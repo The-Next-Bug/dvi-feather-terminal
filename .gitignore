@@ -1,0 +1,13 @@
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+
+# Build outputs and the toolchain installed by scripts/setup-toolchain.sh
+/build/
+/dist/
+/.toolchain/
+__pycache__/
+*.local.md

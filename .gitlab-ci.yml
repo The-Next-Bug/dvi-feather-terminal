@@ -1,0 +1,138 @@
+# Build the DVI terminal firmware with pico-sdk + CMake.
+#
+# The toolchain (CMake, Arm GNU Toolchain, picotool) is installed by
+# scripts/setup-toolchain.sh at the versions pinned in toolchain.env, so no
+# custom image or container registry is needed. The cache, keyed on that
+# file, holds the verified downloads (~200 MB) and the picotool build; each
+# job unpacks them (~25 s) rather than caching ~1.2 GB of unpacked toolchain.
+# pico-sdk and PicoDVI are pinned submodules.
+
+# Branch and tag pipelines only. A merge request shows its branch's pipeline;
+# a separate MR pipeline would drop the rule-less test/build jobs and leave
+# package's needs unsatisfied.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
+    - when: always
+
+stages:
+  - test
+  - build
+  - package
+  - release
+
+variables:
+  GIT_DEPTH: "0"  # full history so git describe works in build-info.txt
+  # Top-level submodules only: pico-sdk's own submodules (TinyUSB, lwIP, ...)
+  # are not used yet.
+  GIT_SUBMODULE_STRATEGY: normal
+  GIT_SUBMODULE_DEPTH: "1"
+  TOOLCHAIN_DIR: "$CI_PROJECT_DIR/.toolchain"
+
+.debian:
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends
+        ca-certificates curl git python3 xz-utils build-essential >/dev/null
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+
+.toolchain:
+  extends: .debian
+  cache: &toolchain_cache
+    # Toolchain versions live in toolchain.env; a change there starts a new cache.
+    key:
+      files:
+        - toolchain.env
+      prefix: toolchain
+    paths:
+      - .toolchain/downloads/
+      - .toolchain/picotool/
+
+# Host unit tests for the portable terminal code; needs only CMake.
+test:
+  extends: .toolchain
+  stage: test
+  cache:
+    <<: *toolchain_cache
+    # Runs alongside build and installs only CMake: never write the cache.
+    policy: pull
+  script:
+    - scripts/setup-toolchain.sh cmake
+    - scripts/test.sh
+  artifacts:
+    when: always
+    reports:
+      junit: build/test/junit.xml
+
+build:
+  extends: .toolchain
+  stage: build
+  needs: []
+  parallel:
+    matrix:
+      - TARGET: [feather-rp2040-dvi]
+  script:
+    - scripts/setup-toolchain.sh
+    - BUILD_DIR=build scripts/build.sh
+  artifacts:
+    name: "dvi-terminal-$TARGET-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - build/$TARGET/dvi_terminal.uf2
+      - build/$TARGET/dvi_terminal.bin
+      - build/$TARGET/dvi_terminal.elf
+      - build/$TARGET/dvi_terminal.dis
+      - build/$TARGET/dvi_terminal.elf.map
+      - build/$TARGET/build-info.txt
+      - build/$TARGET/compile.log
+    expire_in: 30 days
+
+package:
+  extends: .debian
+  stage: package
+  needs: [test, build]
+  script:
+    - BUILD_DIR=build DIST_DIR=dist scripts/package.sh
+  artifacts:
+    name: "dvi-terminal-$CI_COMMIT_REF_SLUG"
+    paths:
+      - dist/*.zip
+      - dist/CHANGES.md
+    expire_in: 90 days
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: always
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: always
+    - when: manual
+      allow_failure: true
+
+# Tagged builds only: store the package permanently in the project's generic
+# package registry and create a GitLab Release that links to it, with
+# CHANGES.md (commit history since the previous tag) as the description.
+release:
+  # GitLab 17.x: the release keyword is handled by release-cli (glab is 18.x+).
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  stage: release
+  needs: [package]
+  rules:
+    - if: $CI_COMMIT_TAG
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+    PACKAGE_URL: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/dvi-terminal/$CI_COMMIT_TAG"
+  script:
+    - command -v curl >/dev/null || apk add --no-cache curl >/dev/null
+    - |
+      curl --fail-with-body --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+        --upload-file "dist/dvi-terminal-$CI_COMMIT_TAG.zip" \
+        "$PACKAGE_URL/dvi-terminal-$CI_COMMIT_TAG.zip"
+  release:
+    tag_name: "$CI_COMMIT_TAG"
+    name: "$CI_COMMIT_TAG"
+    description: "dist/CHANGES.md"
+    assets:
+      links:
+        - name: "dvi-terminal-$CI_COMMIT_TAG.zip (UF2 + BIN + source)"
+          url: "$PACKAGE_URL/dvi-terminal-$CI_COMMIT_TAG.zip"
+          link_type: package

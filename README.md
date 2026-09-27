@@ -1,93 +1,86 @@
 # dvi-feather-terminal
 
+A configurable VT100-style serial terminal with DVI output, for the
+[Adafruit Feather RP2040 DVI](https://www.adafruit.com/product/5710): UART
+in, DVI out (640x480, 80x30 cells of 8x16), USB keyboard in, UART out. It is
+meant to become the console for later RP2040/RP2350 "compute" boards
+(e.g. RunCPM).
 
+Video uses [PicoDVI](https://github.com/Wren6991/PicoDVI)'s `libdvi` and its
+per-character colour text encoder: core 1 renders each scanline straight from
+the character cell buffer (no framebuffer), core 0 runs everything else.
 
-## Getting started
+Status: milestone 1 — DVI bring-up with a static test screen (glyph table,
+RGB222 colour chart, DEC Special Graphics), a scrolling region and an uptime
+counter. Work is tracked with `bd` (beads): `bd list`.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Layout
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+| Path | Contents |
+|---|---|
+| `src/` | Firmware. `screen.[ch]` is the portable cell buffer (host-tested); `video.[ch]` the libdvi renderer on core 1; `font_gen.py` builds the font table |
+| `test/` | Host unit tests (plain CMake + gcc, no pico-sdk) |
+| `lib/pico-sdk`, `lib/PicoDVI` | Pinned submodules |
+| `assets/fonts/` | Terminus Font 8x16 (PSF) and its licence (SIL OFL 1.1) |
+| `cmake/build_info.cmake` | Generates `term_build.h` (git describe, commit, date) on every build |
+| `scripts/` | `setup-toolchain.sh`, `build.sh`, `test.sh`, `package.sh`, `changelog.sh` |
+| `toolchain.env` | Pinned CMake, Arm GNU Toolchain and picotool versions |
+| `docs/FLASHING.txt` | End-user flashing steps, shipped in the package |
 
-## Add your files
+## Font and glyph codes
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+The screen buffer stores one-byte glyph codes (see `src/font.h`): ASCII at
+0x20-0x7E, Latin-1 at 0xA0-0xFF, DEC Special Graphics (line drawing) at
+0x01-0x1F, and shades/blocks/double-line box drawing at 0x80-0x9F. The table
+is generated at build time from `assets/fonts/Uni2-Terminus16.psf.gz`; glyphs
+the console font lacks (control pictures, scan lines, half blocks) are drawn
+by `font_gen.py`.
 
+## Building locally
+
+Everything installs under `.toolchain/` in the repo (git-ignored); only
+`curl`, `git`, `python3`, `xz` and a host C/C++ compiler with `make` are
+needed.
+
+```sh
+git submodule update --init          # pico-sdk, PicoDVI (not their submodules)
+scripts/setup-toolchain.sh           # CMake, Arm GNU Toolchain, picotool
+scripts/test.sh                      # host unit tests
+scripts/build.sh                     # -> build/feather-rp2040-dvi/dvi_terminal.uf2, build-info.txt
+scripts/package.sh                   # -> dist/dvi-terminal-<rev>.zip, dist/CHANGES.md
 ```
-cd existing_repo
-git remote add origin https://gitlab.seg9.com/jules/dvi-feather-terminal.git
-git branch -M main
-git push -uf origin main
+
+`scripts/build.sh` takes `TARGET` (default `feather-rp2040-dvi`), which
+selects the pico-sdk board and PicoDVI pin configuration. Plain `cmake -S .
+-B build/x` also works and picks up `.toolchain/` automatically.
+
+Toolchain versions are pinned in **`toolchain.env`**, the single source of
+truth for `scripts/setup-toolchain.sh` and the CI cache key. To upgrade,
+change the version and its SHA256 there. pico-sdk and PicoDVI are upgraded
+by moving their submodules.
+
+## CI
+
+- `test` — host unit tests (JUnit report).
+- `build` — firmware per target (matrix); UF2/BIN/ELF/disassembly/map and
+  `build-info.txt` artifacts.
+- `package` — ZIP with UF2 and BIN per target, `FLASHING.txt`, `CHANGES.md`
+  (commits since the previous tag), `SHA256SUMS` and the source of the built
+  commit. Automatic on the default branch and tags.
+- `release` — tags only: uploads the ZIP to the project's generic package
+  registry (`dvi-terminal/<tag>`) and creates a GitLab Release linking to it,
+  with `CHANGES.md` as the description.
+
+## Releasing
+
+```sh
+git tag -a v0.1.0 -m "dvi-feather-terminal 0.1.0"
+git push origin v0.1.0
 ```
 
-## Integrate with your tools
+## Licences
 
-- [ ] [Set up project integrations](https://gitlab.seg9.com/jules/dvi-feather-terminal/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Terminus Font is © Dimitar Toshkov Zhekov under the SIL Open Font License
+1.1; see `assets/fonts/Terminus-OFL.txt`. The generated font table is a
+derivative and stays under that licence. pico-sdk and PicoDVI are
+BSD-3-Clause.

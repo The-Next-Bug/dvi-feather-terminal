@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "dvi_feather_terminal",
+  "project_id": "752bc42c-ed01-4f9e-942f-9a74fda25091"
+}
