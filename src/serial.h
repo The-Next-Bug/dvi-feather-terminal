@@ -30,6 +30,8 @@ typedef struct {
 	uint32_t errors;    // framing, parity or break errors
 	uint32_t throttled; // times the receive side held the host off (RTS)
 	uint32_t tx_dropped; // queued bytes lost because the TX queue was full
+	uint32_t rx_level;  // bytes waiting in the receive buffer (of SERIAL_RX_BUFFER_SIZE)
+	uint32_t tx_level;  // bytes waiting in the transmit queue (of SERIAL_TX_BUFFER_SIZE)
 } serial_stats_t;
 
 // Call after the system clock is final (the baud divisor depends on it).

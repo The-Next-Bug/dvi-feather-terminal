@@ -119,6 +119,8 @@ void serial_poll(void) {
 serial_stats_t serial_stats(void) {
 	uint32_t saved = save_and_disable_interrupts();
 	serial_stats_t s = stats;
+	s.rx_level = rx_head - rx_tail;
 	restore_interrupts(saved);
+	s.tx_level = tx_head - tx_tail;
 	return s;
 }

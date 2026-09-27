@@ -93,16 +93,18 @@ static void send_reply(void *ctx, const uint8_t *data, size_t len) {
 }
 
 static bool stats_equal(const serial_stats_t *a, const serial_stats_t *b) {
-	return a->received == b->received && a->overruns == b->overruns && a->dropped == b->dropped &&
-		a->errors == b->errors && a->throttled == b->throttled;
+	return a->rx_level == b->rx_level && a->tx_level == b->tx_level && a->errors == b->errors &&
+		a->throttled == b->throttled;
 }
 
 static void draw_status(const serial_stats_t *st) {
 	char text[SCREEN_MAX_COLS + 1];
-	snprintf(text, sizeof text, " VT100 %ux24 | %s | %u 8N1%s | rx %lu hold %lu ovr %lu drop %lu err %lu",
+	// Buffer levels: bytes waiting to be displayed (rx) and sent (tx).
+	int n = snprintf(text, sizeof text, " VT100 %ux24 | %s | %u 8N1%s | rx buf %lu  tx buf %lu  err %lu",
 		screen.cols, TERM_BUILD_ID, BAUD, SERIAL_FLOW_CONTROL ? " RTS/CTS" : "",
-		(unsigned long)st->received, (unsigned long)st->throttled, (unsigned long)st->overruns,
-		(unsigned long)st->dropped, (unsigned long)st->errors);
+		(unsigned long)st->rx_level, (unsigned long)st->tx_level, (unsigned long)st->errors);
+	if (SERIAL_FLOW_CONTROL && n > 0 && (size_t)n < sizeof text)
+		snprintf(text + n, sizeof text - (size_t)n, "  hold %lu", (unsigned long)st->throttled);
 	screen_clear_line(&screen, STATUS_ROW, STATUS_FG, STATUS_BG);
 	screen_puts(&screen, 0, STATUS_ROW, text, STATUS_FG, STATUS_BG);
 }

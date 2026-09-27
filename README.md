@@ -21,16 +21,17 @@ cells sharing a group show at most two levels per plane — true for normal
 text on one background and for reverse video. 80 columns is always exact.
 
 Status: VT100 emulation on UART0 (115200 8N1, TX = GP0, RX = GP1; optional
-RTS/CTS on GP3/GP2) in rows 0-23, with row 24 as a status line (receive,
-hold-off, overrun, drop and error counts).
-`src/vtparse.c` is a DEC-compatible escape sequence parser (Paul Williams'
-state machine); `src/term.c` implements cursor movement, scrolling regions,
-erase, insert/delete (VT102), tab stops, G0/G1 character sets (ASCII, UK,
-DEC Special Graphics), modes (DECAWM, DECOM, IRM, LNM, DECCKM, DECCOLM
-80/132, DECTCEM), save/restore cursor, SGR colours (8/16, 256 and direct,
-reduced to RGB222), DECALN, RIS, and replies to DA, DSR/CPR and DECREQTPARM
-on UART0 TX. Underline, blink and reverse screen (DECSCNM) are rendered.
-Not yet: double-size lines, VT52 mode, the alternate screen, a keyboard.
+RTS/CTS on GP3/GP2) in rows 0-23, with row 24 as a status line (bytes
+waiting in the receive and transmit buffers, line errors, and hold-offs with
+flow control). `src/vtparse.c` is a DEC-compatible escape sequence parser
+(Paul Williams' state machine); `src/term.c` implements cursor movement,
+scrolling regions, erase, insert/delete (VT102), tab stops, G0/G1 character
+sets (ASCII, UK, DEC Special Graphics), modes (DECAWM, DECOM, IRM, LNM,
+DECCKM, DECCOLM 80/132, DECTCEM), save/restore cursor, SGR colours (8/16,
+256 and direct, reduced to RGB222), DECALN, RIS, and replies to DA, DSR/CPR
+and DECREQTPARM on UART0 TX. Underline, blink and reverse screen (DECSCNM)
+are rendered. Not yet: double-size lines, VT52 mode, the alternate screen, a
+keyboard.
 
 ### Wiring
 
@@ -46,7 +47,7 @@ Not yet: double-size lines, VT52 mode, the alternate screen, a keyboard.
 
 The default build has no flow control. At 115200 baud the terminal keeps up
 with ordinary output, but a long burst that scrolls the whole screen can
-overrun it (the status line's `ovr`/`drop` counters show it). To use
+overrun it (the status line's `rx buf` then sits near 4096). To use
 hardware RTS/CTS:
 
 1. Wire the handshake lines (these are the STEMMA QT pins, so that port is
