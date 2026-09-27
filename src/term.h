@@ -8,15 +8,17 @@
 // cursor movement, scrolling regions, erasing, line and character
 // insert/delete (VT102), tab stops, character sets (G0/G1: ASCII, UK, DEC
 // Special Graphics), modes, save/restore cursor, SGR colours and replies to
-// device attribute and status requests.
+// device attribute and status requests, and REP (repeat character, which
+// ncurses uses under TERM=xterm-16color).
 //
 // The terminal owns a band of screen rows (top .. top + rows - 1); rows
 // outside it (e.g. a status line) are left alone. Its width is the screen's
 // (80 or 132); DECCOLM (CSI ? 3 h/l) switches it, which re-initialises the
 // whole screen.
 //
-// Not (yet) implemented: VT52 mode, double-height/width lines, underline
-// and blink rendering, reverse-screen mode (DECSCNM), smooth scrolling.
+// Not (yet) implemented: VT52 mode (dmt.16), the alternate screen (dmt.15),
+// double-width/height lines (dmt.12/13), underline and blink rendering and
+// reverse-screen mode (dmt.4), smooth scrolling (dmt.14).
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -59,6 +61,7 @@ typedef struct {
 	bool keypad_app;      // DECKPAM / DECKPNM, for the keyboard
 
 	uint8_t tabs[(SCREEN_MAX_COLS + 7) / 8];
+	uint8_t last_char; // for REP: the last character printed, 0 after anything else
 
 	term_reply_t reply;
 	void *reply_ctx;

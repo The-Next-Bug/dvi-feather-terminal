@@ -464,6 +464,13 @@ static void csi_dispatch(term_t *t, const vtparse_t *p, uint8_t final) {
 	case 'T': // SD
 		scroll_down(t, t->margin_top, t->margin_bottom, n);
 		break;
+	case 'b': { // REP: the preceding printed character, n more times
+		uint8_t ch = t->last_char;
+		unsigned max = cols(t) * t->rows;
+		for (unsigned i = 0; ch && i < n && i < max; ++i)
+			print(t, ch);
+		break;
+	}
 	case 'c': // DA
 		if (vtparse_param(p, 0, 0) == 0)
 			device_attributes(t);
@@ -584,11 +591,15 @@ static void execute(term_t *t, uint8_t ch) {
 static void on_parse(vtparse_t *p, vtparse_action_t action, uint8_t ch) {
 	term_t *t = p->user;
 	switch (action) {
-	case VTPARSE_PRINT: print(t, ch); break;
+	case VTPARSE_PRINT:
+		print(t, ch);
+		t->last_char = ch == 0x7f ? 0 : ch;
+		return;
 	case VTPARSE_EXECUTE: execute(t, ch); break;
 	case VTPARSE_ESC_DISPATCH: esc_dispatch(t, p, ch); break;
 	case VTPARSE_CSI_DISPATCH: csi_dispatch(t, p, ch); break;
 	}
+	t->last_char = 0; // REP repeats only a character printed just before it
 }
 
 // ---------------------------------------------------------------------------

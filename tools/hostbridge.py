@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Run a program with the DVI terminal as its display, typing on this PC.
 
-Usage: tools/hostbridge.py [--baud N] [--cols N] SERIAL_PORT [COMMAND ...]
+Usage: tools/hostbridge.py [--baud N] [--cols N] [--term NAME] SERIAL_PORT [COMMAND ...]
 
-COMMAND (default: $SHELL) runs on a pseudo-terminal with TERM=vt100. Its
+COMMAND (default: $SHELL) runs on a pseudo-terminal with TERM=xterm-color
+(8 colours, and nothing the terminal lacks; plain vt100 has no colour, so
+programs would not use it). Its
 output goes to the terminal over SERIAL_PORT; what the terminal sends back
 (replies to device attribute and cursor position requests) and what you type
 here both become its input. Watch the DVI screen and type in this window.
@@ -48,6 +50,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--baud", type=int, default=115200, choices=sorted(BAUDS))
     ap.add_argument("--cols", type=int, default=80, choices=(80, 132))
+    ap.add_argument("--term", default="xterm-color",
+                    help="TERM for the program (default: xterm-color; vt100 for no colour)")
     ap.add_argument("port")
     ap.add_argument("command", nargs=argparse.REMAINDER)
     args = ap.parse_args()
@@ -56,7 +60,7 @@ def main():
     serial = open_serial(args.port, args.baud)
     pid, master = pty.fork()
     if pid == 0:
-        os.environ["TERM"] = "vt100"
+        os.environ["TERM"] = args.term
         os.environ.pop("COLORTERM", None)
         os.execvp(command[0], command)
 

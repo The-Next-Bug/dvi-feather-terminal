@@ -477,6 +477,21 @@ static void test_sgr_extended_colours(void) {
 	CHECK_EQ(fg_at(4, 0), term_ansi_colour(3));
 }
 
+static void test_rep(void) {
+	setup();
+	put("ab\x1b[3bc\x1b[b");
+	CHECK(row_is(0, "abbbbcc"));
+	// Only right after a printed character; SGR in between cancels it.
+	put("\r\nx\x1b[0m\x1b[5b");
+	CHECK(row_is(1, "x"));
+	// Repeats through the charset in effect, and wraps like printing.
+	put("\x1b[3;1H\x1b(0q\x1b[2b\x1b(B");
+	CHECK_EQ(screen_glyph(&s, 2, 2), GLYPH_DEC_GRAPHICS('q'));
+	put("\x1b[4;79Hz\x1b[3b");
+	CHECK_EQ(screen_glyph(&s, 79, 3), 'z');
+	CHECK_EQ(screen_glyph(&s, 1, 4), 'z');
+}
+
 // ---------------------------------------------------------------------------
 // Replies
 
@@ -569,6 +584,7 @@ int main(void) {
 	RUN(test_reset);
 	RUN(test_sgr_colours);
 	RUN(test_sgr_extended_colours);
+	RUN(test_rep);
 	RUN(test_replies);
 	RUN(test_unknown_and_aborted_sequences);
 	RUN(test_random_input_is_safe);
