@@ -467,6 +467,34 @@ static void test_sgr_colours(void) {
 	CHECK_EQ(bg_at(8, 0), term_ansi_colour(12));
 }
 
+static void test_sgr_underline_blink(void) {
+	setup();
+	put("a\x1b[4mb\x1b[5mc\x1b[24md\x1b[0me");
+	CHECK_EQ(screen_attr(&s, 0, 0), 0);
+	CHECK_EQ(screen_attr(&s, 1, 0), SCREEN_ATTR_UNDERLINE);
+	CHECK_EQ(screen_attr(&s, 2, 0), SCREEN_ATTR_UNDERLINE | SCREEN_ATTR_BLINK);
+	CHECK_EQ(screen_attr(&s, 3, 0), SCREEN_ATTR_BLINK);
+	CHECK_EQ(screen_attr(&s, 4, 0), 0);
+	put("\x1b[1mB\x1b[22mn");
+	CHECK_EQ(screen_attr(&s, 5, 0), SCREEN_ATTR_BOLD);
+	CHECK_EQ(screen_attr(&s, 6, 0), 0);
+	// Erasing clears attributes, even with SGR attributes in effect.
+	put("\x1b[4m\x1b[1;1H\x1b[K\x1b[0m");
+	CHECK_EQ(screen_attr(&s, 1, 0), 0);
+}
+
+static void test_reverse_screen(void) {
+	setup();
+	put("\x1b[?5h");
+	CHECK_EQ(s.reverse_rows, (1u << ROWS) - 1); // the terminal's rows, not the status line
+	put("\x1b[?3h"); // DECCOLM keeps it
+	CHECK_EQ(s.reverse_rows, (1u << ROWS) - 1);
+	put("\x1b[?5l");
+	CHECK_EQ(s.reverse_rows, 0);
+	put("\x1b[?5h\x1b" "c"); // RIS clears it
+	CHECK_EQ(s.reverse_rows, 0);
+}
+
 static void test_sgr_extended_colours(void) {
 	setup();
 	put("\x1b[38;5;196ma\x1b[48;5;21mb\x1b[38;2;255;128;0mc\x1b[38;5;244md\x1b[38;5;3me\x1b[0m");
@@ -584,6 +612,8 @@ int main(void) {
 	RUN(test_reset);
 	RUN(test_sgr_colours);
 	RUN(test_sgr_extended_colours);
+	RUN(test_sgr_underline_blink);
+	RUN(test_reverse_screen);
 	RUN(test_rep);
 	RUN(test_replies);
 	RUN(test_unknown_and_aborted_sequences);

@@ -43,7 +43,7 @@ static unsigned wanted_level(const screen_line_t *line, unsigned cols, unsigned 
 // scanlines and pixels, border included) whose level is not the wanted one.
 static unsigned mismatches(unsigned row) {
 	const screen_line_t *line = screen_line(&s, row);
-	raster_render_line(&out, line, s.cols, -1);
+	raster_render_line(&out, line, s.cols, -1, 0);
 	unsigned bad = 0;
 	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
 		for (int p = 0; p < RASTER_PLANES; ++p)
@@ -82,7 +82,7 @@ static void test_80_any_colours_exact(void) {
 static void test_80_glyph_bits(void) {
 	screen_init(&s, 80, RGB222(2, 2, 2), 0);
 	screen_put(&s, 0, 0, 'A', RGB222(3, 0, 0), 0);
-	raster_render_line(&out, screen_line(&s, 0), 80, -1);
+	raster_render_line(&out, screen_line(&s, 0), 80, -1, 0);
 	// Red plane: 'A' pixels at byte 10 (x = 80), set level 3, clear level 0.
 	for (unsigned gy = 0; gy < FONT_8X16_HEIGHT; ++gy)
 		CHECK_EQ(out.bits[1 + gy][2][10], font_8x16[gy * FONT_GLYPHS + 'A']);
@@ -121,7 +121,7 @@ static void test_132_three_levels_approximated(void) {
 	for (unsigned c = 0; c < 132; ++c)
 		screen_put(&s, c, 0, 0x83 /* full block */, RGB222(c % 3 + 1, 0, 0), 0);
 	const screen_line_t *line = screen_line(&s, 0);
-	raster_render_line(&out, line, 132, -1);
+	raster_render_line(&out, line, 132, -1, 0);
 	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
 		for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x) {
 			int d = (int)shown_level(&out, 132, sy, x, 2) - (int)wanted_level(line, 132, sy, x, 2);
@@ -131,7 +131,7 @@ static void test_132_three_levels_approximated(void) {
 
 static void test_border_is_black(void) {
 	screen_init(&s, 132, RGB222(3, 3, 3), RGB222(3, 3, 3));
-	raster_render_line(&out, screen_line(&s, 0), 132, -1);
+	raster_render_line(&out, screen_line(&s, 0), 132, -1, 0);
 	for (int p = 0; p < RASTER_PLANES; ++p)
 		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
 			for (unsigned x = 0; x < 4; ++x)
@@ -155,7 +155,7 @@ static void test_connectors_join(void) {
 		screen_init(&s, cols, RGB222(2, 2, 2), 0);
 		for (unsigned i = 0; i < sizeof verticals; ++i)
 			screen_put(&s, i, 0, verticals[i], RGB222(2, 2, 2), 0);
-		raster_render_line(&out, screen_line(&s, 0), cols, -1);
+		raster_render_line(&out, screen_line(&s, 0), cols, -1, 0);
 		for (unsigned i = 0; i < sizeof verticals; ++i) {
 			// Some column of the glyph is lit on every scanline.
 			unsigned always = (1u << w) - 1;
@@ -170,7 +170,7 @@ static void test_connectors_join(void) {
 
 		screen_init(&s, cols, RGB222(2, 2, 2), 0);
 		screen_puts(&s, 0, 0, "\xc5\xc9gjpqy|", RGB222(2, 2, 2), 0); // Å É descenders and a bar
-		raster_render_line(&out, screen_line(&s, 0), cols, -1);
+		raster_render_line(&out, screen_line(&s, 0), cols, -1, 0);
 		unsigned top = raster_pad_top(cols), rows = raster_font_rows(cols);
 		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
 			if (sy >= top && sy < top + rows)
@@ -187,15 +187,95 @@ static void test_cursor_cell_has_both_levels(void) {
 	for (unsigned cols = 80; cols <= 132; cols += 52) {
 		unsigned x = raster_x_offset(cols) + 5 * raster_cell_width(cols);
 		screen_init(&s, cols, RGB222(2, 2, 2), 0);
-		raster_render_line(&out, screen_line(&s, 0), cols, 5);
+		raster_render_line(&out, screen_line(&s, 0), cols, 5, 0);
 		unsigned g = x / 8, nibble = out.colour[1][g / 8] >> 4 * (g % 8) & 0xf;
 		CHECK_EQ(nibble & 3, 2); // set level: the fg
 		CHECK_EQ(nibble >> 2, 0); // clear level: the bg
 		CHECK_EQ(shown_level(&out, cols, 12, x, 1), 0); // still shows as bg
-		raster_render_line(&out, screen_line(&s, 0), cols, -1);
+		raster_render_line(&out, screen_line(&s, 0), cols, -1, 0);
 		nibble = out.colour[1][g / 8] >> 4 * (g % 8) & 0xf;
 		CHECK_EQ(nibble, 0);
 	}
+}
+
+// Underline: the glyph's bottom row lit across the whole cell in the fg, so
+// underlined runs join up.
+static void test_underline(void) {
+	for (unsigned cols = 80; cols <= 132; cols += 52) {
+		unsigned x0 = raster_x_offset(cols), w = raster_cell_width(cols);
+		unsigned bottom = raster_pad_top(cols) + raster_font_rows(cols) - 1;
+		screen_init(&s, cols, RGB222(2, 2, 2), 0);
+		for (unsigned c = 0; c < 3; ++c)
+			screen_put_attr(&s, c, 0, ' ', RGB222(0, 3, 0), 0, SCREEN_ATTR_UNDERLINE);
+		raster_render_line(&out, screen_line(&s, 0), cols, -1, 0);
+		for (unsigned x = x0; x < x0 + 3 * w; ++x) {
+			CHECK_EQ(shown_level(&out, cols, bottom, x, 1), 3);
+			CHECK_EQ(shown_level(&out, cols, bottom - 1, x, 1), 0);
+		}
+		CHECK_EQ(shown_level(&out, cols, bottom, x0 + 3 * w, 1), 0);
+	}
+}
+
+// Blink: glyph (and underline) hidden in the off phase; the renderer is
+// told the line needs re-rendering when the phase changes.
+static void test_blink(void) {
+	screen_init(&s, 80, RGB222(2, 2, 2), 0);
+	screen_puts(&s, 0, 0, "ab", RGB222(2, 2, 2), 0);
+	CHECK(!raster_render_line(&out, screen_line(&s, 0), 80, -1, RASTER_BLINK_OFF));
+	screen_put_attr(&s, 1, 0, 'H', RGB222(3, 0, 0), 0, SCREEN_ATTR_BLINK | SCREEN_ATTR_UNDERLINE);
+	CHECK(raster_render_line(&out, screen_line(&s, 0), 80, -1, 0));
+	unsigned lit = 0;
+	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
+		for (unsigned x = 88; x < 96; ++x)
+			lit += shown_level(&out, 80, sy, x, 2) != 0;
+	CHECK(lit > 0);
+	CHECK(raster_render_line(&out, screen_line(&s, 0), 80, -1, RASTER_BLINK_OFF));
+	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
+		for (unsigned x = 88; x < 96; ++x)
+			CHECK_EQ(shown_level(&out, 80, sy, x, 2), 0);
+	// The non-blinking neighbour is unaffected.
+	lit = 0;
+	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
+		for (unsigned x = 80; x < 88; ++x)
+			lit += shown_level(&out, 80, sy, x, 1) != 0;
+	CHECK(lit > 0);
+}
+
+// Bold: glyph rows ORed with themselves shifted one pixel right (within
+// the cell); line-drawing glyphs keep their shape so they still join.
+static void test_bold(void) {
+	for (unsigned cols = 80; cols <= 132; cols += 52) {
+		unsigned x0 = raster_x_offset(cols), w = raster_cell_width(cols);
+		const uint8_t *font = cols > 80 ? font_6x13 : font_8x16;
+		unsigned rows = raster_font_rows(cols), top = raster_pad_top(cols);
+		screen_init(&s, cols, RGB222(2, 2, 2), 0);
+		screen_put_attr(&s, 0, 0, 'I', RGB222(3, 3, 3), 0, SCREEN_ATTR_BOLD);
+		screen_put_attr(&s, 1, 0, GLYPH_DEC_GRAPHICS('x'), RGB222(3, 3, 3), 0, SCREEN_ATTR_BOLD);
+		raster_render_line(&out, screen_line(&s, 0), cols, -1, 0);
+		for (unsigned gy = 0; gy < rows; ++gy) {
+			unsigned g = font[gy * FONT_GLYPHS + 'I'], bold = (g | g << 1) & ((1u << w) - 1);
+			unsigned v = font[gy * FONT_GLYPHS + GLYPH_DEC_GRAPHICS('x')];
+			for (unsigned i = 0; i < w; ++i) {
+				CHECK_EQ(shown_level(&out, cols, top + gy, x0 + i, 1), (bold >> i & 1) ? 3 : 0);
+				CHECK_EQ(shown_level(&out, cols, top + gy, x0 + w + i, 1), (v >> i & 1) ? 3 : 0);
+			}
+		}
+	}
+}
+
+// Reverse (DECSCNM): every cell's fg and bg swap.
+static void test_reverse(void) {
+	screen_init(&s, 80, RGB222(2, 2, 2), 0);
+	screen_puts(&s, 0, 0, "Hi", RGB222(2, 2, 2), 0);
+	raster_render_line(&out, screen_line(&s, 0), 80, -1, RASTER_REVERSE);
+	// A blank cell shows the (old) fg everywhere; a glyph pixel shows black.
+	CHECK_EQ(shown_level(&out, 80, 0, 100, 1), 2);
+	unsigned dark = 0;
+	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
+		for (unsigned x = 80; x < 88; ++x)
+			dark += shown_level(&out, 80, sy, x, 1) == 0;
+	CHECK(dark > 0);
+	CHECK_EQ(shown_level(&out, 80, 12, 10, 1), 0); // border stays black
 }
 
 // The demo at 80 columns must be pixel-exact; at 132 only its row of all 64
@@ -225,6 +305,10 @@ int main(void) {
 	RUN(test_border_is_black);
 	RUN(test_connectors_join);
 	RUN(test_cursor_cell_has_both_levels);
+	RUN(test_underline);
+	RUN(test_blink);
+	RUN(test_bold);
+	RUN(test_reverse);
 	RUN(test_demo);
 	return tests_done();
 }

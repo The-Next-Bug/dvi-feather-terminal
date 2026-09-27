@@ -174,9 +174,11 @@ static void print(term_t *t, uint8_t ch) {
 	uint8_t fg, bg;
 	text_colours(t, &fg, &bg);
 	unsigned row = abs_row(t, t->cur.row);
+	uint8_t attr = (t->cur.attr.underline ? SCREEN_ATTR_UNDERLINE : 0) |
+		(t->cur.attr.blink ? SCREEN_ATTR_BLINK : 0) | (t->cur.attr.bold ? SCREEN_ATTR_BOLD : 0);
 	if (t->insert_mode)
 		screen_insert_cells(t->screen, row, t->cur.col, 1, fg, bg);
-	screen_put(t->screen, t->cur.col, row, glyph, fg, bg);
+	screen_put_attr(t->screen, t->cur.col, row, glyph, fg, bg, attr);
 	if (t->cur.col + 1 < cols(t))
 		++t->cur.col;
 	else if (t->autowrap)
@@ -228,6 +230,8 @@ static void clear_band(term_t *t) {
 		screen_erase(t->screen, abs_row(t, row), 0, cols(t), fg, bg);
 }
 
+static void set_reverse_screen(term_t *t, bool on);
+
 static void reset(term_t *t) {
 	reset_cursor(&t->cur);
 	reset_cursor(&t->saved);
@@ -237,7 +241,16 @@ static void reset(term_t *t) {
 	t->insert_mode = t->newline_mode = t->cursor_keys_app = t->keypad_app = false;
 	reset_tabs(t);
 	t->screen->cursor_visible = true;
+	set_reverse_screen(t, false);
 	clear_band(t);
+}
+
+// DECSCNM: show the terminal's rows with fg and bg swapped.
+static void set_reverse_screen(term_t *t, bool on) {
+	t->reverse_screen = on;
+	uint32_t band = ((1u << t->rows) - 1) << t->top;
+	uint32_t mask = on ? t->screen->reverse_rows | band : t->screen->reverse_rows & ~band;
+	screen_set_reverse_rows(t->screen, mask);
 }
 
 // DECCOLM: switch between 80 and 132 columns. This clears the whole screen
@@ -246,6 +259,7 @@ static void set_columns(term_t *t, unsigned n) {
 	bool visible = t->screen->cursor_visible;
 	screen_init(t->screen, n, t->default_fg, t->default_bg);
 	t->screen->cursor_visible = visible;
+	set_reverse_screen(t, t->reverse_screen);
 	t->margin_top = 0;
 	t->margin_bottom = t->rows - 1;
 	move_to(t, 0, 0);
@@ -262,10 +276,11 @@ static void set_mode(term_t *t, bool dec, unsigned mode, bool on) {
 	switch (mode) {
 	case 1: t->cursor_keys_app = on; break;
 	case 3: set_columns(t, on ? 132 : 80); break;
+	case 5: set_reverse_screen(t, on); break;
 	case 6: t->cur.origin_mode = on; move_to(t, 0, 0); break;
 	case 7: t->autowrap = on; if (!on) t->cur.wrap_pending = false; break;
 	case 25: t->screen->cursor_visible = on; break;
-	default: break; // DECANM (VT52), DECSCLM, DECSCNM, DECARM...: ignored
+	default: break; // DECANM (VT52), DECSCLM, DECARM...: ignored
 	}
 }
 

@@ -20,6 +20,9 @@ static inline unsigned picks_hi(unsigned v, unsigned lo, unsigned hi) {
 static uint8_t group_lo[RASTER_PLANES][RASTER_GROUPS], group_hi[RASTER_PLANES][RASTER_GROUPS];
 static uint8_t seen[RASTER_GROUPS];
 static uint8_t fg_set[SCREEN_MAX_COLS][RASTER_PLANES], bg_set[SCREEN_MAX_COLS][RASTER_PLANES];
+// Per cell, after attributes: colours as shown, and what the glyph draws.
+static uint8_t cell_fg[SCREEN_MAX_COLS], cell_bg[SCREEN_MAX_COLS];
+static bool cell_hidden[SCREEN_MAX_COLS], cell_underline[SCREEN_MAX_COLS], cell_bold[SCREEN_MAX_COLS];
 
 typedef struct {
 	const uint8_t *glyphs;
@@ -55,11 +58,24 @@ static inline unsigned stored_glyph_row(const font_info_t *f, unsigned sr, uint8
 	return f->glyphs[(sr - 1) * FONT_GLYPHS + g];
 }
 
-void raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned cols, int cursor_col) {
+bool raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned cols, int cursor_col,
+		unsigned flags) {
 	const unsigned w = raster_cell_width(cols), x0 = raster_x_offset(cols);
 	const font_info_t *font = font_for(cols);
 	const uint8_t *ink = font->ink;
 	const unsigned cell_mask = (1u << w) - 1;
+
+	bool any_blink = false;
+	for (unsigned c = 0; c < cols; ++c) {
+		bool reverse = flags & RASTER_REVERSE;
+		cell_fg[c] = reverse ? line->bg[c] : line->fg[c];
+		cell_bg[c] = reverse ? line->fg[c] : line->bg[c];
+		bool blink = line->attr[c] & SCREEN_ATTR_BLINK;
+		any_blink |= blink;
+		cell_hidden[c] = blink && (flags & RASTER_BLINK_OFF);
+		cell_underline[c] = (line->attr[c] & SCREEN_ATTR_UNDERLINE) && !cell_hidden[c];
+		cell_bold[c] = line->attr[c] & SCREEN_ATTR_BOLD;
+	}
 
 	// Level range per plane and group, over the levels the cells overlapping
 	// the group actually show there: their bg (all but a full block show
@@ -79,9 +95,13 @@ void raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned 
 			// This cell's pixels within group g, as a mask over the cell.
 			int first = (int)(8 * g) - (int)x;
 			unsigned in_group = (first >= 0 ? 0xffu << first : 0xffu >> -first) & cell_mask;
-			bool fg_shows = (ink[line->glyph[c]] & in_group) || (int)c == cursor_col;
+			unsigned glyph_ink = ink[line->glyph[c]];
+			if (cell_bold[c])
+				glyph_ink |= glyph_ink << 1;
+			bool fg_shows = (!cell_hidden[c] && (glyph_ink & in_group)) ||
+				cell_underline[c] || (int)c == cursor_col;
 			for (int p = 0; p < RASTER_PLANES; ++p) {
-				unsigned f = level(line->fg[c], p), b = level(line->bg[c], p);
+				unsigned f = level(cell_fg[c], p), b = level(cell_bg[c], p);
 				if (!fg_shows)
 					f = b;
 				unsigned min = f < b ? f : b, max = f < b ? b : f;
@@ -110,7 +130,7 @@ void raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned 
 	for (unsigned c = 0; c < cols; ++c) {
 		unsigned x = x0 + c * w;
 		for (int p = 0; p < RASTER_PLANES; ++p) {
-			unsigned f = level(line->fg[c], p), b = level(line->bg[c], p);
+			unsigned f = level(cell_fg[c], p), b = level(cell_bg[c], p);
 			uint8_t fm = 0, bm = 0;
 			for (unsigned i = 0; i < w; ++i) {
 				unsigned g = (x + i) / 8;
@@ -126,7 +146,11 @@ void raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned 
 		uint8_t (*rows)[RASTER_BYTES] = out->bits[sr];
 		memset(rows, 0, sizeof out->bits[sr]);
 		for (unsigned c = 0; c < cols; ++c) {
-			unsigned m = stored_glyph_row(font, sr, line->glyph[c]);
+			unsigned m = cell_hidden[c] ? 0 : stored_glyph_row(font, sr, line->glyph[c]);
+			if (cell_bold[c] && !glyph_is_connector(line->glyph[c]))
+				m |= m << 1; // clipped to the cell by cell_mask below
+			if (cell_underline[c] && sr == font->rows) // the glyph's bottom row
+				m = cell_mask;
 			unsigned x = x0 + c * w, byte = x / 8, shift = x % 8;
 			for (int p = 0; p < RASTER_PLANES; ++p) {
 				unsigned bits = ((m & fg_set[c][p]) | (~m & bg_set[c][p])) & cell_mask;
@@ -137,4 +161,5 @@ void raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned 
 			}
 		}
 	}
+	return any_blink;
 }

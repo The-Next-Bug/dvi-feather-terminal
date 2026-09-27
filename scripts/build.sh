@@ -7,6 +7,8 @@
 #   BUILD_DIR       output root; the build lands in BUILD_DIR/TARGET (default: build)
 #   BUILD_TYPE      CMake build type (default: Release)
 #   TOOLCHAIN_DIR   toolchain location (default: <repo>/.toolchain)
+#   SERIAL_FLOW_CONTROL  ON for RTS/CTS on UART0 (default: OFF; see README)
+#   CMAKE_ARGS      extra arguments for the CMake configure step
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,6 +17,7 @@ cd "$ROOT"
 TARGET="${TARGET:-feather-rp2040-dvi}"
 BUILD_DIR="${BUILD_DIR:-build}"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
+SERIAL_FLOW_CONTROL="${SERIAL_FLOW_CONTROL:-OFF}"
 TOOLCHAIN_DIR="${TOOLCHAIN_DIR:-$ROOT/.toolchain}"
 
 # Targets: pico-sdk board and PicoDVI pin configuration.
@@ -49,6 +52,8 @@ mkdir -p "$out"
   -DDVI_SERIAL_CONFIG="$dvi_config" \
   -DPICO_TOOLCHAIN_PATH="$TOOLCHAIN_DIR/arm-none-eabi" \
   -Dpicotool_DIR="$TOOLCHAIN_DIR/picotool/picotool" \
+  -DSERIAL_FLOW_CONTROL="$SERIAL_FLOW_CONTROL" \
+  ${CMAKE_ARGS:-} \
   | tee "$out/configure.log"
 "$cmake" --build "$out" --parallel "$(nproc)" 2>&1 | tee "$out/compile.log"
 
@@ -58,6 +63,7 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
   echo "pico_board=$pico_board"
   echo "dvi_serial_config=$dvi_config"
   echo "build_type=$BUILD_TYPE"
+  echo "serial_flow_control=$SERIAL_FLOW_CONTROL"
   echo "compiler=$("$gcc" --version | head -1)"
   echo "cmake=$("$cmake" --version | head -1)"
   echo "picotool=$("$TOOLCHAIN_DIR/picotool/picotool/picotool" version | head -1)"

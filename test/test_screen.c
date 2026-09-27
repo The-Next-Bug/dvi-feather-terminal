@@ -128,6 +128,39 @@ static void test_scroll_rejects_bad_regions(void) {
 	CHECK_EQ(screen_glyph(&s, 0, 3), 'x');
 }
 
+static void test_attributes(void) {
+	screen_init(&s, 80, FG, BG);
+	screen_put_attr(&s, 3, 2, 'u', FG, BG, SCREEN_ATTR_UNDERLINE);
+	screen_put_attr(&s, 4, 2, 'b', FG, BG, SCREEN_ATTR_BLINK);
+	CHECK_EQ(screen_attr(&s, 3, 2), SCREEN_ATTR_UNDERLINE);
+	CHECK_EQ(screen_attr(&s, 4, 2), SCREEN_ATTR_BLINK);
+	// Attributes move with their cells and are cleared when erased.
+	screen_insert_cells(&s, 2, 0, 2, FG, BG);
+	CHECK_EQ(screen_attr(&s, 5, 2), SCREEN_ATTR_UNDERLINE);
+	CHECK_EQ(screen_attr(&s, 3, 2), 0);
+	screen_delete_cells(&s, 2, 0, 2, FG, BG);
+	CHECK_EQ(screen_attr(&s, 4, 2), SCREEN_ATTR_BLINK);
+	screen_erase(&s, 2, 0, 80, FG, BG);
+	CHECK_EQ(screen_attr(&s, 4, 2), 0);
+	screen_put_attr(&s, 0, 2, 'x', FG, BG, SCREEN_ATTR_BLINK);
+	screen_put(&s, 0, 2, 'y', FG, BG);
+	CHECK_EQ(screen_attr(&s, 0, 2), 0);
+}
+
+static void test_reverse_rows_mark_dirty(void) {
+	screen_init(&s, 80, FG, BG);
+	screen_scroll_up(&s, 0, 23, FG, BG); // row 0 now shows slot 1
+	s.dirty = 0;
+	screen_set_reverse_rows(&s, 1u << 0);
+	CHECK_EQ(s.reverse_rows, 1u << 0);
+	CHECK_EQ(s.dirty, 1u << 1);
+	s.dirty = 0;
+	screen_set_reverse_rows(&s, 1u << 0);
+	CHECK_EQ(s.dirty, 0);
+	screen_init(&s, 80, FG, BG);
+	CHECK_EQ(s.reverse_rows, 0);
+}
+
 int main(void) {
 	RUN(test_init_fills_blanks);
 	RUN(test_bad_width_means_80);
@@ -137,5 +170,7 @@ int main(void) {
 	RUN(test_scroll_region);
 	RUN(test_scroll_many_times);
 	RUN(test_scroll_rejects_bad_regions);
+	RUN(test_attributes);
+	RUN(test_reverse_rows_mark_dirty);
 	return tests_done();
 }

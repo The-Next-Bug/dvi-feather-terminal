@@ -5,8 +5,10 @@
 // code renders. Portable C with no pico-sdk dependency, so it is unit-tested
 // on the host.
 //
-// Each cell holds a glyph code (see font.h) and RGB222 (0bRRGGBB) foreground
-// and background colours. The screen is 80 or 132 columns wide.
+// Each cell holds a glyph code (see font.h), RGB222 (0bRRGGBB) foreground
+// and background colours, and attribute bits (underline, blink). The screen
+// is 80 or 132 columns wide. Rows in reverse_rows are shown with every
+// cell's fg and bg swapped (DECSCNM).
 //
 // Display rows map to line slots through row_map, so scrolling rotates
 // indices instead of copying cells. Changed slots are flagged in `dirty`
@@ -24,10 +26,16 @@
 
 #define RGB222(r, g, b) ((uint8_t)(((r) & 3) << 4 | ((g) & 3) << 2 | ((b) & 3)))
 
+// Cell attribute bits.
+#define SCREEN_ATTR_UNDERLINE 0x01
+#define SCREEN_ATTR_BLINK 0x02
+#define SCREEN_ATTR_BOLD 0x04 // drawn emboldened (the colour is already bright)
+
 typedef struct {
 	uint8_t glyph[SCREEN_MAX_COLS];
 	uint8_t fg[SCREEN_MAX_COLS];
 	uint8_t bg[SCREEN_MAX_COLS];
+	uint8_t attr[SCREEN_MAX_COLS];
 } screen_line_t;
 
 typedef struct {
@@ -36,6 +44,7 @@ typedef struct {
 	uint8_t cols;
 	uint8_t cursor_col, cursor_row;
 	bool cursor_visible;
+	uint32_t reverse_rows; // bit n: display row n is shown reversed
 	uint32_t dirty; // bit n: lines[n] changed since the renderer last saw it
 } screen_t;
 
@@ -44,12 +53,18 @@ typedef struct {
 // Every slot is marked dirty.
 void screen_init(screen_t *s, unsigned cols, uint8_t fg, uint8_t bg);
 
-// Out-of-range cells are ignored.
+// Out-of-range cells are ignored. screen_put clears the cell's attributes.
 void screen_put(screen_t *s, unsigned col, unsigned row, uint8_t glyph, uint8_t fg, uint8_t bg);
+void screen_put_attr(screen_t *s, unsigned col, unsigned row, uint8_t glyph, uint8_t fg, uint8_t bg,
+	uint8_t attr);
 void screen_puts(screen_t *s, unsigned col, unsigned row, const char *text, uint8_t fg, uint8_t bg);
 
 uint8_t screen_glyph(const screen_t *s, unsigned col, unsigned row);
 void screen_colours(const screen_t *s, unsigned col, unsigned row, uint8_t *fg, uint8_t *bg);
+uint8_t screen_attr(const screen_t *s, unsigned col, unsigned row);
+
+// Show the display rows in mask reversed (and the rest normal).
+void screen_set_reverse_rows(screen_t *s, uint32_t mask);
 
 void screen_clear_line(screen_t *s, unsigned row, uint8_t fg, uint8_t bg);
 

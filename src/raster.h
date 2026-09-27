@@ -33,6 +33,7 @@
 // last 32 it reads 4 bytes past the row, and the TMDS buffers have slack for
 // the output, which is never displayed.
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "screen.h"
@@ -79,10 +80,18 @@ static inline unsigned raster_stored_row(unsigned cols, unsigned sy) {
 	return rows + 1;
 }
 
+// Flags for raster_render_line.
+#define RASTER_REVERSE 0x01   // swap every cell's fg and bg (DECSCNM)
+#define RASTER_BLINK_OFF 0x02 // blink phase off: hide blinking cells' glyphs
+
 // Render a screen line of `cols` cells (80 or 132). cursor_col is the column
 // of the cursor if it is on this line, or -1: that cell's fg is given a level
 // even where the glyph has no ink, so the renderer's cursor (which swaps each
-// pixel between its group's two levels) shows on blank cells.
-void raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned cols, int cursor_col);
+// pixel between its group's two levels) shows on blank cells. Underlined
+// cells get a line on the glyph's bottom row; bold cells are emboldened
+// (each glyph row ORed with itself shifted a pixel right). Returns whether any cell
+// blinks, i.e. whether the line needs re-rendering when the phase changes.
+bool raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned cols, int cursor_col,
+	unsigned flags);
 
 #endif
