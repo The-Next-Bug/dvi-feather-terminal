@@ -9,8 +9,16 @@ enable_testing()
 
 set(SRC "${CMAKE_CURRENT_LIST_DIR}/../src")
 
-add_executable(test_screen test_screen.c ${SRC}/screen.c)
-target_include_directories(test_screen PRIVATE ${SRC})
-target_compile_options(test_screen PRIVATE -Wall -Wextra -Werror -fsanitize=address,undefined)
-target_link_options(test_screen PRIVATE -fsanitize=address,undefined)
-add_test(NAME screen COMMAND test_screen)
+# unit_test(<name> <sources>...): builds test_<name> from test_<name>.c and
+# the given src/ files, and registers it with CTest.
+function(unit_test name)
+  list(TRANSFORM ARGN PREPEND "${SRC}/")
+  add_executable(test_${name} test_${name}.c ${ARGN})
+  target_include_directories(test_${name} PRIVATE ${SRC})
+  target_compile_options(test_${name} PRIVATE -Wall -Wextra -Werror -fsanitize=address,undefined)
+  target_link_options(test_${name} PRIVATE -fsanitize=address,undefined)
+  add_test(NAME ${name} COMMAND test_${name})
+endfunction()
+
+unit_test(screen screen.c)
+unit_test(term term.c screen.c)
