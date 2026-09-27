@@ -20,16 +20,58 @@ The encoder has two colour levels per 8-pixel group and colour plane, so in
 cells sharing a group show at most two levels per plane — true for normal
 text on one background and for reverse video. 80 columns is always exact.
 
-Status: VT100 emulation on UART0 (115200 8N1, TX = GP0, RX = GP1) in rows
-0-23, with row 24 as a status line (receive/overrun/drop/error counts).
+Status: VT100 emulation on UART0 (115200 8N1, TX = GP0, RX = GP1; optional
+RTS/CTS on GP3/GP2) in rows 0-23, with row 24 as a status line (receive,
+hold-off, overrun, drop and error counts).
 `src/vtparse.c` is a DEC-compatible escape sequence parser (Paul Williams'
 state machine); `src/term.c` implements cursor movement, scrolling regions,
 erase, insert/delete (VT102), tab stops, G0/G1 character sets (ASCII, UK,
 DEC Special Graphics), modes (DECAWM, DECOM, IRM, LNM, DECCKM, DECCOLM
 80/132, DECTCEM), save/restore cursor, SGR colours (8/16, 256 and direct,
 reduced to RGB222), DECALN, RIS, and replies to DA, DSR/CPR and DECREQTPARM
-on UART0 TX. Not yet: underline/blink rendering, double-size lines,
-DECSCNM, VT52 mode, a keyboard.
+on UART0 TX. Underline, blink and reverse screen (DECSCNM) are rendered.
+Not yet: double-size lines, VT52 mode, the alternate screen, a keyboard.
+
+### Wiring
+
+| Feather | Signal | Serial adapter |
+|---|---|---|
+| TX (GP0) | data out | RX |
+| RX (GP1) | data in | TX |
+| GND | | GND |
+
+3.3 V logic only.
+
+### Flow control (optional, off by default)
+
+The default build has no flow control. At 115200 baud the terminal keeps up
+with ordinary output, but a long burst that scrolls the whole screen can
+overrun it (the status line's `ovr`/`drop` counters show it). To use
+hardware RTS/CTS:
+
+1. Wire the handshake lines (these are the STEMMA QT pins, so that port is
+   then not available for I2C):
+
+   | Feather | Signal | Serial adapter |
+   |---|---|---|
+   | SCL (GP3) | RTS out: terminal ready to receive | CTS |
+   | SDA (GP2) | CTS in: host ready to receive | RTS |
+
+2. Build with flow control on:
+   ```sh
+   SERIAL_FLOW_CONTROL=ON scripts/build.sh
+   ```
+   `scripts/build.sh` passes the setting on every run (default `OFF`), and
+   records it in `build-info.txt`. For a plain CMake build, configure with
+   `-DSERIAL_FLOW_CONTROL=ON`.
+3. Enable RTS/CTS on the host side too: `stty -F /dev/ttyUSB0 crtscts`, or
+   `tools/hostbridge.py --rtscts ...`.
+
+The status line then shows `RTS/CTS` and a `hold` count of how often the
+terminal paused the host. Do not enable it without the wires: the Feather
+has pull-ups on SDA/SCL, so an unconnected CTS reads as "hold" and the
+terminal would never send its replies (device attribute and cursor position
+reports) to the host.
 
 At startup a demo alternates between 80 and 132 columns every 5 seconds
 until the first byte arrives on UART0, which starts the terminal (build
@@ -44,13 +86,14 @@ here plus the terminal's replies come back as its input.
 
 ```sh
 tools/hostbridge.py /dev/ttyUSB0 vttest   # or: vim, top, $SHELL ...
+# add --rtscts when the terminal is built with flow control
 ```
 
 ## Layout
 
 | Path | Contents |
 |---|---|
-| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `demo.[ch]`. RP2040-specific: `video.[ch]` (libdvi, core 1), `uart_rx.[ch]` (IRQ receive). `font_gen.py` builds the font tables |
+| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `demo.[ch]`. RP2040-specific: `video.[ch]` (libdvi, core 1), `serial.[ch]` (UART with RTS/CTS and a TX queue). `font_gen.py` builds the font tables |
 | `test/` | Host unit tests (plain CMake + gcc, no pico-sdk) |
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see above) |
 | `lib/pico-sdk`, `lib/PicoDVI` | Pinned submodules |

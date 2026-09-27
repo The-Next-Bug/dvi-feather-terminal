@@ -7,6 +7,7 @@ static void fill_slot(screen_t *s, unsigned slot, uint8_t fg, uint8_t bg) {
 	memset(line->glyph, ' ', sizeof line->glyph);
 	memset(line->fg, fg, sizeof line->fg);
 	memset(line->bg, bg, sizeof line->bg);
+	memset(line->attr, 0, sizeof line->attr);
 	s->dirty |= 1u << slot;
 }
 
@@ -18,9 +19,11 @@ void screen_init(screen_t *s, unsigned cols, uint8_t fg, uint8_t bg) {
 	}
 	s->cursor_col = s->cursor_row = 0;
 	s->cursor_visible = false;
+	s->reverse_rows = 0;
 }
 
-void screen_put(screen_t *s, unsigned col, unsigned row, uint8_t glyph, uint8_t fg, uint8_t bg) {
+void screen_put_attr(screen_t *s, unsigned col, unsigned row, uint8_t glyph, uint8_t fg, uint8_t bg,
+		uint8_t attr) {
 	if (col >= s->cols || row >= SCREEN_ROWS)
 		return;
 	unsigned slot = s->row_map[row];
@@ -28,7 +31,12 @@ void screen_put(screen_t *s, unsigned col, unsigned row, uint8_t glyph, uint8_t 
 	line->glyph[col] = glyph;
 	line->fg[col] = fg;
 	line->bg[col] = bg;
+	line->attr[col] = attr;
 	s->dirty |= 1u << slot;
+}
+
+void screen_put(screen_t *s, unsigned col, unsigned row, uint8_t glyph, uint8_t fg, uint8_t bg) {
+	screen_put_attr(s, col, row, glyph, fg, bg, 0);
 }
 
 void screen_puts(screen_t *s, unsigned col, unsigned row, const char *text, uint8_t fg, uint8_t bg) {
@@ -49,6 +57,20 @@ void screen_colours(const screen_t *s, unsigned col, unsigned row, uint8_t *fg, 
 	const screen_line_t *line = screen_line(s, row);
 	*fg = line->fg[col];
 	*bg = line->bg[col];
+}
+
+uint8_t screen_attr(const screen_t *s, unsigned col, unsigned row) {
+	if (col >= s->cols || row >= SCREEN_ROWS)
+		return 0;
+	return screen_line(s, row)->attr[col];
+}
+
+void screen_set_reverse_rows(screen_t *s, uint32_t mask) {
+	uint32_t changed = s->reverse_rows ^ mask;
+	s->reverse_rows = mask;
+	for (unsigned row = 0; row < SCREEN_ROWS; ++row)
+		if (changed >> row & 1)
+			s->dirty |= 1u << s->row_map[row];
 }
 
 void screen_clear_line(screen_t *s, unsigned row, uint8_t fg, uint8_t bg) {
@@ -79,6 +101,7 @@ void screen_erase(screen_t *s, unsigned row, unsigned from, unsigned to, uint8_t
 	memset(&line->glyph[from], ' ', to - from);
 	memset(&line->fg[from], fg, to - from);
 	memset(&line->bg[from], bg, to - from);
+	memset(&line->attr[from], 0, to - from);
 	s->dirty |= 1u << slot;
 }
 
@@ -87,6 +110,7 @@ static void shift_cells(screen_line_t *line, unsigned to, unsigned from, unsigne
 	memmove(&line->glyph[to], &line->glyph[from], count);
 	memmove(&line->fg[to], &line->fg[from], count);
 	memmove(&line->bg[to], &line->bg[from], count);
+	memmove(&line->attr[to], &line->attr[from], count);
 }
 
 void screen_insert_cells(screen_t *s, unsigned row, unsigned col, unsigned n, uint8_t fg, uint8_t bg) {

@@ -32,6 +32,8 @@ _Static_assert(SCREEN_ROWS * RASTER_ROW_HEIGHT == FRAME_HEIGHT, "rows fill the s
 
 // Cursor blink: on for 32 frames, off for 32 (about 1 Hz at 60 Hz).
 #define CURSOR_BLINK_FRAMES 32
+// Blinking text (SGR 5): shown for this long, then hidden for as long.
+#define BLINK_HALF_PERIOD_MS 500
 
 static struct dvi_inst dvi0;
 static volatile uint32_t diag_frames, diag_max_cycles;
@@ -179,12 +181,35 @@ void video_update(screen_t *screen) {
 		drawn_col = col_now;
 	}
 
+	// Blink: flip the phase every BLINK_HALF_PERIOD_MS and re-render the lines
+	// that have blinking cells.
+	static bool blink_off;
+	static uint32_t blink_slots;
+	static absolute_time_t next_blink;
+	if (time_reached(next_blink)) {
+		next_blink = make_timeout_time_ms(BLINK_HALF_PERIOD_MS);
+		blink_off = !blink_off;
+		screen->dirty |= blink_slots;
+	}
+
+	// Display row of each slot, for reverse video (DECSCNM) by row.
+	uint8_t slot_row[SCREEN_ROWS];
+	for (uint row = 0; row < SCREEN_ROWS; ++row)
+		slot_row[screen->row_map[row]] = (uint8_t)row;
+
 	uint32_t dirty = screen->dirty;
 	screen->dirty = 0;
 	for (int slot = 0; dirty; ++slot, dirty >>= 1) {
-		if (dirty & 1)
-			raster_render_line(&raster[slot], &screen->lines[slot], screen->cols,
-				slot == slot_now ? col_now : -1);
+		if (!(dirty & 1))
+			continue;
+		unsigned flags = (blink_off ? RASTER_BLINK_OFF : 0) |
+			(screen->reverse_rows >> slot_row[slot] & 1 ? RASTER_REVERSE : 0);
+		bool blinks = raster_render_line(&raster[slot], &screen->lines[slot], screen->cols,
+			slot == slot_now ? col_now : -1, flags);
+		if (blinks)
+			blink_slots |= 1u << slot;
+		else
+			blink_slots &= ~(1u << slot);
 	}
 }
 

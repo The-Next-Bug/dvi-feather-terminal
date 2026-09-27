@@ -7,7 +7,8 @@
 // applied here: printing with DEC-style deferred autowrap, C0 controls,
 // cursor movement, scrolling regions, erasing, line and character
 // insert/delete (VT102), tab stops, character sets (G0/G1: ASCII, UK, DEC
-// Special Graphics), modes, save/restore cursor, SGR colours and replies to
+// Special Graphics), modes (including DECSCNM reverse screen), save/restore
+// cursor, SGR colours, underline and blink, and replies to
 // device attribute and status requests, and REP (repeat character, which
 // ncurses uses under TERM=xterm-16color).
 //
@@ -17,8 +18,7 @@
 // whole screen.
 //
 // Not (yet) implemented: VT52 mode (dmt.16), the alternate screen (dmt.15),
-// double-width/height lines (dmt.12/13), underline and blink rendering and
-// reverse-screen mode (dmt.4), smooth scrolling (dmt.14).
+// double-width/height lines (dmt.12/13), smooth scrolling (dmt.14).
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -59,6 +59,7 @@ typedef struct {
 	bool newline_mode;    // LNM: LF, VT and FF also do CR
 	bool cursor_keys_app; // DECCKM, for the keyboard
 	bool keypad_app;      // DECKPAM / DECKPNM, for the keyboard
+	bool reverse_screen;  // DECSCNM
 
 	uint8_t tabs[(SCREEN_MAX_COLS + 7) / 8];
 	uint8_t last_char; // for REP: the last character printed, 0 after anything else

@@ -1,9 +1,10 @@
 // DVI serial terminal for the Adafruit Feather RP2040 DVI.
 //
 // Core 1 renders the screen over DVI (video.c). Core 0 receives UART0 into
-// a ring buffer (uart_rx.c), feeds it to the VT100 emulator (term.c) that
-// owns rows 0-23, sends its replies back on UART0 TX, and rasterises changed
-// lines; row 24 is a status line.
+// a ring buffer (serial.c), feeds it to the VT100 emulator (term.c) that
+// owns rows 0-23, queues its replies back on UART0 TX, and rasterises changed
+// lines; row 24 is a status line. With -DSERIAL_FLOW_CONTROL=ON, UART0 uses
+// RTS/CTS on GP3/GP2 (the STEMMA QT pins).
 //
 // With STARTUP_DEMO (the default), the demo screen alternates between 80
 // and 132 columns every DEMO_INTERVAL_MS until the first byte arrives on
@@ -19,14 +20,21 @@
 #include "screen.h"
 #include "term.h"
 #include "term_build.h"
-#include "uart_rx.h"
+#include "serial.h"
 #include "video.h"
 
 #ifndef STARTUP_DEMO
 #define STARTUP_DEMO 1
 #endif
 
+#ifndef SERIAL_FLOW_CONTROL
+#define SERIAL_FLOW_CONTROL 0
+#endif
+
 #define BAUD 115200
+// UART0 hardware flow control pins (RP2040 UART0 CTS/RTS function).
+#define CTS_PIN 2
+#define RTS_PIN 3
 #define TERM_COLS 80
 #define DEMO_INTERVAL_MS 5000
 
@@ -70,7 +78,7 @@ static size_t run_demo(uint8_t *buf, size_t max) {
 
 		absolute_time_t next = make_timeout_time_ms(DEMO_INTERVAL_MS);
 		while (!time_reached(next)) {
-			size_t n = uart_rx_read(buf, max);
+			size_t n = serial_read(buf, max);
 			if (n)
 				return n;
 			diag_poll();
@@ -81,13 +89,19 @@ static size_t run_demo(uint8_t *buf, size_t max) {
 // Replies to the host (device attributes, cursor position reports).
 static void send_reply(void *ctx, const uint8_t *data, size_t len) {
 	(void)ctx;
-	uart_write_blocking(uart0, data, len);
+	serial_write(data, len);
 }
 
-static void draw_status(const uart_rx_stats_t *st) {
+static bool stats_equal(const serial_stats_t *a, const serial_stats_t *b) {
+	return a->received == b->received && a->overruns == b->overruns && a->dropped == b->dropped &&
+		a->errors == b->errors && a->throttled == b->throttled;
+}
+
+static void draw_status(const serial_stats_t *st) {
 	char text[SCREEN_MAX_COLS + 1];
-	snprintf(text, sizeof text, " VT100 %ux24 | %s | UART0 %u 8N1 | rx %lu  ovr %lu  drop %lu  err %lu",
-		screen.cols, TERM_BUILD_ID, BAUD, (unsigned long)st->received, (unsigned long)st->overruns,
+	snprintf(text, sizeof text, " VT100 %ux24 | %s | %u 8N1%s | rx %lu hold %lu ovr %lu drop %lu err %lu",
+		screen.cols, TERM_BUILD_ID, BAUD, SERIAL_FLOW_CONTROL ? " RTS/CTS" : "",
+		(unsigned long)st->received, (unsigned long)st->throttled, (unsigned long)st->overruns,
 		(unsigned long)st->dropped, (unsigned long)st->errors);
 	screen_clear_line(&screen, STATUS_ROW, STATUS_FG, STATUS_BG);
 	screen_puts(&screen, 0, STATUS_ROW, text, STATUS_FG, STATUS_BG);
@@ -97,8 +111,12 @@ int main(void) {
 	diag_init();
 	video_init();
 	// After video_init: the baud divisor depends on the final clk_peri.
-	uart_rx_init(uart0, BAUD, PICO_DEFAULT_UART_TX_PIN, PICO_DEFAULT_UART_RX_PIN);
-	diag_mark("uart_rx_init done");
+	// Diagnostic builds write to UART0 with blocking calls, which an unwired
+	// CTS (pulled up on the Feather) would hold off forever: RTS only there.
+	serial_init(uart0, BAUD, PICO_DEFAULT_UART_TX_PIN, PICO_DEFAULT_UART_RX_PIN,
+		SERIAL_FLOW_CONTROL && !VIDEO_DIAG ? CTS_PIN : SERIAL_NO_PIN,
+		SERIAL_FLOW_CONTROL ? RTS_PIN : SERIAL_NO_PIN);
+	diag_mark("serial_init done");
 
 	screen_init(&screen, TERM_COLS, FG, BG);
 	video_start(&screen);
@@ -110,7 +128,7 @@ int main(void) {
 	screen_init(&screen, TERM_COLS, FG, BG);
 	term_init(&term, &screen, 0, TERM_ROWS, FG, BG);
 	term_set_reply(&term, send_reply, NULL);
-	uart_rx_stats_t shown = uart_rx_stats();
+	serial_stats_t shown = serial_stats();
 	unsigned shown_cols = screen.cols;
 	draw_status(&shown);
 
@@ -118,16 +136,18 @@ int main(void) {
 	snprintf(banner, sizeof banner, "DVI Feather Terminal build %s (%s, %s)\r\n",
 		TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
 	term_puts(&term, banner);
-	term_puts(&term, "UART0 on TX (GP0) / RX (GP1)\r\n\r\n");
+	term_puts(&term, SERIAL_FLOW_CONTROL ? "UART0 on TX (GP0) / RX (GP1), RTS (GP3) / CTS (GP2)\r\n\r\n"
+		: "UART0 on TX (GP0) / RX (GP1)\r\n\r\n");
 	if (pending)
 		term_write(&term, buf, pending);
 	video_update(&screen);
 
 	absolute_time_t next_status = make_timeout_time_ms(STATUS_INTERVAL_MS);
 	while (true) {
-		size_t n = uart_rx_read(buf, sizeof buf);
+		size_t n = serial_read(buf, sizeof buf);
 		if (n)
 			term_write(&term, buf, n);
+		serial_poll();
 
 		// DECCOLM re-initialises the whole screen, status line included.
 		if (screen.cols != shown_cols) {
@@ -136,9 +156,8 @@ int main(void) {
 		}
 		if (time_reached(next_status)) {
 			next_status = make_timeout_time_ms(STATUS_INTERVAL_MS);
-			uart_rx_stats_t st = uart_rx_stats();
-			if (st.received != shown.received || st.overruns != shown.overruns ||
-			    st.dropped != shown.dropped || st.errors != shown.errors) {
+			serial_stats_t st = serial_stats();
+			if (!stats_equal(&st, &shown)) {
 				shown = st;
 				draw_status(&shown);
 			}

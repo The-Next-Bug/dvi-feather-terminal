@@ -22,6 +22,8 @@ option(VIDEO_DIAG "Bring-up diagnostics on UART0 TX: boot markers, core 1 timing
 # DVI clocks above 252 MHz (e.g. 67.5 MHz SCK at 270 MHz) flash execution
 # hangs. PicoDVI's apps are built this way too (PICO_COPY_TO_RAM=1). See bd
 # dvi-feather-terminal-dmt.10.
+# Off by default: needs the two handshake wires (see README, "Flow control").
+option(SERIAL_FLOW_CONTROL "RTS/CTS on UART0 (GP3 RTS out, GP2 CTS in: the STEMMA QT pins)" OFF)
 option(COPY_TO_RAM "Run the whole program from SRAM instead of flash" ON)
 # A PicoDVI serialiser config from common_dvi_pin_configs.h.
 set(DVI_SERIAL_CONFIG adafruit_feather_dvi_cfg CACHE STRING "PicoDVI pin configuration")
@@ -53,7 +55,7 @@ add_executable(dvi_terminal
   src/raster.c
   src/screen.c
   src/term.c
-  src/uart_rx.c
+  src/serial.c
   src/video.c
   src/vtparse.c
   ${FONT_SOURCES}
@@ -70,13 +72,14 @@ target_include_directories(dvi_terminal PRIVATE
 
 # Our sources only: libdvi is an INTERFACE library compiled into this target.
 set_source_files_properties(src/demo.c src/diag.c src/main.c src/raster.c src/screen.c src/term.c
-  src/uart_rx.c src/video.c src/vtparse.c
+  src/serial.c src/video.c src/vtparse.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 
 target_compile_definitions(dvi_terminal PRIVATE
   DVI_SERIAL_CONFIG=${DVI_SERIAL_CONFIG}
   STARTUP_DEMO=$<BOOL:${STARTUP_DEMO}>
   VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>
+  SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>
   DVI_VERTICAL_REPEAT=1
   # The render loop needs very little stack.
   PICO_CORE1_STACK_SIZE=0x200
@@ -90,7 +93,7 @@ target_link_libraries(dvi_terminal
   libdvi
 )
 
-# UART0 belongs to the terminal (uart_rx.c): no stdio on it or on USB.
+# UART0 belongs to the terminal (serial.c): no stdio on it or on USB.
 if(VIDEO_DIAG)
   # Stack overflows fault (and are reported) instead of corrupting memory.
   target_compile_definitions(dvi_terminal PRIVATE PICO_USE_STACK_GUARDS=1)
