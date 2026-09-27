@@ -1,51 +1,48 @@
 #ifndef SCREEN_H
 #define SCREEN_H
 
-// The character cell buffer shared by the terminal (core 0, writer) and the
-// video renderer (core 1, reader). Portable C with no pico-sdk dependency, so
-// it is unit-tested on the host.
+// The character cell buffer: what the terminal writes (core 0) and the video
+// code renders. Portable C with no pico-sdk dependency, so it is unit-tested
+// on the host.
 //
-// Each line is stored in the format the renderer consumes directly: one glyph
-// code per cell (see font.h), plus three colour planes (blue, green, red, as
-// TMDS lanes 0-2) holding a 2-bit foreground and background per cell. Colours
-// are RGB222 (0bRRGGBB).
+// Each cell holds a glyph code (see font.h) and RGB222 (0bRRGGBB) foreground
+// and background colours. The screen is 80 or 132 columns wide.
 //
-// Display rows map to lines through row_map, so scrolling rotates indices
-// instead of copying cells.
+// Display rows map to line slots through row_map, so scrolling rotates
+// indices instead of copying cells. Changed slots are flagged in `dirty`
+// for the renderer, which keeps its pixels per slot too, so a scroll only
+// re-renders the recycled line.
 //
-// The cursor is not drawn into the cells: the renderer shows it by swapping
-// the foreground and background of the cursor cell as it draws the row.
+// The cursor is not drawn into the cells: the renderer shows it by
+// inverting the cursor cell's pixels.
 
 #include <stdbool.h>
 #include <stdint.h>
 
-#define SCREEN_COLS 80
-#define SCREEN_ROWS 30
-#define SCREEN_PLANES 3
-#define SCREEN_CELLS_PER_WORD 8 // 4 colour bits per cell per plane
-#define SCREEN_COLOUR_WORDS (SCREEN_COLS / SCREEN_CELLS_PER_WORD)
-
-// Cell colour bits within a plane word: fg in bits 1:0, bg in bits 3:2.
-#define SCREEN_CELL_SHIFT(col) ((col) % SCREEN_CELLS_PER_WORD * 4)
-#define SCREEN_CELL_WORD(col) ((col) / SCREEN_CELLS_PER_WORD)
+#define SCREEN_MAX_COLS 132
+#define SCREEN_ROWS 25 // 24 text rows + a status line
 
 #define RGB222(r, g, b) ((uint8_t)(((r) & 3) << 4 | ((g) & 3) << 2 | ((b) & 3)))
 
 typedef struct {
-	uint8_t glyph[SCREEN_COLS];
-	uint32_t colour[SCREEN_PLANES][SCREEN_COLOUR_WORDS];
+	uint8_t glyph[SCREEN_MAX_COLS];
+	uint8_t fg[SCREEN_MAX_COLS];
+	uint8_t bg[SCREEN_MAX_COLS];
 } screen_line_t;
 
 typedef struct {
 	screen_line_t lines[SCREEN_ROWS];
 	uint8_t row_map[SCREEN_ROWS];
+	uint8_t cols;
 	uint8_t cursor_col, cursor_row;
 	bool cursor_visible;
+	uint32_t dirty; // bit n: lines[n] changed since the renderer last saw it
 } screen_t;
 
-// Map every row to its own line, fill the screen with blanks in fg/bg and
-// hide the cursor.
-void screen_init(screen_t *s, uint8_t fg, uint8_t bg);
+// Set the width (80 or 132; anything else is taken as 80), map every row to
+// its own slot, fill the screen with blanks in fg/bg and hide the cursor.
+// Every slot is marked dirty.
+void screen_init(screen_t *s, unsigned cols, uint8_t fg, uint8_t bg);
 
 // Out-of-range cells are ignored.
 void screen_put(screen_t *s, unsigned col, unsigned row, uint8_t glyph, uint8_t fg, uint8_t bg);
@@ -58,14 +55,6 @@ void screen_clear_line(screen_t *s, unsigned row, uint8_t fg, uint8_t bg);
 
 // Scroll rows top..bottom (inclusive) up by one; the bottom row is cleared.
 void screen_scroll_up(screen_t *s, unsigned top, unsigned bottom, uint8_t fg, uint8_t bg);
-
-// Return a plane word with the fg and bg of the cell at col swapped.
-static inline uint32_t screen_swap_cell_colours(uint32_t word, unsigned col) {
-	unsigned shift = SCREEN_CELL_SHIFT(col);
-	uint32_t cell = word >> shift & 0xfu;
-	uint32_t swapped = (cell >> 2 | cell << 2) & 0xfu;
-	return (word & ~(0xfu << shift)) | swapped << shift;
-}
 
 static inline const screen_line_t *screen_line(const screen_t *s, unsigned row) {
 	return &s->lines[s->row_map[row]];

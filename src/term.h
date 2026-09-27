@@ -6,7 +6,8 @@
 // parser will replace term_putc's control handling.
 //
 // The terminal owns a band of screen rows (top .. top + rows - 1); rows
-// outside it (e.g. a status line) are left alone.
+// outside it (e.g. a status line) are left alone. Its width is the screen's
+// (80 or 132); after changing the screen width, call term_init again.
 //
 // Wrapping follows the VT100: a character written in the last column leaves
 // the cursor there with a wrap pending, and the next printable character

@@ -8,6 +8,8 @@ set(CMAKE_C_STANDARD 11)
 enable_testing()
 
 set(SRC "${CMAKE_CURRENT_LIST_DIR}/../src")
+set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
+include(../cmake/fonts.cmake)
 
 # unit_test(<name> <sources>...): builds test_<name> from test_<name>.c and
 # the given src/ files, and registers it with CTest.
@@ -22,3 +24,5 @@ endfunction()
 
 unit_test(screen screen.c)
 unit_test(term term.c screen.c)
+unit_test(raster raster.c screen.c demo.c)
+target_sources(test_raster PRIVATE ${FONT_SOURCES})
