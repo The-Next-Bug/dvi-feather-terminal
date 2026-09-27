@@ -55,7 +55,7 @@ static inline unsigned stored_glyph_row(const font_info_t *f, unsigned sr, uint8
 	return f->glyphs[(sr - 1) * FONT_GLYPHS + g];
 }
 
-void raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned cols) {
+void raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned cols, int cursor_col) {
 	const unsigned w = raster_cell_width(cols), x0 = raster_x_offset(cols);
 	const font_info_t *font = font_for(cols);
 	const uint8_t *ink = font->ink;
@@ -79,7 +79,7 @@ void raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned 
 			// This cell's pixels within group g, as a mask over the cell.
 			int first = (int)(8 * g) - (int)x;
 			unsigned in_group = (first >= 0 ? 0xffu << first : 0xffu >> -first) & cell_mask;
-			bool fg_shows = ink[line->glyph[c]] & in_group;
+			bool fg_shows = (ink[line->glyph[c]] & in_group) || (int)c == cursor_col;
 			for (int p = 0; p < RASTER_PLANES; ++p) {
 				unsigned f = level(line->fg[c], p), b = level(line->bg[c], p);
 				if (!fg_shows)

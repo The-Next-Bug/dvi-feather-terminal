@@ -1,8 +1,9 @@
 // DVI serial terminal for the Adafruit Feather RP2040 DVI.
 //
 // Core 1 renders the screen over DVI (video.c). Core 0 receives UART0 into
-// a ring buffer (uart_rx.c), feeds it to a teletype (term.c) that owns rows
-// 0-23, and rasterises changed lines; row 24 is a status line.
+// a ring buffer (uart_rx.c), feeds it to the VT100 emulator (term.c) that
+// owns rows 0-23, sends its replies back on UART0 TX, and rasterises changed
+// lines; row 24 is a status line.
 //
 // With STARTUP_DEMO (the default), the demo screen alternates between 80
 // and 132 columns every DEMO_INTERVAL_MS until the first byte arrives on
@@ -77,10 +78,16 @@ static size_t run_demo(uint8_t *buf, size_t max) {
 	}
 }
 
+// Replies to the host (device attributes, cursor position reports).
+static void send_reply(void *ctx, const uint8_t *data, size_t len) {
+	(void)ctx;
+	uart_write_blocking(uart0, data, len);
+}
+
 static void draw_status(const uart_rx_stats_t *st) {
 	char text[SCREEN_MAX_COLS + 1];
-	snprintf(text, sizeof text, " %s | UART0 %u 8N1 | rx %lu  ovr %lu  drop %lu  err %lu",
-		TERM_BUILD_ID, BAUD, (unsigned long)st->received, (unsigned long)st->overruns,
+	snprintf(text, sizeof text, " VT100 %ux24 | %s | UART0 %u 8N1 | rx %lu  ovr %lu  drop %lu  err %lu",
+		screen.cols, TERM_BUILD_ID, BAUD, (unsigned long)st->received, (unsigned long)st->overruns,
 		(unsigned long)st->dropped, (unsigned long)st->errors);
 	screen_clear_line(&screen, STATUS_ROW, STATUS_FG, STATUS_BG);
 	screen_puts(&screen, 0, STATUS_ROW, text, STATUS_FG, STATUS_BG);
@@ -102,7 +109,9 @@ int main(void) {
 
 	screen_init(&screen, TERM_COLS, FG, BG);
 	term_init(&term, &screen, 0, TERM_ROWS, FG, BG);
+	term_set_reply(&term, send_reply, NULL);
 	uart_rx_stats_t shown = uart_rx_stats();
+	unsigned shown_cols = screen.cols;
 	draw_status(&shown);
 
 	char banner[SCREEN_MAX_COLS + 1];
@@ -120,6 +129,11 @@ int main(void) {
 		if (n)
 			term_write(&term, buf, n);
 
+		// DECCOLM re-initialises the whole screen, status line included.
+		if (screen.cols != shown_cols) {
+			shown_cols = screen.cols;
+			draw_status(&shown);
+		}
 		if (time_reached(next_status)) {
 			next_status = make_timeout_time_ms(STATUS_INTERVAL_MS);
 			uart_rx_stats_t st = uart_rx_stats();

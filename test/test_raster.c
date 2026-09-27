@@ -43,7 +43,7 @@ static unsigned wanted_level(const screen_line_t *line, unsigned cols, unsigned 
 // scanlines and pixels, border included) whose level is not the wanted one.
 static unsigned mismatches(unsigned row) {
 	const screen_line_t *line = screen_line(&s, row);
-	raster_render_line(&out, line, s.cols);
+	raster_render_line(&out, line, s.cols, -1);
 	unsigned bad = 0;
 	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
 		for (int p = 0; p < RASTER_PLANES; ++p)
@@ -82,7 +82,7 @@ static void test_80_any_colours_exact(void) {
 static void test_80_glyph_bits(void) {
 	screen_init(&s, 80, RGB222(2, 2, 2), 0);
 	screen_put(&s, 0, 0, 'A', RGB222(3, 0, 0), 0);
-	raster_render_line(&out, screen_line(&s, 0), 80);
+	raster_render_line(&out, screen_line(&s, 0), 80, -1);
 	// Red plane: 'A' pixels at byte 10 (x = 80), set level 3, clear level 0.
 	for (unsigned gy = 0; gy < FONT_8X16_HEIGHT; ++gy)
 		CHECK_EQ(out.bits[1 + gy][2][10], font_8x16[gy * FONT_GLYPHS + 'A']);
@@ -121,7 +121,7 @@ static void test_132_three_levels_approximated(void) {
 	for (unsigned c = 0; c < 132; ++c)
 		screen_put(&s, c, 0, 0x83 /* full block */, RGB222(c % 3 + 1, 0, 0), 0);
 	const screen_line_t *line = screen_line(&s, 0);
-	raster_render_line(&out, line, 132);
+	raster_render_line(&out, line, 132, -1);
 	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
 		for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x) {
 			int d = (int)shown_level(&out, 132, sy, x, 2) - (int)wanted_level(line, 132, sy, x, 2);
@@ -131,7 +131,7 @@ static void test_132_three_levels_approximated(void) {
 
 static void test_border_is_black(void) {
 	screen_init(&s, 132, RGB222(3, 3, 3), RGB222(3, 3, 3));
-	raster_render_line(&out, screen_line(&s, 0), 132);
+	raster_render_line(&out, screen_line(&s, 0), 132, -1);
 	for (int p = 0; p < RASTER_PLANES; ++p)
 		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
 			for (unsigned x = 0; x < 4; ++x)
@@ -155,7 +155,7 @@ static void test_connectors_join(void) {
 		screen_init(&s, cols, RGB222(2, 2, 2), 0);
 		for (unsigned i = 0; i < sizeof verticals; ++i)
 			screen_put(&s, i, 0, verticals[i], RGB222(2, 2, 2), 0);
-		raster_render_line(&out, screen_line(&s, 0), cols);
+		raster_render_line(&out, screen_line(&s, 0), cols, -1);
 		for (unsigned i = 0; i < sizeof verticals; ++i) {
 			// Some column of the glyph is lit on every scanline.
 			unsigned always = (1u << w) - 1;
@@ -170,7 +170,7 @@ static void test_connectors_join(void) {
 
 		screen_init(&s, cols, RGB222(2, 2, 2), 0);
 		screen_puts(&s, 0, 0, "\xc5\xc9gjpqy|", RGB222(2, 2, 2), 0); // Å É descenders and a bar
-		raster_render_line(&out, screen_line(&s, 0), cols);
+		raster_render_line(&out, screen_line(&s, 0), cols, -1);
 		unsigned top = raster_pad_top(cols), rows = raster_font_rows(cols);
 		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
 			if (sy >= top && sy < top + rows)
@@ -178,6 +178,23 @@ static void test_connectors_join(void) {
 			for (unsigned x = x0; x < x0 + 8 * w; ++x)
 				CHECK_EQ(shown_level(&out, cols, sy, x, 2), 0);
 		}
+	}
+}
+
+// The cursor cell gets both of its levels, so inverting it shows even on a
+// blank cell; without the cursor a blank cell's groups hold only bg.
+static void test_cursor_cell_has_both_levels(void) {
+	for (unsigned cols = 80; cols <= 132; cols += 52) {
+		unsigned x = raster_x_offset(cols) + 5 * raster_cell_width(cols);
+		screen_init(&s, cols, RGB222(2, 2, 2), 0);
+		raster_render_line(&out, screen_line(&s, 0), cols, 5);
+		unsigned g = x / 8, nibble = out.colour[1][g / 8] >> 4 * (g % 8) & 0xf;
+		CHECK_EQ(nibble & 3, 2); // set level: the fg
+		CHECK_EQ(nibble >> 2, 0); // clear level: the bg
+		CHECK_EQ(shown_level(&out, cols, 12, x, 1), 0); // still shows as bg
+		raster_render_line(&out, screen_line(&s, 0), cols, -1);
+		nibble = out.colour[1][g / 8] >> 4 * (g % 8) & 0xf;
+		CHECK_EQ(nibble, 0);
 	}
 }
 
@@ -207,6 +224,7 @@ int main(void) {
 	RUN(test_132_three_levels_approximated);
 	RUN(test_border_is_black);
 	RUN(test_connectors_join);
+	RUN(test_cursor_cell_has_both_levels);
 	RUN(test_demo);
 	return tests_done();
 }

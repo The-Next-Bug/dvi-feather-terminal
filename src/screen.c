@@ -56,6 +56,57 @@ void screen_clear_line(screen_t *s, unsigned row, uint8_t fg, uint8_t bg) {
 		fill_slot(s, s->row_map[row], fg, bg);
 }
 
+void screen_scroll_down(screen_t *s, unsigned top, unsigned bottom, uint8_t fg, uint8_t bg) {
+	if (top >= bottom || bottom >= SCREEN_ROWS)
+		return;
+	// The slot leaving the bottom is recycled as the new top row.
+	uint8_t recycled = s->row_map[bottom];
+	for (unsigned row = bottom; row > top; --row)
+		s->row_map[row] = s->row_map[row - 1];
+	s->row_map[top] = recycled;
+	fill_slot(s, recycled, fg, bg);
+}
+
+void screen_erase(screen_t *s, unsigned row, unsigned from, unsigned to, uint8_t fg, uint8_t bg) {
+	if (row >= SCREEN_ROWS)
+		return;
+	if (to > s->cols)
+		to = s->cols;
+	if (from >= to)
+		return;
+	unsigned slot = s->row_map[row];
+	screen_line_t *line = &s->lines[slot];
+	memset(&line->glyph[from], ' ', to - from);
+	memset(&line->fg[from], fg, to - from);
+	memset(&line->bg[from], bg, to - from);
+	s->dirty |= 1u << slot;
+}
+
+// Move count cells of a line from column `from` to column `to`.
+static void shift_cells(screen_line_t *line, unsigned to, unsigned from, unsigned count) {
+	memmove(&line->glyph[to], &line->glyph[from], count);
+	memmove(&line->fg[to], &line->fg[from], count);
+	memmove(&line->bg[to], &line->bg[from], count);
+}
+
+void screen_insert_cells(screen_t *s, unsigned row, unsigned col, unsigned n, uint8_t fg, uint8_t bg) {
+	if (row >= SCREEN_ROWS || col >= s->cols)
+		return;
+	if (n > s->cols - col)
+		n = s->cols - col;
+	shift_cells(&s->lines[s->row_map[row]], col + n, col, s->cols - col - n);
+	screen_erase(s, row, col, col + n, fg, bg);
+}
+
+void screen_delete_cells(screen_t *s, unsigned row, unsigned col, unsigned n, uint8_t fg, uint8_t bg) {
+	if (row >= SCREEN_ROWS || col >= s->cols)
+		return;
+	if (n > s->cols - col)
+		n = s->cols - col;
+	shift_cells(&s->lines[s->row_map[row]], col, col + n, s->cols - col - n);
+	screen_erase(s, row, s->cols - n, s->cols, fg, bg);
+}
+
 void screen_scroll_up(screen_t *s, unsigned top, unsigned bottom, uint8_t fg, uint8_t bg) {
 	if (top >= bottom || bottom >= SCREEN_ROWS)
 		return;

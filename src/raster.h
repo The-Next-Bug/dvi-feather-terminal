@@ -79,7 +79,10 @@ static inline unsigned raster_stored_row(unsigned cols, unsigned sy) {
 	return rows + 1;
 }
 
-// Render a screen line of `cols` cells (80 or 132).
-void raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned cols);
+// Render a screen line of `cols` cells (80 or 132). cursor_col is the column
+// of the cursor if it is on this line, or -1: that cell's fg is given a level
+// even where the glyph has no ink, so the renderer's cursor (which swaps each
+// pixel between its group's two levels) shows on blank cells.
+void raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned cols, int cursor_col);
 
 #endif
