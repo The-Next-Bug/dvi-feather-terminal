@@ -1,0 +1,21 @@
+Flashing the DVI terminal firmware
+==================================
+
+Files: dvi_terminal-<target>.uf2 for each supported board, e.g.
+dvi_terminal-feather-rp2040-dvi.uf2 for the Adafruit Feather RP2040 DVI.
+
+1. Hold the BOOT button, press and release RESET, then release BOOT.
+   (Or hold BOOT while plugging in USB.) The board appears as a USB drive
+   named RPI-RP2.
+
+2. Copy the .uf2 for your board onto that drive. The board reboots into
+   the new firmware when the copy finishes.
+
+   picotool also works: picotool load -x dvi_terminal-<target>.uf2
+
+3. Connect a DVI/HDMI monitor. The terminal runs at 640x480 60 Hz and shows
+   the build id on its top line. The same line is printed on the Feather's
+   TX pin (UART0, 115200 8N1) at startup.
+
+The BIN files are the same images as raw flash contents, for SWD programmers
+(load at 0x10000000). SHA256SUMS covers the UF2 and BIN files.
