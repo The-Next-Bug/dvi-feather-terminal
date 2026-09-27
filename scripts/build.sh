@@ -26,6 +26,10 @@ case "$TARGET" in
     pico_board=adafruit_feather_rp2040
     dvi_config=adafruit_feather_dvi_cfg
     ;;
+  pico2-dvi-sock) # Raspberry Pi Pico 2 (RP2350) with the Pico DVI Sock
+    pico_board=pico2
+    dvi_config=pico_sock_cfg
+    ;;
   *)
     echo "error: unknown TARGET '$TARGET'" >&2
     exit 1

@@ -66,10 +66,13 @@ void serial_init(uart_inst_t *uart, unsigned baud, unsigned tx_pin, unsigned rx_
 	uart_set_fifo_enabled(uart, true);
 	gpio_set_function(tx_pin, UART_FUNCSEL_NUM(uart, tx_pin));
 	gpio_set_function(rx_pin, UART_FUNCSEL_NUM(uart, rx_pin));
+	// CTS/RTS are the plain UART function on both RP2040 and RP2350.
+	// (UART_FUNCSEL_NUM is for TX/RX: on RP2350 it picks the auxiliary
+	// function, UART TX/RX, for GPIOs 2 and 3.)
 	if (cts_pin != SERIAL_NO_PIN)
-		gpio_set_function((unsigned)cts_pin, UART_FUNCSEL_NUM(uart, cts_pin));
+		gpio_set_function((unsigned)cts_pin, GPIO_FUNC_UART);
 	if (rts_pin != SERIAL_NO_PIN)
-		gpio_set_function((unsigned)rts_pin, UART_FUNCSEL_NUM(uart, rts_pin));
+		gpio_set_function((unsigned)rts_pin, GPIO_FUNC_UART);
 	uart_set_hw_flow(uart, cts_pin != SERIAL_NO_PIN, rts_pin != SERIAL_NO_PIN);
 
 	unsigned irq = UART_IRQ_NUM(uart);
