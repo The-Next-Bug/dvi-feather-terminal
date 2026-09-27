@@ -1,18 +1,14 @@
 #include "screen.h"
 
-// Cell colour bits within a plane word: fg in bits 1:0, bg in bits 3:2.
-#define CELL_SHIFT(col) ((col) % SCREEN_CELLS_PER_WORD * 4)
-#define CELL_WORD(col) ((col) / SCREEN_CELLS_PER_WORD)
-
 static screen_line_t *line_at(screen_t *s, unsigned row) {
 	return &s->lines[s->row_map[row]];
 }
 
 static void set_colours(screen_line_t *line, unsigned col, uint8_t fg, uint8_t bg) {
-	unsigned shift = CELL_SHIFT(col);
+	unsigned shift = SCREEN_CELL_SHIFT(col);
 	for (int plane = 0; plane < SCREEN_PLANES; ++plane) {
 		uint32_t bits = (fg & 3u) | (bg & 3u) << 2;
-		uint32_t *word = &line->colour[plane][CELL_WORD(col)];
+		uint32_t *word = &line->colour[plane][SCREEN_CELL_WORD(col)];
 		*word = (*word & ~(0xfu << shift)) | bits << shift;
 		fg >>= 2;
 		bg >>= 2;
@@ -35,6 +31,8 @@ void screen_init(screen_t *s, uint8_t fg, uint8_t bg) {
 		s->row_map[row] = (uint8_t)row;
 		fill_line(&s->lines[row], fg, bg);
 	}
+	s->cursor_col = s->cursor_row = 0;
+	s->cursor_visible = false;
 }
 
 void screen_put(screen_t *s, unsigned col, unsigned row, uint8_t glyph, uint8_t fg, uint8_t bg) {
@@ -62,7 +60,7 @@ void screen_colours(const screen_t *s, unsigned col, unsigned row, uint8_t *fg, 
 		return;
 	const screen_line_t *line = screen_line(s, row);
 	for (int plane = 0; plane < SCREEN_PLANES; ++plane) {
-		uint32_t bits = line->colour[plane][CELL_WORD(col)] >> CELL_SHIFT(col);
+		uint32_t bits = line->colour[plane][SCREEN_CELL_WORD(col)] >> SCREEN_CELL_SHIFT(col);
 		*fg |= (uint8_t)((bits & 3u) << 2 * plane);
 		*bg |= (uint8_t)((bits >> 2 & 3u) << 2 * plane);
 	}

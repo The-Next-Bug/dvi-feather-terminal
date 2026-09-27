@@ -122,6 +122,20 @@ static void test_scroll_rejects_bad_regions(void) {
 	CHECK_EQ(screen_glyph(&s, 0, 3), 'x');
 }
 
+static void test_swap_cell_colours(void) {
+	screen_init(&s, RGB222(3, 2, 1), RGB222(0, 1, 2));
+	const screen_line_t *line = screen_line(&s, 0);
+	for (int plane = 0; plane < SCREEN_PLANES; ++plane) {
+		uint32_t word = line->colour[plane][1];
+		uint32_t swapped = screen_swap_cell_colours(word, 10);
+		unsigned fg = (unsigned)(RGB222(3, 2, 1) >> 2 * plane & 3);
+		unsigned bg = (unsigned)(RGB222(0, 1, 2) >> 2 * plane & 3);
+		CHECK_EQ(swapped >> 8 & 0xf, bg | fg << 2); // cell 10 is nibble 2 of word 1
+		CHECK_EQ(swapped & ~0xf00u, word & ~0xf00u); // other cells untouched
+		CHECK_EQ(screen_swap_cell_colours(swapped, 10), word);
+	}
+}
+
 int main(void) {
 	RUN(test_init_fills_blanks);
 	RUN(test_put_round_trips_every_colour);
@@ -131,5 +145,6 @@ int main(void) {
 	RUN(test_scroll_region);
 	RUN(test_scroll_full_screen_many_times);
 	RUN(test_scroll_rejects_bad_regions);
+	RUN(test_swap_cell_colours);
 	return tests_done();
 }

@@ -53,6 +53,8 @@ add_custom_target(build_info
 add_executable(dvi_terminal
   src/main.c
   src/screen.c
+  src/term.c
+  src/uart_rx.c
   src/video.c
   ${GENERATED}/font_8x16.c
   ${PICODVI}/apps/colour_terminal/tmds_encode_font_2bpp.S
@@ -67,7 +69,7 @@ target_include_directories(dvi_terminal PRIVATE
 )
 
 # Our sources only: libdvi is an INTERFACE library compiled into this target.
-set_source_files_properties(src/main.c src/screen.c src/video.c
+set_source_files_properties(src/main.c src/screen.c src/term.c src/uart_rx.c src/video.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 
 target_compile_definitions(dvi_terminal PRIVATE
@@ -80,10 +82,12 @@ target_compile_definitions(dvi_terminal PRIVATE
 target_link_libraries(dvi_terminal
   pico_stdlib
   pico_multicore
+  hardware_uart
   hardware_vreg
   libdvi
 )
 
-pico_enable_stdio_uart(dvi_terminal 1)
+# UART0 belongs to the terminal (uart_rx.c): no stdio on it or on USB.
+pico_enable_stdio_uart(dvi_terminal 0)
 pico_enable_stdio_usb(dvi_terminal 0)
 pico_add_extra_outputs(dvi_terminal)

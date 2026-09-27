@@ -10,15 +10,18 @@ Video uses [PicoDVI](https://github.com/Wren6991/PicoDVI)'s `libdvi` and its
 per-character colour text encoder: core 1 renders each scanline straight from
 the character cell buffer (no framebuffer), core 0 runs everything else.
 
-Status: milestone 1 — DVI bring-up with a static test screen (glyph table,
-RGB222 colour chart, DEC Special Graphics), a scrolling region and an uptime
-counter. Work is tracked with `bd` (beads): `bd list`.
+Status: milestone 2 — a "dumb" teletype. UART0 (115200 8N1, TX = GP0,
+RX = GP1) is received by interrupt into a ring buffer and shown in rows 0-28
+with CR, LF, BS, TAB, deferred autowrap, scrolling and a blinking block
+cursor; row 29 is a status line with receive/overrun/drop/error counts.
+Nothing is transmitted yet (no keyboard). Work is tracked with `bd`
+(beads): `bd list`.
 
 ## Layout
 
 | Path | Contents |
 |---|---|
-| `src/` | Firmware. `screen.[ch]` is the portable cell buffer (host-tested); `video.[ch]` the libdvi renderer on core 1; `font_gen.py` builds the font table |
+| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `term.[ch]` (teletype). RP2040-specific: `video.[ch]` (libdvi renderer on core 1), `uart_rx.[ch]` (IRQ receive). `font_gen.py` builds the font table |
 | `test/` | Host unit tests (plain CMake + gcc, no pico-sdk) |
 | `lib/pico-sdk`, `lib/PicoDVI` | Pinned submodules |
 | `assets/fonts/` | Terminus Font 8x16 (PSF) and its licence (SIL OFL 1.1) |

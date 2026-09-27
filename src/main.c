@@ -1,129 +1,74 @@
 // DVI serial terminal for the Adafruit Feather RP2040 DVI.
 //
-// Milestone 1: bring up DVI and draw a static test screen (glyph table,
-// colour chart, DEC graphics) plus a small scrolling region and an uptime
-// counter to show that core 0 and scrolling work.
+// Core 1 renders the screen over DVI (video.c). Core 0 receives UART0 into
+// a ring buffer (uart_rx.c) and feeds it to a teletype (term.c) that owns
+// rows 0-28; row 29 is a status line.
 
 #include <stdio.h>
 
 #include "pico/stdlib.h"
 
-#include "font.h"
 #include "screen.h"
+#include "term.h"
 #include "term_build.h"
+#include "uart_rx.h"
 #include "video.h"
+
+#define BAUD 115200
 
 #define FG RGB222(2, 2, 2)
 #define BG RGB222(0, 0, 0)
-#define HILITE RGB222(3, 3, 3)
-#define TITLE_BG RGB222(0, 0, 2)
-#define DIM RGB222(1, 1, 1)
+#define STATUS_FG RGB222(3, 3, 3)
+#define STATUS_BG RGB222(0, 0, 2)
 
-#define SCROLL_TOP 23
-#define SCROLL_BOTTOM 27
+#define TERM_ROWS (SCREEN_ROWS - 1)
+#define STATUS_ROW (SCREEN_ROWS - 1)
+#define STATUS_INTERVAL_MS 250
 
 static screen_t screen;
+static term_t term;
 
-static void draw_title(void) {
+static void draw_status(const uart_rx_stats_t *st) {
 	char text[SCREEN_COLS + 1];
-	screen_clear_line(&screen, 0, HILITE, TITLE_BG);
-	snprintf(text, sizeof text, " DVI Feather Terminal  build %s  %s  %s",
-		TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
-	screen_puts(&screen, 0, 0, text, HILITE, TITLE_BG);
-}
-
-// All 256 glyphs, 16 per row, with hex row/column labels.
-static void draw_glyph_table(unsigned col, unsigned row) {
-	static const char hex[] = "0123456789ABCDEF";
-	screen_puts(&screen, col, row, "Glyphs", HILITE, BG);
-	for (unsigned i = 0; i < 16; ++i) {
-		screen_put(&screen, col + 3 + 2 * i, row + 1, (uint8_t)hex[i], DIM, BG);
-		screen_put(&screen, col, row + 2 + i, (uint8_t)hex[i], DIM, BG);
-		screen_put(&screen, col + 1, row + 2 + i, '0', DIM, BG);
-		for (unsigned j = 0; j < 16; ++j)
-			screen_put(&screen, col + 3 + 2 * j, row + 2 + i, (uint8_t)(i * 16 + j), FG, BG);
-	}
-}
-
-// All 64 RGB222 colours as 2-cell swatches, 8 per row.
-static void draw_colour_chart(unsigned col, unsigned row) {
-	screen_puts(&screen, col, row, "RGB222 colours", HILITE, BG);
-	for (unsigned c = 0; c < 64; ++c) {
-		unsigned x = col + c % 8 * 3, y = row + 1 + c / 8;
-		screen_put(&screen, x, y, ' ', BG, (uint8_t)c);
-		screen_put(&screen, x + 1, y, ' ', BG, (uint8_t)c);
-	}
-}
-
-// A box drawn with DEC Special Graphics, holding the rest of that set.
-static void draw_dec_graphics(unsigned col, unsigned row) {
-	const unsigned w = 34, h = 5;
-	uint8_t c = HILITE;
-	screen_put(&screen, col, row, GLYPH_DEC_GRAPHICS('l'), c, BG);
-	screen_put(&screen, col + w - 1, row, GLYPH_DEC_GRAPHICS('k'), c, BG);
-	screen_put(&screen, col, row + h - 1, GLYPH_DEC_GRAPHICS('m'), c, BG);
-	screen_put(&screen, col + w - 1, row + h - 1, GLYPH_DEC_GRAPHICS('j'), c, BG);
-	for (unsigned x = 1; x < w - 1; ++x) {
-		screen_put(&screen, col + x, row, GLYPH_DEC_GRAPHICS('q'), c, BG);
-		screen_put(&screen, col + x, row + h - 1, GLYPH_DEC_GRAPHICS('q'), c, BG);
-	}
-	for (unsigned y = 1; y < h - 1; ++y) {
-		screen_put(&screen, col, row + y, GLYPH_DEC_GRAPHICS('x'), c, BG);
-		screen_put(&screen, col + w - 1, row + y, GLYPH_DEC_GRAPHICS('x'), c, BG);
-	}
-	screen_puts(&screen, col + 2, row + 1, "DEC Special Graphics 0x60-0x7E", FG, BG);
-	for (unsigned i = 0; i < 31; ++i)
-		screen_put(&screen, col + 2 + i, row + 2, GLYPH_DEC_GRAPHICS(0x60 + i), FG, BG);
-	screen_puts(&screen, col + 2, row + 3, "Latin-1: \xe0\xe9\xee\xf5\xfc \xc6\xd8\xc5 \xdf \xa3 \xa9 \xb1 \xbd",
-		FG, BG);
-}
-
-static void draw_test_screen(void) {
-	screen_init(&screen, FG, BG);
-	draw_title();
-	draw_glyph_table(1, 2);
-	draw_colour_chart(40, 2);
-	draw_dec_graphics(40, 12);
-	screen_puts(&screen, 1, SCROLL_TOP - 1, "Scrolling region", HILITE, BG);
-	screen_puts(&screen, 1, SCREEN_ROWS - 1, "UART0 115200 8N1 TX=GP0 RX=GP1", DIM, BG);
+	snprintf(text, sizeof text, " %s | UART0 %u 8N1 | rx %lu  ovr %lu  drop %lu  err %lu",
+		TERM_BUILD_ID, BAUD, (unsigned long)st->received, (unsigned long)st->overruns,
+		(unsigned long)st->dropped, (unsigned long)st->errors);
+	screen_clear_line(&screen, STATUS_ROW, STATUS_FG, STATUS_BG);
+	screen_puts(&screen, 0, STATUS_ROW, text, STATUS_FG, STATUS_BG);
 }
 
 int main(void) {
 	video_init();
-	// After video_init: the UART baud divisor depends on the new clk_peri.
-	stdio_init_all();
+	// After video_init: the baud divisor depends on the final clk_peri.
+	uart_rx_init(uart0, BAUD, PICO_DEFAULT_UART_TX_PIN, PICO_DEFAULT_UART_RX_PIN);
 
-	draw_test_screen();
+	screen_init(&screen, FG, BG);
+	term_init(&term, &screen, 0, TERM_ROWS, FG, BG);
+	uart_rx_stats_t shown = uart_rx_stats();
+	draw_status(&shown);
 	video_start(&screen);
 
-	char text[SCREEN_COLS + 1];
-	unsigned rx_count = 0;
-	absolute_time_t next_tick = get_absolute_time();
-	for (unsigned tick = 0;;) {
-		// Serial check: echo received bytes back and count them on screen.
-		int c = getchar_timeout_us(0);
-		if (c != PICO_ERROR_TIMEOUT) {
-			putchar_raw(c);
-			snprintf(text, sizeof text, "rx %6u  last 0x%02x", ++rx_count, c & 0xff);
-			screen_puts(&screen, 30, SCREEN_ROWS - 1, text, HILITE, BG);
+	char banner[SCREEN_COLS + 1];
+	snprintf(banner, sizeof banner, "DVI Feather Terminal build %s (%s, %s)\r\n",
+		TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
+	term_puts(&term, banner);
+	term_puts(&term, "UART0 on TX (GP0) / RX (GP1)\r\n\r\n");
+
+	uint8_t buf[256];
+	absolute_time_t next_status = make_timeout_time_ms(STATUS_INTERVAL_MS);
+	while (true) {
+		size_t n = uart_rx_read(buf, sizeof buf);
+		if (n)
+			term_write(&term, buf, n);
+
+		if (time_reached(next_status)) {
+			next_status = make_timeout_time_ms(STATUS_INTERVAL_MS);
+			uart_rx_stats_t st = uart_rx_stats();
+			if (st.received != shown.received || st.overruns != shown.overruns ||
+			    st.dropped != shown.dropped || st.errors != shown.errors) {
+				shown = st;
+				draw_status(&shown);
+			}
 		}
-
-		if (absolute_time_diff_us(next_tick, get_absolute_time()) < 0)
-			continue;
-		next_tick = delayed_by_ms(next_tick, 500);
-		++tick;
-
-		screen_scroll_up(&screen, SCROLL_TOP, SCROLL_BOTTOM, FG, BG);
-		snprintf(text, sizeof text, "scroll test line %u", tick);
-		screen_puts(&screen, 1, SCROLL_BOTTOM, text, (uint8_t)(tick % 63 + 1), BG);
-
-		unsigned s = tick / 2;
-		snprintf(text, sizeof text, "uptime %02u:%02u:%02u", s / 3600, s / 60 % 60, s % 60);
-		screen_puts(&screen, SCREEN_COLS - 16, SCREEN_ROWS - 1, text, DIM, BG);
-
-		// Repeat the banner so it is seen whenever the serial port is opened.
-		if (tick % 10 == 0)
-			printf("DVI Feather Terminal build %s commit %s built %s, uptime %us\r\n",
-				TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE, s);
 	}
 }
