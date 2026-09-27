@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
-"""Generate the firmware's 8x16 font table from a PSF console font.
+"""Generate a firmware font table from a PSF or BDF font.
 
-Usage: font_gen.py FONT.psf[.gz] OUT.c
+Usage: font_gen.py [--scale-y N] SOURCE WIDTH HEIGHT NAME OUT.c
+
+SOURCE is a PSF console font (optionally .gz) or a BDF font; its glyphs must
+be WIDTH pixels wide and HEIGHT / N pixels high (--scale-y repeats each row
+N times). The output defines `const uint8_t NAME[HEIGHT * FONT_GLYPHS]`.
 
 The table has 256 glyphs, indexed by the glyph codes the screen buffer stores
-(see src/font.h for the layout). It is stored scanline-major, as the PicoDVI
-tmds_encode_font_2bpp encoder wants: font[row * 256 + glyph], one byte per
-glyph row, least-significant bit = leftmost pixel.
+(see src/font.h for the layout). It is stored scanline-major:
+NAME[row * 256 + glyph], one byte per glyph row, least-significant bit =
+leftmost pixel.
 
-Glyphs are looked up by Unicode code point through the PSF's Unicode table.
-The few DEC Special Graphics characters that console fonts lack (control
-pictures and scan lines) are drawn here.
+Glyphs are looked up by Unicode code point. The few that some fonts lack
+(DEC control pictures and scan lines, half blocks) are drawn here.
 """
 
+import argparse
 import gzip
 import struct
 import sys
 
-WIDTH, HEIGHT, N_GLYPHS = 8, 16, 256
+N_GLYPHS = 256
 
 # 0x01-0x1F: DEC Special Graphics for 0x60-0x7E, in order.
 DEC_GRAPHICS = "◆▒␉␌␍␊°±␤␋┘┐┌└┼⎺⎻─⎼⎽├┤┴┬│≤≥π≠£·"
@@ -39,81 +43,125 @@ MINI = {
 CONTROL_PICTURES = {"␉": "HT", "␌": "FF", "␍": "CR", "␊": "LF", "␤": "NL", "␋": "VT"}
 
 
-def load_psf(path):
-    """Return ({char: glyph rows as ints, MSB = leftmost}, height)."""
+def load_psf(path, width, height):
+    """Return {char: rows}, each row an int with the MSB of `width` bits leftmost."""
     opener = gzip.open if path.endswith(".gz") else open
     with opener(path, "rb") as f:
         data = f.read()
 
     if data[:4] == b"\x72\xb5\x4a\x86":  # PSF2
-        _, _, hdr, flags, n, size, height, width = struct.unpack("<8I", data[:32])
-        if width != WIDTH:
-            sys.exit(f"{path}: glyphs are {width} wide, need {WIDTH}")
+        _, _, hdr, flags, n, size, h, w = struct.unpack("<8I", data[:32])
         glyphs = [data[hdr + i * size:hdr + (i + 1) * size] for i in range(n)]
         table = data[hdr + n * size:] if flags & 1 else b""
-        entries = []
-        for chunk in table.split(b"\xff")[:n]:
-            # Characters before the first 0xFE (sequence start) map to the glyph.
-            entries.append(chunk.split(b"\xfe")[0].decode("utf-8"))
+        # Characters before the first 0xFE (sequence start) map to the glyph.
+        entries = [c.split(b"\xfe")[0].decode("utf-8") for c in table.split(b"\xff")[:n]]
     elif data[:2] == b"\x36\x04":  # PSF1
-        mode, height = data[2], data[3]
+        mode, h, w = data[2], data[3], 8
         n = 512 if mode & 1 else 256
-        glyphs = [data[4 + i * height:4 + (i + 1) * height] for i in range(n)]
+        glyphs = [data[4 + i * h:4 + (i + 1) * h] for i in range(n)]
         entries = [""] * n
         if mode & 2:
-            words = struct.unpack(f"<{(len(data) - 4 - n * height) // 2}H", data[4 + n * height:])
+            words = struct.unpack(f"<{(len(data) - 4 - n * h) // 2}H", data[4 + n * h:])
             g, in_seq = 0, False
-            for w in words:
-                if w == 0xFFFF:
+            for word in words:
+                if word == 0xFFFF:
                     g, in_seq = g + 1, False
-                elif w == 0xFFFE:
+                elif word == 0xFFFE:
                     in_seq = True
                 elif not in_seq and g < n:
-                    entries[g] += chr(w)
+                    entries[g] += chr(word)
     else:
         sys.exit(f"{path}: not a PSF font")
 
-    if height != HEIGHT:
-        sys.exit(f"{path}: glyphs are {height} high, need {HEIGHT}")
+    if (w, h) != (width, height):
+        sys.exit(f"{path}: glyphs are {w}x{h}, need {width}x{height}")
     if not any(entries):
         sys.exit(f"{path}: font has no Unicode table")
+    stride = (w + 7) // 8
     chars = {}
     for glyph, codepoints in zip(glyphs, entries):
+        rows = [int.from_bytes(glyph[r * stride:(r + 1) * stride], "big") >> (stride * 8 - w)
+                for r in range(h)]
         for ch in codepoints:
-            chars.setdefault(ch, list(glyph))
+            chars.setdefault(ch, rows)
     return chars
 
 
-def hline(row):
-    return [0xFF if r == row else 0 for r in range(HEIGHT)]
+def load_bdf(path, width, height):
+    """Return {char: rows} for a BDF font whose cells are width x height."""
+    with open(path, encoding="latin-1") as f:
+        lines = f.read().splitlines()
+    ascent = descent = None
+    chars = {}
+    i = 0
+    while i < len(lines):
+        words = lines[i].split()
+        if words and words[0] == "FONT_ASCENT":
+            ascent = int(words[1])
+        elif words and words[0] == "FONT_DESCENT":
+            descent = int(words[1])
+        elif words and words[0] == "STARTCHAR":
+            enc = bbx = None
+            i += 1
+            while not lines[i].startswith("BITMAP"):
+                w = lines[i].split()
+                if w[0] == "ENCODING":
+                    enc = int(w[1])
+                elif w[0] == "BBX":
+                    bbx = tuple(int(v) for v in w[1:5])
+                i += 1
+            bw, bh, bx, by = bbx
+            bitmap = [int(lines[i + 1 + r], 16) for r in range(bh)]
+            i += bh + 1
+            if enc is None or enc < 0:
+                continue
+            nbytes = (bw + 7) // 8
+            rows = [0] * height
+            top = ascent - (by + bh)  # first bitmap row, counted from the cell top
+            for r, bits in enumerate(bitmap):
+                y = top + r
+                if 0 <= y < height:
+                    # Bitmap rows are left-aligned in whole bytes.
+                    row = bits >> (nbytes * 8 - bw)
+                    shift = width - bw - bx
+                    rows[y] = (row << shift if shift >= 0 else row >> -shift) & ((1 << width) - 1)
+            chars[chr(enc)] = rows
+        i += 1
+    if ascent is None or ascent + descent != height:
+        sys.exit(f"{path}: cell height is not {height}")
+    return chars
 
 
-def control_picture(pair):
-    rows = [0] * HEIGHT
-    for (top, left), letter in zip(((2, 0), (9, 4)), pair):
+def control_picture(pair, width, height):
+    # Two 3x5 letters: one top-left, one lower-right.
+    rows = [0] * height
+    positions = ((height // 8, 0), (height // 8 + 7 * height // 16, min(4, width - 3)))
+    for (top, left), letter in zip(positions, pair):
         for dy, bits in enumerate(MINI[letter]):
-            rows[top + dy] |= int(bits, 2) << (5 - left)
+            if top + dy < height:
+                rows[top + dy] |= int(bits, 2) << (width - 3 - left)
     return rows
 
 
-def build(chars):
-    blank = [0] * HEIGHT
+def build(chars, width, height):
+    full = (1 << width) - 1
+    blank = [0] * height
 
     def glyph(ch):
         return chars.get(ch) or chars.get(FALLBACK.get(ch, ""))
 
     # Scan lines 1/3/5/7/9 sit around the font's own horizontal line (scan 5).
     mid = next(r for r, bits in enumerate(glyph("─")) if bits)
-    scan = {"⎺": 1, "⎻": (1 + mid) // 2, "⎼": (mid + HEIGHT - 2) // 2, "⎽": HEIGHT - 2}
+    scan = {"⎺": 1, "⎻": (1 + mid) // 2, "⎼": (mid + height - 2) // 2, "⎽": height - 2}
 
-    half = HEIGHT // 2
+    half, left = height // 2, (width + 1) // 2
     shade = glyph("░")
     drawn = {
-        "▀": [0xFF] * half + [0] * half,
-        "▄": [0] * half + [0xFF] * half,
-        "▌": [0xF0] * HEIGHT,
-        "▐": [0x0F] * HEIGHT,
-        "▓": shade and [b ^ 0xFF for b in shade],
+        "▀": [full] * half + [0] * (height - half),
+        "▄": [0] * half + [full] * (height - half),
+        "▌": [full & ~((1 << (width - left)) - 1)] * height,
+        "▐": [(1 << (width - left)) - 1] * height,
+        "▓": shade and [b ^ full for b in shade],
     }
 
     table = [blank] * N_GLYPHS
@@ -122,9 +170,9 @@ def build(chars):
     def place(code, ch):
         g = glyph(ch) or drawn.get(ch)
         if g is None and ch in scan:
-            g = hline(scan[ch])
+            g = [full if r == scan[ch] else 0 for r in range(height)]
         if g is None and ch in CONTROL_PICTURES:
-            g = control_picture(CONTROL_PICTURES[ch])
+            g = control_picture(CONTROL_PICTURES[ch], width, height)
         if g is None:
             missing.append(ch)
             g = blank
@@ -143,30 +191,43 @@ def build(chars):
     return table
 
 
-def reverse_bits(b):
-    return int(f"{b:08b}"[::-1], 2)
+def lsb_left(row, width):
+    """Mirror a width-bit row so the leftmost pixel is bit 0."""
+    return int(f"{row:0{width}b}"[::-1], 2)
 
 
 def main():
-    if len(sys.argv) != 3:
-        sys.exit(__doc__)
-    src, out = sys.argv[1:]
-    table = build(load_psf(src))
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--scale-y", type=int, default=1)
+    ap.add_argument("source")
+    ap.add_argument("width", type=int)
+    ap.add_argument("height", type=int)
+    ap.add_argument("name")
+    ap.add_argument("out")
+    args = ap.parse_args()
+    if not 1 <= args.width <= 8 or args.height % args.scale_y:
+        sys.exit("width must be 1-8 and height a multiple of --scale-y")
+
+    src_height = args.height // args.scale_y
+    load = load_bdf if args.source.endswith(".bdf") else load_psf
+    chars = load(args.source, args.width, src_height)
+    chars = {ch: [r for r in rows for _ in range(args.scale_y)] for ch, rows in chars.items()}
+    table = build(chars, args.width, args.height)
+
+    src = args.source.split("/")[-1]
     lines = [
-        f"// Generated by src/font_gen.py from {src.split('/')[-1]} -- do not edit.",
-        "// Derived from Terminus Font; see assets/fonts/Terminus-OFL.txt.",
-        '#include "pico.h"',
+        f"// Generated by src/font_gen.py from {src} -- do not edit.",
         '#include "font.h"',
         "",
-        "const uint8_t __not_in_flash(\"font\") font_8x16[FONT_HEIGHT * FONT_GLYPHS] = {",
+        f"const uint8_t {args.name}[{args.height} * FONT_GLYPHS] = {{",
     ]
-    for row in range(HEIGHT):
+    for row in range(args.height):
         lines.append(f"\t// row {row}")
-        values = [reverse_bits(table[g][row]) for g in range(N_GLYPHS)]
+        values = [lsb_left(table[g][row], args.width) for g in range(N_GLYPHS)]
         for i in range(0, N_GLYPHS, 16):
             lines.append("\t" + " ".join(f"0x{v:02x}," for v in values[i:i + 16]))
     lines.append("};")
-    with open(out, "w") as f:
+    with open(args.out, "w") as f:
         f.write("\n".join(lines) + "\n")
 
 

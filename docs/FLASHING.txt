@@ -13,9 +13,10 @@ dvi_terminal-feather-rp2040-dvi.uf2 for the Adafruit Feather RP2040 DVI.
 
    picotool also works: picotool load -x dvi_terminal-<target>.uf2
 
-3. Connect a DVI/HDMI monitor. The terminal runs at 640x480 60 Hz and shows
-   the build id on its top line. The same line is printed on the Feather's
-   TX pin (UART0, 115200 8N1) at startup.
+3. Connect a DVI/HDMI monitor. The display runs at 800x600 60 Hz.
+   A demo alternates between 80 and 132 columns every 5 seconds, with the
+   build id on the bottom line, until data arrives on the Feather's RX pin
+   (UART0, 115200 8N1); then the terminal starts.
 
 The BIN files are the same images as raw flash contents, for SWD programmers
 (load at 0x10000000). SHA256SUMS covers the UF2 and BIN files.

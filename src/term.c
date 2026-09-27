@@ -28,7 +28,7 @@ static void print(term_t *t, uint8_t glyph) {
 		t->wrap_pending = false;
 	}
 	screen_put(t->screen, t->col, t->top + t->row, glyph, t->fg, t->bg);
-	if (t->col + 1 < SCREEN_COLS)
+	if (t->col + 1 < t->screen->cols)
 		++t->col;
 	else
 		t->wrap_pending = true;
@@ -61,8 +61,8 @@ static void control(term_t *t, uint8_t c) {
 		break;
 	case HT:
 		t->col = (t->col / TERM_TAB_WIDTH + 1) * TERM_TAB_WIDTH;
-		if (t->col >= SCREEN_COLS)
-			t->col = SCREEN_COLS - 1;
+		if (t->col >= t->screen->cols)
+			t->col = t->screen->cols - 1u;
 		break;
 	default: // BEL, NUL and the rest are ignored for now.
 		break;

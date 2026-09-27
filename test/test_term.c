@@ -6,15 +6,16 @@
 #define FG RGB222(2, 2, 2)
 #define BG RGB222(0, 0, 0)
 
-// The terminal uses rows 0..28; row 29 is a status line it must not touch.
+// The terminal uses rows 0..23; row 24 is a status line it must not touch.
 #define ROWS (SCREEN_ROWS - 1)
 #define STATUS (SCREEN_ROWS - 1)
 
 static screen_t s;
 static term_t t;
+static unsigned cols = 80; // width for setup(); main() runs the tests at 80 and 132
 
 static void setup(void) {
-	screen_init(&s, FG, BG);
+	screen_init(&s, cols, FG, BG);
 	screen_puts(&s, 0, STATUS, "status", FG, BG);
 	term_init(&t, &s, 0, ROWS, FG, BG);
 }
@@ -22,7 +23,7 @@ static void setup(void) {
 // Compare the text of a screen row (trailing blanks ignored) with expected.
 static int row_is(unsigned row, const char *expected) {
 	size_t len = strlen(expected);
-	for (unsigned col = 0; col < SCREEN_COLS; ++col) {
+	for (unsigned col = 0; col < s.cols; ++col) {
 		uint8_t want = col < len ? (uint8_t)expected[col] : ' ';
 		if (screen_glyph(&s, col, row) != want) {
 			fprintf(stderr, "row %u col %u: got 0x%02x want 0x%02x\n",
@@ -82,17 +83,17 @@ static void test_tabs(void) {
 	CHECK(row_is(0, "a       b       c"));
 	for (int i = 0; i < 20; ++i)
 		term_putc(&t, '\t');
-	CHECK_CURSOR(SCREEN_COLS - 1, 0); // stops at the last column
+	CHECK_CURSOR(s.cols - 1, 0); // stops at the last column
 }
 
 static void test_wrap_is_deferred(void) {
 	setup();
-	char line[SCREEN_COLS + 1];
-	memset(line, 'x', SCREEN_COLS);
-	line[SCREEN_COLS] = 0;
+	char line[SCREEN_MAX_COLS + 1];
+	memset(line, 'x', s.cols);
+	line[s.cols] = 0;
 	term_puts(&t, line);
 	// Full line: cursor stays in the last column until the next character.
-	CHECK_CURSOR(SCREEN_COLS - 1, 0);
+	CHECK_CURSOR(s.cols - 1, 0);
 	CHECK(row_is(1, ""));
 	term_puts(&t, "y");
 	CHECK(row_is(0, line));
@@ -102,9 +103,9 @@ static void test_wrap_is_deferred(void) {
 
 static void test_crlf_after_full_line_does_not_double_space(void) {
 	setup();
-	char line[SCREEN_COLS + 1];
-	memset(line, '=', SCREEN_COLS);
-	line[SCREEN_COLS] = 0;
+	char line[SCREEN_MAX_COLS + 1];
+	memset(line, '=', s.cols);
+	line[s.cols] = 0;
 	term_puts(&t, line);
 	term_puts(&t, "\r\nnext");
 	CHECK(row_is(0, line));
@@ -118,10 +119,10 @@ static void test_scrolls_at_bottom_and_spares_status(void) {
 		snprintf(text, sizeof text, "line %u\r\n", i);
 		term_puts(&t, text);
 	}
-	// 34 lines plus the empty row after the last CR LF fill 35 rows; 29 are
+	// 29 lines plus the empty row after the last CR LF fill 30 rows; 24 are
 	// visible, so lines 0..5 have scrolled off and the bottom row is empty.
 	CHECK(row_is(0, "line 6"));
-	CHECK(row_is(ROWS - 2, "line 33"));
+	CHECK(row_is(ROWS - 2, "line 28"));
 	CHECK(row_is(ROWS - 1, ""));
 	CHECK_CURSOR(0, ROWS - 1);
 	CHECK(row_is(STATUS, "status"));
@@ -131,9 +132,9 @@ static void test_wrap_scrolls_at_bottom(void) {
 	setup();
 	for (unsigned i = 0; i < ROWS - 1; ++i)
 		term_puts(&t, "\n");
-	char line[SCREEN_COLS + 1];
-	memset(line, 'w', SCREEN_COLS);
-	line[SCREEN_COLS] = 0;
+	char line[SCREEN_MAX_COLS + 1];
+	memset(line, 'w', s.cols);
+	line[s.cols] = 0;
 	term_puts(&t, line);
 	term_puts(&t, "z");
 	CHECK(row_is(ROWS - 2, line));
@@ -153,7 +154,7 @@ static void test_controls_and_c1_ignored(void) {
 
 static void test_band_offset(void) {
 	// A terminal that starts below row 0 writes and scrolls only in its band.
-	screen_init(&s, FG, BG);
+	screen_init(&s, cols, FG, BG);
 	screen_puts(&s, 0, 0, "title", FG, BG);
 	term_init(&t, &s, 1, 3, FG, BG);
 	term_puts(&t, "a\r\nb\r\nc\r\nd");
@@ -165,7 +166,7 @@ static void test_band_offset(void) {
 	CHECK_CURSOR(1, 3);
 }
 
-int main(void) {
+static void run_all(void) {
 	RUN(test_init);
 	RUN(test_text_and_crlf);
 	RUN(test_bare_lf_keeps_column);
@@ -178,5 +179,12 @@ int main(void) {
 	RUN(test_wrap_scrolls_at_bottom);
 	RUN(test_controls_and_c1_ignored);
 	RUN(test_band_offset);
+}
+
+int main(void) {
+	for (cols = 80; cols <= 132; cols += 52) {
+		printf("-- %u columns\n", cols);
+		run_all();
+	}
 	return tests_done();
 }
