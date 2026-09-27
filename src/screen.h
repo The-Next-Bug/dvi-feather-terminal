@@ -56,6 +56,18 @@ void screen_clear_line(screen_t *s, unsigned row, uint8_t fg, uint8_t bg);
 // Scroll rows top..bottom (inclusive) up by one; the bottom row is cleared.
 void screen_scroll_up(screen_t *s, unsigned top, unsigned bottom, uint8_t fg, uint8_t bg);
 
+// Scroll rows top..bottom (inclusive) down by one; the top row is cleared.
+void screen_scroll_down(screen_t *s, unsigned top, unsigned bottom, uint8_t fg, uint8_t bg);
+
+// Blank cells from..to-1 of a row (clipped to the width).
+void screen_erase(screen_t *s, unsigned row, unsigned from, unsigned to, uint8_t fg, uint8_t bg);
+
+// Insert n blank cells at col, shifting the rest of the row right (cells
+// pushed past the edge are lost); or delete n cells at col, shifting the
+// rest left and blanking the end.
+void screen_insert_cells(screen_t *s, unsigned row, unsigned col, unsigned n, uint8_t fg, uint8_t bg);
+void screen_delete_cells(screen_t *s, unsigned row, unsigned col, unsigned n, uint8_t fg, uint8_t bg);
+
 static inline const screen_line_t *screen_line(const screen_t *s, unsigned row) {
 	return &s->lines[s->row_map[row]];
 }

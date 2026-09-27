@@ -161,11 +161,30 @@ void video_init(void) {
 }
 
 void video_update(screen_t *screen) {
+	// The cursor cell must be rasterised with its fg level (see
+	// raster_render_line). Re-render the lines involved whenever the cursor,
+	// or the slot shown on its row, changes.
+	static int drawn_slot = -1, drawn_col = -1;
+	int slot_now = -1, col_now = -1;
+	if (screen->cursor_visible) {
+		slot_now = screen->row_map[screen->cursor_row];
+		col_now = screen->cursor_col;
+	}
+	if (slot_now != drawn_slot || col_now != drawn_col) {
+		if (drawn_slot >= 0)
+			screen->dirty |= 1u << drawn_slot;
+		if (slot_now >= 0)
+			screen->dirty |= 1u << slot_now;
+		drawn_slot = slot_now;
+		drawn_col = col_now;
+	}
+
 	uint32_t dirty = screen->dirty;
 	screen->dirty = 0;
-	for (uint slot = 0; dirty; ++slot, dirty >>= 1) {
+	for (int slot = 0; dirty; ++slot, dirty >>= 1) {
 		if (dirty & 1)
-			raster_render_line(&raster[slot], &screen->lines[slot], screen->cols);
+			raster_render_line(&raster[slot], &screen->lines[slot], screen->cols,
+				slot == slot_now ? col_now : -1);
 	}
 }
 

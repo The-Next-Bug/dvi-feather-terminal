@@ -20,23 +20,39 @@ The encoder has two colour levels per 8-pixel group and colour plane, so in
 cells sharing a group show at most two levels per plane — true for normal
 text on one background and for reverse video. 80 columns is always exact.
 
-Status: milestone 2 — a "dumb" teletype on UART0 (115200 8N1, TX = GP0,
-RX = GP1): interrupt-driven receive into a ring buffer, CR, LF, BS, TAB,
-deferred autowrap, scrolling and a blinking block cursor in rows 0-23; row
-24 is a status line with receive/overrun/drop/error counts. Nothing is
-transmitted yet (no keyboard).
+Status: VT100 emulation on UART0 (115200 8N1, TX = GP0, RX = GP1) in rows
+0-23, with row 24 as a status line (receive/overrun/drop/error counts).
+`src/vtparse.c` is a DEC-compatible escape sequence parser (Paul Williams'
+state machine); `src/term.c` implements cursor movement, scrolling regions,
+erase, insert/delete (VT102), tab stops, G0/G1 character sets (ASCII, UK,
+DEC Special Graphics), modes (DECAWM, DECOM, IRM, LNM, DECCKM, DECCOLM
+80/132, DECTCEM), save/restore cursor, SGR colours (8/16, 256 and direct,
+reduced to RGB222), DECALN, RIS, and replies to DA, DSR/CPR and DECREQTPARM
+on UART0 TX. Not yet: underline/blink rendering, double-size lines,
+DECSCNM, VT52 mode, a keyboard.
 
 At startup a demo alternates between 80 and 132 columns every 5 seconds
 until the first byte arrives on UART0, which starts the terminal (build
 with `-DSTARTUP_DEMO=OFF` to skip it). Work is tracked with `bd` (beads):
 `bd list`.
 
+## Trying it without a keyboard
+
+`tools/hostbridge.py` runs a program on this PC with the terminal as its
+display: its output goes out over the serial adapter, and your keystrokes
+here plus the terminal's replies come back as its input.
+
+```sh
+tools/hostbridge.py /dev/ttyUSB0 vttest   # or: vim, top, $SHELL ...
+```
+
 ## Layout
 
 | Path | Contents |
 |---|---|
-| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `term.[ch]` (teletype), `raster.[ch]` (cells to pixels), `demo.[ch]`. RP2040-specific: `video.[ch]` (libdvi, core 1), `uart_rx.[ch]` (IRQ receive). `font_gen.py` builds the font tables |
+| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `demo.[ch]`. RP2040-specific: `video.[ch]` (libdvi, core 1), `uart_rx.[ch]` (IRQ receive). `font_gen.py` builds the font tables |
 | `test/` | Host unit tests (plain CMake + gcc, no pico-sdk) |
+| `tools/hostbridge.py` | Run a host program with the terminal as its display (see above) |
 | `lib/pico-sdk`, `lib/PicoDVI` | Pinned submodules |
 | `assets/fonts/` | Terminus Font 8x16 (SIL OFL 1.1) and misc-fixed 5x8 (public domain); see its README |
 | `cmake/build_info.cmake` | Generates `term_build.h` (git describe, commit, date) on every build |

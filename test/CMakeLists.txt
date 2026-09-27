@@ -23,6 +23,7 @@ function(unit_test name)
 endfunction()
 
 unit_test(screen screen.c)
-unit_test(term term.c screen.c)
+unit_test(vtparse vtparse.c)
+unit_test(term term.c vtparse.c screen.c)
 unit_test(raster raster.c screen.c demo.c)
 target_sources(test_raster PRIVATE ${FONT_SOURCES})

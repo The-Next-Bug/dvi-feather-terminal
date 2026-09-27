@@ -55,6 +55,7 @@ add_executable(dvi_terminal
   src/term.c
   src/uart_rx.c
   src/video.c
+  src/vtparse.c
   ${FONT_SOURCES}
   ${PICODVI}/apps/colour_terminal/tmds_encode_font_2bpp.S
 )
@@ -69,7 +70,7 @@ target_include_directories(dvi_terminal PRIVATE
 
 # Our sources only: libdvi is an INTERFACE library compiled into this target.
 set_source_files_properties(src/demo.c src/diag.c src/main.c src/raster.c src/screen.c src/term.c
-  src/uart_rx.c src/video.c
+  src/uart_rx.c src/video.c src/vtparse.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 
 target_compile_definitions(dvi_terminal PRIVATE
