@@ -128,8 +128,17 @@ scripts/build.sh                     # -> build/feather-rp2040-dvi/dvi_terminal.
 scripts/package.sh                   # -> dist/dvi-terminal-<rev>.zip, dist/CHANGES.md
 ```
 
-`scripts/build.sh` takes `TARGET` (default `feather-rp2040-dvi`), which
-selects the pico-sdk board and PicoDVI pin configuration. The firmware is
+`scripts/build.sh` takes `TARGET`, which selects the pico-sdk board and
+PicoDVI pin configuration:
+
+| `TARGET` | Board | DVI pins (PicoDVI config) |
+|---|---|---|
+| `feather-rp2040-dvi` (default) | Adafruit Feather RP2040 DVI | D0-D2 GP18/20/22, clock GP16, inverted pairs (`adafruit_feather_dvi_cfg`) |
+| `pico2-dvi-sock` | Raspberry Pi Pico 2 (RP2350) with the Pico DVI Sock | D0-D2 GP12/18/16, clock GP14 (`pico_sock_cfg`) |
+
+Both use UART0 on GP0/GP1 (and GP2/GP3 for optional RTS/CTS), run the
+same firmware at 800x600 (400 MHz, 1.3 V) from SRAM, and are built and
+packaged together by CI. The firmware is
 built to run entirely from SRAM (`COPY_TO_RAM`, default ON), as PicoDVI's
 apps are: the board's boot2 reads flash with the slow 03h command at
 clk_sys / 4, and at DVI clocks above 252 MHz flash execution hangs (bd

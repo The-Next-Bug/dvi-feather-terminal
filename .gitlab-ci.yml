@@ -72,7 +72,7 @@ build:
   needs: []
   parallel:
     matrix:
-      - TARGET: [feather-rp2040-dvi]
+      - TARGET: [feather-rp2040-dvi, pico2-dvi-sock]
   script:
     - scripts/setup-toolchain.sh
     - BUILD_DIR=build scripts/build.sh
