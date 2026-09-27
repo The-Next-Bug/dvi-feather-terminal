@@ -7,6 +7,15 @@
 # job unpacks them (~25 s) rather than caching ~1.2 GB of unpacked toolchain.
 # pico-sdk and PicoDVI are pinned submodules.
 
+# Branch and tag pipelines only. A merge request shows its branch's pipeline;
+# a separate MR pipeline would drop the rule-less test/build jobs and leave
+# package's needs unsatisfied.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
+    - when: always
+
 stages:
   - test
   - build
