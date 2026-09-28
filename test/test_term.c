@@ -380,6 +380,15 @@ static void test_deccolm(void) {
 	CHECK_EQ(screen_glyph(&s, 131, 0), 'x');
 	put("\x1b[?3l");
 	CHECK_EQ(s.cols, 80);
+	CHECK_EQ(t.screen_resets, 2);
+
+	// The same width again still clears everything, status line included,
+	// and says so.
+	screen_puts(&s, 0, STATUS, "status", FG, BG);
+	put("hello\x1b[?3l");
+	CHECK(row_is(0, ""));
+	CHECK(row_is(STATUS, ""));
+	CHECK_EQ(t.screen_resets, 3);
 }
 
 // ---------------------------------------------------------------------------

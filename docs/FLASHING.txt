@@ -22,7 +22,13 @@ the RP2040 and RP2350 bootloaders each reject the other's image.
 3. Connect a DVI/HDMI monitor. The display runs at 800x600 60 Hz.
    A demo alternates between 80 and 132 columns every 5 seconds, with the
    build id on the bottom line, until data arrives on the Feather's RX pin
-   (UART0, 115200 8N1); then the terminal starts.
+   (UART0, 115200 8N1) or a key is pressed; then the terminal starts.
+
+4. Optional USB keyboard (Pico 2 only): after flashing, unplug the PC from
+   the USB port, connect the keyboard there through an OTG adapter, and
+   power the board with 5 V into VBUS (pin 40): in host mode the board does
+   not power the keyboard itself. Never feed 5 V in while a PC is plugged
+   into the USB port. See the README, "USB keyboard".
 
 The BIN files are the same images as raw flash contents, for SWD programmers
 (load at 0x10000000). SHA256SUMS covers the UF2 and BIN files.

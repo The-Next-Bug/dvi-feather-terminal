@@ -3,8 +3,9 @@
 A VT100 serial terminal with DVI output for RP2040/RP2350 boards: UART in,
 800x600 DVI out, 80 or 132 columns by 24 rows plus a status line. It is
 meant to become the console for later RP2040/RP2350 "compute" boards (e.g.
-RunCPM). A USB keyboard is planned; until then the host side can be driven
-with `tools/hostbridge.py`.
+RunCPM). On the Pico 2, a USB keyboard on the board's USB port types to the
+host over the same UART; `tools/hostbridge.py` drives the host side from a
+PC instead.
 
 Supported boards (both verified on hardware):
 
@@ -30,15 +31,17 @@ Releases (`vX.Y.Z` tags) ship both firmware images; see `docs/FLASHING.txt`.
 - **Attributes**: SGR bold (bright and emboldened), underline, blink,
   reverse; colours 8/16, 256 and 24-bit, shown with the display's 64 colours
   (RGB222).
-- **Status line** (row 24): width, build id, line settings, bytes waiting in
-  the receive and transmit buffers, line errors (and hold-offs with flow
-  control).
+- **Keyboard** (Pico 2 only): USB keyboard on the native USB port (host
+  mode, see [USB keyboard](#usb-keyboard)); keys go to the host on UART0 TX.
+- **Status line** (row 24): width, build id, line settings, `kbd` while a
+  keyboard is attached, bytes waiting in the receive and transmit buffers,
+  line errors (and hold-offs with flow control).
 - **Startup demo**: alternates between 80 and 132 columns every 5 seconds
-  until the first byte arrives on UART0, then the terminal starts (build
-  with `-DSTARTUP_DEMO=OFF` to skip it).
+  until the first byte arrives on UART0 or a key is pressed, then the
+  terminal starts (build with `-DSTARTUP_DEMO=OFF` to skip it).
 
-Not yet (tracked in bd): USB keyboard, SET-UP screen, alternate screen,
-VT52 mode, double-width/height lines, smooth scrolling.
+Not yet (tracked in bd): SET-UP screen, alternate screen, VT52 mode,
+double-width/height lines, smooth scrolling.
 
 Checked with `vttest` (menus 1-3, 6 and 8) through `tools/hostbridge.py`.
 
@@ -83,11 +86,39 @@ has pull-ups on SDA/SCL, so an unconnected CTS reads as "hold" and the
 terminal would never send its replies (device attribute and cursor position
 reports) to the host.
 
-## Trying it without a keyboard
+## USB keyboard
+
+**Pico 2 (`pico2-dvi-sock`) only.** The Feather RP2040 DVI build leaves the
+keyboard out (`USB_KEYBOARD` defaults to OFF there): with it, that board
+crashed, and it is not yet known why (bd `dvi-feather-terminal-dmt.20`).
+`-DUSB_KEYBOARD=ON` builds it in anyway, for experiments.
+
+Plug a USB keyboard into the Pico 2's micro-USB port through an OTG adapter
+or cable; a hub (or a keyboard with one built in) works too. The firmware is
+the USB host, so the port is no longer the board's power input, and the
+board does not switch 5 V onto the connector's VBUS by itself: feed 5 V into
+**VBUS** (pin 40), which is the micro-USB connector's VBUS.
+
+Never connect a PC (or charger) to the USB port while 5 V is fed in this
+way: both would drive VBUS. To flash, disconnect the 5 V supply and the
+keyboard, then use the USB port as usual (BOOTSEL).
+
+Keys (US layout) send what a VT100 sends: letters honour Caps Lock, Ctrl
+makes control characters, Alt sends ESC first (meta). Return sends CR (CR LF
+in LNM), Backspace DEL, Ctrl-Backspace BS. The cursor keys follow DECCKM
+(`ESC [ A` / `ESC O A`); F1-F4 are PF1-PF4 (`ESC O P`..`S`). The keypad
+follows DECKPAM/DECKPNM while Num Lock is on (keypad + is the VT100's keypad
+comma) and is cursor/editing keys when it is off, as on a PC. Home, End,
+Insert, Delete, Page Up/Down and F5-F12 send the xterm/VT220 codes
+(`ESC [ H`/`F`, `ESC [ 2 ~`, ...). Keys repeat after 0.5 s at about 30 per
+second. Caps Lock and Num Lock light the keyboard's LEDs.
+
+## Trying it from a PC
 
 `tools/hostbridge.py` runs a program on this PC with the terminal as its
 display: its output goes out over the serial adapter, and your keystrokes
-here plus the terminal's replies come back as its input. Ctrl-] quits.
+here (and on a USB keyboard on a Pico 2) plus the terminal's replies
+come back as its input. Ctrl-] quits.
 
 ```sh
 tools/hostbridge.py /dev/ttyUSB0 vttest   # or: vim, top, $SHELL ...
@@ -106,9 +137,11 @@ its 2bpp text encoder at 800x600p60 (400 MHz, 1.3 V).
 - **Core 0** runs the terminal: UART0 receive interrupt into a ring buffer
   (`src/serial.c`), the escape sequence parser (`src/vtparse.c`, Paul
   Williams' DEC state machine), the VT100 emulation (`src/term.c`) on a cell
-  buffer (`src/screen.c`), and rasterisation of changed lines into per-line
+  buffer (`src/screen.c`), rasterisation of changed lines into per-line
   pixel buffers (`src/raster.c`, driven by `video_update` in
-  `src/video.c`).
+  `src/video.c`), and on the RP2350 the USB keyboard: TinyUSB host
+  (`src/usbkbd.c`) with boot protocol reports turned into VT100 key codes
+  (`src/keyboard.c`).
 - **Core 1** encodes those buffers to TMDS one scanline at a time and draws
   the blinking cursor (`src/video.c`).
 
@@ -127,10 +160,10 @@ on UART0 TX (boot markers, core 1 scanline timing, fault reports).
 
 | Path | Contents |
 |---|---|
-| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `demo.[ch]`. RP2040/RP2350: `video.[ch]` (libdvi, core 1), `serial.[ch]` (UART with optional RTS/CTS and a TX queue), `diag.[ch]` (VIDEO_DIAG), `main.c`. `font_gen.py` builds the font tables |
+| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100 codes), `demo.[ch]`. RP2040/RP2350: `video.[ch]` (libdvi, core 1), `serial.[ch]` (UART with optional RTS/CTS and a TX queue), `usbkbd.[ch]` and `tusb_config.h` (TinyUSB host, `USB_KEYBOARD` builds), `diag.[ch]` (VIDEO_DIAG), `main.c`. `font_gen.py` builds the font tables |
 | `test/` | Host unit tests (plain CMake + gcc with ASan/UBSan, no pico-sdk) |
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see above) |
-| `lib/pico-sdk`, `lib/PicoDVI` | Pinned submodules |
+| `lib/pico-sdk`, `lib/PicoDVI` | Pinned submodules (plus pico-sdk's `lib/tinyusb`) |
 | `assets/fonts/` | Terminus Font 8x16 (SIL OFL 1.1) and misc-fixed 6x13 (public domain); see its README |
 | `cmake/build_info.cmake` | Generates `term_build.h` (git describe, commit, date) on every build |
 | `cmake/fonts.cmake` | Font table generation, shared by the firmware and host tests |
@@ -155,6 +188,7 @@ needed.
 
 ```sh
 git submodule update --init          # pico-sdk, PicoDVI (not their submodules)
+git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # the one we need
 scripts/setup-toolchain.sh           # CMake, Arm GNU Toolchain, picotool
 scripts/test.sh                      # host unit tests
 scripts/build.sh                     # -> build/feather-rp2040-dvi/dvi_terminal.uf2, build-info.txt
@@ -164,7 +198,8 @@ scripts/package.sh                   # every built target -> dist/dvi-terminal-<
 
 `scripts/build.sh` takes `TARGET` (see the board table above),
 `SERIAL_FLOW_CONTROL` and `CMAKE_ARGS` (extra configure arguments, e.g.
-`CMAKE_ARGS=-DVIDEO_DIAG=ON`). Plain `cmake -S . -B build/x` also works and
+`CMAKE_ARGS=-DVIDEO_DIAG=ON`, or `-DUSB_KEYBOARD=ON/OFF` to override the
+per-chip default: ON for RP2350, OFF for RP2040). Plain `cmake -S . -B build/x` also works and
 picks up `.toolchain/` automatically.
 
 Toolchain versions are pinned in **`toolchain.env`**, the single source of

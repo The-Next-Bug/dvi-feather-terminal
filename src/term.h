@@ -15,7 +15,8 @@
 // The terminal owns a band of screen rows (top .. top + rows - 1); rows
 // outside it (e.g. a status line) are left alone. Its width is the screen's
 // (80 or 132); DECCOLM (CSI ? 3 h/l) switches it, which re-initialises the
-// whole screen.
+// whole screen (even when the width stays the same) and bumps
+// screen_resets, so the owner of the other rows knows to redraw them.
 //
 // Not (yet) implemented: VT52 mode (dmt.16), the alternate screen (dmt.15),
 // double-width/height lines (dmt.12/13), smooth scrolling (dmt.14).
@@ -63,6 +64,7 @@ typedef struct {
 
 	uint8_t tabs[(SCREEN_MAX_COLS + 7) / 8];
 	uint8_t last_char; // for REP: the last character printed, 0 after anything else
+	unsigned screen_resets; // times DECCOLM cleared the whole screen
 
 	term_reply_t reply;
 	void *reply_ctx;

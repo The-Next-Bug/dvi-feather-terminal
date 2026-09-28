@@ -253,11 +253,13 @@ static void set_reverse_screen(term_t *t, bool on) {
 	screen_set_reverse_rows(t->screen, mask);
 }
 
-// DECCOLM: switch between 80 and 132 columns. This clears the whole screen
-// (status line included; its owner redraws it when it sees the new width).
+// DECCOLM: switch between 80 and 132 columns. This clears the whole screen,
+// also when the width does not change (status line included; its owner
+// redraws it when it sees screen_resets change).
 static void set_columns(term_t *t, unsigned n) {
 	bool visible = t->screen->cursor_visible;
 	screen_init(t->screen, n, t->default_fg, t->default_bg);
+	++t->screen_resets;
 	t->screen->cursor_visible = visible;
 	set_reverse_screen(t, t->reverse_screen);
 	t->margin_top = 0;

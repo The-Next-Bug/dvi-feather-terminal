@@ -44,9 +44,6 @@ static screen_t *video_screen;
 // One raster line per screen line slot (indexed like screen_t.lines).
 static raster_line_t raster[SCREEN_ROWS];
 
-// Replace libdvi's TMDS buffers, which have no slack.
-static uint32_t tmds_bufs[DVI_N_TMDS_BUFFERS][TMDS_BUF_WORDS];
-
 // Everything core 1 reads lives in SRAM (not const, which would put it in
 // flash): an XIP stall would starve the serialisers.
 //
@@ -149,14 +146,18 @@ void video_init(void) {
 	dvi0.timing = &DVI_TIMING;
 	dvi0.ser_cfg = DVI_SERIAL_CONFIG;
 	dvi_init(&dvi0, next_striped_spin_lock_num(), next_striped_spin_lock_num());
-	// Swap libdvi's TMDS buffers for ones with slack for the encoder.
+	// Swap libdvi's TMDS buffers for ones with slack for the encoder. These
+	// are allocated in the same heap space rather than static: dvi_init
+	// mallocs its own first (3 x 4.8 KB), so static copies would need that
+	// much heap on top, and the RP2040 does not have it (malloc failing
+	// panics at boot, silently outside VIDEO_DIAG builds).
 	for (int i = 0; i < DVI_N_TMDS_BUFFERS; ++i) {
 		uint32_t *buf;
 		queue_remove_blocking_u32(&dvi0.q_tmds_free, &buf);
 		free(buf);
 	}
 	for (int i = 0; i < DVI_N_TMDS_BUFFERS; ++i) {
-		uint32_t *buf = tmds_bufs[i];
+		uint32_t *buf = malloc(TMDS_BUF_WORDS * sizeof(uint32_t));
 		queue_add_blocking_u32(&dvi0.q_tmds_free, &buf);
 	}
 	diag_mark("dvi_init done");

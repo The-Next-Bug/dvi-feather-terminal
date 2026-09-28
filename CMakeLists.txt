@@ -34,6 +34,17 @@ project(dvi_feather_terminal C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 pico_sdk_init()
 
+# USB keyboard (TinyUSB host on the native USB port): RP2350 only by default.
+# On the Feather RP2040 DVI the firmware crashes with it (bd dmt.20); the
+# RP2040 build leaves it out and keeps the RAM.
+if(PICO_PLATFORM MATCHES "^rp2350")
+  set(USB_KEYBOARD_DEFAULT ON)
+else()
+  set(USB_KEYBOARD_DEFAULT OFF)
+endif()
+option(USB_KEYBOARD "USB keyboard on the native USB port (TinyUSB host)" ${USB_KEYBOARD_DEFAULT})
+message(STATUS "USB_KEYBOARD: ${USB_KEYBOARD} (platform ${PICO_PLATFORM})")
+
 set(PICODVI "${CMAKE_CURRENT_LIST_DIR}/lib/PicoDVI/software")
 add_subdirectory(${PICODVI}/libdvi libdvi)
 
@@ -71,14 +82,15 @@ target_include_directories(dvi_terminal PRIVATE
 )
 
 # Our sources only: libdvi is an INTERFACE library compiled into this target.
-set_source_files_properties(src/demo.c src/diag.c src/main.c src/raster.c src/screen.c src/term.c
-  src/serial.c src/video.c src/vtparse.c
+set_source_files_properties(src/demo.c src/diag.c src/keyboard.c src/main.c src/raster.c src/screen.c
+  src/term.c src/serial.c src/usbkbd.c src/video.c src/vtparse.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 
 target_compile_definitions(dvi_terminal PRIVATE
   DVI_SERIAL_CONFIG=${DVI_SERIAL_CONFIG}
   STARTUP_DEMO=$<BOOL:${STARTUP_DEMO}>
   VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>
+  USB_KEYBOARD=$<BOOL:${USB_KEYBOARD}>
   SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>
   DVI_VERTICAL_REPEAT=1
   # The render loop needs very little stack.
@@ -92,6 +104,12 @@ target_link_libraries(dvi_terminal
   hardware_vreg
   libdvi
 )
+
+if(USB_KEYBOARD)
+  target_sources(dvi_terminal PRIVATE src/keyboard.c src/usbkbd.c)
+  # tusb_config.h is in src/.
+  target_link_libraries(dvi_terminal tinyusb_host)
+endif()
 
 # UART0 belongs to the terminal (serial.c): no stdio on it or on USB.
 if(VIDEO_DIAG)
