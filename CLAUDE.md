@@ -65,8 +65,9 @@ CMake or Arm GCC on the dev host. Use the scripts:
 
 ```bash
 git submodule update --init          # lib/pico-sdk (2.3.1), lib/PicoDVI (not their submodules)
+git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard
 scripts/build.sh                     # TARGET=feather-rp2040-dvi (default) -> build/<target>/dvi_terminal.uf2
 TARGET=pico2-dvi-sock scripts/build.sh   # RP2350: Pico 2 + Pico DVI Sock
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
@@ -75,7 +76,9 @@ scripts/package.sh                   # every built target -> dist/dvi-terminal-<
 Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
 the environment, other options via `CMAKE_ARGS`):
 `SERIAL_FLOW_CONTROL` (RTS/CTS on GP3/GP2, default OFF), `STARTUP_DEMO`
-(default ON), `VIDEO_DIAG` (UART0 TX diagnostics, default OFF),
+(default ON), `VIDEO_DIAG` (UART0 TX diagnostics, default OFF; also prints
+panic() text), `USB_KEYBOARD` (TinyUSB host keyboard; default ON for RP2350,
+OFF for RP2040, where it crashed: dmt.20),
 `COPY_TO_RAM` (default ON; must stay ON, see below).
 
 Always run `scripts/test.sh` and a firmware build before handing work
@@ -105,12 +108,18 @@ columns x 24 rows plus a status line (row 24); UART0 on GP0/GP1.
 - `src/video.[ch]` (RP2040/RP2350): libdvi setup, core 1 scanline loop
   (encode 832 px/line into TMDS buffers with slack, cursor inversion),
   `video_update()` on core 0 rasterises dirty slots, cursor slot and blink.
+- `src/keyboard.[ch]` (portable): HID boot keyboard reports -> VT100 key
+  codes (DECCKM, DECKPAM, LNM, Num/Caps Lock, autorepeat via kbd_tick).
+- `src/usbkbd.[ch]` + `src/tusb_config.h` (USB_KEYBOARD builds, RP2350 by
+  default): TinyUSB host on the native USB port, boot keyboards only; keys
+  go to the serial TX queue. The board does not power VBUS in host mode
+  (5 V fed into the VBUS pin).
 - `src/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
   RTS/CTS. `src/demo.[ch]`: startup demo. `src/diag.[ch]`: VIDEO_DIAG.
 - `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus 8x16,
   misc-fixed 6x13) generated at build time; glyph codes in `src/font.h`.
-- `tools/hostbridge.py`: run a host program with the terminal as display
-  (stands in for the keyboard until dmt.5).
+- `tools/hostbridge.py`: run a host program with the terminal as display,
+  typing on the PC.
 - CI (`.gitlab-ci.yml`): test -> build (matrix of targets) -> package ->
   release (tags `vX.Y.Z`). Pipeline status is not visible from here.
 
@@ -126,6 +135,11 @@ columns x 24 rows plus a status line (row 24); UART0 on GP0/GP1.
   - `tmds_encode_font_2bpp` processes 64 px per loop pass: widths must be
     multiples of 64; it overruns otherwise (hence the TMDS buffer slack).
   - The 2 KB core 0 stack is small: big scratch arrays are static.
+  - RP2040 heap = SRAM left after .bss (code is in SRAM too). libdvi's
+    dvi_init mallocs 3 x 4.8 KB TMDS buffers, which video.c swaps for
+    heap-allocated ones with slack: ~15 KB of heap is needed at boot, and
+    malloc failure panics silently (crash before video; RP2350 unaffected).
+    Check `__end__` in the .elf.map when adding static data or libraries.
   - Pin functions for CTS/RTS use `GPIO_FUNC_UART` (UART_FUNCSEL_NUM is
     wrong for GPIO 2/3 on RP2350).
 - Git: work on a branch, merge to `main` with `git merge --no-ff`, push only

@@ -1,11 +1,26 @@
 #include "diag.h"
 
 #include "pico/stdlib.h"
+#include "pico/stdio/driver.h"
 #include "hardware/structs/sio.h"
 #include "hardware/uart.h"
 
 #define DIAG_UART uart0
 #define DIAG_BAUD 115200
+
+// stdio on UART0 TX, blocking, so panic() messages (TinyUSB's driver panics
+// on USB errors) are seen; panic then ends in a breakpoint, which without a
+// debugger is a HardFault, reported below.
+static void diag_out_chars(const char *buf, int len) {
+	uart_write_blocking(DIAG_UART, (const uint8_t *)buf, (size_t)len);
+}
+
+static stdio_driver_t diag_stdio = {
+	.out_chars = diag_out_chars,
+#if PICO_STDIO_ENABLE_CRLF_SUPPORT
+	.crlf_enabled = true,
+#endif
+};
 
 void diag_init(void) {
 	if (!VIDEO_DIAG)
@@ -16,6 +31,7 @@ void diag_init(void) {
 	gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 	gpio_put(PICO_DEFAULT_LED_PIN, 1);
 	uart_puts(DIAG_UART, "\r\n\r\ndiag: boot\r\n");
+	stdio_set_driver_enabled(&diag_stdio, true);
 }
 
 void diag_reinit(uint32_t baud) {

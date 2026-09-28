@@ -47,6 +47,12 @@ for sub in lib/pico-sdk lib/PicoDVI; do
     exit 1
   }
 done
+# The USB keyboard (RP2350 builds) needs it; without it pico-sdk quietly
+# drops USB support and the link fails later.
+[[ "$TARGET" != pico2-dvi-sock || -f lib/pico-sdk/lib/tinyusb/src/tusb.h ]] || {
+  echo "error: TinyUSB missing; run: git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb" >&2
+  exit 1
+}
 
 out="$BUILD_DIR/$TARGET"
 mkdir -p "$out"
@@ -68,6 +74,7 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
   echo "dvi_serial_config=$dvi_config"
   echo "build_type=$BUILD_TYPE"
   echo "serial_flow_control=$SERIAL_FLOW_CONTROL"
+  echo "usb_keyboard=$(sed -n 's/^USB_KEYBOARD:BOOL=//p' "$out/CMakeCache.txt")"
   echo "compiler=$("$gcc" --version | head -1)"
   echo "cmake=$("$cmake" --version | head -1)"
   echo "picotool=$("$TOOLCHAIN_DIR/picotool/picotool/picotool" version | head -1)"

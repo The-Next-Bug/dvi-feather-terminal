@@ -1,0 +1,66 @@
+#ifndef KEYBOARD_H
+#define KEYBOARD_H
+
+// USB HID keyboard (boot protocol reports) to VT100 key codes. Portable C
+// (no pico-sdk, no TinyUSB), host-tested; usbkbd.c feeds it from TinyUSB.
+//
+// US layout. Letters honour Caps Lock, Ctrl makes control characters, Alt
+// prefixes ESC (meta). Cursor keys follow DECCKM (ESC [ A or ESC O A), the
+// keypad follows DECKPAM/DECKPNM while Num Lock is on (it is navigation
+// otherwise, as on a PC), F1-F4 are PF1-PF4 (ESC O P..S), and Return sends
+// CR, or CR LF in LNM. Backspace sends DEL, as Unix hosts expect. The editing
+// keys and F5-F12 send the VT220/xterm sequences (ESC [ n ~).
+//
+// Boot keyboards do not repeat keys themselves: the last key pressed repeats
+// after KBD_REPEAT_DELAY_MS, every KBD_REPEAT_INTERVAL_MS, while held.
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#define KBD_REPORT_KEYS 6
+#define KBD_REPEAT_DELAY_MS 500
+#define KBD_REPEAT_INTERVAL_MS 33 // about 30 characters a second
+
+// Output report bits (boot protocol LEDs).
+#define KBD_LED_NUM_LOCK 0x01
+#define KBD_LED_CAPS_LOCK 0x02
+
+typedef void (*kbd_output_t)(void *ctx, const uint8_t *data, size_t len);
+
+// The terminal modes that change what keys send.
+typedef struct {
+	bool cursor_keys_app; // DECCKM
+	bool keypad_app;      // DECKPAM
+	bool newline_mode;    // LNM
+} kbd_modes_t;
+
+typedef struct {
+	uint8_t modifiers;                // from the last report
+	uint8_t keys[KBD_REPORT_KEYS];    // from the last report
+	bool caps_lock, num_lock;
+	uint8_t repeat_key;               // 0: none
+	uint32_t repeat_at;               // ms, when it next repeats
+
+	kbd_output_t output;
+	void *output_ctx;
+} kbd_t;
+
+// Num Lock starts on, so the keypad sends digits (or DECKPAM codes).
+void kbd_init(kbd_t *k, kbd_output_t output, void *ctx);
+
+// Handle an 8-byte boot protocol report (modifiers, reserved, 6 key codes)
+// received at now_ms. Returns true if the lock LEDs should change (see
+// kbd_leds).
+bool kbd_report(kbd_t *k, const uint8_t report[8], const kbd_modes_t *modes, uint32_t now_ms);
+
+// Send auto-repeats that are due. Call regularly.
+void kbd_tick(kbd_t *k, const kbd_modes_t *modes, uint32_t now_ms);
+
+// All keys up (the keyboard was unplugged): stops any repeat.
+void kbd_release_all(kbd_t *k);
+
+// The LED output report for the current lock state.
+uint8_t kbd_leds(const kbd_t *k);
+
+#endif

@@ -11,8 +11,8 @@ output goes to the terminal over SERIAL_PORT; what the terminal sends back
 here both become its input. Watch the DVI screen and type in this window.
 Ctrl-] quits.
 
-Until the terminal has a keyboard, this is how to try vttest, vim, top and
-friends on it. After switching the terminal to 132 columns, tell the program
+This is how to try vttest, vim, top and friends on the terminal from a PC
+(a USB keyboard on the terminal types into the program too). After switching the terminal to 132 columns, tell the program
 with `stty cols 132` (or start with --cols 132).
 
 With --rtscts the serial port uses RTS/CTS flow control (wire the adapter's
