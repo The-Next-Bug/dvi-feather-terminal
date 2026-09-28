@@ -16,6 +16,7 @@
 
 #include "diag.h"
 #include "raster.h"
+#include "splash.h"
 
 #define FRAME_WIDTH RASTER_ACTIVE_WIDTH
 #define FRAME_HEIGHT RASTER_ACTIVE_HEIGHT
@@ -36,6 +37,7 @@ _Static_assert(SCREEN_ROWS * RASTER_ROW_HEIGHT == FRAME_HEIGHT, "rows fill the s
 #define BLINK_HALF_PERIOD_MS 500
 
 static struct dvi_inst dvi0;
+// diag_frames counts frames in every build: video_splash waits on it.
 static volatile uint32_t diag_frames, diag_max_cycles;
 // Core 1 progress: 1 started, 2 starting DVI, 3 DVI started, 4 in frame loop.
 static volatile uint32_t diag_core1_stage;
@@ -43,6 +45,20 @@ static screen_t *video_screen;
 
 // One raster line per screen line slot (indexed like screen_t.lines).
 static raster_line_t raster[SCREEN_ROWS];
+
+// The splash (video_splash) lives in the raster memory of the first
+// SPLASH_SLOTS slots, which are not rendered meanwhile. At startup the
+// status line is in slot SCREEN_ROWS - 1, clear of it.
+#define SPLASH_SLOTS ((SPLASH_HEIGHT * sizeof(splash_row_t) + sizeof(raster_line_t) - 1) / sizeof(raster_line_t))
+_Static_assert(SPLASH_SLOTS < SCREEN_ROWS - 1, "the splash fits below the status line's slot");
+static splash_row_t *splash_rows = (splash_row_t *)(void *)raster;
+// Core 1 shows the splash for the text rows while splash_on, in the planes
+// in splash_planes (the others, or all while 0, black).
+static volatile bool splash_on;
+static volatile uint8_t splash_planes;
+// Core 0: the splash owns its slots (video_update leaves them alone).
+static bool splash_holds_raster;
+static splash_row_t blank_row;
 
 // Everything core 1 reads lives in SRAM (not const, which would put it in
 // flash): an XIP stall would starve the serialisers.
@@ -82,6 +98,8 @@ static void __not_in_flash_func(core1_main)(void) {
 		// Latch the mode and cursor once per frame so they cannot tear
 		// between rows.
 		const screen_t *s = video_screen;
+		bool splash = splash_on;
+		uint planes = splash_planes;
 		uint cols = s->cols;
 		bool cursor_on = s->cursor_visible && !(frame / CURSOR_BLINK_FRAMES & 1);
 		uint cursor_row = s->cursor_row;
@@ -91,13 +109,21 @@ static void __not_in_flash_func(core1_main)(void) {
 
 		uint row = 0, sy = 0;
 		for (uint y = 0; y < FRAME_HEIGHT; ++y) {
-			const raster_line_t *line = &raster[s->row_map[row]];
-			uint sr = raster_stored_row(cols, sy);
-			for (int p = 0; p < RASTER_PLANES; ++p) {
-				bits[p] = line->bits[sr][p];
-				colour[p] = line->colour[p];
+			if (splash && y < SPLASH_HEIGHT) {
+				for (int p = 0; p < RASTER_PLANES; ++p) {
+					const splash_row_t *src = planes >> p & 1 ? &splash_rows[y] : &blank_row;
+					bits[p] = src->bits;
+					colour[p] = src->colour;
+				}
+			} else {
+				const raster_line_t *line = &raster[s->row_map[row]];
+				uint sr = raster_stored_row(cols, sy);
+				for (int p = 0; p < RASTER_PLANES; ++p) {
+					bits[p] = line->bits[sr][p];
+					colour[p] = line->colour[p];
+				}
 			}
-			if (cursor_on && row == cursor_row) {
+			if (cursor_on && row == cursor_row && !(splash && y < SPLASH_HEIGHT)) {
 				// Invert the cursor cell: each pixel swaps between its group's
 				// two levels.
 				for (int p = 0; p < RASTER_PLANES; ++p) {
@@ -200,6 +226,12 @@ void video_update(screen_t *screen) {
 
 	uint32_t dirty = screen->dirty;
 	screen->dirty = 0;
+	if (splash_holds_raster) {
+		// Keep those for when the splash ends.
+		uint32_t held = dirty & ((1u << SPLASH_SLOTS) - 1);
+		screen->dirty |= held;
+		dirty &= ~held;
+	}
 	for (int slot = 0; dirty; ++slot, dirty >>= 1) {
 		if (!(dirty & 1))
 			continue;
@@ -235,4 +267,36 @@ void video_start(screen_t *screen) {
 	// Core 1 must never stall on the bus while feeding the serialisers.
 	hw_set_bits(&bus_ctrl_hw->priority, BUSCTRL_BUS_PRIORITY_PROC1_BITS);
 	multicore_launch_core1(core1_main);
+}
+
+// Wait until core 1 has finished a frame after this call, so any frame it
+// shows next latched the current mode.
+static void wait_frame(void) {
+	uint32_t frame = diag_frames;
+	while (diag_frames == frame)
+		tight_loop_contents();
+}
+
+bool video_splash(const splash_image_t *img) {
+	// Black while the rows are written, so no half-drawn logo shows.
+	splash_planes = 0;
+	splash_on = true;
+	wait_frame();
+	splash_holds_raster = true;
+	if (!splash_unpack(splash_rows, img)) {
+		video_splash_end();
+		return false;
+	}
+	splash_planes = img->planes;
+	return true;
+}
+
+void video_splash_end(void) {
+	// Black again until the text rows are rendered back over the splash.
+	splash_planes = 0;
+	wait_frame();
+	splash_holds_raster = false;
+	video_screen->dirty = (1u << SCREEN_ROWS) - 1;
+	video_update(video_screen);
+	splash_on = false;
 }

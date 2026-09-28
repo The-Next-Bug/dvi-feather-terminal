@@ -20,9 +20,9 @@ the RP2040 and RP2350 bootloaders each reject the other's image.
    picotool also works: picotool load -x dvi_terminal-<target>.uf2
 
 3. Connect a DVI/HDMI monitor. The display runs at 800x600 60 Hz.
-   A demo alternates between 80 and 132 columns every 5 seconds, with the
-   build id on the bottom line, until data arrives on the Feather's RX pin
-   (UART0, 115200 8N1) or a key is pressed; then the terminal starts.
+   The logo shows for 10 seconds, with the build id on the bottom line,
+   then the terminal starts (at once if data arrives on the RX pin, UART0
+   115200 8N1, or a key is pressed).
 
 4. Optional USB keyboard (Pico 2 only): after flashing, unplug the PC from
    the USB port, connect the keyboard there through an OTG adapter, and

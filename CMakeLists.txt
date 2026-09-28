@@ -16,7 +16,11 @@ if(NOT DEFINED picotool_DIR AND EXISTS "${TOOLCHAIN_DIR}/picotool/picotool")
 endif()
 
 set(PICO_BOARD adafruit_feather_rp2040 CACHE STRING "pico-sdk board")
-option(STARTUP_DEMO "Cycle the 80/132-column demo at startup until UART0 receives data" ON)
+option(STARTUP_LOGO "Show the logo (LOGO_IMAGE) for a few seconds at power-on/reset" ON)
+# Monitors take a few seconds to lock onto the signal after power-on, which
+# comes out of this.
+set(LOGO_MS 10000 CACHE STRING "How long the startup logo shows, in ms")
+option(STARTUP_DEMO "Then cycle the 80/132-column demo until UART0 receives data or a key is pressed" OFF)
 option(VIDEO_DIAG "Bring-up diagnostics on UART0 TX: boot markers, core 1 timing, faults" OFF)
 # Run from SRAM: the board's boot2 reads flash with 03h at clk_sys / 4, and at
 # DVI clocks above 252 MHz (e.g. 67.5 MHz SCK at 270 MHz) flash execution
@@ -50,6 +54,7 @@ add_subdirectory(${PICODVI}/libdvi libdvi)
 
 set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
 include(cmake/fonts.cmake)
+include(cmake/logo.cmake)
 
 # Runs on every build; rewrites term_build.h only when git state changes.
 add_custom_target(build_info
@@ -67,6 +72,7 @@ add_executable(dvi_terminal
   src/screen.c
   src/term.c
   src/serial.c
+  src/splash.c
   src/video.c
   src/vtparse.c
   ${FONT_SOURCES}
@@ -83,11 +89,13 @@ target_include_directories(dvi_terminal PRIVATE
 
 # Our sources only: libdvi is an INTERFACE library compiled into this target.
 set_source_files_properties(src/demo.c src/diag.c src/keyboard.c src/main.c src/raster.c src/screen.c
-  src/term.c src/serial.c src/usbkbd.c src/video.c src/vtparse.c
+  src/splash.c src/term.c src/serial.c src/usbkbd.c src/video.c src/vtparse.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 
 target_compile_definitions(dvi_terminal PRIVATE
   DVI_SERIAL_CONFIG=${DVI_SERIAL_CONFIG}
+  STARTUP_LOGO=$<BOOL:${STARTUP_LOGO}>
+  LOGO_MS=${LOGO_MS}
   STARTUP_DEMO=$<BOOL:${STARTUP_DEMO}>
   VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>
   USB_KEYBOARD=$<BOOL:${USB_KEYBOARD}>
@@ -104,6 +112,10 @@ target_link_libraries(dvi_terminal
   hardware_vreg
   libdvi
 )
+
+if(STARTUP_LOGO)
+  target_sources(dvi_terminal PRIVATE ${LOGO_SOURCES})
+endif()
 
 if(USB_KEYBOARD)
   target_sources(dvi_terminal PRIVATE src/keyboard.c src/usbkbd.c)

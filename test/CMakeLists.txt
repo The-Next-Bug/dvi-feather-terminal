@@ -10,6 +10,7 @@ enable_testing()
 set(SRC "${CMAKE_CURRENT_LIST_DIR}/../src")
 set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
 include(../cmake/fonts.cmake)
+include(../cmake/logo.cmake)
 
 # unit_test(<name> <sources>...): builds test_<name> from test_<name>.c and
 # the given src/ files, and registers it with CTest.
@@ -28,3 +29,5 @@ unit_test(term term.c vtparse.c screen.c)
 unit_test(raster raster.c screen.c demo.c)
 target_sources(test_raster PRIVATE ${FONT_SOURCES})
 unit_test(keyboard keyboard.c)
+unit_test(splash splash.c)
+target_sources(test_splash PRIVATE ${LOGO_SOURCES})

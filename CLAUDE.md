@@ -67,7 +67,7 @@ CMake or Arm GCC on the dev host. Use the scripts:
 git submodule update --init          # lib/pico-sdk (2.3.1), lib/PicoDVI (not their submodules)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, splash
 scripts/build.sh                     # TARGET=feather-rp2040-dvi (default) -> build/<target>/dvi_terminal.uf2
 TARGET=pico2-dvi-sock scripts/build.sh   # RP2350: Pico 2 + Pico DVI Sock
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
@@ -75,8 +75,10 @@ scripts/package.sh                   # every built target -> dist/dvi-terminal-<
 
 Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
 the environment, other options via `CMAKE_ARGS`):
-`SERIAL_FLOW_CONTROL` (RTS/CTS on GP3/GP2, default OFF), `STARTUP_DEMO`
-(default ON), `VIDEO_DIAG` (UART0 TX diagnostics, default OFF; also prints
+`SERIAL_FLOW_CONTROL` (RTS/CTS on GP3/GP2, default OFF), `STARTUP_LOGO`
+(default ON; image from `LOGO_IMAGE`, shown `LOGO_MS`, default 10000: monitors
+need seconds to sync), `STARTUP_DEMO` (default OFF),
+`VIDEO_DIAG` (UART0 TX diagnostics, default OFF; also prints
 panic() text), `USB_KEYBOARD` (TinyUSB host keyboard; default ON for RP2350,
 OFF for RP2040, where it crashed: dmt.20),
 `COPY_TO_RAM` (default ON; must stay ON, see below).
@@ -115,7 +117,12 @@ columns x 24 rows plus a status line (row 24); UART0 on GP0/GP1.
   go to the serial TX queue. The board does not power VBUS in host mode
   (5 V fed into the VBUS pin).
 - `src/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
-  RTS/CTS. `src/demo.[ch]`: startup demo. `src/diag.[ch]`: VIDEO_DIAG.
+  RTS/CTS. `src/demo.[ch]`: opt-in startup demo. `src/diag.[ch]`: VIDEO_DIAG.
+- `src/logo_gen.py` + `cmake/logo.cmake`: PNG -> run-length encoded 2-bit
+  levels (one hue, <=2 levels per 8-px group). `src/splash.[ch]` (portable)
+  unpacks it into full-width encoder rows; `video_splash()` puts them in the
+  raster memory of slots 0-16 and core 1 shows them for scanlines 0-575
+  (status line from its slot); power-on/reset only, never on RIS.
 - `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus 8x16,
   misc-fixed 6x13) generated at build time; glyph codes in `src/font.h`.
 - `tools/hostbridge.py`: run a host program with the terminal as display,
