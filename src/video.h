@@ -11,6 +11,7 @@
 #include <stdint.h>
 
 #include "screen.h"
+#include "splash.h"
 
 // Raise the core voltage, set the system clock to the TMDS bit clock and set
 // up libdvi. Call before any peripheral that depends on clk_sys/clk_peri
@@ -36,5 +37,15 @@ video_stats_t video_stats(void);
 // Rasterise the whole screen and launch core 1. The screen must outlive the
 // program.
 void video_start(screen_t *screen);
+
+// Show img (see splash.h) in place of the text rows until video_splash_end;
+// the status line is still the screen's. For startup, after video_start and
+// before the text rows scroll (the splash reuses their raster memory; the
+// status line must still be in its own slot). Returns false, showing the
+// screen as before, if img cannot be shown.
+bool video_splash(const splash_image_t *img);
+
+// Back to the text rows (all re-rendered).
+void video_splash_end(void);
 
 #endif

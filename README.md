@@ -36,9 +36,14 @@ Releases (`vX.Y.Z` tags) ship both firmware images; see `docs/FLASHING.txt`.
 - **Status line** (row 24): width, build id, line settings, `kbd` while a
   keyboard is attached, bytes waiting in the receive and transmit buffers,
   line errors (and hold-offs with flow control).
-- **Startup demo**: alternates between 80 and 132 columns every 5 seconds
-  until the first byte arrives on UART0 or a key is pressed, then the
-  terminal starts (build with `-DSTARTUP_DEMO=OFF` to skip it).
+- **Startup logo**: at power-on/reset the logo (`assets/logo/`) shows for
+  10 seconds (monitors take a few to sync), with the build on the status
+  line, then the terminal starts; the first byte on UART0 or a key press
+  ends it early. See [Startup logo](#startup-logo); `-DLOGO_MS=<ms>` changes
+  the time, `-DSTARTUP_LOGO=OFF` skips it.
+- **Demo** (opt-in, `-DSTARTUP_DEMO=ON`): after the logo, alternates
+  between 80 and 132 columns every 5 seconds until the first byte arrives
+  or a key is pressed.
 
 Not yet (tracked in bd): SET-UP screen, alternate screen, VT52 mode,
 double-width/height lines, smooth scrolling.
@@ -113,6 +118,21 @@ Insert, Delete, Page Up/Down and F5-F12 send the xterm/VT220 codes
 (`ESC [ H`/`F`, `ESC [ 2 ~`, ...). Keys repeat after 0.5 s at about 30 per
 second. Caps Lock and Num Lock light the keyboard's LEDs.
 
+## Startup logo
+
+`LOGO_IMAGE` (CMake, default `assets/logo/ColorLogo-576.png`) is converted
+at build time by `src/logo_gen.py` (Python standard library only). It must
+be a non-interlaced 8-bit PNG, at most 800x576 (576 is the 24 text rows; the
+status line stays below) and a multiple of 8 pixels wide; alpha is
+composited over black, and it is shown unscaled, centred.
+
+The display has 4 levels per colour, and per 8 pixels each colour shows at
+most two of them, so the image is posterised (the build picks the best pair
+per group). To fit in RAM the logo must be a single hue or grey on black:
+every colour channel that is not black must show the same levels (the
+default is green only). It is stored run-length encoded (about 19 KB for
+the default) and unpacked into the text raster's memory while it shows.
+
 ## Trying it from a PC
 
 `tools/hostbridge.py` runs a program on this PC with the terminal as its
@@ -160,10 +180,11 @@ on UART0 TX (boot markers, core 1 scanline timing, fault reports).
 
 | Path | Contents |
 |---|---|
-| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100 codes), `demo.[ch]`. RP2040/RP2350: `video.[ch]` (libdvi, core 1), `serial.[ch]` (UART with optional RTS/CTS and a TX queue), `usbkbd.[ch]` and `tusb_config.h` (TinyUSB host, `USB_KEYBOARD` builds), `diag.[ch]` (VIDEO_DIAG), `main.c`. `font_gen.py` builds the font tables |
+| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100 codes), `splash.[ch]` (startup logo unpacking), `demo.[ch]`. RP2040/RP2350: `video.[ch]` (libdvi, core 1), `serial.[ch]` (UART with optional RTS/CTS and a TX queue), `usbkbd.[ch]` and `tusb_config.h` (TinyUSB host, `USB_KEYBOARD` builds), `diag.[ch]` (VIDEO_DIAG), `main.c`. `font_gen.py` builds the font tables, `logo_gen.py` the logo |
 | `test/` | Host unit tests (plain CMake + gcc with ASan/UBSan, no pico-sdk) |
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see above) |
 | `lib/pico-sdk`, `lib/PicoDVI` | Pinned submodules (plus pico-sdk's `lib/tinyusb`) |
+| `assets/logo/` | The startup logo (PNG used by the build, JPEG original) |
 | `assets/fonts/` | Terminus Font 8x16 (SIL OFL 1.1) and misc-fixed 6x13 (public domain); see its README |
 | `cmake/build_info.cmake` | Generates `term_build.h` (git describe, commit, date) on every build |
 | `cmake/fonts.cmake` | Font table generation, shared by the firmware and host tests |

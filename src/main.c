@@ -8,9 +8,11 @@
 // a USB keyboard on the native USB port (usbkbd.c) types to the host through
 // UART0 TX.
 //
-// With STARTUP_DEMO (the default), the demo screen alternates between 80
-// and 132 columns every DEMO_INTERVAL_MS until the first byte arrives on
-// UART0 or a key is pressed; then the terminal starts, with that byte.
+// At power-on/reset, with STARTUP_LOGO (the default), the logo (splash.h)
+// shows for LOGO_MS; with STARTUP_DEMO (opt-in), the demo screen then
+// alternates between 80 and 132 columns every DEMO_INTERVAL_MS. Either ends
+// early when the first byte arrives on UART0 or a key is pressed; then the
+// terminal starts, with that byte.
 
 #include <stdio.h>
 
@@ -25,8 +27,12 @@
 #include "serial.h"
 #include "video.h"
 
+#ifndef STARTUP_LOGO
+#define STARTUP_LOGO 1
+#endif
+
 #ifndef STARTUP_DEMO
-#define STARTUP_DEMO 1
+#define STARTUP_DEMO 0
 #endif
 
 #ifndef USB_KEYBOARD
@@ -47,6 +53,9 @@
 #define RTS_PIN 3
 #define TERM_COLS 80
 #define DEMO_INTERVAL_MS 5000
+#ifndef LOGO_MS
+#define LOGO_MS 10000
+#endif
 
 #define FG RGB222(2, 2, 2)
 #define BG RGB222(0, 0, 0)
@@ -60,7 +69,7 @@
 static screen_t screen;
 static term_t term;
 static bool term_started;
-static bool key_pressed; // since run_demo started
+static bool key_pressed; // before the terminal started: ends the logo and demo
 
 // With VIDEO_DIAG, report core 1's timing on UART0 TX twice a second.
 static void diag_poll(void) {
@@ -110,6 +119,40 @@ static unsigned keyboards_attached(void) {
 }
 #endif
 
+// Wait until `until`, UART0 receiving something (copied into buf) or a key
+// press. Returns whether either happened; *n is what arrived.
+static bool wait_for_input(absolute_time_t until, uint8_t *buf, size_t max, size_t *n) {
+	while (!time_reached(until)) {
+		*n = serial_read(buf, max);
+		if (*n || key_pressed)
+			return true;
+		keyboard_poll();
+		serial_poll();
+		diag_poll();
+	}
+	*n = 0;
+	return false;
+}
+
+#if STARTUP_LOGO
+// Show the logo for LOGO_MS, with the build on the status line. Returns
+// whether input ended it; *n is what arrived.
+static bool show_logo(uint8_t *buf, size_t max, size_t *n) {
+	char status[SCREEN_MAX_COLS + 1];
+	snprintf(status, sizeof status, " DVI Terminal | build %s (%s, %s)",
+		TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
+	screen_clear_line(&screen, STATUS_ROW, STATUS_FG, STATUS_BG);
+	screen_puts(&screen, 0, STATUS_ROW, status, STATUS_FG, STATUS_BG);
+	video_update(&screen);
+	*n = 0;
+	if (!video_splash(&splash_logo))
+		return false;
+	bool input = wait_for_input(make_timeout_time_ms(LOGO_MS), buf, max, n);
+	video_splash_end();
+	return input;
+}
+#endif
+
 // Cycle the demo until UART0 receives something or a key is pressed; return
 // what arrived.
 static size_t run_demo(uint8_t *buf, size_t max) {
@@ -120,15 +163,9 @@ static size_t run_demo(uint8_t *buf, size_t max) {
 		demo_draw(&screen, cols, status);
 		video_update(&screen);
 
-		absolute_time_t next = make_timeout_time_ms(DEMO_INTERVAL_MS);
-		while (!time_reached(next)) {
-			size_t n = serial_read(buf, max);
-			if (n || key_pressed)
-				return n;
-			keyboard_poll();
-			serial_poll();
-			diag_poll();
-		}
+		size_t n;
+		if (wait_for_input(make_timeout_time_ms(DEMO_INTERVAL_MS), buf, max, &n))
+			return n;
 	}
 }
 
@@ -187,7 +224,13 @@ int main(void) {
 	diag_mark("video_start done (core 1 launched)");
 
 	uint8_t buf[256];
-	size_t pending = STARTUP_DEMO ? run_demo(buf, sizeof buf) : 0;
+	size_t pending = 0;
+	bool input = false;
+#if STARTUP_LOGO
+	input = show_logo(buf, sizeof buf, &pending);
+#endif
+	if (STARTUP_DEMO && !input)
+		pending = run_demo(buf, sizeof buf);
 
 	screen_init(&screen, TERM_COLS, FG, BG);
 	term_init(&term, &screen, 0, TERM_ROWS, FG, BG);
