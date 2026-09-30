@@ -77,7 +77,9 @@ Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
 the environment, other options via `CMAKE_ARGS`):
 `SERIAL_FLOW_CONTROL` (RTS/CTS on GP3/GP2, default OFF), `STARTUP_LOGO`
 (default ON; image from `LOGO_IMAGE`, shown `LOGO_MS`, default 10000: monitors
-need seconds to sync), `STARTUP_DEMO` (default OFF),
+need seconds to sync), `LOGO_IN_FLASH` (default ON, experimental dmt.25: logo data in a
+`.flashdata` section read via XIP after `nvflash_retime()`; frees ~19 KB of
+SRAM), `STARTUP_DEMO` (default OFF),
 `VIDEO_DIAG` (UART0 TX diagnostics, default OFF; also prints
 panic() text), `USB_KEYBOARD` (TinyUSB host keyboard; default ON for RP2350,
 OFF for RP2040, where it crashed: dmt.20),

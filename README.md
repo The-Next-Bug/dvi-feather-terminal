@@ -170,6 +170,9 @@ per group). To fit in RAM the logo must be a single hue or grey on black:
 every colour channel that is not black must show the same levels (the
 default is green only). It is stored run-length encoded (about 19 KB for
 the default) and unpacked into the text raster's memory while it shows.
+With `LOGO_IN_FLASH` (default ON, experimental) the encoded data stays in
+flash and is read once at startup, instead of being copied into SRAM with
+the rest of the program; `-DLOGO_IN_FLASH=OFF` keeps the old behaviour.
 
 ## Trying it from a PC
 

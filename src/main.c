@@ -359,6 +359,8 @@ int main(void) {
 	settings_load(slots, &settings, &save_target);
 
 	video_init();
+	// Before anything reads flash at the new clock: the settings saves and,
+	// with LOGO_IN_FLASH, the logo.
 	nvflash_retime();
 	// After video_init: the baud divisor depends on the final clk_peri.
 	// Diagnostic builds write to UART0 with blocking calls, which an unwired

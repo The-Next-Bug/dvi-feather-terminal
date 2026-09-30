@@ -17,6 +17,9 @@ unpacks one plane's pixels and shows them in each plane of `planes`.
 
 The output defines `const splash_image_t NAME` (see src/splash.h): the
 levels, row by row, run-length encoded as bytes `level << 6 | (run - 1)`.
+Compiled with LOGO_IN_FLASH=1 (firmware), the encoded data goes in a
+.flashdata section, which the SDK's copy_to_ram link leaves in flash, so it
+is read through XIP at startup instead of taking up SRAM for good.
 """
 
 import argparse
@@ -162,7 +165,12 @@ def main():
         f.write(f"// {width}x{height}, planes {', '.join(PLANE_NAMES[p] for p in planes) or 'none'}, "
                 f"{len(data)} bytes run-length encoded.\n\n")
         f.write('#include "splash.h"\n\n')
-        f.write(f"static const uint8_t data[{len(data)}] = {{\n")
+        f.write("#if LOGO_IN_FLASH\n"
+                "#define LOGO_DATA __attribute__((section(\".flashdata.logo\")))\n"
+                "#else\n"
+                "#define LOGO_DATA\n"
+                "#endif\n\n")
+        f.write(f"static const uint8_t data[{len(data)}] LOGO_DATA = {{\n")
         for i in range(0, len(data), 16):
             f.write("\t" + ", ".join(f"0x{b:02x}" for b in data[i:i + 16]) + ",\n")
         f.write("};\n\n")
