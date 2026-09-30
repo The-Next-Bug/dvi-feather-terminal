@@ -239,6 +239,7 @@ static void reset(term_t *t) {
 	t->margin_bottom = t->rows - 1;
 	t->autowrap = true;
 	t->insert_mode = t->newline_mode = t->cursor_keys_app = t->keypad_app = false;
+	t->backspace_bs = t->backspace_bs_default;
 	reset_tabs(t);
 	t->screen->cursor_visible = true;
 	set_reverse_screen(t, false);
@@ -282,6 +283,7 @@ static void set_mode(term_t *t, bool dec, unsigned mode, bool on) {
 	case 6: t->cur.origin_mode = on; move_to(t, 0, 0); break;
 	case 7: t->autowrap = on; if (!on) t->cur.wrap_pending = false; break;
 	case 25: t->screen->cursor_visible = on; break;
+	case 67: t->backspace_bs = on; break; // DECBKM
 	default: break; // DECANM (VT52), DECSCLM, DECARM...: ignored
 	}
 }
@@ -400,6 +402,8 @@ static void csi_dispatch(term_t *t, const vtparse_t *p, uint8_t final) {
 		if (final == 'h' || final == 'l')
 			for (unsigned i = 0; i < p->n_params; ++i)
 				set_mode(t, true, p->params[i], final == 'h');
+		else if (final == '~' && p->n_params == 1 && p->params[0] == TERM_SETUP_PARAM)
+			++t->setup_requests;
 		return;
 	}
 	if (p->private_marker || p->n_intermediates)
@@ -635,9 +639,21 @@ void term_set_reply(term_t *t, term_reply_t reply_fn, void *ctx) {
 }
 
 // The screen's cursor is updated once per call, not per byte.
-void term_write(term_t *t, const uint8_t *data, size_t len) {
-	for (size_t i = 0; i < len; ++i)
-		vtparse_byte(&t->parser, data[i]);
+size_t term_write(term_t *t, const uint8_t *data, size_t len) {
+	unsigned setup_requests = t->setup_requests;
+	size_t i = 0;
+	while (i < len && t->setup_requests == setup_requests)
+		vtparse_byte(&t->parser, data[i++]);
+	sync_cursor(t);
+	return i;
+}
+
+void term_set_backspace_default(term_t *t, bool bs) {
+	t->backspace_bs = t->backspace_bs_default = bs;
+}
+
+void term_set_columns(term_t *t, unsigned cols) {
+	set_columns(t, cols);
 	sync_cursor(t);
 }
 

@@ -88,6 +88,10 @@ static void test_basic_controls(void) {
 	CHECK(!strcmp(tap(0, 0x29), "\x1b"));
 	CHECK(!strcmp(tap(0, 0x2a), "\x7f"));
 	CHECK(!strcmp(tap(LCTRL, 0x2a), "\b"));
+	modes.backspace_bs = true; // DECBKM: the other way round
+	CHECK(!strcmp(tap(0, 0x2a), "\b"));
+	CHECK(!strcmp(tap(LCTRL, 0x2a), "\x7f"));
+	modes.backspace_bs = false;
 	CHECK(!strcmp(tap(0, 0x2b), "\t"));
 	modes.newline_mode = true;
 	CHECK(!strcmp(tap(0, 0x28), "\r\n"));
@@ -113,7 +117,7 @@ static void test_function_and_editing_keys(void) {
 	CHECK(!strcmp(tap(0, 0x3d), "\x1bOS"));
 	CHECK(!strcmp(tap(0, 0x3e), "\x1b[15~"));
 	CHECK(!strcmp(tap(0, 0x44), "\x1b[23~"));
-	CHECK(!strcmp(tap(0, 0x45), "\x1b[24~"));
+	CHECK(!strcmp(tap(0, 0x45), "")); // F12 is SET-UP
 	CHECK(!strcmp(tap(0, 0x49), "\x1b[2~"));
 	CHECK(!strcmp(tap(0, 0x4c), "\x1b[3~"));
 	CHECK(!strcmp(tap(0, 0x4b), "\x1b[5~"));
@@ -218,8 +222,32 @@ static void test_repeat(void) {
 	CHECK_EQ(kbd_leds(&k), KBD_LED_NUM_LOCK | KBD_LED_CAPS_LOCK);
 }
 
+static int setup_presses;
+
+static void on_setup(void *ctx) {
+	(void)ctx;
+	++setup_presses;
+}
+
+// F12 and Pause are the SET-UP key: they send nothing and do not repeat.
+static void test_setup_key(void) {
+	setup();
+	CHECK(!strcmp(tap(0, 0x45), "")); // no callback set: nothing happens
+	kbd_set_setup_key(&k, on_setup);
+	setup_presses = 0;
+	for (uint8_t key = 0x45; key <= 0x48; key += 3) { // F12, Pause
+		report(0, key, 0);
+		now += KBD_REPEAT_DELAY_MS + 10 * KBD_REPEAT_INTERVAL_MS;
+		kbd_tick(&k, &modes, now);
+		report(0, 0, 0);
+	}
+	CHECK_EQ(setup_presses, 2);
+	CHECK(!strcmp(out, ""));
+}
+
 int main(void) {
 	RUN(test_letters_and_shift);
+	RUN(test_setup_key);
 	RUN(test_caps_lock);
 	RUN(test_control_and_alt);
 	RUN(test_basic_controls);

@@ -68,6 +68,11 @@ void screen_set_reverse_rows(screen_t *s, uint32_t mask);
 
 void screen_clear_line(screen_t *s, unsigned row, uint8_t fg, uint8_t bg);
 
+// Copy a row's cells out, or put saved cells back (e.g. under an overlay).
+// Out-of-range rows are ignored.
+void screen_save_row(const screen_t *s, unsigned row, screen_line_t *out);
+void screen_restore_row(screen_t *s, unsigned row, const screen_line_t *in);
+
 // Scroll rows top..bottom (inclusive) up by one; the bottom row is cleared.
 void screen_scroll_up(screen_t *s, unsigned top, unsigned bottom, uint8_t fg, uint8_t bg);
 

@@ -67,7 +67,7 @@ CMake or Arm GCC on the dev host. Use the scripts:
 git submodule update --init          # lib/pico-sdk (2.3.1), lib/PicoDVI (not their submodules)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, splash
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash
 scripts/build.sh                     # TARGET=feather-rp2040-dvi (default) -> build/<target>/dvi_terminal.uf2
 TARGET=pico2-dvi-sock scripts/build.sh   # RP2350: Pico 2 + Pico DVI Sock
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
@@ -116,6 +116,22 @@ columns x 24 rows plus a status line (row 24); UART0 on GP0/GP1.
   default): TinyUSB host on the native USB port, boot keyboards only; keys
   go to the serial TX queue. The board does not power VBUS in host mode
   (5 V fed into the VBUS pin).
+- `src/settings.[ch]` (portable): settings record (magic, seq, CRC-32,
+  one byte per setting, append-only) in two flash sectors used in turn.
+  Settings: columns, backspace (DEL/BS: DECBKM default), local_echo.
+  `src/setup.[ch]` (portable): SET-UP panel over the bottom text rows
+  (key bytes in, save/cancel out); main.c saves/restores those rows. Opened
+  by F12 or Pause (keyboard.c SET-UP callback) or host `CSI ? 999 ~` (term.c bumps
+  `setup_requests` and term_write stops after it; later bytes are keys).
+- `src/keyname.[ch]` (portable): key bytes -> "ESC [A", "^C", ... for the
+  status line's last-key field (which replaced the rx/tx/err counters).
+- `src/nvflash.[ch]`: last 2 flash sectors. Read at boot before
+  video_init; `nvflash_retime()` after the clock change. RP2350: SDK
+  flash_range_* (ROM uses QMI clkdiv 12) + `rom_flash_select_xip_read_mode`
+  03h at <=50 MHz afterwards (the boot XIP stub the SDK replays assumes
+  <=150 MHz). RP2040: own erase/program sequence that sets SSI BAUDR for
+  <=25 MHz between ROM flash_exit_xip and erase (ROM default 6 = 67 MHz),
+  then boot2 copy + BAUDR for reads. No flash_safe_execute (core 1 in RAM).
 - `src/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
   RTS/CTS. `src/demo.[ch]`: opt-in startup demo. `src/diag.[ch]`: VIDEO_DIAG.
 - `src/logo_gen.py` + `cmake/logo.cmake`: PNG -> run-length encoded 2-bit

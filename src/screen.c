@@ -78,6 +78,18 @@ void screen_clear_line(screen_t *s, unsigned row, uint8_t fg, uint8_t bg) {
 		fill_slot(s, s->row_map[row], fg, bg);
 }
 
+void screen_save_row(const screen_t *s, unsigned row, screen_line_t *out) {
+	if (row < SCREEN_ROWS)
+		*out = *screen_line(s, row);
+}
+
+void screen_restore_row(screen_t *s, unsigned row, const screen_line_t *in) {
+	if (row >= SCREEN_ROWS)
+		return;
+	s->lines[s->row_map[row]] = *in;
+	s->dirty |= 1u << s->row_map[row];
+}
+
 void screen_scroll_down(screen_t *s, unsigned top, unsigned bottom, uint8_t fg, uint8_t bg) {
 	if (top >= bottom || bottom >= SCREEN_ROWS)
 		return;
