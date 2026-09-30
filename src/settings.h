@@ -22,12 +22,50 @@
 #define SETTINGS_RECORD_SIZE 256 // one flash page
 #define SETTINGS_SLOTS 2         // flash sectors used in turn
 
-// One byte per setting; the payload stores them in this order.
+// One byte per setting; the payload stores them in this order (append only).
 typedef struct {
 	uint8_t columns;    // power-on width: 80 or 132
 	uint8_t backspace;  // what Backspace sends at power-on/RIS: 0x7f DEL or 0x08 BS
 	uint8_t local_echo; // 1: keys typed are also shown on the terminal
+	uint8_t baud;       // index: see settings_baud_rate
+	uint8_t framing;    // index: see settings_framing
+	uint8_t newline;    // LNM at power-on/RIS: 1 on
+	uint8_t colours;    // index: see settings_colours
+	uint8_t palette;    // 1: mono, SGR colours ignored (term_set_palette)
 } settings_t;
+
+// The settings, in settings_t order, with the values each can take (the
+// first choice need not be the default) and their names for SET-UP.
+#define SETTINGS_FIELDS 8
+#define SETTINGS_MAX_CHOICES 9
+
+typedef struct {
+	const char *name;
+	uint8_t n_choices;
+	uint8_t values[SETTINGS_MAX_CHOICES];
+	const char *labels[SETTINGS_MAX_CHOICES];
+} settings_field_t;
+
+extern const settings_field_t settings_fields[SETTINGS_FIELDS];
+
+// A field's value in s (i < SETTINGS_FIELDS).
+static inline uint8_t *settings_field(settings_t *s, unsigned i) {
+	return (uint8_t *)s + i;
+}
+
+unsigned settings_baud_rate(const settings_t *s);
+
+// Data bits (7 or 8), parity ('N', 'E' or 'O') and stop bits (1 or 2).
+void settings_framing(const settings_t *s, unsigned *data_bits, char *parity, unsigned *stop_bits);
+
+// The colours of the "Colors" setting (RGB222). With the mono palette the
+// status line is the text colours reversed.
+typedef struct {
+	uint8_t fg, bold_fg, bg;      // default text
+	uint8_t status_fg, status_bg; // the status line and the SET-UP panel
+} settings_colours_t;
+
+settings_colours_t settings_colours(const settings_t *s);
 
 // Where the next save goes and with which sequence number.
 typedef struct {

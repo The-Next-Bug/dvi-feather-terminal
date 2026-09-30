@@ -22,6 +22,34 @@ static bool next_level(runs_t *r, uint8_t *level) {
 	return true;
 }
 
+splash_tint_t splash_tint(const splash_image_t *img, uint8_t fg, bool mono) {
+	splash_tint_t t;
+	unsigned level[RASTER_PLANES], max = 0;
+	for (int p = 0; p < RASTER_PLANES; ++p) {
+		level[p] = fg >> 2 * p & 3;
+		max = level[p] > max ? level[p] : max;
+	}
+	bool grey = level[0] == level[1] && level[1] == level[2] && !mono;
+	for (int p = 0; p < RASTER_PLANES; ++p) {
+		if (grey)
+			t.shift[p] = img->planes >> p & 1 ? 0 : SPLASH_PLANE_OFF;
+		else
+			t.shift[p] = level[p] ? (uint8_t)(max - level[p]) : SPLASH_PLANE_OFF;
+	}
+	return t;
+}
+
+void splash_shift_map(unsigned shift, uint8_t map[256]) {
+	for (unsigned b = 0; b < 256; ++b) {
+		unsigned out = 0;
+		for (unsigned i = 0; i < 8; i += 2) { // four 2-bit levels
+			unsigned v = b >> i & 3;
+			out |= (v > shift ? v - shift : 0) << i;
+		}
+		map[b] = (uint8_t)out;
+	}
+}
+
 bool splash_unpack(splash_row_t *rows, const splash_image_t *img) {
 	memset(rows, 0, SPLASH_HEIGHT * sizeof *rows);
 	unsigned w = img->width, h = img->height;

@@ -1,5 +1,6 @@
 #include <string.h>
 
+#include "screen.h"
 #include "settings.h"
 #include "test.h"
 
@@ -24,7 +25,8 @@ static void erase_all(void) {
 }
 
 static void test_round_trip(void) {
-	settings_t in = {.columns = 132, .backspace = 0x08, .local_echo = 1}, out;
+	settings_t in = {.columns = 132, .backspace = 0x08, .local_echo = 1, .baud = 4, .framing = 4,
+		.newline = 1, .colours = 2, .palette = 1}, out;
 	uint8_t rec[SETTINGS_RECORD_SIZE];
 	uint32_t seq = 0;
 	settings_encode(&in, 0x12345678, rec);
@@ -32,6 +34,11 @@ static void test_round_trip(void) {
 	CHECK_EQ(out.columns, 132);
 	CHECK_EQ(out.backspace, 0x08);
 	CHECK_EQ(out.local_echo, 1);
+	CHECK_EQ(out.baud, 4);
+	CHECK_EQ(out.framing, 4);
+	CHECK_EQ(out.newline, 1);
+	CHECK_EQ(out.colours, 2);
+	CHECK_EQ(out.palette, 1);
 	CHECK_EQ(seq, 0x12345678);
 	CHECK_EQ(rec[SETTINGS_RECORD_SIZE - 1], 0xff); // unused bytes stay erased
 }
@@ -127,7 +134,56 @@ static void test_older_record(void) {
 	CHECK_EQ(probe.columns, 132);
 	CHECK_EQ(probe.backspace, 0x7f);
 	CHECK_EQ(probe.local_echo, 0);
+	CHECK_EQ(settings_baud_rate(&probe), 115200);
 	CHECK_EQ(seq, 3);
+}
+
+static void test_line_and_colours(void) {
+	settings_t s;
+	settings_defaults(&s);
+	unsigned bits, stop;
+	char parity;
+	CHECK_EQ(settings_baud_rate(&s), 115200);
+	settings_framing(&s, &bits, &parity, &stop);
+	CHECK(bits == 8 && parity == 'N' && stop == 1);
+	s.baud = 4;
+	s.framing = 4;
+	CHECK_EQ(settings_baud_rate(&s), 9600);
+	settings_framing(&s, &bits, &parity, &stop);
+	CHECK(bits == 7 && parity == 'E' && stop == 1);
+	settings_colours_t c = settings_colours(&s);
+	CHECK_EQ(c.fg, RGB222(2, 2, 2)); // white, as before settings had colours
+	CHECK_EQ(c.bold_fg, RGB222(3, 3, 3));
+	CHECK_EQ(c.bg, 0);
+	CHECK_EQ(c.status_fg, RGB222(3, 3, 3)); // the status line as before too
+	CHECK_EQ(c.status_bg, RGB222(0, 0, 2));
+	s.colours = 2; // amber
+	c = settings_colours(&s);
+	CHECK_EQ(c.fg, RGB222(2, 1, 0));
+	CHECK_EQ(c.bold_fg, RGB222(3, 2, 0));
+	CHECK_EQ(c.status_bg, RGB222(2, 1, 0)); // the status line follows
+	// Each set's status line differs from its text background.
+	for (s.colours = 0; s.colours < 4; ++s.colours) {
+		c = settings_colours(&s);
+		CHECK(c.status_bg != c.bg);
+		CHECK(c.status_fg != c.status_bg);
+	}
+	// Mono: the status line is the text colours reversed (white's too).
+	s.palette = 1;
+	for (s.colours = 0; s.colours < 4; ++s.colours) {
+		c = settings_colours(&s);
+		CHECK(c.status_fg == c.bg && c.status_bg == c.fg);
+	}
+	// Every field's labels and values line up and the defaults are choices.
+	settings_defaults(&s);
+	for (unsigned i = 0; i < SETTINGS_FIELDS; ++i) {
+		bool found = false;
+		for (unsigned c = 0; c < settings_fields[i].n_choices; ++c) {
+			CHECK(settings_fields[i].labels[c] != NULL);
+			found |= settings_fields[i].values[c] == *settings_field(&s, i);
+		}
+		CHECK(found);
+	}
 }
 
 int main(void) {
@@ -138,5 +194,6 @@ int main(void) {
 	RUN(test_sequence_wraps);
 	RUN(test_bad_value_keeps_default);
 	RUN(test_older_record);
+	RUN(test_line_and_colours);
 	return tests_done();
 }

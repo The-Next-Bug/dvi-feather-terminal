@@ -17,8 +17,10 @@
 #include "screen.h"
 #include "settings.h"
 
-#define SETUP_ITEMS 3
-#define SETUP_ROWS (SETUP_ITEMS + 3) // title, the settings, message, help
+#define SETUP_ITEMS SETTINGS_FIELDS
+// Title, the settings with two preview rows under the colour ones, message,
+// help.
+#define SETUP_ROWS (SETUP_ITEMS + 5)
 #define SETUP_ESC_TIMEOUT_MS 100
 
 typedef enum {
@@ -45,7 +47,9 @@ setup_action_t setup_input(setup_t *u, uint8_t c, uint32_t now_ms);
 setup_action_t setup_tick(setup_t *u, uint32_t now_ms);
 
 // Draw the panel on rows top .. top + SETUP_ROWS - 1 in fg/bg (the current
-// choices reversed); title is shown after "SET-UP".
+// choices reversed); title is shown after "SET-UP". Under Colors and
+// Palette, a preview of the chosen colours: default text, bold and status
+// line, and the 16 ANSI colours as text and as backgrounds.
 void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, uint8_t fg, uint8_t bg);
 
 #endif

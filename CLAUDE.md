@@ -77,7 +77,9 @@ Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
 the environment, other options via `CMAKE_ARGS`):
 `SERIAL_FLOW_CONTROL` (RTS/CTS on GP3/GP2, default OFF), `STARTUP_LOGO`
 (default ON; image from `LOGO_IMAGE`, shown `LOGO_MS`, default 10000: monitors
-need seconds to sync), `STARTUP_DEMO` (default OFF),
+need seconds to sync), `LOGO_IN_FLASH` (default ON, experimental dmt.25: logo data in a
+`.flashdata` section read via XIP after `nvflash_retime()`; frees ~19 KB of
+SRAM), `STARTUP_DEMO` (default OFF),
 `VIDEO_DIAG` (UART0 TX diagnostics, default OFF; also prints
 panic() text), `USB_KEYBOARD` (TinyUSB host keyboard; default ON for RP2350,
 OFF for RP2040, where it crashed: dmt.20),
@@ -118,8 +120,16 @@ columns x 24 rows plus a status line (row 24); UART0 on GP0/GP1.
   (5 V fed into the VBUS pin).
 - `src/settings.[ch]` (portable): settings record (magic, seq, CRC-32,
   one byte per setting, append-only) in two flash sectors used in turn.
-  Settings: columns, backspace (DEL/BS: DECBKM default), local_echo.
+  Settings (settings_fields[] drives the record, validation and SET-UP
+  labels; append only): columns, backspace (DECBKM RIS value), local_echo,
+  baud, framing, newline (LNM RIS value), colours, palette (mono: SGR
+  colours -> brightness/inverse of the defaults, term_mono_colours; the
+  SET-UP preview uses it too). main.c apply_settings()
+  -> serial_configure, term_set_defaults, term_set_colours (recolours
+  cells in the old defaults).
   `src/setup.[ch]` (portable): SET-UP panel over the bottom text rows
+  (one row per setting, plus two preview rows under Palette: ANSI colours
+  as fg and as bg, spaced so no 8-px group holds two samples in 132 cols)
   (key bytes in, save/cancel out); main.c saves/restores those rows. Opened
   by F12 or Pause (keyboard.c SET-UP callback) or host `CSI ? 999 ~` (term.c bumps
   `setup_requests` and term_write stops after it; later bytes are keys).
@@ -139,6 +149,9 @@ columns x 24 rows plus a status line (row 24); UART0 on GP0/GP1.
   unpacks it into full-width encoder rows; `video_splash()` puts them in the
   raster memory of slots 0-16 and core 1 shows them for scanlines 0-575
   (status line from its slot); power-on/reset only, never on RIS.
+  `splash_tint()` maps the Colors text colour to per-plane level shifts;
+  core 1 remaps the 13 colour words of shifted planes per splash scanline
+  (`splash_map`), so no extra per-row colour arrays are stored.
 - `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus 8x16,
   misc-fixed 6x13) generated at build time; glyph codes in `src/font.h`.
 - `tools/hostbridge.py`: run a host program with the terminal as display,

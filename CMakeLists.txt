@@ -20,6 +20,10 @@ option(STARTUP_LOGO "Show the logo (LOGO_IMAGE) for a few seconds at power-on/re
 # Monitors take a few seconds to lock onto the signal after power-on, which
 # comes out of this.
 set(LOGO_MS 10000 CACHE STRING "How long the startup logo shows, in ms")
+# Experimental (bd dmt.25): leave the logo's 19 KB in flash and read it
+# through XIP when it is shown, rather than keep a copy in SRAM. Needs the
+# flash read clock that nvflash_retime sets after the DVI clock change.
+option(LOGO_IN_FLASH "Keep the startup logo data in flash instead of SRAM" ON)
 option(STARTUP_DEMO "Then cycle the 80/132-column demo until UART0 receives data or a key is pressed" OFF)
 option(VIDEO_DIAG "Bring-up diagnostics on UART0 TX: boot markers, core 1 timing, faults" OFF)
 # Run from SRAM: the board's boot2 reads flash with 03h at clk_sys / 4, and at
@@ -101,6 +105,7 @@ target_compile_definitions(dvi_terminal PRIVATE
   DVI_SERIAL_CONFIG=${DVI_SERIAL_CONFIG}
   STARTUP_LOGO=$<BOOL:${STARTUP_LOGO}>
   LOGO_MS=${LOGO_MS}
+  LOGO_IN_FLASH=$<BOOL:${LOGO_IN_FLASH}>
   STARTUP_DEMO=$<BOOL:${STARTUP_DEMO}>
   VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>
   USB_KEYBOARD=$<BOOL:${USB_KEYBOARD}>

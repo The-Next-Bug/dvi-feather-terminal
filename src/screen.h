@@ -68,6 +68,11 @@ void screen_set_reverse_rows(screen_t *s, uint32_t mask);
 
 void screen_clear_line(screen_t *s, unsigned row, uint8_t fg, uint8_t bg);
 
+// In rows top..bottom (inclusive), change every fg or bg colour equal to
+// from[i] into to[i] (the first match), e.g. for new default colours.
+void screen_recolour(screen_t *s, unsigned top, unsigned bottom, const uint8_t *from, const uint8_t *to,
+	unsigned n);
+
 // Copy a row's cells out, or put saved cells back (e.g. under an overlay).
 // Out-of-range rows are ignored.
 void screen_save_row(const screen_t *s, unsigned row, screen_line_t *out);

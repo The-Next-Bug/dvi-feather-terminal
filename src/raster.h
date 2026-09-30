@@ -58,8 +58,13 @@ static inline unsigned raster_cell_width(unsigned cols) {
 	return cols > 80 ? 6 : 8;
 }
 
+// Centred, rounded down to a whole 8-pixel group, so no group is part
+// border and part text: such a group would need black for the border as
+// well as the cells' two levels, which the encoder cannot show (on a
+// non-black background the background went black there). 132 columns
+// (792 px) start at 0, 4 px left of centre; 80 columns are centred exactly.
 static inline unsigned raster_x_offset(unsigned cols) {
-	return (RASTER_ACTIVE_WIDTH - cols * raster_cell_width(cols)) / 2;
+	return (RASTER_ACTIVE_WIDTH - cols * raster_cell_width(cols)) / 2 / 8 * 8;
 }
 
 static inline unsigned raster_font_rows(unsigned cols) {

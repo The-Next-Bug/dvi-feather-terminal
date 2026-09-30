@@ -615,10 +615,73 @@ static void test_decbkm(void) {
 	CHECK(t.backspace_bs);
 	put("\x1b[?67l");
 	CHECK(!t.backspace_bs);
-	term_set_backspace_default(&t, true);
+	term_set_defaults(&t, &(term_defaults_t){.backspace_bs = true});
 	CHECK(t.backspace_bs);
 	put("\x1b[?67l\x1b" "c"); // RIS
 	CHECK(t.backspace_bs);
+}
+
+// LNM's RIS value is a SET-UP setting too.
+static void test_newline_default(void) {
+	setup();
+	term_set_defaults(&t, &(term_defaults_t){.newline_mode = true});
+	CHECK(t.newline_mode);
+	put("\x1b[20l");
+	CHECK(!t.newline_mode);
+	put("\x1b" "c"); // RIS
+	CHECK(t.newline_mode);
+	put("ab\ncd");
+	CHECK(row_is(1, "cd")); // LF did CR too
+}
+
+// New default colours recolour what is on screen in the old ones (and
+// leave other colours alone); bold default text uses the new bold colour.
+static void test_set_colours(void) {
+	setup();
+	put("a\x1b[1mb\x1b[0;31mc");
+	uint8_t red, fg, bg;
+	screen_colours(&s, 2, 0, &red, &bg);
+	const uint8_t green = RGB222(0, 2, 0), bright = RGB222(0, 3, 0), blue = RGB222(0, 0, 1);
+	term_set_colours(&t, green, bright, blue);
+	screen_colours(&s, 0, 0, &fg, &bg);
+	CHECK_EQ(fg, green);
+	CHECK_EQ(bg, blue);
+	screen_colours(&s, 1, 0, &fg, &bg);
+	CHECK_EQ(fg, bright);
+	screen_colours(&s, 2, 0, &fg, &bg);
+	CHECK_EQ(fg, red);
+	CHECK_EQ(bg, blue);
+	screen_colours(&s, 0, STATUS, &fg, &bg);
+	CHECK_EQ(fg, FG); // the status line is not the terminal's
+	put("\x1b[0;1md");
+	screen_colours(&s, 3, 0, &fg, &bg);
+	CHECK_EQ(fg, bright);
+}
+
+// Mono: SGR colours only pick brightness within the default colours.
+// Bright text (and bold) uses the bold colour; a background other than
+// black shows inverse (bright ones in the bold colour) with text in the
+// background colour. Colour again afterwards.
+static void test_mono_palette(void) {
+	setup();
+	const uint8_t bold = t.bold_fg;
+	term_set_palette(&t, true);
+	put("\x1b[31ma\x1b[1mb\x1b[0;91mc\x1b[0;44md\x1b[0;104me\x1b[0;40mf");
+	put("\x1b[0;38;2;255;0;0mg\x1b[0;38;2;128;0;0mh\x1b[0;7;32;41mi");
+	CHECK(fg_at(0, 0) == FG && bg_at(0, 0) == BG);   // normal red: text colour
+	CHECK_EQ(fg_at(1, 0), bold);                       // bold
+	CHECK_EQ(fg_at(2, 0), bold);                       // bright red
+	CHECK(fg_at(3, 0) == BG && bg_at(3, 0) == FG);    // blue background: inverse
+	CHECK(fg_at(4, 0) == BG && bg_at(4, 0) == bold);  // bright blue: inverse bright
+	CHECK(fg_at(5, 0) == FG && bg_at(5, 0) == BG);    // black background: plain
+	CHECK_EQ(fg_at(6, 0), bold);                       // direct red, full channel: bright
+	CHECK_EQ(fg_at(7, 0), FG);                         // direct dark red: normal
+	CHECK(fg_at(8, 0) == FG && bg_at(8, 0) == BG);    // reverse of inverse
+	put("\x1b[0;44m\x1b[2K");                         // erase uses the inverse background
+	CHECK_EQ(bg_at(0, 0), FG);
+	term_set_palette(&t, false);
+	put("\x1b[0;31mj");
+	CHECK_EQ(fg_at(9, 0), term_ansi_colour(1));
 }
 
 static void test_set_columns(void) {
@@ -658,6 +721,9 @@ int main(void) {
 	RUN(test_setup_request);
 	RUN(test_set_columns);
 	RUN(test_decbkm);
+	RUN(test_newline_default);
+	RUN(test_set_colours);
+	RUN(test_mono_palette);
 	RUN(test_save_restore_cursor);
 	RUN(test_charsets);
 	RUN(test_tab_stops);
