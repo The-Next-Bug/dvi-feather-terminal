@@ -28,8 +28,9 @@ static void set_leds(uint8_t dev_addr, uint8_t instance) {
 	tuh_hid_set_report(dev_addr, instance, 0, HID_REPORT_TYPE_OUTPUT, &led_report, sizeof led_report);
 }
 
-void usbkbd_init(kbd_output_t output, void *ctx) {
+void usbkbd_init(kbd_output_t output, kbd_setup_t setup, void *ctx) {
 	kbd_init(&kbd, output, ctx);
+	kbd_set_setup_key(&kbd, setup);
 	led_report = kbd_leds(&kbd);
 	tusb_rhport_init_t host = {.role = TUSB_ROLE_HOST, .speed = TUSB_SPEED_AUTO};
 	tusb_init(0, &host);

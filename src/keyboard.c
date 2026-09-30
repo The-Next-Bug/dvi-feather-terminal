@@ -22,6 +22,7 @@ enum {
 	KEY_CAPS_LOCK = 0x39,
 	KEY_F1 = 0x3a,
 	KEY_F12 = 0x45,
+	KEY_PAUSE = 0x48, // SET-UP, as is F12
 	KEY_INSERT = 0x49,
 	KEY_HOME = 0x4a,
 	KEY_PAGE_UP = 0x4b,
@@ -70,8 +71,8 @@ static const struct {
 	{'0', 'p', KEY_INSERT}, {'.', 'n', KEY_DELETE},
 };
 
-// F5 .. F12: the n of ESC [ n ~ (VT220 / xterm).
-static const uint8_t function_keys[] = {15, 17, 18, 19, 20, 21, 23, 24};
+// F5 .. F11: the n of ESC [ n ~ (VT220 / xterm). F12 is SET-UP.
+static const uint8_t function_keys[] = {15, 17, 18, 19, 20, 21, 23};
 
 typedef struct {
 	uint8_t data[8];
@@ -194,13 +195,13 @@ static void translate(const kbd_t *k, uint8_t key, uint8_t modifiers, const kbd_
 	} else if (key == KEY_ESCAPE) {
 		c = 0x1b;
 	} else if (key == KEY_BACKSPACE) {
-		c = ctrl ? '\b' : 0x7f;
+		c = ctrl != modes->backspace_bs ? '\b' : 0x7f;
 		ctrl = false;
 	} else if (key == KEY_ENTER) {
 		seq_return(s, modes);
 	} else if (key >= KEY_F1 && key < KEY_F1 + 4) {
 		seq_ss3(s, true, (char)('P' + (key - KEY_F1))); // PF1-PF4
-	} else if (key >= KEY_F1 + 4 && key <= KEY_F12) {
+	} else if (key >= KEY_F1 + 4 && key < KEY_F12) {
 		seq_tilde(s, function_keys[key - KEY_F1 - 4]);
 	} else if (key >= KEY_KP_1 && key <= KEY_KP_DOT) {
 		unsigned i = key - KEY_KP_1;
@@ -256,6 +257,10 @@ void kbd_init(kbd_t *k, kbd_output_t output, void *ctx) {
 	k->output_ctx = ctx;
 }
 
+void kbd_set_setup_key(kbd_t *k, kbd_setup_t setup) {
+	k->setup = setup;
+}
+
 bool kbd_report(kbd_t *k, const uint8_t report[8], const kbd_modes_t *modes, uint32_t now_ms) {
 	const uint8_t *keys = report + 2;
 	// Too many keys down: the keyboard reports ErrorRollOver in every slot
@@ -275,6 +280,9 @@ bool kbd_report(kbd_t *k, const uint8_t report[8], const kbd_modes_t *modes, uin
 		} else if (key == KEY_NUM_LOCK) {
 			k->num_lock = !k->num_lock;
 			leds_changed = true;
+		} else if (key == KEY_F12 || key == KEY_PAUSE) {
+			if (k->setup)
+				k->setup(k->output_ctx);
 		} else {
 			send(k, key, modes);
 			k->repeat_key = key;

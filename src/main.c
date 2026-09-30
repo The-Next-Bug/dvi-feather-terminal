@@ -13,15 +13,26 @@
 // alternates between 80 and 132 columns every DEMO_INTERVAL_MS. Either ends
 // early when the first byte arrives on UART0 or a key is pressed; then the
 // terminal starts, with that byte.
+//
+// SET-UP (setup.c) opens over the bottom text rows on the USB keyboard's
+// F12 or Pause key, or when the host sends CSI ? 999 ~ (then keys come from UART0
+// RX too, so it can be driven from the host's keyboard). The settings are
+// kept in flash (nvflash.c, settings.c); the saved width is the power-on one.
 
+#include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
 
 #include "demo.h"
 #include "diag.h"
+#include "keyname.h"
+#include "nvflash.h"
 #include "screen.h"
+#include "settings.h"
+#include "setup.h"
 #include "term.h"
 #include "term_build.h"
 #include "serial.h"
@@ -65,11 +76,36 @@
 #define TERM_ROWS (SCREEN_ROWS - 1)
 #define STATUS_ROW (SCREEN_ROWS - 1)
 #define STATUS_INTERVAL_MS 250
+#define SETUP_TOP (TERM_ROWS - SETUP_ROWS)
+
+static_assert(NVFLASH_SECTORS == SETTINGS_SLOTS && NVFLASH_PAGE_SIZE == SETTINGS_RECORD_SIZE,
+	"a settings slot is a flash sector holding one page");
 
 static screen_t screen;
 static term_t term;
 static bool term_started;
 static bool key_pressed; // before the terminal started: ends the logo and demo
+
+static settings_t settings;          // as saved in flash
+static settings_target_t save_target;
+
+// The last key sequence sent to the host, for the status line.
+static struct {
+	uint8_t data[8];
+	uint8_t len;
+	uint32_t count; // keys sent: tells a repeat of the same key apart
+} last_key;
+
+// SET-UP state; the panel's rows are saved while it covers them.
+static struct {
+	bool active, from_host;
+	bool open_requested;  // by the SET-UP key
+	setup_action_t action; // a save or cancel waiting for the main loop
+	setup_t ui;
+	screen_line_t saved[SETUP_ROWS];
+	uint32_t saved_reverse;
+	bool saved_cursor;
+} setup;
 
 // With VIDEO_DIAG, report core 1's timing on UART0 TX twice a second.
 static void diag_poll(void) {
@@ -88,21 +124,130 @@ static void diag_poll(void) {
 	diag_heartbeat();
 }
 
+static void setup_draw_panel(void) {
+	char title[SCREEN_MAX_COLS + 1];
+	snprintf(title, sizeof title, "  DVI Terminal build %s", TERM_BUILD_ID);
+	setup_draw(&setup.ui, &screen, SETUP_TOP, title, STATUS_FG, STATUS_BG);
+}
+
+// Key bytes for SET-UP. A save or cancel is left for the main loop (the
+// keyboard calls this from inside the USB stack); later bytes are dropped.
+static void setup_feed(const uint8_t *data, size_t len) {
+	uint32_t now = to_ms_since_boot(get_absolute_time());
+	for (size_t i = 0; i < len && setup.action == SETUP_NONE; ++i) {
+		setup_action_t a = setup_input(&setup.ui, data[i], now);
+		if (a == SETUP_REDRAW)
+			setup_draw_panel();
+		else if (a != SETUP_NONE)
+			setup.action = a;
+	}
+}
+
+static void setup_enter(bool from_host) {
+	// The modes now, whatever set them.
+	settings_t current = settings;
+	current.columns = screen.cols;
+	current.backspace = term.backspace_bs ? 0x08 : 0x7f;
+	setup_open(&setup.ui, &current);
+	setup.active = true;
+	setup.from_host = from_host;
+	setup.action = SETUP_NONE;
+	for (unsigned r = 0; r < SETUP_ROWS; ++r)
+		screen_save_row(&screen, SETUP_TOP + r, &setup.saved[r]);
+	setup.saved_reverse = screen.reverse_rows;
+	setup.saved_cursor = screen.cursor_visible;
+	screen_set_reverse_rows(&screen, screen.reverse_rows & ~(((1u << SETUP_ROWS) - 1) << SETUP_TOP));
+	screen.cursor_visible = false;
+	setup_draw_panel();
+}
+
+// Put the rows back; with apply, use the edited settings now: Backspace,
+// and the width if it differs (which clears the screen, as DECCOLM does).
+// Local echo is read from `settings` as keys are sent.
+static void setup_leave(bool apply) {
+	for (unsigned r = 0; r < SETUP_ROWS; ++r)
+		screen_restore_row(&screen, SETUP_TOP + r, &setup.saved[r]);
+	screen_set_reverse_rows(&screen, setup.saved_reverse);
+	screen.cursor_visible = setup.saved_cursor;
+	setup.active = false;
+	if (!apply)
+		return;
+	term_set_backspace_default(&term, setup.ui.values.backspace == 0x08);
+	if (setup.ui.values.columns != screen.cols)
+		term_set_columns(&term, setup.ui.values.columns);
+}
+
+static bool setup_save(void) {
+	static uint8_t page[SETTINGS_RECORD_SIZE]; // RAM, for the flash ROM routines
+	settings_encode(&setup.ui.values, save_target.seq, page);
+	if (!nvflash_write(save_target.slot, page))
+		return false;
+	settings = setup.ui.values;
+	save_target.slot = (save_target.slot + 1) % SETTINGS_SLOTS;
+	++save_target.seq;
+	return true;
+}
+
+// Run SET-UP's pending save or cancel, or the Escape key timeout.
+static void setup_service(void) {
+	if (setup.action == SETUP_NONE)
+		setup.action = setup_tick(&setup.ui, to_ms_since_boot(get_absolute_time()));
+	setup_action_t a = setup.action;
+	setup.action = SETUP_NONE;
+	if (a == SETUP_CANCEL) {
+		setup_leave(false);
+	} else if (a == SETUP_SAVE) {
+		// The erase holds core 0 for tens of ms: say so first.
+		setup.ui.message = "Saving...";
+		setup_draw_panel();
+		video_update(&screen);
+		if (setup_save()) {
+			setup_leave(true);
+		} else {
+			setup.ui.message = "Saving to flash failed";
+			setup_draw_panel();
+		}
+	}
+}
+
 #if USB_KEYBOARD
-// Keystrokes go to the host like replies, through the TX queue.
+// Keystrokes go to the host like replies, through the TX queue (or to
+// SET-UP while it is open). With local echo they are shown too.
 static void send_key(void *ctx, const uint8_t *data, size_t len) {
 	(void)ctx;
 	key_pressed = true;
+	if (setup.active) {
+		setup_feed(data, len);
+		return;
+	}
 	serial_write(data, len);
+	last_key.len = (uint8_t)(len < sizeof last_key.data ? len : sizeof last_key.data);
+	memcpy(last_key.data, data, last_key.len);
+	++last_key.count;
+	if (term_started && settings.local_echo)
+		term_write(&term, data, len);
+}
+
+// The SET-UP key opens SET-UP, or leaves it without saving.
+static void setup_key(void *ctx) {
+	(void)ctx;
+	key_pressed = true;
+	if (!term_started)
+		return;
+	if (setup.active)
+		setup.action = SETUP_CANCEL;
+	else
+		setup.open_requested = true;
 }
 
 // The terminal modes that change what keys send (none before it starts).
 static void keyboard_poll(void) {
-	kbd_modes_t modes = {false, false, false};
+	kbd_modes_t modes = {.backspace_bs = settings.backspace == 0x08};
 	if (term_started) {
 		modes.cursor_keys_app = term.cursor_keys_app;
 		modes.keypad_app = term.keypad_app;
 		modes.newline_mode = term.newline_mode;
+		modes.backspace_bs = term.backspace_bs;
 	}
 	usbkbd_poll(&modes);
 }
@@ -176,37 +321,45 @@ static void send_reply(void *ctx, const uint8_t *data, size_t len) {
 }
 
 typedef struct {
-	serial_stats_t serial;
 	unsigned keyboards;
+	uint32_t keys_sent; // last_key.count
+	bool local_echo;
 } status_t;
 
 static status_t status_now(void) {
-	return (status_t){serial_stats(), keyboards_attached()};
+	return (status_t){keyboards_attached(), last_key.count, settings.local_echo};
 }
 
 static bool status_equal(const status_t *a, const status_t *b) {
-	return a->serial.rx_level == b->serial.rx_level && a->serial.tx_level == b->serial.tx_level &&
-		a->serial.errors == b->serial.errors && a->serial.throttled == b->serial.throttled &&
-		a->keyboards == b->keyboards;
+	return a->keyboards == b->keyboards && a->keys_sent == b->keys_sent && a->local_echo == b->local_echo;
 }
 
 static void draw_status(const status_t *st) {
+	char key[32] = "";
+	if (st->keys_sent) {
+		char name[24];
+		keyname(last_key.data, last_key.len, name, sizeof name);
+		snprintf(key, sizeof key, " | key %s", name);
+	}
 	char text[SCREEN_MAX_COLS + 1];
-	// Buffer levels: bytes waiting to be displayed (rx) and sent (tx).
-	int n = snprintf(text, sizeof text, " VT100 %ux24 | %s | %u 8N1%s%s | rx buf %lu  tx buf %lu  err %lu",
+	snprintf(text, sizeof text, " VT100 %ux24 | %s | %u 8N1%s%s%s%s",
 		screen.cols, TERM_BUILD_ID, BAUD, SERIAL_FLOW_CONTROL ? " RTS/CTS" : "",
-		st->keyboards ? " | kbd" : "",
-		(unsigned long)st->serial.rx_level, (unsigned long)st->serial.tx_level,
-		(unsigned long)st->serial.errors);
-	if (SERIAL_FLOW_CONTROL && n > 0 && (size_t)n < sizeof text)
-		snprintf(text + n, sizeof text - (size_t)n, "  hold %lu", (unsigned long)st->serial.throttled);
+		st->keyboards ? " | kbd" : "", st->local_echo ? " | local echo" : "", key);
 	screen_clear_line(&screen, STATUS_ROW, STATUS_FG, STATUS_BG);
 	screen_puts(&screen, 0, STATUS_ROW, text, STATUS_FG, STATUS_BG);
 }
 
 int main(void) {
 	diag_init();
+	// Read the settings while the flash is still in its boot-time setup.
+	nvflash_init();
+	const uint8_t *slots[SETTINGS_SLOTS];
+	for (unsigned i = 0; i < SETTINGS_SLOTS; ++i)
+		slots[i] = nvflash_sector(i);
+	settings_load(slots, &settings, &save_target);
+
 	video_init();
+	nvflash_retime();
 	// After video_init: the baud divisor depends on the final clk_peri.
 	// Diagnostic builds write to UART0 with blocking calls, which an unwired
 	// CTS (pulled up on the Feather) would hold off forever: RTS only there.
@@ -215,7 +368,7 @@ int main(void) {
 		SERIAL_FLOW_CONTROL ? RTS_PIN : SERIAL_NO_PIN);
 	diag_mark("serial_init done");
 #if USB_KEYBOARD
-	usbkbd_init(send_key, NULL);
+	usbkbd_init(send_key, setup_key, NULL);
 	diag_mark("usbkbd_init done");
 #endif
 
@@ -232,12 +385,14 @@ int main(void) {
 	if (STARTUP_DEMO && !input)
 		pending = run_demo(buf, sizeof buf);
 
-	screen_init(&screen, TERM_COLS, FG, BG);
+	screen_init(&screen, settings.columns, FG, BG);
 	term_init(&term, &screen, 0, TERM_ROWS, FG, BG);
+	term_set_backspace_default(&term, settings.backspace == 0x08);
 	term_set_reply(&term, send_reply, NULL);
 	term_started = true;
 	status_t shown = status_now();
 	unsigned shown_resets = term.screen_resets;
+	unsigned setup_requests = term.setup_requests;
 	draw_status(&shown);
 
 	char banner[SCREEN_MAX_COLS + 1];
@@ -252,10 +407,27 @@ int main(void) {
 
 	absolute_time_t next_status = make_timeout_time_ms(STATUS_INTERVAL_MS);
 	while (true) {
-		size_t n = serial_read(buf, sizeof buf);
-		if (n)
-			term_write(&term, buf, n);
+		// While SET-UP is open from the keyboard, host data waits in the
+		// receive buffer; opened by the host, what it sends are keys.
+		size_t n = setup.active && !setup.from_host ? 0 : serial_read(buf, sizeof buf);
+		if (setup.active) {
+			setup_feed(buf, n);
+		} else {
+			size_t used = n ? term_write(&term, buf, n) : 0;
+			if (term.setup_requests != setup_requests) {
+				setup_requests = term.setup_requests;
+				setup_enter(true);
+				setup_feed(buf + used, n - used);
+			}
+		}
 		keyboard_poll();
+		if (setup.open_requested) {
+			setup.open_requested = false;
+			if (!setup.active)
+				setup_enter(false);
+		}
+		if (setup.active)
+			setup_service();
 		serial_poll();
 
 		// DECCOLM re-initialises the whole screen, status line included,

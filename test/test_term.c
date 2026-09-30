@@ -591,6 +591,47 @@ static void run_basics(void) {
 	RUN(test_band_offset);
 }
 
+// CSI ? 999 ~ asks for SET-UP; term_write stops right after it.
+static void test_setup_request(void) {
+	setup();
+	const char *data = "ab\x1b[?999~cd";
+	size_t len = strlen(data);
+	size_t used = term_write(&t, (const uint8_t *)data, len);
+	CHECK_EQ(used, len - 2);
+	CHECK_EQ(t.setup_requests, 1);
+	CHECK(row_is(0, "ab"));
+	// Other parameters, or a different marker, are not requests.
+	put("\x1b[?998~\x1b[999~\x1b[?999;1~");
+	CHECK_EQ(t.setup_requests, 1);
+	CHECK(row_is(0, "ab"));
+}
+
+// DECBKM (CSI ? 67 h/l) sets what Backspace sends; RIS goes back to the
+// SET-UP default.
+static void test_decbkm(void) {
+	setup();
+	CHECK(!t.backspace_bs);
+	put("\x1b[?67h");
+	CHECK(t.backspace_bs);
+	put("\x1b[?67l");
+	CHECK(!t.backspace_bs);
+	term_set_backspace_default(&t, true);
+	CHECK(t.backspace_bs);
+	put("\x1b[?67l\x1b" "c"); // RIS
+	CHECK(t.backspace_bs);
+}
+
+static void test_set_columns(void) {
+	setup();
+	put("hello");
+	term_set_columns(&t, 132);
+	CHECK_EQ(s.cols, 132);
+	CHECK_EQ(t.screen_resets, 1);
+	CHECK(row_is(0, ""));
+	CHECK_EQ(s.cursor_col, 0);
+	CHECK_EQ(s.cursor_row, 0);
+}
+
 int main(void) {
 	for (cols = 80; cols <= 132; cols += 52) {
 		printf("-- basics, %u columns\n", cols);
@@ -614,6 +655,9 @@ int main(void) {
 	RUN(test_newline_mode);
 	RUN(test_cursor_visibility);
 	RUN(test_deccolm);
+	RUN(test_setup_request);
+	RUN(test_set_columns);
+	RUN(test_decbkm);
 	RUN(test_save_restore_cursor);
 	RUN(test_charsets);
 	RUN(test_tab_stops);

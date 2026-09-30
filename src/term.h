@@ -8,7 +8,8 @@
 // cursor movement, scrolling regions, erasing, line and character
 // insert/delete (VT102), tab stops, character sets (G0/G1: ASCII, UK, DEC
 // Special Graphics), modes (including DECSCNM reverse screen), save/restore
-// cursor, SGR colours, underline and blink, and replies to
+// cursor, SGR colours, underline and blink, DECBKM (what Backspace sends, for
+// the keyboard; RIS restores the SET-UP default), and replies to
 // device attribute and status requests, and REP (repeat character, which
 // ncurses uses under TERM=xterm-16color).
 //
@@ -17,6 +18,10 @@
 // (80 or 132); DECCOLM (CSI ? 3 h/l) switches it, which re-initialises the
 // whole screen (even when the width stays the same) and bumps
 // screen_resets, so the owner of the other rows knows to redraw them.
+//
+// CSI ? 999 ~ (private to this terminal) asks for SET-UP: it bumps
+// setup_requests, and term_write stops right after it, so the owner can hand
+// the bytes that follow to SET-UP instead.
 //
 // Not (yet) implemented: VT52 mode (dmt.16), the alternate screen (dmt.15),
 // double-width/height lines (dmt.12/13), smooth scrolling (dmt.14).
@@ -29,6 +34,7 @@
 #include "vtparse.h"
 
 #define TERM_DEFAULT_COLOUR 0xff // SGR 39 / 49: the terminal's default fg/bg
+#define TERM_SETUP_PARAM 999     // CSI ? 999 ~: open SET-UP
 
 typedef void (*term_reply_t)(void *ctx, const uint8_t *data, size_t len);
 
@@ -60,11 +66,14 @@ typedef struct {
 	bool newline_mode;    // LNM: LF, VT and FF also do CR
 	bool cursor_keys_app; // DECCKM, for the keyboard
 	bool keypad_app;      // DECKPAM / DECKPNM, for the keyboard
+	bool backspace_bs;    // DECBKM: Backspace sends BS (else DEL), for the keyboard
+	bool backspace_bs_default; // DECBKM after RIS (SET-UP)
 	bool reverse_screen;  // DECSCNM
 
 	uint8_t tabs[(SCREEN_MAX_COLS + 7) / 8];
 	uint8_t last_char; // for REP: the last character printed, 0 after anything else
 	unsigned screen_resets; // times DECCOLM cleared the whole screen
+	unsigned setup_requests; // times the host sent CSI ? 999 ~
 
 	term_reply_t reply;
 	void *reply_ctx;
@@ -78,9 +87,17 @@ void term_init(term_t *t, screen_t *screen, unsigned top, unsigned rows, uint8_t
 // go. Without one they are dropped.
 void term_set_reply(term_t *t, term_reply_t reply, void *ctx);
 
+// Returns how many bytes were used: all of them, unless a SET-UP request
+// (CSI ? 999 ~) ended the call early.
+size_t term_write(term_t *t, const uint8_t *data, size_t len);
 void term_putc(term_t *t, uint8_t c);
-void term_write(term_t *t, const uint8_t *data, size_t len);
 void term_puts(term_t *t, const char *text);
+
+// Set DECBKM now and as its reset value (the SET-UP setting).
+void term_set_backspace_default(term_t *t, bool bs);
+
+// Switch to 80 or 132 columns, as DECCOLM does (clears the whole screen).
+void term_set_columns(term_t *t, unsigned cols);
 
 // The RGB222 colour for ANSI colour n (0-15).
 uint8_t term_ansi_colour(unsigned n);

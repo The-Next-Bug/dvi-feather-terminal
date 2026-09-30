@@ -11,6 +11,10 @@ output goes to the terminal over SERIAL_PORT; what the terminal sends back
 here both become its input. Watch the DVI screen and type in this window.
 Ctrl-] quits.
 
+Ctrl-\\ opens the terminal's SET-UP (it sends CSI ? 999 ~); what you type
+then goes to the terminal instead of the program, until Return (save) or
+Esc (cancel).
+
 This is how to try vttest, vim, top and friends on the terminal from a PC
 (a USB keyboard on the terminal types into the program too). After switching the terminal to 132 columns, tell the program
 with `stty cols 132` (or start with --cols 132).
@@ -34,6 +38,8 @@ import termios
 import tty
 
 QUIT = b"\x1d"  # Ctrl-]
+SETUP = b"\x1c"  # Ctrl-\
+SETUP_REQUEST = b"\x1b[?999~"
 
 BAUDS = {n: getattr(termios, f"B{n}") for n in
          (9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600)
@@ -79,8 +85,9 @@ def main():
     saved = termios.tcgetattr(stdin) if os.isatty(stdin) else None
     if saved:
         tty.setraw(stdin)
-    print(f"hostbridge: running {' '.join(command)} on {args.port}; Ctrl-] quits\r",
-          file=sys.stderr)
+    print(f"hostbridge: running {' '.join(command)} on {args.port}; Ctrl-] quits, "
+          "Ctrl-\\ opens SET-UP\r", file=sys.stderr)
+    in_setup = False  # keys go to the terminal's SET-UP
     try:
         while True:
             ready, _, _ = select.select([master, serial, stdin], [], [])
@@ -98,7 +105,17 @@ def main():
                 data = os.read(stdin, 1024)
                 if QUIT in data:
                     break
-                os.write(master, data)
+                if SETUP in data:
+                    os.write(serial, SETUP_REQUEST)
+                    in_setup = True
+                    continue
+                if in_setup:
+                    os.write(serial, data)
+                    # Return saves, a lone Esc cancels: SET-UP closes.
+                    if b"\r" in data or b"\n" in data or data == b"\x1b":
+                        in_setup = False
+                else:
+                    os.write(master, data)
     finally:
         if saved:
             termios.tcsetattr(stdin, termios.TCSADRAIN, saved)

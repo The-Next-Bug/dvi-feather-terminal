@@ -10,7 +10,8 @@
 #include "keyboard.h"
 
 // Start the USB host. Keys are passed to output as VT100 byte sequences.
-void usbkbd_init(kbd_output_t output, void *ctx);
+// The SET-UP key (F12 or Pause) calls setup instead.
+void usbkbd_init(kbd_output_t output, kbd_setup_t setup, void *ctx);
 
 // Run the USB host stack and key repeat. Call often from the main loop.
 void usbkbd_poll(const kbd_modes_t *modes);

@@ -161,8 +161,25 @@ static void test_reverse_rows_mark_dirty(void) {
 	CHECK_EQ(s.reverse_rows, 0);
 }
 
+// Rows saved from under an overlay come back, in whichever slot now holds
+// the row, and are marked dirty.
+static void test_save_restore_row(void) {
+	screen_init(&s, 80, FG, BG);
+	screen_puts(&s, 0, 20, "keep me", FG, BG);
+	screen_line_t saved;
+	screen_save_row(&s, 20, &saved);
+	screen_puts(&s, 0, 20, "overlay", BG, FG);
+	s.dirty = 0;
+	screen_restore_row(&s, 20, &saved);
+	CHECK_EQ(screen_glyph(&s, 0, 20), 'k');
+	CHECK_EQ(s.dirty, 1u << s.row_map[20]);
+	screen_restore_row(&s, SCREEN_ROWS, &saved); // ignored
+	CHECK_EQ(s.dirty, 1u << s.row_map[20]);
+}
+
 int main(void) {
 	RUN(test_init_fills_blanks);
+	RUN(test_save_restore_row);
 	RUN(test_bad_width_means_80);
 	RUN(test_put_round_trips);
 	RUN(test_out_of_range_is_ignored);

@@ -67,9 +67,13 @@ add_custom_target(build_info
 add_executable(dvi_terminal
   src/demo.c
   src/diag.c
+  src/keyname.c
   src/main.c
+  src/nvflash.c
   src/raster.c
   src/screen.c
+  src/settings.c
+  src/setup.c
   src/term.c
   src/serial.c
   src/splash.c
@@ -88,8 +92,9 @@ target_include_directories(dvi_terminal PRIVATE
 )
 
 # Our sources only: libdvi is an INTERFACE library compiled into this target.
-set_source_files_properties(src/demo.c src/diag.c src/keyboard.c src/main.c src/raster.c src/screen.c
-  src/splash.c src/term.c src/serial.c src/usbkbd.c src/video.c src/vtparse.c
+set_source_files_properties(src/demo.c src/diag.c src/keyboard.c src/keyname.c src/main.c src/nvflash.c src/raster.c
+  src/screen.c src/settings.c src/setup.c src/splash.c src/term.c src/serial.c src/usbkbd.c src/video.c
+  src/vtparse.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 
 target_compile_definitions(dvi_terminal PRIVATE
@@ -108,6 +113,7 @@ target_compile_definitions(dvi_terminal PRIVATE
 target_link_libraries(dvi_terminal
   pico_stdlib
   pico_multicore
+  hardware_flash
   hardware_uart
   hardware_vreg
   libdvi

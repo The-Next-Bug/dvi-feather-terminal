@@ -8,8 +8,13 @@
 // prefixes ESC (meta). Cursor keys follow DECCKM (ESC [ A or ESC O A), the
 // keypad follows DECKPAM/DECKPNM while Num Lock is on (it is navigation
 // otherwise, as on a PC), F1-F4 are PF1-PF4 (ESC O P..S), and Return sends
-// CR, or CR LF in LNM. Backspace sends DEL, as Unix hosts expect. The editing
-// keys and F5-F12 send the VT220/xterm sequences (ESC [ n ~).
+// CR, or CR LF in LNM. Backspace sends DEL, as Unix hosts expect, or BS in
+// DECBKM (Ctrl-Backspace sends the other one). The editing
+// keys and F5-F11 send the VT220/xterm sequences (ESC [ n ~).
+//
+// F12 (the VT100 has none) and Pause (for full-size keyboards) are the
+// SET-UP key: they send nothing and call the setup callback
+// (kbd_set_setup_key) instead.
 //
 // Boot keyboards do not repeat keys themselves: the last key pressed repeats
 // after KBD_REPEAT_DELAY_MS, every KBD_REPEAT_INTERVAL_MS, while held.
@@ -27,12 +32,14 @@
 #define KBD_LED_CAPS_LOCK 0x02
 
 typedef void (*kbd_output_t)(void *ctx, const uint8_t *data, size_t len);
+typedef void (*kbd_setup_t)(void *ctx);
 
 // The terminal modes that change what keys send.
 typedef struct {
 	bool cursor_keys_app; // DECCKM
 	bool keypad_app;      // DECKPAM
 	bool newline_mode;    // LNM
+	bool backspace_bs;    // DECBKM
 } kbd_modes_t;
 
 typedef struct {
@@ -43,11 +50,15 @@ typedef struct {
 	uint32_t repeat_at;               // ms, when it next repeats
 
 	kbd_output_t output;
-	void *output_ctx;
+	kbd_setup_t setup; // the SET-UP key; NULL: none
+	void *output_ctx;  // for both
 } kbd_t;
 
 // Num Lock starts on, so the keypad sends digits (or DECKPAM codes).
 void kbd_init(kbd_t *k, kbd_output_t output, void *ctx);
+
+// Call setup (with the output ctx) when the SET-UP key is pressed.
+void kbd_set_setup_key(kbd_t *k, kbd_setup_t setup);
 
 // Handle an 8-byte boot protocol report (modifiers, reserved, 6 key codes)
 // received at now_ms. Returns true if the lock LEDs should change (see
