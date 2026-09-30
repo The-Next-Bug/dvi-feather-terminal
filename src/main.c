@@ -58,7 +58,6 @@
 #define SERIAL_FLOW_CONTROL 0
 #endif
 
-#define BAUD 115200
 // UART0 hardware flow control pins (RP2040 UART0 CTS/RTS function).
 #define CTS_PIN 2
 #define RTS_PIN 3
@@ -68,10 +67,9 @@
 #define LOGO_MS 10000
 #endif
 
+// The logo's screen; the terminal's colours are a setting.
 #define FG RGB222(2, 2, 2)
 #define BG RGB222(0, 0, 0)
-#define STATUS_FG RGB222(3, 3, 3)
-#define STATUS_BG RGB222(0, 0, 2)
 
 #define TERM_ROWS (SCREEN_ROWS - 1)
 #define STATUS_ROW (SCREEN_ROWS - 1)
@@ -88,6 +86,7 @@ static bool key_pressed; // before the terminal started: ends the logo and demo
 
 static settings_t settings;          // as saved in flash
 static settings_target_t save_target;
+static settings_colours_t colours;   // in use (the status line's too)
 
 // The last key sequence sent to the host, for the status line.
 static struct {
@@ -127,7 +126,7 @@ static void diag_poll(void) {
 static void setup_draw_panel(void) {
 	char title[SCREEN_MAX_COLS + 1];
 	snprintf(title, sizeof title, "  DVI Terminal build %s", TERM_BUILD_ID);
-	setup_draw(&setup.ui, &screen, SETUP_TOP, title, STATUS_FG, STATUS_BG);
+	setup_draw(&setup.ui, &screen, SETUP_TOP, title, colours.status_fg, colours.status_bg);
 }
 
 // Key bytes for SET-UP. A save or cancel is left for the main loop (the
@@ -148,6 +147,7 @@ static void setup_enter(bool from_host) {
 	settings_t current = settings;
 	current.columns = screen.cols;
 	current.backspace = term.backspace_bs ? 0x08 : 0x7f;
+	current.newline = term.newline_mode;
 	setup_open(&setup.ui, &current);
 	setup.active = true;
 	setup.from_host = from_host;
@@ -161,9 +161,28 @@ static void setup_enter(bool from_host) {
 	setup_draw_panel();
 }
 
-// Put the rows back; with apply, use the edited settings now: Backspace,
-// and the width if it differs (which clears the screen, as DECCOLM does).
-// Local echo is read from `settings` as keys are sent.
+// The serial line settings of s.
+static void apply_line(const settings_t *s) {
+	unsigned data_bits, stop_bits;
+	char parity;
+	settings_framing(s, &data_bits, &parity, &stop_bits);
+	serial_configure(settings_baud_rate(s), data_bits, parity, stop_bits);
+}
+
+// Use settings s: the line, the modes RIS resets to (also set now) and the
+// colours. The width is only used at power-on and by SET-UP; local echo is
+// read from `settings` as keys are sent.
+static void apply_settings(const settings_t *s) {
+	apply_line(s);
+	term_set_defaults(&term, &(term_defaults_t){.backspace_bs = s->backspace == 0x08,
+		.newline_mode = s->newline});
+	colours = settings_colours(s);
+	term_set_colours(&term, colours.fg, colours.bold_fg, colours.bg);
+	term_set_palette(&term, s->palette);
+}
+
+// Put the rows back; with apply, use the edited settings now, and the width
+// if it differs (which clears the screen, as DECCOLM does).
 static void setup_leave(bool apply) {
 	for (unsigned r = 0; r < SETUP_ROWS; ++r)
 		screen_restore_row(&screen, SETUP_TOP + r, &setup.saved[r]);
@@ -172,7 +191,7 @@ static void setup_leave(bool apply) {
 	setup.active = false;
 	if (!apply)
 		return;
-	term_set_backspace_default(&term, setup.ui.values.backspace == 0x08);
+	apply_settings(&setup.ui.values);
 	if (setup.ui.values.columns != screen.cols)
 		term_set_columns(&term, setup.ui.values.columns);
 }
@@ -286,11 +305,14 @@ static bool show_logo(uint8_t *buf, size_t max, size_t *n) {
 	char status[SCREEN_MAX_COLS + 1];
 	snprintf(status, sizeof status, " DVI Terminal | build %s (%s, %s)",
 		TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
-	screen_clear_line(&screen, STATUS_ROW, STATUS_FG, STATUS_BG);
-	screen_puts(&screen, 0, STATUS_ROW, status, STATUS_FG, STATUS_BG);
+	screen_clear_line(&screen, STATUS_ROW, colours.status_fg, colours.status_bg);
+	screen_puts(&screen, 0, STATUS_ROW, status, colours.status_fg, colours.status_bg);
 	video_update(&screen);
 	*n = 0;
-	if (!video_splash(&splash_logo))
+	// In the hue of the Colors setting (white keeps the logo's own colours,
+	// or with the mono palette shows it grey).
+	splash_tint_t tint = splash_tint(&splash_logo, colours.fg, settings.palette);
+	if (!video_splash(&splash_logo, &tint))
 		return false;
 	bool input = wait_for_input(make_timeout_time_ms(LOGO_MS), buf, max, n);
 	video_splash_end();
@@ -323,15 +345,16 @@ static void send_reply(void *ctx, const uint8_t *data, size_t len) {
 typedef struct {
 	unsigned keyboards;
 	uint32_t keys_sent; // last_key.count
-	bool local_echo;
+	settings_t settings;
 } status_t;
 
 static status_t status_now(void) {
-	return (status_t){keyboards_attached(), last_key.count, settings.local_echo};
+	return (status_t){keyboards_attached(), last_key.count, settings};
 }
 
 static bool status_equal(const status_t *a, const status_t *b) {
-	return a->keyboards == b->keyboards && a->keys_sent == b->keys_sent && a->local_echo == b->local_echo;
+	return a->keyboards == b->keyboards && a->keys_sent == b->keys_sent &&
+		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0;
 }
 
 static void draw_status(const status_t *st) {
@@ -341,12 +364,16 @@ static void draw_status(const status_t *st) {
 		keyname(last_key.data, last_key.len, name, sizeof name);
 		snprintf(key, sizeof key, " | key %s", name);
 	}
+	unsigned data_bits, stop_bits;
+	char parity;
+	settings_framing(&st->settings, &data_bits, &parity, &stop_bits);
 	char text[SCREEN_MAX_COLS + 1];
-	snprintf(text, sizeof text, " VT100 %ux24 | %s | %u 8N1%s%s%s%s",
-		screen.cols, TERM_BUILD_ID, BAUD, SERIAL_FLOW_CONTROL ? " RTS/CTS" : "",
-		st->keyboards ? " | kbd" : "", st->local_echo ? " | local echo" : "", key);
-	screen_clear_line(&screen, STATUS_ROW, STATUS_FG, STATUS_BG);
-	screen_puts(&screen, 0, STATUS_ROW, text, STATUS_FG, STATUS_BG);
+	snprintf(text, sizeof text, " VT100 %ux24 | %s | %u %u%c%u%s%s%s%s",
+		screen.cols, TERM_BUILD_ID, settings_baud_rate(&st->settings), data_bits, parity, stop_bits,
+		SERIAL_FLOW_CONTROL ? " RTS/CTS" : "", st->keyboards ? " | kbd" : "",
+		st->settings.local_echo ? " | echo" : "", key);
+	screen_clear_line(&screen, STATUS_ROW, colours.status_fg, colours.status_bg);
+	screen_puts(&screen, 0, STATUS_ROW, text, colours.status_fg, colours.status_bg);
 }
 
 int main(void) {
@@ -357,6 +384,7 @@ int main(void) {
 	for (unsigned i = 0; i < SETTINGS_SLOTS; ++i)
 		slots[i] = nvflash_sector(i);
 	settings_load(slots, &settings, &save_target);
+	colours = settings_colours(&settings); // the status line under the logo uses them
 
 	video_init();
 	// Before anything reads flash at the new clock: the settings saves and,
@@ -365,9 +393,10 @@ int main(void) {
 	// After video_init: the baud divisor depends on the final clk_peri.
 	// Diagnostic builds write to UART0 with blocking calls, which an unwired
 	// CTS (pulled up on the Feather) would hold off forever: RTS only there.
-	serial_init(uart0, BAUD, PICO_DEFAULT_UART_TX_PIN, PICO_DEFAULT_UART_RX_PIN,
+	serial_init(uart0, settings_baud_rate(&settings), PICO_DEFAULT_UART_TX_PIN, PICO_DEFAULT_UART_RX_PIN,
 		SERIAL_FLOW_CONTROL && !VIDEO_DIAG ? CTS_PIN : SERIAL_NO_PIN,
 		SERIAL_FLOW_CONTROL ? RTS_PIN : SERIAL_NO_PIN);
+	apply_line(&settings);
 	diag_mark("serial_init done");
 #if USB_KEYBOARD
 	usbkbd_init(send_key, setup_key, NULL);
@@ -387,9 +416,9 @@ int main(void) {
 	if (STARTUP_DEMO && !input)
 		pending = run_demo(buf, sizeof buf);
 
-	screen_init(&screen, settings.columns, FG, BG);
-	term_init(&term, &screen, 0, TERM_ROWS, FG, BG);
-	term_set_backspace_default(&term, settings.backspace == 0x08);
+	screen_init(&screen, settings.columns, colours.fg, colours.bg);
+	term_init(&term, &screen, 0, TERM_ROWS, colours.fg, colours.bg);
+	apply_settings(&settings);
 	term_set_reply(&term, send_reply, NULL);
 	term_started = true;
 	status_t shown = status_now();

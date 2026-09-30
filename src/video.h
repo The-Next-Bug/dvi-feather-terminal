@@ -42,8 +42,9 @@ void video_start(screen_t *screen);
 // the status line is still the screen's. For startup, after video_start and
 // before the text rows scroll (the splash reuses their raster memory; the
 // status line must still be in its own slot). Returns false, showing the
-// screen as before, if img cannot be shown.
-bool video_splash(const splash_image_t *img);
+// screen as before, if img cannot be shown. tint (splash_tint) says which
+// planes show it, at which levels.
+bool video_splash(const splash_image_t *img, const splash_tint_t *tint);
 
 // Back to the text rows (all re-rendered).
 void video_splash_end(void);

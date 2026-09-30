@@ -20,8 +20,9 @@ Releases (`vX.Y.Z` tags) ship both firmware images; see `docs/FLASHING.txt`.
 
 - **Display**: 800x600p60 over DVI/HDMI. 80 columns use Terminus 8x16 in
   8-pixel cells (centred, 80-pixel borders); 132 columns use misc-fixed 6x13
-  in 6-pixel cells. 24-pixel rows; line drawing, block and shade characters
-  join up between rows.
+  in 6-pixel cells, 792 pixels starting at the left edge (centred, they
+  would split 8-pixel colour groups between text and border). 24-pixel
+  rows; line drawing, block and shade characters join up between rows.
 - **Emulation**: VT100/VT102. Cursor movement, scrolling regions, erase,
   insert/delete lines and characters, tab stops, G0/G1 character sets (ASCII,
   UK, DEC Special Graphics) with SI/SO, modes (DECAWM, DECOM, IRM, LNM,
@@ -34,12 +35,13 @@ Releases (`vX.Y.Z` tags) ship both firmware images; see `docs/FLASHING.txt`.
 - **Keyboard** (Pico 2 only): USB keyboard on the native USB port (host
   mode, see [USB keyboard](#usb-keyboard)); keys go to the host on UART0 TX.
 - **Status line** (row 24): width, build id, line settings, `kbd` while a
-  keyboard is attached, `local echo` when it is on, and the last key sent to
+  keyboard is attached, `echo` when local echo is on, and the last key sent to
   the host (`key ESC [A`, `key ^C`, `key DEL`, ...), for checking a keyboard
   without a host.
-- **SET-UP** (first version): power-on width (80/132), what Backspace sends
-  (DEL/BS) and local echo, kept in flash. F12 on a USB keyboard or `CSI ? 999 ~` from the host opens
-  it; see [SET-UP](#set-up).
+- **SET-UP**: power-on width, Backspace (DEL/BS), local echo, baud rate,
+  data/parity/stop bits, new line mode, colors and a mono palette, kept in
+  flash. F12 on a USB keyboard or `CSI ? 999 ~` from the host opens it; see
+  [SET-UP](#set-up).
 - **Startup logo**: at power-on/reset the logo (`assets/logo/`) shows for
   10 seconds (monitors take a few to sync), with the build on the status
   line, then the terminal starts; the first byte on UART0 or a key press
@@ -49,8 +51,9 @@ Releases (`vX.Y.Z` tags) ship both firmware images; see `docs/FLASHING.txt`.
   between 80 and 132 columns every 5 seconds until the first byte arrives
   or a key is pressed.
 
-Not yet (tracked in bd): the rest of SET-UP (line settings, colours, ...),
-alternate screen, VT52 mode, double-width/height lines, smooth scrolling.
+Not yet (tracked in bd): flow control as a SET-UP setting, an ADM-3A
+terminal type, alternate screen, VT52 mode, double-width/height lines,
+smooth scrolling.
 
 Checked with `vttest` (menus 1-3, 6 and 8) through `tools/hostbridge.py`.
 
@@ -62,7 +65,7 @@ Checked with `vttest` (menus 1-3, 6 and 8) through `tools/hostbridge.py`.
 | RX (GP1) | data in | TX |
 | GND | | GND |
 
-UART0, 115200 8N1, 3.3 V logic only.
+UART0, 3.3 V logic only. 115200 8N1 until changed in [SET-UP](#set-up).
 
 ### Flow control (optional, off by default)
 
@@ -133,6 +136,15 @@ A panel over the bottom text rows for the settings kept in flash:
 | Columns | 80, 132 | the width at power-on |
 | Backspace sends | DEL, BS | DECBKM at power-on and after RIS (vttest and CP/M software want BS) |
 | Local echo | off, on | keys typed are shown on the terminal as well as sent |
+| Baud rate | 300 - 115200 | default 115200 |
+| Data/parity/stop | 8N1, 8E1, 8O1, 8N2, 7E1, 7O1, 7N1, 7N2 | default 8N1 |
+| New line (LNM) | off, on | LNM at power-on and after RIS: Return sends CR LF, and LF also returns the cursor |
+| Colors | white, green, amber, blue | text colors: white, or green, amber or blue phosphor, on black; bold is one level brighter; the status line, SET-UP panel and startup logo match (white keeps the logo's own colors). Changing them recolors what is on screen |
+| Palette | color, mono | mono shows SGR colors (the 16 ANSI ones, 256-color and 24-bit) only as brightness within the Colors setting's colors: bright colors (and bold) in the bright shade; a background other than black as inverse (bright ones in the bright shade), text on it in the background color. The status line and SET-UP panel become the text colors reversed, and with white the startup logo shows in grey. Text already on screen keeps its colors |
+
+Under Palette, two rows preview both color settings: default text, bold and
+the status line, then each of the 16 ANSI colors (0-F) as text on the
+default background and, below it, as a background under default text.
 
 It opens from:
 
@@ -146,8 +158,11 @@ It opens from:
 Up/Down select a setting, Left/Right or Space change it, **Return** saves
 it to flash and applies it (a new width clears the screen, as DECCOLM
 does), **Esc** (or F12 again) leaves without saving. The panel opens
-with the width and Backspace mode currently in use, so Return alone makes a
-DECCOLM or DECBKM switch from the host the power-on default.
+with the width, Backspace mode and LNM currently in use, so Return alone
+makes a DECCOLM, DECBKM or LNM switch from the host the power-on default.
+A new baud rate or framing applies as soon as it is saved: the host has to
+be switched to match (opened from the host, SET-UP's own keys then arrive
+at the new settings too).
 
 Settings live in the last two 4 KB sectors of the flash, used in turn with a
 sequence number and a CRC, so a save cut short by a power loss keeps the
@@ -170,6 +185,9 @@ per group). To fit in RAM the logo must be a single hue or grey on black:
 every colour channel that is not black must show the same levels (the
 default is green only). It is stored run-length encoded (about 19 KB for
 the default) and unpacked into the text raster's memory while it shows.
+The saved Colors setting tints it: green, amber and blue show it in that
+hue (core 1 lowers the levels of the weaker planes as it draws), white shows
+it as it is.
 With `LOGO_IN_FLASH` (default ON, experimental) the encoded data stays in
 flash and is read once at startup, instead of being copied into SRAM with
 the rest of the program; `-DLOGO_IN_FLASH=OFF` keeps the old behaviour.

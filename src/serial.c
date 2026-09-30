@@ -86,6 +86,12 @@ void serial_init(uart_inst_t *uart, unsigned baud, unsigned tx_pin, unsigned rx_
 		UART_UARTIFLS_RXIFLSEL_BITS);
 }
 
+void serial_configure(unsigned baud, unsigned data_bits, char parity, unsigned stop_bits) {
+	uart_parity_t p = parity == 'E' ? UART_PARITY_EVEN : parity == 'O' ? UART_PARITY_ODD : UART_PARITY_NONE;
+	uart_set_baudrate(serial_uart, baud);
+	uart_set_format(serial_uart, data_bits, stop_bits, p);
+}
+
 size_t serial_read(uint8_t *buf, size_t max) {
 	uint32_t t = rx_tail, available = rx_head - t;
 	size_t n = available < max ? available : max;

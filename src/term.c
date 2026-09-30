@@ -40,11 +40,37 @@ uint8_t term_ansi_colour(unsigned n) {
 	return palette[n & 15];
 }
 
+// Mono: how bright an SGR colour is. 0: black or the default; 1: normal;
+// 2: bright (ANSI 8-15, or a 256-colour/direct colour with a full channel).
+static unsigned mono_level(uint8_t c) {
+	if (c == TERM_DEFAULT_COLOUR || c == 0)
+		return 0;
+	if (c < 16)
+		return c < 8 ? 1 : 2;
+	uint8_t rgb = (uint8_t)(c - 16);
+	if (!rgb)
+		return 0;
+	return (rgb >> 4 & 3) == 3 || (rgb >> 2 & 3) == 3 || (rgb & 3) == 3 ? 2 : 1;
+}
+
+void term_mono_colours(const term_colours_t *d, uint8_t fg, uint8_t bg, bool bold, uint8_t *out_fg,
+	uint8_t *out_bg) {
+	unsigned b = mono_level(bg);
+	if (b) {
+		// Inverse: the (bright) text colour behind, text in the background's.
+		*out_bg = b == 2 ? d->bold_fg : d->fg;
+		*out_fg = d->bg;
+		return;
+	}
+	*out_bg = d->bg;
+	*out_fg = bold || mono_level(fg) == 2 ? d->bold_fg : d->fg;
+}
+
 static uint8_t attr_colour(const term_t *t, uint8_t c, bool bold, bool is_fg) {
 	if (c == TERM_DEFAULT_COLOUR) {
 		if (!is_fg)
 			return t->default_bg;
-		return bold ? RGB222(3, 3, 3) : t->default_fg;
+		return bold ? t->bold_fg : t->default_fg;
 	}
 	if (c < 16)
 		return term_ansi_colour(c < 8 && bold && is_fg ? c + 8u : c);
@@ -54,8 +80,14 @@ static uint8_t attr_colour(const term_t *t, uint8_t c, bool bold, bool is_fg) {
 // Colours for printed text: bold brightens the fg, reverse swaps.
 static void text_colours(const term_t *t, uint8_t *fg, uint8_t *bg) {
 	const term_attr_t *a = &t->cur.attr;
-	uint8_t f = attr_colour(t, a->fg, a->bold, true);
-	uint8_t b = attr_colour(t, a->bg, false, false);
+	uint8_t f, b;
+	if (t->mono) {
+		const term_colours_t d = {t->default_fg, t->bold_fg, t->default_bg};
+		term_mono_colours(&d, a->fg, a->bg, a->bold, &f, &b);
+	} else {
+		f = attr_colour(t, a->fg, a->bold, true);
+		b = attr_colour(t, a->bg, false, false);
+	}
 	*fg = a->reverse ? b : f;
 	*bg = a->reverse ? f : b;
 }
@@ -64,7 +96,13 @@ static void text_colours(const term_t *t, uint8_t *fg, uint8_t *bg) {
 // colour erase"), default foreground.
 static void erase_colours(const term_t *t, uint8_t *fg, uint8_t *bg) {
 	*fg = t->default_fg;
-	*bg = attr_colour(t, t->cur.attr.bg, false, false);
+	if (t->mono) {
+		uint8_t unused;
+		const term_colours_t d = {t->default_fg, t->bold_fg, t->default_bg};
+		term_mono_colours(&d, TERM_DEFAULT_COLOUR, t->cur.attr.bg, false, &unused, bg);
+	} else {
+		*bg = attr_colour(t, t->cur.attr.bg, false, false);
+	}
 }
 
 static void sync_cursor(term_t *t) {
@@ -238,8 +276,9 @@ static void reset(term_t *t) {
 	t->margin_top = 0;
 	t->margin_bottom = t->rows - 1;
 	t->autowrap = true;
-	t->insert_mode = t->newline_mode = t->cursor_keys_app = t->keypad_app = false;
-	t->backspace_bs = t->backspace_bs_default;
+	t->insert_mode = t->cursor_keys_app = t->keypad_app = false;
+	t->newline_mode = t->defaults.newline_mode;
+	t->backspace_bs = t->defaults.backspace_bs;
 	reset_tabs(t);
 	t->screen->cursor_visible = true;
 	set_reverse_screen(t, false);
@@ -627,7 +666,8 @@ static void on_parse(vtparse_t *p, vtparse_action_t action, uint8_t ch) {
 // API
 
 void term_init(term_t *t, screen_t *screen, unsigned top, unsigned rows, uint8_t fg, uint8_t bg) {
-	*t = (term_t){ .screen = screen, .top = top, .rows = rows, .default_fg = fg, .default_bg = bg };
+	*t = (term_t){ .screen = screen, .top = top, .rows = rows, .default_fg = fg, .default_bg = bg,
+		.bold_fg = RGB222(3, 3, 3) };
 	vtparse_init(&t->parser, on_parse, t);
 	reset(t);
 	sync_cursor(t);
@@ -648,8 +688,23 @@ size_t term_write(term_t *t, const uint8_t *data, size_t len) {
 	return i;
 }
 
-void term_set_backspace_default(term_t *t, bool bs) {
-	t->backspace_bs = t->backspace_bs_default = bs;
+void term_set_defaults(term_t *t, const term_defaults_t *d) {
+	t->defaults = *d;
+	t->backspace_bs = d->backspace_bs;
+	t->newline_mode = d->newline_mode;
+}
+
+void term_set_palette(term_t *t, bool mono) {
+	t->mono = mono;
+}
+
+void term_set_colours(term_t *t, uint8_t fg, uint8_t bold_fg, uint8_t bg) {
+	const uint8_t from[] = {t->default_fg, t->bold_fg, t->default_bg};
+	const uint8_t to[] = {fg, bold_fg, bg};
+	screen_recolour(t->screen, t->top, t->top + t->rows - 1, from, to, 3);
+	t->default_fg = fg;
+	t->bold_fg = bold_fg;
+	t->default_bg = bg;
 }
 
 void term_set_columns(term_t *t, unsigned cols) {

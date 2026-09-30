@@ -87,9 +87,41 @@ static void test_built_in_logo(void) {
 	CHECK(lit > SPLASH_HEIGHT);
 }
 
+// The tint follows the text colour's hue: its brightest plane at the
+// logo's levels, the others lowered in proportion; grey keeps the logo's
+// own planes.
+static void test_tint(void) {
+	const splash_image_t img = {.planes = 0x2}; // green only
+	splash_tint_t t = splash_tint(&img, RGB222(2, 2, 2), false); // white
+	CHECK(t.shift[0] == SPLASH_PLANE_OFF && t.shift[1] == 0 && t.shift[2] == SPLASH_PLANE_OFF);
+	t = splash_tint(&img, RGB222(2, 2, 2), true); // white, mono: grey
+	CHECK(t.shift[0] == 0 && t.shift[1] == 0 && t.shift[2] == 0);
+	t = splash_tint(&img, RGB222(0, 2, 0), false); // green
+	CHECK(t.shift[0] == SPLASH_PLANE_OFF && t.shift[1] == 0 && t.shift[2] == SPLASH_PLANE_OFF);
+	t = splash_tint(&img, RGB222(2, 1, 0), true); // amber (mono or not): red full, green one down
+	CHECK(t.shift[0] == SPLASH_PLANE_OFF && t.shift[1] == 1 && t.shift[2] == 0);
+	t = splash_tint(&img, RGB222(0, 1, 3), false); // blue: blue full, green two down
+	CHECK(t.shift[0] == 0 && t.shift[1] == 2 && t.shift[2] == SPLASH_PLANE_OFF);
+}
+
+static void test_shift_map(void) {
+	uint8_t map[256];
+	splash_shift_map(0, map);
+	for (unsigned b = 0; b < 256; ++b)
+		CHECK_EQ(map[b], b);
+	splash_shift_map(1, map);
+	CHECK_EQ(map[0xff], 0xaa);            // all 3s -> 2s
+	CHECK_EQ(map[0x1b], 0x06);            // levels 3,2,1,0 (low bits first) -> 2,1,0,0
+	splash_shift_map(2, map);
+	CHECK_EQ(map[0xff], 0x55);
+	CHECK_EQ(map[0x1b], 0x01);
+}
+
 int main(void) {
 	RUN(test_small_image_centred);
 	RUN(test_bad_images_leave_black);
 	RUN(test_built_in_logo);
+	RUN(test_tint);
+	RUN(test_shift_map);
 	return tests_done();
 }

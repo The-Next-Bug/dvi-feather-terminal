@@ -39,6 +39,24 @@ typedef struct {
 // is malformed.
 bool splash_unpack(splash_row_t *rows, const splash_image_t *img);
 
+// How the image's levels are shown per plane (0 blue, 1 green, 2 red):
+// SPLASH_PLANE_OFF (black), or lowered by `shift` steps (0: as unpacked).
+#define SPLASH_PLANE_OFF 0xff
+
+typedef struct {
+	uint8_t shift[RASTER_PLANES];
+} splash_tint_t;
+
+// The tint that shows img in the hue of text colour fg (RGB222): fg's
+// brightest plane at the image's own levels, the others lower in the same
+// proportion, unlit planes off. A grey fg leaves img in its own planes (a
+// full-colour scheme), or with mono shows it in grey.
+splash_tint_t splash_tint(const splash_image_t *img, uint8_t fg, bool mono);
+
+// A byte of packed level pairs (two groups, as in splash_row_t.colour) to
+// the same with every level lowered by shift steps (not below 0).
+void splash_shift_map(unsigned shift, uint8_t map[256]);
+
 // The logo built into the firmware (generated from LOGO_IMAGE).
 extern const splash_image_t splash_logo;
 

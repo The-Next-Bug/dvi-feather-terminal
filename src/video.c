@@ -53,9 +53,13 @@ static raster_line_t raster[SCREEN_ROWS];
 _Static_assert(SPLASH_SLOTS < SCREEN_ROWS - 1, "the splash fits below the status line's slot");
 static splash_row_t *splash_rows = (splash_row_t *)(void *)raster;
 // Core 1 shows the splash for the text rows while splash_on, in the planes
-// in splash_planes (the others, or all while 0, black).
+// in splash_planes (the others, or all while 0, black); in the planes in
+// splash_shifted with its levels lowered through splash_map (the tint), a
+// row at a time into splash_colour.
 static volatile bool splash_on;
-static volatile uint8_t splash_planes;
+static volatile uint8_t splash_planes, splash_shifted;
+static uint8_t splash_map[RASTER_PLANES][256];
+static uint32_t splash_colour[RASTER_PLANES][RASTER_COLOUR_WORDS];
 // Core 0: the splash owns its slots (video_update leaves them alone).
 static bool splash_holds_raster;
 static splash_row_t blank_row;
@@ -99,7 +103,7 @@ static void __not_in_flash_func(core1_main)(void) {
 		// between rows.
 		const screen_t *s = video_screen;
 		bool splash = splash_on;
-		uint planes = splash_planes;
+		uint planes = splash_planes, shifted = splash_shifted;
 		uint cols = s->cols;
 		bool cursor_on = s->cursor_visible && !(frame / CURSOR_BLINK_FRAMES & 1);
 		uint cursor_row = s->cursor_row;
@@ -114,6 +118,14 @@ static void __not_in_flash_func(core1_main)(void) {
 					const splash_row_t *src = planes >> p & 1 ? &splash_rows[y] : &blank_row;
 					bits[p] = src->bits;
 					colour[p] = src->colour;
+					if (planes >> p & shifted >> p & 1) {
+						// 13 words: a few hundred cycles, only while the logo shows.
+						const uint8_t *in = (const uint8_t *)src->colour;
+						uint8_t *out = (uint8_t *)splash_colour[p];
+						for (uint i = 0; i < sizeof splash_colour[p]; ++i)
+							out[i] = splash_map[p][in[i]];
+						colour[p] = splash_colour[p];
+					}
 				}
 			} else {
 				const raster_line_t *line = &raster[s->row_map[row]];
@@ -277,7 +289,7 @@ static void wait_frame(void) {
 		tight_loop_contents();
 }
 
-bool video_splash(const splash_image_t *img) {
+bool video_splash(const splash_image_t *img, const splash_tint_t *tint) {
 	// Black while the rows are written, so no half-drawn logo shows.
 	splash_planes = 0;
 	splash_on = true;
@@ -287,7 +299,18 @@ bool video_splash(const splash_image_t *img) {
 		video_splash_end();
 		return false;
 	}
-	splash_planes = img->planes;
+	uint8_t planes = 0, shifted = 0;
+	for (int p = 0; p < RASTER_PLANES; ++p) {
+		if (tint->shift[p] == SPLASH_PLANE_OFF)
+			continue;
+		planes |= (uint8_t)(1u << p);
+		if (tint->shift[p]) {
+			shifted |= (uint8_t)(1u << p);
+			splash_shift_map(tint->shift[p], splash_map[p]);
+		}
+	}
+	splash_shifted = shifted;
+	splash_planes = planes;
 	return true;
 }
 

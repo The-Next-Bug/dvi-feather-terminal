@@ -52,11 +52,24 @@ static unsigned mismatches(unsigned row) {
 	return bad;
 }
 
+// White text on a blue background (the "blue" colours setting) at 132
+// columns, with ink in the first and last cells: every pixel must be exact.
+// With the text 4 px in from the edges, the edge groups needed black
+// (border), blue and white in the blue plane, and the background there went
+// black.
+static void test_132_blue_background_edges(void) {
+	const uint8_t white = RGB222(2, 2, 2), blue = RGB222(0, 0, 1);
+	screen_init(&s, 132, white, blue);
+	screen_puts(&s, 0, 0, "W", white, blue);
+	screen_puts(&s, 131, 0, "W", white, blue);
+	CHECK_EQ(mismatches(0), 0);
+}
+
 static void test_layout(void) {
 	CHECK_EQ(raster_cell_width(80), 8);
 	CHECK_EQ(raster_x_offset(80), 80);
 	CHECK_EQ(raster_cell_width(132), 6);
-	CHECK_EQ(raster_x_offset(132), 4);
+	CHECK_EQ(raster_x_offset(132), 0); // whole groups (centre would be 4)
 	CHECK(raster_x_offset(132) + 132 * 6 <= RASTER_ACTIVE_WIDTH);
 	CHECK_EQ(SCREEN_ROWS * RASTER_ROW_HEIGHT, RASTER_ACTIVE_HEIGHT);
 	CHECK_EQ(RASTER_WIDTH % 64, 0);
@@ -132,14 +145,11 @@ static void test_132_three_levels_approximated(void) {
 static void test_border_is_black(void) {
 	screen_init(&s, 132, RGB222(3, 3, 3), RGB222(3, 3, 3));
 	raster_render_line(&out, screen_line(&s, 0), 132, -1, 0);
+	const unsigned x0 = raster_x_offset(132), x_end = x0 + 132 * 6;
 	for (int p = 0; p < RASTER_PLANES; ++p)
 		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
-			for (unsigned x = 0; x < 4; ++x)
-				CHECK_EQ(shown_level(&out, 132, sy, x, p), 0);
-			for (unsigned x = 4 + 792; x < RASTER_ACTIVE_WIDTH; ++x)
-				CHECK_EQ(shown_level(&out, 132, sy, x, p), 0);
-			CHECK_EQ(shown_level(&out, 132, sy, 4, p), 3);
-			CHECK_EQ(shown_level(&out, 132, sy, 795, p), 3);
+			for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x)
+				CHECK_EQ(shown_level(&out, 132, sy, x, p), x >= x0 && x < x_end ? 3 : 0);
 		}
 }
 
@@ -297,6 +307,7 @@ static void test_demo(void) {
 
 int main(void) {
 	RUN(test_layout);
+	RUN(test_132_blue_background_edges);
 	RUN(test_80_any_colours_exact);
 	RUN(test_80_glyph_bits);
 	RUN(test_132_hues_exact);

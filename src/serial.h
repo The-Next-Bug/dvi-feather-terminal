@@ -39,6 +39,10 @@ typedef struct {
 void serial_init(uart_inst_t *uart, unsigned baud, unsigned tx_pin, unsigned rx_pin, int cts_pin,
 	int rts_pin);
 
+// Change the line settings: baud rate, data bits (5-8), parity ('N', 'E' or
+// 'O') and stop bits (1 or 2). serial_init starts at 8N1.
+void serial_configure(unsigned baud, unsigned data_bits, char parity, unsigned stop_bits);
+
 // Copy up to max received bytes into buf; returns the number copied.
 size_t serial_read(uint8_t *buf, size_t max);
 
