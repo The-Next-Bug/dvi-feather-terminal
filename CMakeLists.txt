@@ -30,13 +30,13 @@ option(STARTUP_DEMO "Then cycle the 80/132-column demo until UART0 receives data
 option(VIDEO_DIAG "Bring-up diagnostics on UART0 TX: boot markers, core 1 timing, faults" OFF)
 # Run from SRAM: the boot-time XIP setup is chosen for clk_sys <= 150 MHz, and
 # at the 400 MHz DVI clock flash execution is unreliable (on the RP2040 it hung
-# above 252 MHz). PicoDVI's apps are built this way too (PICO_COPY_TO_RAM=1).
-# See bd dvi-feather-terminal-dmt.10.
+# above 252 MHz). See bd dvi-feather-terminal-dmt.10.
 # Off by default: needs the two handshake wires (see README, "Flow control").
 option(SERIAL_FLOW_CONTROL "RTS/CTS on UART0 (GP3 RTS out, GP2 CTS in)" OFF)
 option(COPY_TO_RAM "Run the whole program from SRAM instead of flash" ON)
-# A PicoDVI serialiser config from common_dvi_pin_configs.h.
-set(DVI_SERIAL_CONFIG pico_sock_cfg CACHE STRING "PicoDVI pin configuration")
+# Video timing (src/hstx_dvi.h): 800x600 at 60 Hz needs clk_hstx at 200 MHz,
+# beyond its 150 MHz rating; the others are fallbacks with slower clocks.
+set(HSTX_MODE 0 CACHE STRING "HSTX video mode: 0 800x600@60, 1 800x600@56, 2 800x600@60 reduced blanking")
 
 include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
@@ -50,9 +50,6 @@ endif()
 
 option(USB_KEYBOARD "USB keyboard on the native USB port (TinyUSB host)" ON)
 message(STATUS "USB_KEYBOARD: ${USB_KEYBOARD}")
-
-set(PICODVI "${CMAKE_CURRENT_LIST_DIR}/lib/PicoDVI/software")
-add_subdirectory(${PICODVI}/libdvi libdvi)
 
 set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
 include(cmake/fonts.cmake)
@@ -69,6 +66,7 @@ add_custom_target(build_info
 add_executable(dvi_terminal
   src/demo.c
   src/diag.c
+  src/hstx_dvi.c
   src/keyname.c
   src/main.c
   src/nvflash.c
@@ -82,25 +80,22 @@ add_executable(dvi_terminal
   src/video.c
   src/vtparse.c
   ${FONT_SOURCES}
-  ${PICODVI}/apps/colour_terminal/tmds_encode_font_2bpp.S
 )
 add_dependencies(dvi_terminal build_info)
 
 target_include_directories(dvi_terminal PRIVATE
   src
   ${GENERATED}
-  ${PICODVI}/include
-  ${PICODVI}/apps/colour_terminal
 )
 
-# Our sources only: libdvi is an INTERFACE library compiled into this target.
-set_source_files_properties(src/demo.c src/diag.c src/keyboard.c src/keyname.c src/main.c src/nvflash.c src/raster.c
+# Warnings for our sources only, not the SDK's.
+set_source_files_properties(src/demo.c src/diag.c src/hstx_dvi.c src/keyboard.c src/keyname.c src/main.c src/nvflash.c src/raster.c
   src/screen.c src/settings.c src/setup.c src/splash.c src/term.c src/serial.c src/usbkbd.c src/video.c
   src/vtparse.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 
 target_compile_definitions(dvi_terminal PRIVATE
-  DVI_SERIAL_CONFIG=${DVI_SERIAL_CONFIG}
+  HSTX_MODE=${HSTX_MODE}
   STARTUP_LOGO=$<BOOL:${STARTUP_LOGO}>
   LOGO_MS=${LOGO_MS}
   LOGO_IN_FLASH=$<BOOL:${LOGO_IN_FLASH}>
@@ -108,8 +103,7 @@ target_compile_definitions(dvi_terminal PRIVATE
   VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>
   USB_KEYBOARD=$<BOOL:${USB_KEYBOARD}>
   SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>
-  DVI_VERTICAL_REPEAT=1
-  # The render loop needs very little stack.
+  # The compose loop needs very little stack.
   PICO_CORE1_STACK_SIZE=0x200
 )
 
@@ -118,8 +112,8 @@ target_link_libraries(dvi_terminal
   pico_multicore
   hardware_flash
   hardware_uart
+  hardware_dma
   hardware_vreg
-  libdvi
 )
 
 if(STARTUP_LOGO)
@@ -147,7 +141,6 @@ pico_add_extra_outputs(dvi_terminal)
 
 # HSTX DVI bring-up test pattern (bd dmt.8.1): hstx_test.uf2 next to the
 # terminal. HSTX_MODE picks the timing (see src/hstx_dvi.h).
-set(HSTX_MODE 0 CACHE STRING "HSTX video mode: 0 800x600@60, 1 800x600@56, 2 800x600@60 reduced blanking")
 add_executable(hstx_test src/hstx_test.c src/hstx_dvi.c)
 target_include_directories(hstx_test PRIVATE src)
 set_source_files_properties(src/hstx_test.c src/hstx_dvi.c PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")

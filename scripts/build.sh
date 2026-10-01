@@ -20,11 +20,10 @@ BUILD_TYPE="${BUILD_TYPE:-Release}"
 SERIAL_FLOW_CONTROL="${SERIAL_FLOW_CONTROL:-OFF}"
 TOOLCHAIN_DIR="${TOOLCHAIN_DIR:-$ROOT/.toolchain}"
 
-# Targets: pico-sdk board and PicoDVI pin configuration.
+# Targets: pico-sdk board (the DVI pins are the HSTX ones, GP12-19).
 case "$TARGET" in
   pico2-dvi-sock) # Raspberry Pi Pico 2 (RP2350) with the Pico DVI Sock
     pico_board=pico2
-    dvi_config=pico_sock_cfg
     ;;
   *)
     echo "error: unknown TARGET '$TARGET'" >&2
@@ -37,7 +36,7 @@ gcc="$TOOLCHAIN_DIR/arm-none-eabi/bin/arm-none-eabi-gcc"
 for tool in "$cmake" "$gcc"; do
   [[ -x "$tool" ]] || { echo "error: $tool missing; run scripts/setup-toolchain.sh" >&2; exit 1; }
 done
-for sub in lib/pico-sdk lib/PicoDVI; do
+for sub in lib/pico-sdk; do
   [[ -f "$sub/.git" || -d "$sub/.git" ]] || {
     echo "error: $sub missing; run: git submodule update --init" >&2
     exit 1
@@ -55,7 +54,6 @@ mkdir -p "$out"
 "$cmake" -S . -B "$out" \
   -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
   -DPICO_BOARD="$pico_board" \
-  -DDVI_SERIAL_CONFIG="$dvi_config" \
   -DPICO_TOOLCHAIN_PATH="$TOOLCHAIN_DIR/arm-none-eabi" \
   -Dpicotool_DIR="$TOOLCHAIN_DIR/picotool/picotool" \
   -DSERIAL_FLOW_CONTROL="$SERIAL_FLOW_CONTROL" \
@@ -67,7 +65,7 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
 {
   echo "target=$TARGET"
   echo "pico_board=$pico_board"
-  echo "dvi_serial_config=$dvi_config"
+  echo "hstx_mode=$(sed -n 's/^HSTX_MODE:STRING=//p' "$out/CMakeCache.txt")"
   echo "build_type=$BUILD_TYPE"
   echo "serial_flow_control=$SERIAL_FLOW_CONTROL"
   echo "usb_keyboard=$(sed -n 's/^USB_KEYBOARD:BOOL=//p' "$out/CMakeCache.txt")"
@@ -75,7 +73,6 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
   echo "cmake=$("$cmake" --version | head -1)"
   echo "picotool=$("$TOOLCHAIN_DIR/picotool/picotool/picotool" version | head -1)"
   echo "pico_sdk=$(git -C lib/pico-sdk describe --tags --always 2>/dev/null) $(git_rev lib/pico-sdk)"
-  echo "picodvi=$(git_rev lib/PicoDVI)"
   echo "git_sha=$(git_rev .)"
   echo "git_describe=$(git describe --always --dirty 2>/dev/null || echo unknown)"
   echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"

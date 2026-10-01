@@ -3,28 +3,20 @@
 #include "splash.h"
 #include "test.h"
 
-static splash_row_t rows[SPLASH_HEIGHT];
+static uint16_t px[RASTER_ACTIVE_WIDTH];
 
-// The level pair of group g on a row: set (hi) and clear (lo).
-static unsigned group_hi(const splash_row_t *row, unsigned g) {
-	return row->colour[g / 8] >> 4 * (g % 8) & 3;
-}
+// Level colours for the tests: level l as the pixel 0x10 + l (black is 0).
+static const uint16_t colours[4] = { 0x10, 0x11, 0x12, 0x13 };
 
-static unsigned group_lo(const splash_row_t *row, unsigned g) {
-	return row->colour[g / 8] >> (4 * (g % 8) + 2) & 3;
-}
-
-static bool row_black(const splash_row_t *row) {
-	for (unsigned i = 0; i < sizeof row->bits; ++i)
-		if (row->bits[i])
-			return false;
-	for (unsigned i = 0; i < RASTER_COLOUR_WORDS; ++i)
-		if (row->colour[i])
+static bool row_black(void) {
+	for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x)
+		if (px[x])
 			return false;
 	return true;
 }
 
-// A 16x2 image: row 0 is levels 0 0 0 3 3 3 3 3 | 2 x 8; row 1 all 1.
+// A 16x2 image: row 0 is levels 0 0 0 3 3 3 3 3 | 2 x 8; row 1 all 1. The
+// 2-run crosses into row 1 (runs do not stop at row ends).
 static const uint8_t small_data[] = {
 	0 << 6 | 2, 3 << 6 | 4, 2 << 6 | 7,
 	1 << 6 | 15,
@@ -32,58 +24,76 @@ static const uint8_t small_data[] = {
 static const splash_image_t small = { 16, 2, 0x2, small_data, sizeof small_data };
 
 static void test_small_image_centred(void) {
-	CHECK(splash_unpack(rows, &small));
+	CHECK(splash_check(&small));
+	splash_decoder_t d = splash_decoder_init(&small, small_data);
 	unsigned x0 = (RASTER_ACTIVE_WIDTH - 16) / 2, y0 = (SPLASH_HEIGHT - 2) / 2;
-	unsigned g = x0 / 8;
-	CHECK_EQ(x0 % 8, 0);
-	CHECK(row_black(&rows[y0 - 1]));
-	CHECK(row_black(&rows[y0 + 2]));
-	const splash_row_t *r0 = &rows[y0], *r1 = &rows[y0 + 1];
-	// Two levels: pixels 3-7 take the set level.
-	CHECK_EQ(r0->bits[g], 0xf8);
-	CHECK_EQ(group_hi(r0, g), 3);
-	CHECK_EQ(group_lo(r0, g), 0);
-	// One level: set and clear are the same, no bits.
-	CHECK_EQ(r0->bits[g + 1], 0);
-	CHECK_EQ(group_hi(r0, g + 1), 2);
-	CHECK_EQ(group_lo(r0, g + 1), 2);
-	CHECK_EQ(group_hi(r1, g), 1);
-	CHECK_EQ(group_lo(r1, g + 1), 1);
-	// Outside the image: black.
-	CHECK_EQ(r0->bits[g - 1], 0);
-	CHECK_EQ(group_hi(r0, g - 1), 0);
-	CHECK_EQ(group_hi(r0, g + 2), 0);
-	CHECK_EQ(r0->bits[RASTER_BYTES - 1], 0);
+	for (unsigned y = 0; y < SPLASH_HEIGHT; ++y) {
+		memset(px, 0xa5, sizeof px); // every pixel must be written
+		splash_compose(px, &d, y, colours);
+		if (y == y0) {
+			for (unsigned i = 0; i < 16; ++i)
+				CHECK_EQ(px[x0 + i], i < 3 ? 0x10 : i < 8 ? 0x13 : 0x12);
+			CHECK_EQ(px[x0 - 1], 0);
+			CHECK_EQ(px[x0 + 16], 0);
+		} else if (y == y0 + 1) {
+			for (unsigned i = 0; i < 16; ++i)
+				CHECK_EQ(px[x0 + i], 0x11);
+		} else {
+			CHECK(row_black());
+		}
+	}
+	CHECK(d.data == d.end && d.left == 0);
 }
 
-static void test_bad_images_leave_black(void) {
+// An odd-width margin rounds the start down to an even pixel.
+static void test_start_even(void) {
+	static const uint8_t data[] = { 3 << 6 | 1 };
+	const splash_image_t img = { 2, 1, 0x2, data, sizeof data };
+	splash_decoder_t d = splash_decoder_init(&img, data);
+	CHECK_EQ(d.x0 % 2, 0);
+	CHECK_EQ(d.x0, (RASTER_ACTIVE_WIDTH - 2) / 2 / 2 * 2);
+}
+
+static void test_bad_images_rejected(void) {
 	splash_image_t img = small;
 	img.size = sizeof small_data - 1; // too little data
-	CHECK(!splash_unpack(rows, &img));
-	CHECK(row_black(&rows[SPLASH_HEIGHT / 2]));
-
+	CHECK(!splash_check(&img));
 	static const uint8_t extra[] = { 0 << 6 | 2, 3 << 6 | 4, 2 << 6 | 7, 1 << 6 | 15, 0 };
 	img.data = extra;
 	img.size = sizeof extra; // data left over
-	CHECK(!splash_unpack(rows, &img));
-	CHECK(row_black(&rows[SPLASH_HEIGHT / 2]));
-
+	CHECK(!splash_check(&img));
 	img = small;
-	img.width = 12; // not whole groups
-	CHECK(!splash_unpack(rows, &img));
+	img.width = 15; // odd
+	CHECK(!splash_check(&img));
 	img = small;
 	img.height = SPLASH_HEIGHT + 1;
-	CHECK(!splash_unpack(rows, &img));
+	CHECK(!splash_check(&img));
+
+	// Short data while decoding (an unchecked image) leaves the rest black
+	// instead of reading past the end.
+	img = small;
+	img.size = 2;
+	splash_decoder_t d = splash_decoder_init(&img, small_data);
+	unsigned y0 = (SPLASH_HEIGHT - 2) / 2, x0 = (RASTER_ACTIVE_WIDTH - 16) / 2;
+	for (unsigned y = 0; y <= y0; ++y)
+		splash_compose(px, &d, y, colours);
+	CHECK_EQ(px[x0 + 7], 0x13);
+	CHECK_EQ(px[x0 + 8], 0);
 }
 
-// The logo built from LOGO_IMAGE unpacks and has something to show.
+// The logo built from LOGO_IMAGE checks out, decodes to the end of its data
+// and has something to show.
 static void test_built_in_logo(void) {
 	CHECK(splash_logo.planes != 0);
-	CHECK(splash_unpack(rows, &splash_logo));
+	CHECK(splash_check(&splash_logo));
+	splash_decoder_t d = splash_decoder_init(&splash_logo, splash_logo.data);
 	unsigned lit = 0;
-	for (unsigned y = 0; y < SPLASH_HEIGHT; ++y)
-		for (unsigned i = 0; i < RASTER_COLOUR_WORDS; ++i)
-			lit += rows[y].colour[i] != 0;
+	for (unsigned y = 0; y < SPLASH_HEIGHT; ++y) {
+		splash_compose(px, &d, y, colours);
+		for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x)
+			lit += px[x] > 0x10;
+	}
+	CHECK(d.data == d.end && d.left == 0);
 	CHECK(lit > SPLASH_HEIGHT);
 }
 
@@ -104,24 +114,25 @@ static void test_tint(void) {
 	CHECK(t.shift[0] == 0 && t.shift[1] == 2 && t.shift[2] == SPLASH_PLANE_OFF);
 }
 
-static void test_shift_map(void) {
-	uint8_t map[256];
-	splash_shift_map(0, map);
-	for (unsigned b = 0; b < 256; ++b)
-		CHECK_EQ(map[b], b);
-	splash_shift_map(1, map);
-	CHECK_EQ(map[0xff], 0xaa);            // all 3s -> 2s
-	CHECK_EQ(map[0x1b], 0x06);            // levels 3,2,1,0 (low bits first) -> 2,1,0,0
-	splash_shift_map(2, map);
-	CHECK_EQ(map[0xff], 0x55);
-	CHECK_EQ(map[0x1b], 0x01);
+// Each level's colour: per plane, off or the level lowered by the shift.
+static void test_tint_colour(void) {
+	const splash_tint_t green = { { SPLASH_PLANE_OFF, 0, SPLASH_PLANE_OFF } };
+	for (unsigned l = 0; l < 4; ++l)
+		CHECK_EQ(splash_tint_colour(&green, l), RGB222(0, l, 0));
+	const splash_tint_t amber = { { SPLASH_PLANE_OFF, 1, 0 } };
+	CHECK_EQ(splash_tint_colour(&amber, 3), RGB222(3, 2, 0));
+	CHECK_EQ(splash_tint_colour(&amber, 1), RGB222(1, 0, 0));
+	CHECK_EQ(splash_tint_colour(&amber, 0), 0);
+	const splash_tint_t grey = { { 0, 0, 0 } };
+	CHECK_EQ(splash_tint_colour(&grey, 2), RGB222(2, 2, 2));
 }
 
 int main(void) {
 	RUN(test_small_image_centred);
-	RUN(test_bad_images_leave_black);
+	RUN(test_start_even);
+	RUN(test_bad_images_rejected);
 	RUN(test_built_in_logo);
 	RUN(test_tint);
-	RUN(test_shift_map);
+	RUN(test_tint_colour);
 	return tests_done();
 }

@@ -8,9 +8,9 @@ keyboard on the board's USB port types to the host over the same UART;
 
 Supported board (verified on hardware):
 
-| `TARGET` | Board | DVI pins (PicoDVI config) |
+| `TARGET` | Board | DVI pins (HSTX) |
 |---|---|---|
-| `pico2-dvi-sock` (default) | Raspberry Pi Pico 2 (RP2350) with the Pico DVI Sock | D0-D2 GP12/18/16, clock GP14 (`pico_sock_cfg`) |
+| `pico2-dvi-sock` (default) | Raspberry Pi Pico 2 (RP2350) with the Pico DVI Sock | D0 GP12/13, D1 GP18/19, D2 GP16/17, clock GP14/15 (HSTX bits 0-7) |
 
 The name comes from where the project started: it was first built for the
 [Adafruit Feather RP2040 DVI](https://www.adafruit.com/product/5710), and
@@ -24,8 +24,8 @@ Releases (`vX.Y.Z` tags) ship the firmware image; see `docs/FLASHING.txt`.
 
 - **Display**: 800x600p60 over DVI/HDMI. 80 columns use Terminus 8x16 in
   8-pixel cells (centred, 80-pixel borders); 132 columns use misc-fixed 6x13
-  in 6-pixel cells, 792 pixels starting at the left edge (centred, they
-  would split 8-pixel colour groups between text and border). 24-pixel
+  in 6-pixel cells (792 pixels, centred). Every cell shows its own colours
+  exactly, in both widths. 24-pixel
   rows; line drawing, block and shade characters join up between rows.
 - **Emulation**: VT100/VT102. Cursor movement, scrolling regions, erase,
   insert/delete lines and characters, tab stops, G0/G1 character sets (ASCII,
@@ -181,18 +181,18 @@ be a non-interlaced 8-bit PNG, at most 800x576 (576 is the 24 text rows; the
 status line stays below) and a multiple of 8 pixels wide; alpha is
 composited over black, and it is shown unscaled, centred.
 
-The display has 4 levels per colour, and per 8 pixels each colour shows at
-most two of them, so the image is posterised (the build picks the best pair
-per group). To fit in RAM the logo must be a single hue or grey on black:
-every colour channel that is not black must show the same levels (the
-default is green only). It is stored run-length encoded (about 19 KB for
-the default) and unpacked into the text raster's memory while it shows.
-The saved Colors setting tints it: green, amber and blue show it in that
-hue (core 1 lowers the levels of the weaker planes as it draws), white shows
-it as it is.
+The image is posterised to 4 levels per colour (and, a leftover of the
+PicoDVI encoder, at most two levels per 8-pixel group). The logo must be a
+single hue or grey on black: every colour channel that is not black must
+show the same levels (the default is green only). It is stored run-length
+encoded (about 19 KB for the default); while it shows, a copy sits in the
+text raster's memory and core 1 decodes it a scanline at a time. The saved
+Colors setting tints it: green, amber and blue show it in that hue (each of
+its four levels gets a colour), white shows it as it is.
 With `LOGO_IN_FLASH` (default ON, experimental) the encoded data stays in
-flash and is read once at startup, instead of being copied into SRAM with
-the rest of the program; `-DLOGO_IN_FLASH=OFF` keeps the old behaviour.
+flash and is copied out only while the logo shows, instead of being copied
+into SRAM with the rest of the program; `-DLOGO_IN_FLASH=OFF` keeps the old
+behaviour.
 
 ## Trying it from a PC
 
@@ -212,28 +212,31 @@ It sets `TERM=xterm-color` (8 colours, nothing the terminal lacks);
 
 ## How it works
 
-Video uses [PicoDVI](https://github.com/Wren6991/PicoDVI)'s `libdvi` and
-its 2bpp text encoder at 800x600p60 (400 MHz, 1.3 V).
+Video comes from the RP2350's HSTX, whose TMDS encoder turns RGB565 pixels
+into DVI (`src/hstx_dvi.c`, after Raspberry Pi's
+`pico-examples/hstx/dvi_out_hstx_encoder`): 800x600 at 60 Hz, a 40 MHz pixel
+clock, so clk_hstx 200 MHz and clk_sys 400 MHz (1.3 V). Two DMA channels
+feed it blanking command lists and scanlines in turn. `-DHSTX_MODE=1` (56 Hz,
+clk_hstx 180 MHz) and `2` (reduced blanking, 177 MHz) are slower fallbacks;
+`hstx_test.uf2`, built alongside, shows a test pattern for checking a
+monitor and the clocks.
 
 - **Core 0** runs the terminal: UART0 receive interrupt into a ring buffer
   (`src/serial.c`), the escape sequence parser (`src/vtparse.c`, Paul
   Williams' DEC state machine), the VT100 emulation (`src/term.c`) on a cell
-  buffer (`src/screen.c`), rasterisation of changed lines into per-line
-  pixel buffers (`src/raster.c`, driven by `video_update` in
-  `src/video.c`), and the USB keyboard: TinyUSB host
+  buffer (`src/screen.c`), rasterisation of changed lines (glyph bits per
+  cell with the attributes applied, and each cell's colours:
+  `src/raster.c`, driven by `video_update` in `src/video.c`), and the USB
+  keyboard: TinyUSB host
   (`src/usbkbd.c`) with boot protocol reports turned into VT100 key codes
   (`src/keyboard.c`).
-- **Core 1** encodes those buffers to TMDS one scanline at a time and draws
-  the blinking cursor (`src/video.c`).
+- **Core 1** composes each scanline from those into RGB565 pixels a couple
+  of lines ahead of the DMA, inverts the cursor cell in the blink-on phase,
+  and decodes the startup logo (`src/video.c`, `raster_compose`); the DMA
+  interrupt runs on core 1 too.
 
-The encoder has two colour levels per 8-pixel group and colour plane, so in
-132 columns (where cells straddle groups) colours are exact as long as the
-cells sharing a group show at most two levels per plane — true for normal
-text on one background and for reverse video. 80 columns is always exact.
-
-The firmware runs entirely from SRAM (`COPY_TO_RAM`, default ON), as
-PicoDVI's apps do: the boot-time flash (XIP) setup is chosen for clk_sys up
-to 150 MHz, far below the 400 MHz DVI clock (bd `dvi-feather-terminal-dmt.10`).
+The firmware runs entirely from SRAM (`COPY_TO_RAM`, default ON): the
+boot-time flash (XIP) setup is chosen for clk_sys up to 150 MHz, far below the 400 MHz DVI clock (bd `dvi-feather-terminal-dmt.10`).
 `-DVIDEO_DIAG=ON` adds bring-up diagnostics on UART0 TX (boot markers, core 1
 scanline timing, fault reports).
 
@@ -241,10 +244,10 @@ scanline timing, fault reports).
 
 | Path | Contents |
 |---|---|
-| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100 codes), `splash.[ch]` (startup logo unpacking), `settings.[ch]` (settings records), `setup.[ch]` (SET-UP panel), `demo.[ch]`. RP2350: `video.[ch]` (libdvi, core 1), `serial.[ch]` (UART with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors, written at the DVI clock), `usbkbd.[ch]` and `tusb_config.h` (TinyUSB host, `USB_KEYBOARD` builds), `diag.[ch]` (VIDEO_DIAG), `main.c`. `font_gen.py` builds the font tables, `logo_gen.py` the logo |
+| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100 codes), `splash.[ch]` (startup logo decoding), `settings.[ch]` (settings records), `setup.[ch]` (SET-UP panel), `demo.[ch]`. RP2350: `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]` (scanlines on core 1), `hstx_test.c` (test pattern), `serial.[ch]` (UART with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors, written at the DVI clock), `usbkbd.[ch]` and `tusb_config.h` (TinyUSB host, `USB_KEYBOARD` builds), `diag.[ch]` (VIDEO_DIAG), `main.c`. `font_gen.py` builds the font tables, `logo_gen.py` the logo |
 | `test/` | Host unit tests (plain CMake + gcc with ASan/UBSan, no pico-sdk) |
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see above) |
-| `lib/pico-sdk`, `lib/PicoDVI` | Pinned submodules (plus pico-sdk's `lib/tinyusb`) |
+| `lib/pico-sdk` | Pinned submodule (plus its `lib/tinyusb`) |
 | `assets/logo/` | The startup logo (PNG used by the build, JPEG original) |
 | `assets/fonts/` | Terminus Font 8x16 (SIL OFL 1.1) and misc-fixed 6x13 (public domain); see its README |
 | `cmake/build_info.cmake` | Generates `term_build.h` (git describe, commit, date) on every build |
@@ -269,7 +272,7 @@ Everything installs under `.toolchain/` in the repo (git-ignored); only
 needed.
 
 ```sh
-git submodule update --init          # pico-sdk, PicoDVI (not their submodules)
+git submodule update --init          # pico-sdk (not its submodules)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # the one we need
 scripts/setup-toolchain.sh           # CMake, Arm GNU Toolchain, picotool
 scripts/test.sh                      # host unit tests
@@ -284,8 +287,8 @@ picks up `.toolchain/` automatically.
 
 Toolchain versions are pinned in **`toolchain.env`**, the single source of
 truth for `scripts/setup-toolchain.sh` and the CI cache key. To upgrade,
-change the version and its SHA256 there. pico-sdk and PicoDVI are upgraded
-by moving their submodules.
+change the version and its SHA256 there. pico-sdk is upgraded by moving its
+submodule.
 
 ## CI
 
@@ -313,4 +316,5 @@ Work is tracked with `bd` (beads): `bd ready`, `bd list`.
 Terminus Font is © Dimitar Toshkov Zhekov under the SIL Open Font License
 1.1; see `assets/fonts/Terminus-OFL.txt`. The 8x16 table generated from it
 is a derivative and stays under that licence. The misc-fixed 6x13 font is
-public domain. pico-sdk and PicoDVI are BSD-3-Clause.
+public domain. pico-sdk is BSD-3-Clause, as is the pico-examples HSTX DVI
+example `src/hstx_dvi.c` follows.

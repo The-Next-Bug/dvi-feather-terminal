@@ -103,8 +103,8 @@ setup_action_t setup_tick(setup_t *u, uint32_t now_ms) {
 // The preview rows: samples in the colours of values' Colors and Palette.
 // The first shows default text, bold and the status line, then each ANSI
 // colour as text on the default background; the second, under those, each
-// as a background under default text. Spaced out, so no 8-pixel group (at
-// 132 columns) holds two samples.
+// as a background under default text. Spaced out (once so that no 8-pixel
+// group at 132 columns held two samples, for the PicoDVI encoder).
 static void draw_colours_preview(screen_t *s, unsigned row, const settings_t *values) {
 	settings_colours_t c = settings_colours(values);
 	unsigned col = 3 + NAME_WIDTH;

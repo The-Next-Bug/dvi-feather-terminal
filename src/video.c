@@ -1,84 +1,123 @@
 #include "video.h"
 
-#include <stdlib.h>
+#include <string.h>
 
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
-#include "hardware/clocks.h"
-#include "hardware/structs/bus_ctrl.h"
 #include "hardware/structs/systick.h"
-#include "hardware/vreg.h"
-
-#include "dvi.h"
-#include "dvi_serialiser.h"
-#include "common_dvi_pin_configs.h"
-#include "tmds_encode_font_2bpp.h"
+#include "hardware/sync.h"
 
 #include "diag.h"
+#include "hstx_dvi.h"
 #include "raster.h"
 #include "splash.h"
 
-#define FRAME_WIDTH RASTER_ACTIVE_WIDTH
-#define FRAME_HEIGHT RASTER_ACTIVE_HEIGHT
-#define DVI_TIMING dvi_timing_800x600p_60hz
-
-#define PLANE_WORDS (FRAME_WIDTH / DVI_SYMBOLS_PER_WORD)
-// The encoder writes RASTER_WIDTH pixels per plane, past the end of the
-// line: each plane's excess lands on the start of the next (which is then
-// overwritten) and the last plane's in this slack.
-#define SLACK_WORDS ((RASTER_WIDTH - FRAME_WIDTH) / DVI_SYMBOLS_PER_WORD)
-#define TMDS_BUF_WORDS (RASTER_PLANES * PLANE_WORDS + SLACK_WORDS)
-
-_Static_assert(SCREEN_ROWS * RASTER_ROW_HEIGHT == FRAME_HEIGHT, "rows fill the screen");
+_Static_assert(SCREEN_ROWS * RASTER_ROW_HEIGHT == RASTER_ACTIVE_HEIGHT, "rows fill the screen");
 
 // Cursor blink: on for 32 frames, off for 32 (about 1 Hz at 60 Hz).
 #define CURSOR_BLINK_FRAMES 32
 // Blinking text (SGR 5): shown for this long, then hidden for as long.
 #define BLINK_HALF_PERIOD_MS 500
 
-static struct dvi_inst dvi0;
+// Core 1 composes scanlines into a ring of LINE_BUFS buffers, at most
+// AHEAD lines beyond the one the DMA interrupt last handed out: a buffer
+// stays in use until the interrupt asks for the line two after it (see
+// hstx_line_fn), so line k may overwrite line k - LINE_BUFS once the
+// interrupt has asked for line k - 2.
+#define LINE_BUFS 4
+#define AHEAD (LINE_BUFS - 2)
+
+// Everything core 1 (and its interrupt) reads lives in SRAM (not const,
+// which would put it in flash): an XIP stall would starve the HSTX.
+static uint32_t line_buf[LINE_BUFS][RASTER_LINE_WORDS];
+// Scanlines are numbered from the first one of the first frame, so frame
+// and line are seq / RASTER_ACTIVE_HEIGHT and seq % RASTER_ACTIVE_HEIGHT.
+// Unsigned and compared by difference, so they may wrap.
+static volatile uint32_t requested = UINT32_MAX; // last line handed to the DMA
+static volatile uint32_t composed;               // lines composed so far
+static volatile uint32_t late_lines;
+
+// RGB222 colour c as an RGB565 pixel in both halves of a word.
+static uint32_t colour_words[64];
+
 // diag_frames counts frames in every build: video_splash waits on it.
 static volatile uint32_t diag_frames, diag_max_cycles;
-// Core 1 progress: 1 started, 2 starting DVI, 3 DVI started, 4 in frame loop.
+// Core 1 progress: 1 started, 2 starting HSTX, 3 HSTX started, 4 in frame loop.
 static volatile uint32_t diag_core1_stage;
 static screen_t *video_screen;
 
 // One raster line per screen line slot (indexed like screen_t.lines).
 static raster_line_t raster[SCREEN_ROWS];
 
-// The splash (video_splash) lives in the raster memory of the first
-// SPLASH_SLOTS slots, which are not rendered meanwhile. At startup the
-// status line is in slot SCREEN_ROWS - 1, clear of it.
-#define SPLASH_SLOTS ((SPLASH_HEIGHT * sizeof(splash_row_t) + sizeof(raster_line_t) - 1) / sizeof(raster_line_t))
-_Static_assert(SPLASH_SLOTS < SCREEN_ROWS - 1, "the splash fits below the status line's slot");
-static splash_row_t *splash_rows = (splash_row_t *)(void *)raster;
-// Core 1 shows the splash for the text rows while splash_on, in the planes
-// in splash_planes (the others, or all while 0, black); in the planes in
-// splash_shifted with its levels lowered through splash_map (the tint), a
-// row at a time into splash_colour.
-static volatile bool splash_on;
-static volatile uint8_t splash_planes, splash_shifted;
-static uint8_t splash_map[RASTER_PLANES][256];
-static uint32_t splash_colour[RASTER_PLANES][RASTER_COLOUR_WORDS];
-// Core 0: the splash owns its slots (video_update leaves them alone).
+// The splash (video_splash) keeps a copy of its image data in the raster
+// memory of the text rows' slots, which are not rendered meanwhile. At
+// startup the status line is in the last slot, clear of it.
+#define SPLASH_SLOTS (SCREEN_ROWS - 1)
+static uint8_t *const splash_data = (uint8_t *)(void *)raster;
+#define SPLASH_DATA_MAX (SPLASH_SLOTS * sizeof(raster_line_t))
+// Core 1 shows the splash for the text rows unless SPLASH_OFF: black while
+// SPLASH_BLACK (the data is being written), the image while SPLASH_SHOW,
+// decoded from splash_start with splash_colours per level.
+enum { SPLASH_OFF, SPLASH_BLACK, SPLASH_SHOW };
+static volatile uint8_t splash_state;
+static splash_decoder_t splash_start;
+static uint16_t splash_colours[4];
+// Core 0: the splash owns those slots (video_update leaves them alone).
 static bool splash_holds_raster;
-static splash_row_t blank_row;
 
-// Everything core 1 reads lives in SRAM (not const, which would put it in
-// flash): an XIP stall would starve the serialisers.
-//
-// The encoder looks each raster byte up in a "font" row; this identity row
-// makes each byte its own 8-pixel pattern.
-static uint8_t identity_font[256];
-// Cursor row copies; the 4 bytes past a stored row are read but not shown.
-static uint8_t __attribute__((aligned(4))) cursor_bits[RASTER_PLANES][RASTER_WIDTH / 8];
+// What core 1 latched at the start of the frame it is composing: the mode
+// and cursor cannot tear between rows.
+static struct {
+	const screen_t *s;
+	uint8_t splash;
+	uint cols, cursor_row;
+	int cursor_col; // -1: not shown this frame
+	splash_decoder_t decoder;
+	uint16_t colours[4];
+} frame;
 
-static void __not_in_flash_func(encode_scanline)(uint32_t *tmdsbuf, const uint8_t *const bits[RASTER_PLANES],
-		const uint32_t *const colour[RASTER_PLANES]) {
-	// In plane order: each plane's excess is overwritten by the next.
-	for (int plane = 0; plane < RASTER_PLANES; ++plane)
-		tmds_encode_font_2bpp(bits[plane], colour[plane], tmdsbuf + plane * PLANE_WORDS,
-			RASTER_WIDTH, identity_font);
+static void __not_in_flash_func(start_frame)(uint32_t n) {
+	const screen_t *s = video_screen;
+	frame.s = s;
+	frame.cols = s->cols;
+	bool cursor_on = s->cursor_visible && !(n / CURSOR_BLINK_FRAMES & 1);
+	frame.cursor_row = s->cursor_row;
+	frame.cursor_col = cursor_on ? (int)s->cursor_col : -1;
+	frame.splash = splash_state;
+	if (frame.splash == SPLASH_SHOW) {
+		frame.decoder = splash_start;
+		for (int i = 0; i < 4; ++i)
+			frame.colours[i] = splash_colours[i];
+	}
+}
+
+static void __not_in_flash_func(compose)(uint32_t seq) {
+	uint y = seq % RASTER_ACTIVE_HEIGHT;
+	if (y == 0)
+		start_frame(seq / RASTER_ACTIVE_HEIGHT);
+	uint32_t *px = line_buf[seq % LINE_BUFS];
+	if (frame.splash != SPLASH_OFF && y < SPLASH_HEIGHT) {
+		if (frame.splash == SPLASH_SHOW)
+			splash_compose((uint16_t *)px, &frame.decoder, y, frame.colours);
+		else
+			for (uint i = 0; i < RASTER_LINE_WORDS; ++i)
+				px[i] = 0;
+		return;
+	}
+	uint row = y / RASTER_ROW_HEIGHT;
+	const raster_line_t *line = &raster[frame.s->row_map[row]];
+	uint sr = raster_stored_row(frame.cols, y % RASTER_ROW_HEIGHT);
+	raster_compose(px, line, frame.cols, sr, row == frame.cursor_row ? frame.cursor_col : -1, colour_words);
+}
+
+// The DMA interrupt (core 1) wants line y's pixels: the next in order.
+static const uint32_t *__not_in_flash_func(next_line)(unsigned y) {
+	(void)y;
+	uint32_t seq = requested + 1;
+	requested = seq;
+	if ((int32_t)(composed - seq) <= 0)
+		++late_lines; // shows whatever the buffer holds
+	return line_buf[seq % LINE_BUFS];
 }
 
 static void __not_in_flash_func(core1_main)(void) {
@@ -90,137 +129,46 @@ static void __not_in_flash_func(core1_main)(void) {
 		systick_hw->csr = 0x5; // enable, processor clock, no interrupt
 	}
 
+	// The first lines are ready before the output starts.
+	uint32_t next = 0;
+	while ((int32_t)(next - requested) <= AHEAD) {
+		compose(next);
+		composed = ++next;
+	}
 	diag_core1_stage = 2;
-	dvi_register_irqs_this_core(&dvi0, DMA_IRQ_0);
-	dvi_start(&dvi0);
+	hstx_dvi_start(next_line);
 	diag_core1_stage = 3;
 
-	const uint8_t *bits[RASTER_PLANES];
-	const uint32_t *colour[RASTER_PLANES];
-	for (uint frame = 0;; ++frame) {
+	for (;;) {
 		diag_core1_stage = 4;
-		// Latch the mode and cursor once per frame so they cannot tear
-		// between rows.
-		const screen_t *s = video_screen;
-		bool splash = splash_on;
-		uint planes = splash_planes, shifted = splash_shifted;
-		uint cols = s->cols;
-		bool cursor_on = s->cursor_visible && !(frame / CURSOR_BLINK_FRAMES & 1);
-		uint cursor_row = s->cursor_row;
-		uint cursor_x = raster_x_offset(cols) + s->cursor_col * raster_cell_width(cols);
-		uint cursor_byte = cursor_x / 8;
-		uint cursor_mask = ((1u << raster_cell_width(cols)) - 1) << cursor_x % 8;
-
-		uint row = 0, sy = 0;
-		for (uint y = 0; y < FRAME_HEIGHT; ++y) {
-			if (splash && y < SPLASH_HEIGHT) {
-				for (int p = 0; p < RASTER_PLANES; ++p) {
-					const splash_row_t *src = planes >> p & 1 ? &splash_rows[y] : &blank_row;
-					bits[p] = src->bits;
-					colour[p] = src->colour;
-					if (planes >> p & shifted >> p & 1) {
-						// 13 words: a few hundred cycles, only while the logo shows.
-						const uint8_t *in = (const uint8_t *)src->colour;
-						uint8_t *out = (uint8_t *)splash_colour[p];
-						for (uint i = 0; i < sizeof splash_colour[p]; ++i)
-							out[i] = splash_map[p][in[i]];
-						colour[p] = splash_colour[p];
-					}
-				}
-			} else {
-				const raster_line_t *line = &raster[s->row_map[row]];
-				uint sr = raster_stored_row(cols, sy);
-				for (int p = 0; p < RASTER_PLANES; ++p) {
-					bits[p] = line->bits[sr][p];
-					colour[p] = line->colour[p];
-				}
-			}
-			if (cursor_on && row == cursor_row && !(splash && y < SPLASH_HEIGHT)) {
-				// Invert the cursor cell: each pixel swaps between its group's
-				// two levels.
-				for (int p = 0; p < RASTER_PLANES; ++p) {
-					const uint32_t *src = (const uint32_t *)bits[p];
-					uint32_t *dst = (uint32_t *)cursor_bits[p];
-					for (int i = 0; i < RASTER_BYTES / 4; ++i)
-						dst[i] = src[i];
-					cursor_bits[p][cursor_byte] ^= (uint8_t)cursor_mask;
-					cursor_bits[p][cursor_byte + 1] ^= (uint8_t)(cursor_mask >> 8);
-					bits[p] = cursor_bits[p];
-				}
-			}
-			if (++sy == RASTER_ROW_HEIGHT) {
-				sy = 0;
-				++row;
-			}
-
-			uint32_t *tmdsbuf;
-			queue_remove_blocking_u32(&dvi0.q_tmds_free, &tmdsbuf);
-			uint32_t start = VIDEO_DIAG ? systick_hw->cvr : 0;
-			encode_scanline(tmdsbuf, bits, colour);
-			if (VIDEO_DIAG) {
-				uint32_t cycles = (start - systick_hw->cvr) & 0xffffff;
-				if (cycles > diag_max_cycles)
-					diag_max_cycles = cycles;
-			}
-			queue_add_blocking_u32(&dvi0.q_tmds_valid, &tmdsbuf);
+		while ((int32_t)(next - requested) > AHEAD)
+			tight_loop_contents();
+		uint32_t start = VIDEO_DIAG ? systick_hw->cvr : 0;
+		compose(next);
+		if (VIDEO_DIAG) {
+			uint32_t cycles = (start - systick_hw->cvr) & 0xffffff;
+			if (cycles > diag_max_cycles)
+				diag_max_cycles = cycles;
 		}
-		diag_frames = frame + 1;
+		composed = ++next;
+		if (next % RASTER_ACTIVE_HEIGHT == 0)
+			diag_frames = next / RASTER_ACTIVE_HEIGHT;
 	}
 }
 
 void video_init(void) {
-	// 800x600p60 needs a 400 MHz system clock, which needs 1.3 V. The whole
-	// program runs from SRAM (COPY_TO_RAM): flash cannot keep up at 400 MHz.
-	vreg_set_voltage(VREG_VOLTAGE_1_30);
-	sleep_ms(10);
-	diag_mark("vreg 1.30 V; setting system clock");
-	set_sys_clock_khz(DVI_TIMING.bit_clk_khz, true);
+	hstx_dvi_init();
 	diag_reinit(115200);
-	diag_mark("system clock set; dvi_init");
-
-	for (int i = 0; i < 256; ++i)
-		identity_font[i] = (uint8_t)i;
-
-	dvi0.timing = &DVI_TIMING;
-	dvi0.ser_cfg = DVI_SERIAL_CONFIG;
-	dvi_init(&dvi0, next_striped_spin_lock_num(), next_striped_spin_lock_num());
-	// Swap libdvi's TMDS buffers for ones with slack for the encoder. These
-	// are allocated in the same heap space rather than static: dvi_init
-	// mallocs its own first (3 x 4.8 KB), so this reuses that memory
-	// rather than adding static copies on top.
-	for (int i = 0; i < DVI_N_TMDS_BUFFERS; ++i) {
-		uint32_t *buf;
-		queue_remove_blocking_u32(&dvi0.q_tmds_free, &buf);
-		free(buf);
+	diag_mark("clocks and HSTX set up");
+	for (uint c = 0; c < 64; ++c) {
+		uint32_t px = hstx_rgb565((uint8_t)c);
+		colour_words[c] = px | px << 16;
 	}
-	for (int i = 0; i < DVI_N_TMDS_BUFFERS; ++i) {
-		uint32_t *buf = malloc(TMDS_BUF_WORDS * sizeof(uint32_t));
-		queue_add_blocking_u32(&dvi0.q_tmds_free, &buf);
-	}
-	diag_mark("dvi_init done");
 }
 
 void video_update(screen_t *screen) {
-	// The cursor cell must be rasterised with its fg level (see
-	// raster_render_line). Re-render the lines involved whenever the cursor,
-	// or the slot shown on its row, changes.
-	static int drawn_slot = -1, drawn_col = -1;
-	int slot_now = -1, col_now = -1;
-	if (screen->cursor_visible) {
-		slot_now = screen->row_map[screen->cursor_row];
-		col_now = screen->cursor_col;
-	}
-	if (slot_now != drawn_slot || col_now != drawn_col) {
-		if (drawn_slot >= 0)
-			screen->dirty |= 1u << drawn_slot;
-		if (slot_now >= 0)
-			screen->dirty |= 1u << slot_now;
-		drawn_slot = slot_now;
-		drawn_col = col_now;
-	}
-
 	// Blink: flip the phase every BLINK_HALF_PERIOD_MS and re-render the lines
-	// that have blinking cells.
+	// that have blinking cells. (The cursor is core 1's, from the screen.)
 	static bool blink_off;
 	static uint32_t blink_slots;
 	static absolute_time_t next_blink;
@@ -248,8 +196,7 @@ void video_update(screen_t *screen) {
 			continue;
 		unsigned flags = (blink_off ? RASTER_BLINK_OFF : 0) |
 			(screen->reverse_rows >> slot_row[slot] & 1 ? RASTER_REVERSE : 0);
-		bool blinks = raster_render_line(&raster[slot], &screen->lines[slot], screen->cols,
-			slot == slot_now ? col_now : -1, flags);
+		bool blinks = raster_render_line(&raster[slot], &screen->lines[slot], screen->cols, flags);
 		if (blinks)
 			blink_slots |= 1u << slot;
 		else
@@ -258,14 +205,14 @@ void video_update(screen_t *screen) {
 }
 
 video_stats_t video_stats(void) {
+	const hstx_timing_t *t = &hstx_timing;
 	video_stats_t st = {
 		.frames = diag_frames,
 		.max_line_cycles = diag_max_cycles,
-		.late = dvi0.late_scanline_ctr,
+		.late = late_lines,
 		.core1_stage = diag_core1_stage,
-		// The system clock is the TMDS bit clock: 10 cycles per pixel.
-		.cycles_budget = 10u * (DVI_TIMING.h_front_porch + DVI_TIMING.h_sync_width +
-			DVI_TIMING.h_back_porch + DVI_TIMING.h_active_pixels),
+		// The system clock is 10 x the pixel clock.
+		.cycles_budget = 10u * (t->h_front + t->h_sync + t->h_back + t->h_active),
 	};
 	diag_max_cycles = 0;
 	return st;
@@ -275,13 +222,11 @@ void video_start(screen_t *screen) {
 	video_screen = screen;
 	video_update(screen);
 	diag_mark("screen rasterised; launching core 1");
-	// Core 1 must never stall on the bus while feeding the serialisers.
-	hw_set_bits(&bus_ctrl_hw->priority, BUSCTRL_BUS_PRIORITY_PROC1_BITS);
 	multicore_launch_core1(core1_main);
 }
 
 // Wait until core 1 has finished a frame after this call, so any frame it
-// shows next latched the current mode.
+// composes next latched the current state.
 static void wait_frame(void) {
 	uint32_t frame = diag_frames;
 	while (diag_frames == frame)
@@ -289,36 +234,29 @@ static void wait_frame(void) {
 }
 
 bool video_splash(const splash_image_t *img, const splash_tint_t *tint) {
-	// Black while the rows are written, so no half-drawn logo shows.
-	splash_planes = 0;
-	splash_on = true;
+	if (!splash_check(img) || img->size > SPLASH_DATA_MAX)
+		return false;
+	// Black while the data is copied, so no half-written logo shows.
+	splash_state = SPLASH_BLACK;
 	wait_frame();
 	splash_holds_raster = true;
-	if (!splash_unpack(splash_rows, img)) {
-		video_splash_end();
-		return false;
-	}
-	uint8_t planes = 0, shifted = 0;
-	for (int p = 0; p < RASTER_PLANES; ++p) {
-		if (tint->shift[p] == SPLASH_PLANE_OFF)
-			continue;
-		planes |= (uint8_t)(1u << p);
-		if (tint->shift[p]) {
-			shifted |= (uint8_t)(1u << p);
-			splash_shift_map(tint->shift[p], splash_map[p]);
-		}
-	}
-	splash_shifted = shifted;
-	splash_planes = planes;
+	// With LOGO_IN_FLASH this reads flash: after nvflash_retime (main.c).
+	memcpy(splash_data, img->data, img->size);
+	splash_start = splash_decoder_init(img, splash_data);
+	for (unsigned l = 0; l < 4; ++l)
+		splash_colours[l] = hstx_rgb565(splash_tint_colour(tint, l));
+	__dmb(); // all of that before core 1 can see SPLASH_SHOW
+	splash_state = SPLASH_SHOW;
 	return true;
 }
 
 void video_splash_end(void) {
 	// Black again until the text rows are rendered back over the splash.
-	splash_planes = 0;
+	splash_state = SPLASH_BLACK;
 	wait_frame();
 	splash_holds_raster = false;
 	video_screen->dirty = (1u << SCREEN_ROWS) - 1;
 	video_update(video_screen);
-	splash_on = false;
+	__dmb();
+	splash_state = SPLASH_OFF;
 }

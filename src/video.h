@@ -1,21 +1,19 @@
 #ifndef VIDEO_H
 #define VIDEO_H
 
-// DVI output at 800x600p60. The screen is rasterised on core 0
-// into per-line pixel buffers (video_update); core 1 encodes those to TMDS
-// one scanline at a time and draws the cursor.
-//
-// This is the libdvi (PIO) backend. The rasteriser (raster.c) is portable,
-// so an RP2350 HSTX backend can implement the same calls.
+// DVI output at 800x600 through the RP2350 HSTX (hstx_dvi.c). Changed
+// screen lines are rasterised on core 0 (video_update); core 1 composes
+// each scanline from them into RGB565 (raster_compose), shows the cursor and
+// the startup logo, and the HSTX's TMDS encoder does the rest.
 
 #include <stdint.h>
 
 #include "screen.h"
 #include "splash.h"
 
-// Raise the core voltage, set the system clock to the TMDS bit clock and set
-// up libdvi. Call before any peripheral that depends on clk_sys/clk_peri
-// (e.g. the UART) is initialised.
+// Raise the core voltage, set the system clock (10 x the pixel clock) and
+// set up the HSTX. Call before any peripheral that depends on
+// clk_sys/clk_peri (e.g. the UART) is initialised.
 void video_init(void);
 
 // Rasterise every dirty line of the screen and clear its dirty flags. Call
@@ -24,11 +22,11 @@ void video_update(screen_t *screen);
 
 // Diagnostics, collected when built with VIDEO_DIAG (zero otherwise).
 typedef struct {
-	uint32_t frames;           // frames rendered by core 1
-	uint32_t max_line_cycles;  // longest scanline encode since the last call
-	uint32_t late;             // libdvi's count of scanlines not ready in time
+	uint32_t frames;           // frames composed by core 1
+	uint32_t max_line_cycles;  // longest scanline compose since the last call
+	uint32_t late;             // scanlines not composed in time for the DMA
 	uint32_t cycles_budget;    // system clock cycles per scanline
-	uint32_t core1_stage;      // 1 started, 2 starting DVI, 3 DVI started, 4 in frame loop
+	uint32_t core1_stage;      // 1 started, 2 starting HSTX, 3 HSTX started, 4 in frame loop
 } video_stats_t;
 
 // Read the diagnostics and reset max_line_cycles.
@@ -40,10 +38,10 @@ void video_start(screen_t *screen);
 
 // Show img (see splash.h) in place of the text rows until video_splash_end;
 // the status line is still the screen's. For startup, after video_start and
-// before the text rows scroll (the splash reuses their raster memory; the
-// status line must still be in its own slot). Returns false, showing the
-// screen as before, if img cannot be shown. tint (splash_tint) says which
-// planes show it, at which levels.
+// before the text rows scroll (a copy of the image data goes in the text
+// rows' raster memory, as core 1 must not read flash; the status line must
+// still be in its own, last, slot). Returns false, showing the screen as
+// before, if img cannot be shown. tint (splash_tint) gives its colours.
 bool video_splash(const splash_image_t *img, const splash_tint_t *tint);
 
 // Back to the text rows (all re-rendered).
