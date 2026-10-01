@@ -439,9 +439,17 @@ const char *machine_stop_reason(void) {
 		break; // set by the port handler
 	case OPTRAP1:
 	case OPTRAP2:
-	case OPTRAP4:
-		snprintf(m.reason, sizeof m.reason, "Unknown instruction near 0x%04x", PC);
+	case OPTRAP4: {
+		// PC is past the opcode's bytes (prefixes, a DD CB / FD CB
+		// displacement): show them.
+		unsigned n = cpu_error == OPTRAP1 ? 1 : cpu_error == OPTRAP2 ? 2 : 4;
+		WORD at = (WORD)(PC - n);
+		int len = snprintf(m.reason, sizeof m.reason, "Unknown instruction");
+		for (unsigned i = 0; i < n; ++i)
+			len += snprintf(m.reason + len, sizeof m.reason - (size_t)len, " %02X", getmem((WORD)(at + i)));
+		snprintf(m.reason + len, sizeof m.reason - (size_t)len, " at 0x%04x", at);
 		break;
+	}
 	case USERINT:
 		snprintf(m.reason, sizeof m.reason, "Interrupted at 0x%04x", PC);
 		break;
