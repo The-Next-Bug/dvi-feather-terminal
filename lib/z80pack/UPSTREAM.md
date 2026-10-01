@@ -31,4 +31,7 @@ Each change is marked in the source with a `/* local: ... */` comment and
 listed here with its bd issue. To take a newer upstream, diff upstream at the
 commit above against its new version and port the changes here.
 
-None yet.
+- `z80core/simz80-dd.c`, `z80core/simz80-fd.c`, `trap_dd`/`trap_fd`: a
+  DD or FD prefix before an opcode that does not use HL is ignored, as on a
+  real Z80, instead of stopping the CPU with OPTRAP2 (bd lpt.10; EXZ80DOC's
+  `ld <bcdexya>,<bcdexya>` test stopped at DD 40).

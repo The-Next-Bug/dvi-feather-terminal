@@ -365,9 +365,11 @@ int op_dd_handle(void)
  */
 static int trap_dd(void)
 {
-	cpu_error = OPTRAP2;
-	cpu_state = ST_STOPPED;
-	return 0;
+	/* local: a real Z80 ignores the prefix before an opcode that does
+	   not use HL (4 T-states, then the opcode as usual: 0xDD 0x40 is
+	   LD B,B); upstream stops with OPTRAP2. */
+	PC--;
+	return 4;
 }
 
 static int op_popix(void)		/* POP IX */

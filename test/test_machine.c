@@ -3,7 +3,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "diskimg.h"
 #include "diskio_ram.h"
@@ -12,6 +11,7 @@
 #include "ff.h"
 #include "lz.h"
 #include "machine.h"
+#include "machine_host.h"
 #include "monitor.h"
 #include "test.h"
 
@@ -19,85 +19,6 @@
 
 static FATFS fs;
 static uint8_t window[LZ_WINDOW];
-
-static char screen[65536];
-static size_t screen_len;
-static char aux_sent[256];
-static size_t aux_len;
-
-static uint64_t host_clock_us(void) {
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u;
-}
-
-static void idle(void) {
-}
-
-static void console_out(uint8_t c) {
-	if (screen_len < sizeof screen - 1)
-		screen[screen_len++] = (char)c;
-	screen[screen_len] = '\0';
-}
-
-static void aux_out(uint8_t c) {
-	if (aux_len < sizeof aux_sent)
-		aux_sent[aux_len++] = (char)c;
-}
-
-static bool aux_in(uint8_t *c) {
-	(void)c;
-	return false;
-}
-
-static uint8_t disk_read(unsigned drive, unsigned track, unsigned sector, uint8_t *buf) {
-	return drives_read(drive, track, sector, buf);
-}
-
-static uint8_t disk_write(unsigned drive, unsigned track, unsigned sector, const uint8_t *buf) {
-	return drives_write(drive, track, sector, buf);
-}
-
-static uint8_t disk_format(unsigned drive) {
-	return (uint8_t)drives_format(drive);
-}
-
-static const machine_platform_t platform = {
-	.clock_us = host_clock_us,
-	.idle = idle,
-	.console_out = console_out,
-	.aux_out = aux_out,
-	.aux_in = aux_in,
-	.disk_read = disk_read,
-	.disk_write = disk_write,
-	.disk_format = disk_format,
-};
-
-static void clear_screen(void) {
-	screen_len = 0;
-	screen[0] = '\0';
-}
-
-// Run until the console shows text (after what was there already) or the
-// machine stops; at most `seconds`.
-static machine_state_t run_until(const char *text, double seconds) {
-	size_t from = screen_len;
-	uint64_t end = host_clock_us() + (uint64_t)(seconds * 1e6);
-	while (host_clock_us() < end) {
-		machine_state_t st = machine_run(10000);
-		if (strstr(screen + from, text))
-			return MACHINE_RUNNING;
-		if (st == MACHINE_STOPPED)
-			return st;
-	}
-	fprintf(stderr, "timed out waiting for \"%s\"; console:\n%s\n", text, screen);
-	return MACHINE_STOPPED;
-}
-
-static void type(const char *s) {
-	while (*s)
-		CHECK(machine_key((uint8_t)*s++));
-}
 
 static bool fat_file_exists(const char *path) {
 	FILINFO info;
@@ -172,15 +93,15 @@ static void test_mount(void) {
 
 static void test_boot_cpm22(void) {
 	clear_screen();
-	machine_init(&platform);
+	machine_init(&host_platform);
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "62K CP/M 2.2, 8 drives") != NULL);
 
-	type("DIR\r");
+	CHECK(type("DIR\r"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "PIP") != NULL);
 
-	type("DIR B:\r");
+	CHECK(type("DIR B:\r"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "CPUTEST") != NULL);
 }
@@ -189,7 +110,7 @@ static void test_boot_cpm22(void) {
 // cold boot.
 static void test_write_persists(void) {
 	clear_screen();
-	type("SAVE 2 HELLO.COM\r");
+	CHECK(type("SAVE 2 HELLO.COM\r"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(drives_flush());
 	drives_unmount_all();
@@ -199,7 +120,7 @@ static void test_write_persists(void) {
 	clear_screen();
 	machine_reset();
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
-	type("DIR HELLO.COM\r");
+	CHECK(type("DIR HELLO.COM\r"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "HELLO") != NULL);
 	CHECK(strstr(screen, "NO FILE") == NULL);
@@ -238,37 +159,37 @@ static void test_hard_disks(void) {
 	CHECK_EQ(drives_read(5, 255, 1, buf), 8);
 
 	clear_screen();
-	type("\x03"); // ^C: warm boot, so CP/M sees the new drives
+	CHECK(type("\x03")); // ^C: warm boot, so CP/M sees the new drives
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
-	type("STAT E:DSK:\r");
+	CHECK(type("STAT E:DSK:\r"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "8160: Kilobyte Drive  Capacity") != NULL);
 	CHECK(strstr(screen, "1024: 32  Byte Directory Entries") != NULL);
 	clear_screen();
-	type("STAT F:DSK:\r");
+	CHECK(type("STAT F:DSK:\r"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "4080: Kilobyte Drive  Capacity") != NULL);
 
 	// Files on both, read back.
 	clear_screen();
-	type("PIP E:=A:*.COM\r");
+	CHECK(type("PIP E:=A:*.COM\r"));
 	CHECK_EQ(run_until("A>", 30), MACHINE_RUNNING);
-	type("PIP F:=E:PIP.COM[V]\r");
+	CHECK(type("PIP F:=E:PIP.COM[V]\r"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
-	type("DIR F:\r");
+	CHECK(type("DIR F:\r"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "F: PIP      COM") != NULL);
 	CHECK(strstr(screen, "VERIFY ERROR") == NULL);
 	clear_screen();
-	type("STAT E:*.*\r");
+	CHECK(type("STAT E:*.*\r"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "STAT.COM") != NULL);
 
 	// G: has no disk: BDOS reports a select error and waits for a key.
 	clear_screen();
-	type("DIR G:\r");
+	CHECK(type("DIR G:\r"));
 	CHECK_EQ(run_until("Bdos Err On G: Select", 10), MACHINE_RUNNING);
-	type("x");
+	CHECK(type("x"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 }
 
@@ -346,14 +267,14 @@ static void test_benchmark(void) {
 	CHECK(khz > 1000);
 	// The machine carries on where it was.
 	clear_screen();
-	type("DIR\r");
+	CHECK(type("DIR\r"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "PIP") != NULL);
 }
 
 static void test_bye_halts(void) {
 	clear_screen();
-	type("BYE\r");
+	CHECK(type("BYE\r"));
 	CHECK_EQ(run_until("never", 10), MACHINE_STOPPED);
 	CHECK(strcmp(machine_stop_reason(), "System halted") == 0);
 }
@@ -371,7 +292,7 @@ static void test_no_disk_boot_rom(void) {
 
 static void console_text(const char *text) {
 	while (*text)
-		console_out((uint8_t)*text++);
+		host_platform.console_out((uint8_t)*text++);
 }
 
 static const char *card_info(void) {
@@ -409,7 +330,7 @@ static void test_monitor_fresh_card(void) {
 	CHECK_EQ(f_mkfs("", &opt, work, sizeof work), FR_OK);
 
 	clear_screen();
-	machine_init(&platform);
+	machine_init(&host_platform);
 	monitor_start(&monitor_platform, true, 0);
 	CHECK(strstr(screen, "RAM, 40 MB, FAT32") != NULL);
 	CHECK(strstr(screen, "No boot disk") != NULL);
@@ -454,7 +375,7 @@ static void test_monitor_fresh_card(void) {
 	clear_screen();
 	CHECK_EQ(keys("\r"), MONITOR_RUN);
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
-	type("DIR C:\r");
+	CHECK(type("DIR C:\r"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "NO FILE") != NULL);
 
@@ -464,7 +385,7 @@ static void test_monitor_fresh_card(void) {
 	CHECK(strstr(screen, "R       resume") != NULL);
 	CHECK(menu_shown());
 	CHECK_EQ(keys("r"), MONITOR_RUN);
-	type("DIR B:\r");
+	CHECK(type("DIR B:\r"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "CPUTEST") != NULL);
 }

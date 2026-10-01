@@ -68,6 +68,7 @@ git submodule update --init          # lib/pico-sdk (2.3.1), not its submodules 
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
 scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, lz, machine (boots CP/M 2.2 from a FAT32 RAM volume)
+CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~90 s, optimised, no sanitisers): EXZ80DOC and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default, the only one) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
 ```
@@ -174,10 +175,11 @@ status line (row 24); UART0 on GP0/GP1.
   core 0 (`main.c` cpm_*: 10 ms CPU slices between keyboard, disks, screen).
   `src/machine.[ch]` (portable): z80pack's Z80 core (`lib/z80pack`,
   vendored, MIT: UPSTREAM.md has the commit and our local changes; only
-  z80core + iodevices/sd-fdc.c, built by `cmake/z80pack.cmake`) configured by `src/z80pack/{sim,simmem,simio,
-  simport}.h`; picosim's port map (SIO1 0/1 console, SIO2 2/3 = UART0, FDC
-  4, MMU 64, clock 65/66 without localtime, 60 Hz timer 67, hwctl 160) and
-  boot ROM; bank 0 64 KB + MACHINE_BANKS x 48 KB. Slices end from
+  z80core + iodevices/sd-fdc.c, built by `cmake/z80pack.cmake`) configured
+  by `src/z80pack/{sim,simmem,simio,simport}.h`; picosim's port map (SIO1
+  0/1 console, SIO2 2/3 = UART0, FDC 4, MMU 64, clock 65/66 without
+  localtime, 60 Hz timer 67, hwctl 160) and boot ROM; bank 0 64 KB +
+  MACHINE_BANKS x 48 KB. Slices end from
   `machine_clock_us` (z80pack reads the clock every 20000 T-states and
   around port I/O); HALT waits call the platform idle hook and, at a slice
   end, stop with PC back on the HALT. z80pack's CPU state is globals (A, B,
