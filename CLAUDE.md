@@ -64,10 +64,10 @@ Everything installs under `.toolchain/` (git-ignored); there is no system
 CMake or Arm GCC on the dev host. Use the scripts:
 
 ```bash
-git submodule update --init          # lib/pico-sdk (2.3.1) (not its submodules)
+git submodule update --init          # lib/pico-sdk (2.3.1), lib/z80pack (not their submodules)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, lz, machine (boots CP/M 2.2 from a FAT32 RAM volume)
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default, the only one) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
 ```
@@ -81,7 +81,8 @@ need seconds to sync), `LOGO_IN_FLASH` (default ON, experimental dmt.25: logo da
 SRAM), `STARTUP_DEMO` (default OFF),
 `VIDEO_DIAG` (UART0 TX diagnostics, default OFF; also prints
 panic() text), `USB_KEYBOARD` (TinyUSB host keyboard; default ON),
-`COPY_TO_RAM` (default ON; must stay ON, see below).
+`COPY_TO_RAM` (default ON; must stay ON, see below), `MACHINE_BANKS` (Z80
+machine: 48 KB banks besides bank 0, default 2; each costs 48 KB of SRAM).
 
 Always run `scripts/test.sh` and a firmware build before handing work
 back. Hardware checks are done by the user (no board is attached to the
@@ -136,7 +137,8 @@ status line (row 24); UART0 on GP0/GP1.
   labels; append only): columns, backspace (DECBKM RIS value), local_echo,
   baud, framing, newline (LNM RIS value), colours, palette (mono: SGR
   colours -> brightness/inverse of the defaults, term_mono_colours; the
-  SET-UP preview uses it too). main.c apply_settings()
+  SET-UP preview uses it too), mode (terminal / CP/M machine). CRC-32 in
+  `src/crc32.[ch]` (shared with the disk images). main.c apply_settings()
   -> serial_configure, term_set_defaults, term_set_colours (recolours
   cells in the old defaults).
   `src/setup.[ch]` (portable): SET-UP panel over the bottom text rows
@@ -166,6 +168,45 @@ status line (row 24); UART0 on GP0/GP1.
   on RIS.
 - `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus 8x16,
   misc-fixed 6x13) generated at build time; glyph codes in `src/font.h`.
+- Z80 CP/M machine (Mode setting "CP/M machine", bd lpt): the screen and
+  keyboard become the console of a z80pack picosim-compatible machine on
+  core 0 (`main.c` cpm_*: 10 ms CPU slices between keyboard, disks, screen).
+  `src/machine.[ch]` (portable): z80pack's Z80 core (`lib/z80pack`
+  submodule, MIT; only z80core + iodevices/sd-fdc.c, built by
+  `cmake/z80pack.cmake`) configured by `src/z80pack/{sim,simmem,simio,
+  simport}.h`; picosim's port map (SIO1 0/1 console, SIO2 2/3 = UART0, FDC
+  4, MMU 64, clock 65/66 without localtime, 60 Hz timer 67, hwctl 160) and
+  boot ROM; bank 0 64 KB + MACHINE_BANKS x 48 KB. Slices end from
+  `machine_clock_us` (z80pack reads the clock every 20000 T-states and
+  around port I/O); HALT waits call the platform idle hook and, at a slice
+  end, stop with PC back on the HALT. z80pack's CPU state is globals (A, B,
+  PC, T, ...): only machine.c includes its headers. `src/drives.[ch]`
+  (portable): 8 drives A-H; .DSK images in /DISKS80 via FatFs, format by
+  size (8" FD 77x26, z80pack 4 MB HD 255x128, 8 MB HD 256x255; 128-byte
+  sectors), kept open, flushed 250 ms after writes, DRIVES.CFG, blank image
+  creation. Port 8 (machine.c, ours) tells the BIOS a drive's format.
+  `src/cpm/`: our 62K CP/M 2.2 (bios.asm 8-drive BIOS picking the DPB per
+  drive at SELDSK, boot.asm), assembled at build time by build.sh with
+  z80pack's z80asm built by the host cc; CCP+BDOS = picosim's 64K cpm.bin
+  relocated with ccpbdos.rel (from MOVCPM 62 *); diskimg_gen.py --system
+  writes the system tracks of CPM22 (README there). `src/monitor.[ch]`
+  (portable): menu (boot, mount, list, new blank disk, install, speed
+  test, rescan), 3 s autoboot. `src/drivepanel.[ch]` (portable): SET-UP's
+  Drives panel (D in CP/M mode); main.c defers its FatFs work to the main
+  loop (setup_feed runs inside the USB stack). Status line: drive letters
+  only, reverse while accessed. `src/diskimg.[ch]` + `src/lz.[ch]` (portable)
+  + `src/diskimg_gen.py` (`cmake/diskimg.cmake`): CPM22, Z80TESTS, EMPTY
+  from z80pack as LZ4-format blocks (offsets < 16 KB, streamed through a
+  16 KB window) in `.flashdata.diskimg`, written to the card by the
+  monitor. `src/sdcard.[ch]` (RP2350): polled SPI0 SD driver = FatFs
+  diskio (GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI; 400 kHz init, 25 MHz).
+  `lib/fatfs`: ChaN FatFs R0.15a vendored (ffconf: FIND, MKFS, CP437,
+  NORTC, no LFN). Host tests use `test/diskio_ram.c`. Changing Mode
+  saves and reboots (watchdog). In SET-UP, M leaves for the monitor. F11
+  is the machine's reset key in CP/M mode (kbd_set_reset_key; terminal
+  mode keeps ESC [ 23 ~).
+  SRAM: ~55 KB heap left with 2 banks; newlib's localtime/scanf cost ~20 KB,
+  so the clock avoids them.
 - `tools/hostbridge.py`: run a host program with the terminal as display,
   typing on the PC.
 - CI (`.gitlab-ci.yml`): test -> build (matrix of targets) -> package ->

@@ -51,6 +51,11 @@ Releases (`vX.Y.Z` tags) ship the firmware image; see `docs/FLASHING.txt`.
   line, then the terminal starts; the first byte on UART0 or a key press
   ends it early. See [Startup logo](#startup-logo); `-DLOGO_MS=<ms>` changes
   the time, `-DSTARTUP_LOGO=OFF` skips it.
+- **Z80 CP/M machine** (SET-UP Mode): instead of a serial terminal, the
+  screen and keyboard can be the console of a built-in Z80 computer running
+  CP/M 2.2 (and CP/M 3 / MP/M II disk images) from a microSD card, on
+  [z80pack](https://github.com/udo-munk/z80pack)'s CPU core. See
+  [Z80 CP/M machine](#z80-cpm-machine).
 - **Demo** (opt-in, `-DSTARTUP_DEMO=ON`): after the logo, alternates
   between 80 and 132 columns every 5 seconds until the first byte arrives
   or a key is pressed.
@@ -70,6 +75,10 @@ Checked with `vttest` (menus 1-3, 6 and 8) through `tools/hostbridge.py`.
 | GND | | GND |
 
 UART0, 3.3 V logic only. 115200 8N1 until changed in [SET-UP](#set-up).
+
+For the [Z80 CP/M machine](#z80-cpm-machine), a microSD adapter goes on
+SPI0: GP4 (pin 6) MISO, GP5 (pin 7) CS, GP6 (pin 9) SCK, GP7 (pin 10)
+MOSI, plus 3V3 (pin 36) and GND; see [SD card wiring](#sd-card-wiring).
 
 ### Flow control (optional, off by default)
 
@@ -141,6 +150,7 @@ A panel over the bottom text rows for the settings kept in flash:
 | New line (LNM) | off, on | LNM at power-on and after RIS: Return sends CR LF, and LF also returns the cursor |
 | Colors | white, green, amber, blue | text colors: white, or green, amber or blue phosphor, on black; bold is one level brighter; the status line, SET-UP panel and startup logo match (white keeps the logo's own colors). Changing them recolors what is on screen |
 | Palette | color, mono | mono shows SGR colors (the 16 ANSI ones, 256-color and 24-bit) only as brightness within the Colors setting's colors: bright colors (and bold) in the bright shade; a background other than black as inverse (bright ones in the bright shade), text on it in the background color. The status line and SET-UP panel become the text colors reversed, and with white the startup logo shows in grey. Text already on screen keeps its colors |
+| Mode | terminal, CP/M machine | what the screen and keyboard are for: a serial terminal on UART0, or the console of the [Z80 CP/M machine](#z80-cpm-machine). Saving a new mode restarts the board |
 
 Under Palette, two rows preview both color settings: default text, bold and
 the status line, then each of the 16 ANSI colors (0-F) as text on the
@@ -172,6 +182,105 @@ program runs from RAM. The flash is written with the 400 MHz DVI clock
 running: the ROM's erase/program routines run its serial clock at
 clk_sys / 12, and reads are set back to at most 50 MHz afterwards (see
 `src/nvflash.c`).
+
+## Z80 CP/M machine
+
+With **Mode** set to *CP/M machine* in SET-UP, the board is a small CP/M
+computer: a Z80 emulated on core 0 (z80pack's CPU core, as in its
+[picosim](https://github.com/udo-munk/z80pack/tree/master/picosim) for
+the Pico) with the terminal as its console, the USB keyboard as its
+keyboard, disk images on a microSD card, and UART0 as its second serial
+port. Set Mode back to *terminal* for the plain serial terminal.
+
+### SD card wiring
+
+An SPI microSD adapter (3.3 V) on SPI0:
+
+| Board pin | Card |
+|---|---|
+| GP4 (pin 6) | MISO / DO |
+| GP5 (pin 7) | CS |
+| GP6 (pin 9) | SCK / CLK |
+| GP7 (pin 10) | MOSI / DI |
+| 3V3 (pin 36) | VCC |
+| GND | GND |
+
+The card must have a FAT file system (FAT12/16/32; cards up to 32 GB come
+as FAT32; format bigger, exFAT, cards as FAT32 on a PC).
+
+### Drives and disk images
+
+The machine has eight drives, A-H. Its disks are image files in `/DISKS80`
+on the card, so a PC can copy them on and off, in three formats, told apart
+by their size (all 128-byte sectors, stored track by track):
+
+| Format | Size | Geometry | CP/M capacity | cpmtools |
+|---|---|---|---|---|
+| 8" floppy (z80pack picosim) | 256256 bytes | 77 tracks x 26 sectors | 241 KB, 64 files | `ibm-3740` |
+| 4 MB hard disk (z80pack cpmsim) | 4177920 bytes | 255 x 128 | 4080 KB, 1024 files | `z80pack-hd` |
+| 8 MB hard disk | 8355840 bytes | 256 x 255 | 8160 KB, 1024 files | `dvi-hd8` |
+
+cpmtools knows the first two; the 8 MB one is in `docs/cpmtools-diskdefs`:
+add it to cpmtools' `diskdefs` file, then e.g. `cpmls -f dvi-hd8 DISK.DSK`
+(checked with cpmtools 2.23 on images written by the emulated CP/M). Drive A must hold a bootable 8"
+floppy: CP/M reloads itself from its system tracks on every warm boot. The
+built-in `CPM22` is a 62K CP/M 2.2 with a BIOS for the eight drives and the
+three formats (`src/cpm`); z80pack's CP/M 3 and MP/M II images keep their
+own BIOSes, with four floppy drives.
+
+### The monitor
+
+At power-on in CP/M mode the monitor mounts the card and boots from drive
+A after 3 seconds (any key stops that), or shows its menu:
+
+- **Return**: boot from drive A (picosim's boot ROM loads track 0 sector 1).
+- **M**: mount a disk image on drive A-H (by name, without `.DSK`;
+  Return alone empties the drive). The assignments are kept in
+  `/DISKS80/DRIVES.CFG`.
+- **L**: list the images on the card, with their formats.
+- **N**: make a new blank disk: name, then 8" floppy, 4 MB or 8 MB
+  (an 8 MB one takes a few seconds to write).
+- **I**: install the built-in disk images onto the card: `CPM22` (CP/M 2.2
+  with its tools: boots), `Z80TESTS` (Z80 instruction exercisers and
+  `CPUTEST`, a benchmark) and `EMPTY` (a blank disk). They are kept
+  compressed in flash (about 240 KB) to start a blank card with; existing
+  files are only replaced if you say so.
+- **S**: CPU speed test (a JP loop for a second, in Z80 MHz).
+- **C**: check the card again (after changing it).
+- **R**: resume the CPU, after leaving it from SET-UP.
+
+In CP/M mode the New line (LNM) setting is not used: Return sends CR
+alone, as CP/M expects (a following LF would wait as a key press, which
+makes DIR and TYPE stop after their first line).
+
+While CP/M runs, F12 opens SET-UP as usual (the CPU waits). In CP/M mode
+it has two more keys: **D** opens the Drives panel, which shows what is
+mounted on A-H and changes it (Up/Down a drive, Left/Right or Space a disk
+image from the card, Return mounts and saves); CP/M sees a changed drive
+after a warm boot, so type **^C** at the prompt afterwards (as after
+swapping floppies; don't change a drive a program is using). **M** returns
+to the monitor. **F11** is the reset button: it reboots from drive
+A at once (keys typed ahead are dropped; with drive A empty it goes to the
+monitor). In terminal mode F11 sends its usual `ESC [ 2 3 ~`. `BYE` stops
+the machine, `RESET` reboots it (z80pack's hardware control port).
+
+The status line shows the drives as letters (`-` for an empty one; the
+Drives panel names them) and the emulated clock rate (MHz). A drive's letter
+lights up (reverse video) while it is being read or written, like a drive's
+busy light.
+
+The machine is picosim's: ports 0/1 console, 2/3 the second serial port
+(UART0 at the SET-UP baud rate), 4 the disk controller, 8 the format of
+the disk in a drive (for the BIOS; not picosim's), 5/6 a printer
+(none), 64 the MMU (bank 0 plus `MACHINE_BANKS` 48 KB banks, default 2:
+enough for CP/M 3; MP/M II wants as many as it was generated for), 65/66 a
+clock (no RTC: it starts at 1 Jan 2026 at power-on), 67 a 60 Hz timer
+interrupt and 160 the hardware control port. The CPU runs unthrottled in
+10 ms slices between the keyboard, disk and screen work: the monitor's
+speed test (a JP loop) measured 48.84 MHz (Z80 clock equivalent) on a Pico 2
+at the 400 MHz DVI clock, and the status line shows about 36 MHz while
+`EXZ80DOC` runs (its prefixed and block instructions cost more per
+T-state).
 
 ## Startup logo
 
@@ -244,10 +353,12 @@ scanline timing, fault reports).
 
 | Path | Contents |
 |---|---|
-| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100 codes), `splash.[ch]` (startup logo decoding), `settings.[ch]` (settings records), `setup.[ch]` (SET-UP panel), `demo.[ch]`. RP2350: `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]` (scanlines on core 1), `hstx_test.c` (test pattern), `serial.[ch]` (UART with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors, written at the DVI clock), `usbkbd.[ch]` and `tusb_config.h` (TinyUSB host, `USB_KEYBOARD` builds), `diag.[ch]` (VIDEO_DIAG), `main.c`. `font_gen.py` builds the font tables, `logo_gen.py` the logo |
+| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100 codes), `splash.[ch]` (startup logo decoding), `settings.[ch]` (settings records), `setup.[ch]` (SET-UP panel), `demo.[ch]`, and for the Z80 machine `machine.[ch]` (z80pack glue; `z80pack/` holds its configuration headers), `monitor.[ch]`, `drives.[ch]` (disk images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel), `cpm/` (the CP/M 2.2 BIOS and boot loader, see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in images), `crc32.[ch]`. RP2350: `sdcard.[ch]` (SPI SD card for FatFs), `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]` (scanlines on core 1), `hstx_test.c` (test pattern), `serial.[ch]` (UART with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors, written at the DVI clock), `usbkbd.[ch]` and `tusb_config.h` (TinyUSB host, `USB_KEYBOARD` builds), `diag.[ch]` (VIDEO_DIAG), `main.c`. `font_gen.py` builds the font tables, `logo_gen.py` the logo, `diskimg_gen.py` the compressed disk images |
 | `test/` | Host unit tests (plain CMake + gcc with ASan/UBSan, no pico-sdk) |
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see above) |
 | `lib/pico-sdk` | Pinned submodule (plus its `lib/tinyusb`) |
+| `lib/z80pack` | Pinned submodule: z80pack (Z80 core, picosim disk images) |
+| `lib/fatfs` | ChaN's FatFs R0.15a, vendored (see its README) |
 | `assets/logo/` | The startup logo (PNG used by the build, JPEG original) |
 | `assets/fonts/` | Terminus Font 8x16 (SIL OFL 1.1) and misc-fixed 6x13 (public domain); see its README |
 | `cmake/build_info.cmake` | Generates `term_build.h` (git describe, commit, date) on every build |
@@ -255,6 +366,7 @@ scanline timing, fault reports).
 | `scripts/` | `setup-toolchain.sh`, `build.sh`, `test.sh`, `package.sh`, `changelog.sh` |
 | `toolchain.env` | Pinned CMake, Arm GNU Toolchain and picotool versions |
 | `docs/FLASHING.txt` | End-user flashing steps, shipped in the package |
+| `docs/THIRD-PARTY.md`, `docs/licenses/` | Third-party components and licences (shipped, with the texts from the submodules, in `licenses/`) |
 
 ## Fonts and glyph codes
 
@@ -272,7 +384,7 @@ Everything installs under `.toolchain/` in the repo (git-ignored); only
 needed.
 
 ```sh
-git submodule update --init          # pico-sdk (not its submodules)
+git submodule update --init          # pico-sdk and z80pack (not their submodules)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # the one we need
 scripts/setup-toolchain.sh           # CMake, Arm GNU Toolchain, picotool
 scripts/test.sh                      # host unit tests
@@ -295,7 +407,8 @@ submodule.
 - `test` — host unit tests (JUnit report).
 - `build` — firmware per target (matrix, one entry per board); UF2/BIN/ELF/
   disassembly/map and `build-info.txt` artifacts.
-- `package` — ZIP with UF2 and BIN per target, `FLASHING.txt`, `CHANGES.md`
+- `package` — ZIP with UF2 and BIN per target, `FLASHING.txt`,
+  `THIRD-PARTY.md` and `licenses/`, `CHANGES.md`
   (commits since the previous tag), `SHA256SUMS` and the source of the built
   commit. Automatic on the default branch and tags.
 - `release` — tags only: uploads the ZIP to the project's generic package
@@ -318,3 +431,17 @@ Terminus Font is © Dimitar Toshkov Zhekov under the SIL Open Font License
 is a derivative and stays under that licence. The misc-fixed 6x13 font is
 public domain. pico-sdk is BSD-3-Clause, as is the pico-examples HSTX DVI
 example `src/hstx_dvi.c` follows.
+
+TinyUSB (in pico-sdk) is MIT; pico-sdk's CMSIS headers are Apache-2.0.
+z80pack is © Udo Munk and others under the MIT licence (`lib/z80pack/LICENSE`);
+`src/machine.c` and `src/z80pack/` follow its picosim, and its CPU core
+includes `log.h` (Apache-2.0). FatFs is © ChaN under a 1-clause BSD licence
+(`lib/fatfs/LICENSE.txt`). The built-in disk images come from z80pack: CP/M
+2.2 is Digital Research's, redistributed under the permission Lineo
+(Caldera) gave in 2001 for the CP/M material of "The Unofficial CP/M Web
+Site"; the Z80 exercisers are Frank D. Cringle's, GPL-2.0 (their sources are
+on the same disk image).
+
+[`docs/THIRD-PARTY.md`](docs/THIRD-PARTY.md) lists every third-party
+component in the firmware with its licence; release packages carry it and the
+licence texts in `licenses/`.

@@ -86,6 +86,16 @@ setup_action_t setup_input(setup_t *u, uint8_t c, uint32_t now_ms) {
 	case '\r':
 	case '\n':
 		return SETUP_SAVE;
+	case 'm':
+	case 'M':
+		if (u->machine_menu)
+			return SETUP_MACHINE;
+		break;
+	case 'd':
+	case 'D':
+		if (u->machine_menu)
+			return SETUP_DRIVES;
+		break;
 	default:
 		break;
 	}
@@ -173,6 +183,7 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 
 	if (u->message)
 		screen_puts(s, 3, top + SETUP_ROWS - 2, u->message, fg, bg);
-	screen_puts(s, 0, top + SETUP_ROWS - 1,
-		" Up/Down select   Left/Right/Space change   Return save   Esc cancel", fg, bg);
+	screen_puts(s, 0, top + SETUP_ROWS - 1, u->machine_menu
+		? " Up/Down select  Left/Right change  Return save  Esc cancel  D drives  M monitor"
+		: " Up/Down select   Left/Right/Space change   Return save   Esc cancel", fg, bg);
 }

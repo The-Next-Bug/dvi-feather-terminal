@@ -245,9 +245,35 @@ static void test_setup_key(void) {
 	CHECK(!strcmp(out, ""));
 }
 
+static int reset_presses;
+
+static void on_reset(void *ctx) {
+	(void)ctx;
+	++reset_presses;
+}
+
+// F11 sends ESC [ 2 3 ~ until it is made the reset key; then it calls that
+// instead, once per press (no repeat).
+static void test_reset_key(void) {
+	setup();
+	CHECK(!strcmp(tap(0, 0x44), "\x1b[23~"));
+	kbd_set_reset_key(&k, on_reset);
+	reset_presses = 0;
+	out[0] = '\0';
+	report(0, 0x44, 0);
+	now += KBD_REPEAT_DELAY_MS + 10 * KBD_REPEAT_INTERVAL_MS;
+	kbd_tick(&k, &modes, now);
+	report(0, 0, 0);
+	CHECK_EQ(reset_presses, 1);
+	CHECK(!strcmp(out, ""));
+	kbd_set_reset_key(&k, NULL);
+	CHECK(!strcmp(tap(0, 0x44), "\x1b[23~"));
+}
+
 int main(void) {
 	RUN(test_letters_and_shift);
 	RUN(test_setup_key);
+	RUN(test_reset_key);
 	RUN(test_caps_lock);
 	RUN(test_control_and_alt);
 	RUN(test_basic_controls);

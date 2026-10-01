@@ -28,5 +28,15 @@ Adafruit Feather RP2040 DVI) are no longer supported.
    not power the keyboard itself. Never feed 5 V in while a PC is plugged
    into the USB port. See the README, "USB keyboard".
 
+5. Optional Z80 CP/M machine: in SET-UP (F12) set Mode to "CP/M machine"
+   and save; the board restarts as a CP/M computer. Wire an SPI microSD
+   adapter to GP4 (MISO), GP5 (CS), GP6 (SCK), GP7 (MOSI), 3V3 and GND,
+   with a FAT32 card; I in the monitor installs the built-in CP/M 2.2 disk.
+   See the README, "Z80 CP/M machine".
+
 The BIN files are the same images as raw flash contents, for SWD programmers
 (load at 0x10000000). SHA256SUMS covers the UF2 and BIN files.
+
+THIRD-PARTY.md lists the open-source components and data built into the
+firmware (pico-sdk, TinyUSB, z80pack, FatFs, Terminus Font, the CP/M disk
+images) and their licences; the licence texts are in licenses/.

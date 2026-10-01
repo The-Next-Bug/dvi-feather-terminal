@@ -7,7 +7,9 @@
 //
 // Keys arrive as the bytes a VT100 keyboard sends (from the USB keyboard or
 // from the host): Up/Down (ESC [ A/B or ESC O A/B) select a setting,
-// Left/Right and Space change it, Return saves, Escape cancels. A lone ESC
+// Left/Right and Space change it, Return saves, Escape cancels, and with
+// machine_menu D opens the Drives panel and M leaves for the Z80 machine's
+// menu. A lone ESC
 // is only known to be the Escape key once SETUP_ESC_TIMEOUT_MS pass without
 // the rest of a sequence (setup_tick).
 
@@ -28,6 +30,8 @@ typedef enum {
 	SETUP_REDRAW, // the panel changed
 	SETUP_SAVE,   // Return: save values
 	SETUP_CANCEL, // Escape: leave without saving
+	SETUP_MACHINE, // M (with machine_menu): leave for the Z80 machine's menu
+	SETUP_DRIVES,  // D (with machine_menu): the Drives panel (drivepanel.h)
 } setup_action_t;
 
 typedef struct {
@@ -36,6 +40,7 @@ typedef struct {
 	uint8_t esc;         // 0, or 1 after ESC, 2 inside ESC [ / ESC O
 	uint32_t esc_ms;     // when the ESC arrived
 	const char *message; // shown in the panel until the next key; NULL: none
+	bool machine_menu;   // offer M for the Z80 machine's menu (set after setup_open)
 } setup_t;
 
 void setup_open(setup_t *u, const settings_t *values);

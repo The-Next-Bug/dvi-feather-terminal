@@ -14,7 +14,9 @@
 //
 // F12 (the VT100 has none) and Pause (for full-size keyboards) are the
 // SET-UP key: they send nothing and call the setup callback
-// (kbd_set_setup_key) instead.
+// (kbd_set_setup_key) instead. With a reset callback set
+// (kbd_set_reset_key, the Z80 machine's reset), F11 calls it instead of
+// sending its sequence.
 //
 // Boot keyboards do not repeat keys themselves: the last key pressed repeats
 // after KBD_REPEAT_DELAY_MS, every KBD_REPEAT_INTERVAL_MS, while held.
@@ -51,7 +53,8 @@ typedef struct {
 
 	kbd_output_t output;
 	kbd_setup_t setup; // the SET-UP key; NULL: none
-	void *output_ctx;  // for both
+	kbd_setup_t reset; // F11 as the reset key; NULL: F11 sends ESC [ 2 3 ~
+	void *output_ctx;  // for all three
 } kbd_t;
 
 // Num Lock starts on, so the keypad sends digits (or DECKPAM codes).
@@ -59,6 +62,10 @@ void kbd_init(kbd_t *k, kbd_output_t output, void *ctx);
 
 // Call setup (with the output ctx) when the SET-UP key is pressed.
 void kbd_set_setup_key(kbd_t *k, kbd_setup_t setup);
+
+// Make F11 call reset (with the output ctx) instead of sending a sequence;
+// NULL: F11 is a function key again.
+void kbd_set_reset_key(kbd_t *k, kbd_setup_t reset);
 
 // Handle an 8-byte boot protocol report (modifiers, reserved, 6 key codes)
 // received at now_ms. Returns true if the lock LEDs should change (see
