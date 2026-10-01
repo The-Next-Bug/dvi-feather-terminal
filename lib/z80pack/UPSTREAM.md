@@ -20,7 +20,7 @@ The directory layout is upstream's, so paths match the upstream tree.
 | `iodevices/sd-fdc.[ch]` | picosim's disk controller, port 4 |
 | `z80asm/` | The assembler, built for the host to assemble `src/cpm` (`src/cpm/build.sh`) |
 | `picosim/srccpm2/cpm.bin` | picosim's 64K CCP+BDOS, relocated to 62K (`src/cpm`) |
-| `picosim/disks/cpm22.dsk`, `picosim/disks/empty.dsk`, `cpmsim/disks/library/z80tests.dsk` | The built-in disk images (`cmake/diskimg.cmake`) |
+| `picosim/disks/cpm22.dsk`, `picosim/disks/empty.dsk`, `cpmsim/disks/library/z80tests.dsk` | The built-in disk images (`cmake/diskimg.cmake`); z80tests.dsk changed, see below |
 
 Everything else upstream (the other machines, the 8080 core, the
 alternative `ALT_Z80` core, the front panel, other disks) is left out.
@@ -35,3 +35,12 @@ commit above against its new version and port the changes here.
   DD or FD prefix before an opcode that does not use HL is ignored, as on a
   real Z80, instead of stopping the CPU with OPTRAP2 (bd lpt.10; EXZ80DOC's
   `ld <bcdexya>,<bcdexya>` test stopped at DD 40).
+- `z80core/simdefs.h` and all of `z80core/simz80*.c`: the undocumented
+  flags Y and X (F bits 5 and 3) are set as a Z80 sets them, through the
+  `SET_XY`/`SET_XY_BLOCK` macros (simdefs.h says where each comes from);
+  upstream never set them (bd lpt.6; CPUTEST failed test 0025h). Not
+  modelled: MEMPTR, so `BIT n,(HL)` leaves them as they were.
+- `cpmsim/disks/library/z80tests.dsk`: added `EXZ80ALL.COM` (EX.MAC built
+  with `exkind equ 2`, all flags tested; z80asm reproduces the shipped
+  EXZ80DOC.COM exactly from EXZ80DOC.MAC, bar `ds` fill bytes) and its
+  source wrapper `EXZ80ALL.MAC`.

@@ -50,6 +50,17 @@
 #define N_FLAG		2	/* add/subtract flag */
 #define C_FLAG		1	/* carry flag */
 
+/*
+ * local: the undocumented flags Y and X (bits 5 and 3) as a Z80 sets them:
+ * SET_XY copies them from v (most results; CP's operand; BIT's register
+ * or address high byte; the high byte of 16-bit adds), SET_XY_BLOCK takes
+ * Y from bit 1 and X from bit 3 of n (LDI/LDD: byte moved + A; CPI/CPD:
+ * A - (HL) - H). bd lpt.6.
+ */
+#define SET_XY(v)	(F = (F & ~(Y_FLAG | X_FLAG)) | ((v) & (Y_FLAG | X_FLAG)))
+#define SET_XY_BLOCK(n)	(F = (F & ~(Y_FLAG | X_FLAG)) | ((n) & X_FLAG) | \
+			     (((n) << 4) & Y_FLAG))
+
 				/* bit definitions for CPU bus status */
 #define CPU_MEMR	128	/* memory read */
 #define CPU_INP		64	/* input device address */

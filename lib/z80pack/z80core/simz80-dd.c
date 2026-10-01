@@ -449,6 +449,7 @@ static int op_adaxd(void)		/* ADD A,(IX+d) */
 	A = i = (SBYTE) A + (SBYTE) P;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(i);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F &= ~N_FLAG;
 	return 19;
@@ -466,6 +467,7 @@ static int op_acaxd(void)		/* ADC A,(IX+d) */
 	A = i = (SBYTE) A + (SBYTE) P + carry;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(i);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F &= ~N_FLAG;
 	return 19;
@@ -482,6 +484,7 @@ static int op_suaxd(void)		/* SUB A,(IX+d) */
 	A = i = (SBYTE) A - (SBYTE) P;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(i);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= N_FLAG;
 	return 19;
@@ -499,6 +502,7 @@ static int op_scaxd(void)		/* SBC A,(IX+d) */
 	A = i = (SBYTE) A - (SBYTE) P - carry;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(i);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= N_FLAG;
 	return 19;
@@ -508,6 +512,7 @@ static int op_andxd(void)		/* AND (IX+d) */
 {
 	A &= memrdr(IX + (SBYTE) memrdr(PC++));
 	(A & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(A);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= H_FLAG;
 	(parity[A]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
@@ -519,6 +524,7 @@ static int op_xorxd(void)		/* XOR (IX+d) */
 {
 	A ^= memrdr(IX + (SBYTE) memrdr(PC++));
 	(A & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(A);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(parity[A]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	F &= ~(H_FLAG | N_FLAG | C_FLAG);
@@ -529,6 +535,7 @@ static int op_orxd(void)		/* OR (IX+d) */
 {
 	A |= memrdr(IX + (SBYTE) memrdr(PC++));
 	(A & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(A);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(parity[A]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	F &= ~(H_FLAG | N_FLAG | C_FLAG);
@@ -546,6 +553,7 @@ static int op_cpxd(void)		/* CP (IX+d) */
 	i = (SBYTE) A - (SBYTE) P;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(i) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= N_FLAG;
 	return 19;
@@ -563,6 +571,7 @@ static int op_incxd(void)		/* INC (IX+d) */
 	((P & 0xf) == 0) ? (F |= H_FLAG) : (F &= ~H_FLAG);
 	(P == 128) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F &= ~N_FLAG;
 	return 23;
@@ -580,6 +589,7 @@ static int op_decxd(void)		/* DEC (IX+d) */
 	((P & 0xf) == 0xf) ? (F |= H_FLAG) : (F &= ~H_FLAG);
 	(P == 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= N_FLAG;
 	return 23;
@@ -599,6 +609,7 @@ static int op_addxb(void)		/* ADD IX,BC */
 	ixh += B + carry;
 	IX = (ixh << 8) + ixl;
 	F &= ~N_FLAG;
+	SET_XY(IX >> 8);
 	return 15;
 }
 
@@ -616,6 +627,7 @@ static int op_addxd(void)		/* ADD IX,DE */
 	ixh += D + carry;
 	IX = (ixh << 8) + ixl;
 	F &= ~N_FLAG;
+	SET_XY(IX >> 8);
 	return 15;
 }
 
@@ -635,6 +647,7 @@ static int op_addxs(void)		/* ADD IX,SP */
 	ixh += sph + carry;
 	IX = (ixh << 8) + ixl;
 	F &= ~N_FLAG;
+	SET_XY(IX >> 8);
 	return 15;
 }
 
@@ -652,6 +665,7 @@ static int op_addxx(void)		/* ADD IX,IX */
 	ixh += ixh + carry;
 	IX = (ixh << 8) + ixl;
 	F &= ~N_FLAG;
+	SET_XY(IX >> 8);
 	return 15;
 }
 
@@ -1014,6 +1028,7 @@ static int op_undoc_cpixl(void)		/* CP IXL */
 	i = (SBYTE) A - (SBYTE) P;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(i) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= N_FLAG;
 	return 8;
@@ -1033,6 +1048,7 @@ static int op_undoc_cpixh(void)		/* CP IXH */
 	i = (SBYTE) A - (SBYTE) P;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(i) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= N_FLAG;
 	return 8;
@@ -1052,6 +1068,7 @@ static int op_undoc_adaixl(void)	/* ADD A,IXL */
 	A = i = (SBYTE) A + (SBYTE) P;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(i);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F &= ~N_FLAG;
 	return 8;
@@ -1071,6 +1088,7 @@ static int op_undoc_adaixh(void)	/* ADD A,IXH */
 	A = i = (SBYTE) A + (SBYTE) P;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(i);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F &= ~N_FLAG;
 	return 8;
@@ -1091,6 +1109,7 @@ static int op_undoc_acaixl(void)	/* ADC A,IXL */
 	A = i = (SBYTE) A + (SBYTE) P + carry;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(i);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F &= ~N_FLAG;
 	return 8;
@@ -1111,6 +1130,7 @@ static int op_undoc_acaixh(void)	/* ADC A,IXH */
 	A = i = (SBYTE) A + (SBYTE) P + carry;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(i);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F &= ~N_FLAG;
 	return 8;
@@ -1130,6 +1150,7 @@ static int op_undoc_suaixl(void)	/* SUB A,IXL */
 	A = i = (SBYTE) A - (SBYTE) P;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(i);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= N_FLAG;
 	return 8;
@@ -1149,6 +1170,7 @@ static int op_undoc_suaixh(void)	/* SUB A,IXH */
 	A = i = (SBYTE) A - (SBYTE) P;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(i);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= N_FLAG;
 	return 8;
@@ -1169,6 +1191,7 @@ static int op_undoc_scaixl(void)	/* SBC A,IXL */
 	A = i = (SBYTE) A - (SBYTE) P - carry;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(i);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= N_FLAG;
 	return 8;
@@ -1189,6 +1212,7 @@ static int op_undoc_scaixh(void)	/* SBC A,IXH */
 	A = i = (SBYTE) A - (SBYTE) P - carry;
 	(i < -128 || i > 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(i & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(i);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= N_FLAG;
 	return 8;
@@ -1201,6 +1225,7 @@ static int op_undoc_oraixl(void)	/* OR IXL */
 
 	A |= IX & 0xff;
 	(A & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(A);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(parity[A]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	F &= ~(H_FLAG | N_FLAG | C_FLAG);
@@ -1214,6 +1239,7 @@ static int op_undoc_oraixh(void)	/* OR IXH */
 
 	A |= IX >> 8;
 	(A & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(A);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(parity[A]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	F &= ~(H_FLAG | N_FLAG | C_FLAG);
@@ -1227,6 +1253,7 @@ static int op_undoc_xorixl(void)	/* XOR IXL */
 
 	A ^= IX & 0xff;
 	(A & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(A);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(parity[A]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	F &= ~(H_FLAG | N_FLAG | C_FLAG);
@@ -1240,6 +1267,7 @@ static int op_undoc_xorixh(void)	/* XOR IXH */
 
 	A ^= IX >> 8;
 	(A & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(A);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(parity[A]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	F &= ~(H_FLAG | N_FLAG | C_FLAG);
@@ -1253,6 +1281,7 @@ static int op_undoc_andixl(void)	/* AND IXL */
 
 	A &= IX & 0xff;
 	(A & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(A);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= H_FLAG;
 	(parity[A]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
@@ -1267,6 +1296,7 @@ static int op_undoc_andixh(void)	/* AND IXH */
 
 	A &= IX >> 8;
 	(A & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(A);
 	(A) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= H_FLAG;
 	(parity[A]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
@@ -1287,6 +1317,7 @@ static int op_undoc_incixl(void)	/* INC IXL */
 	((P & 0xf) == 0) ? (F |= H_FLAG) : (F &= ~H_FLAG);
 	(P == 128) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F &= ~N_FLAG;
 	return 8;
@@ -1305,6 +1336,7 @@ static int op_undoc_incixh(void)	/* INC IXH */
 	((P & 0xf) == 0) ? (F |= H_FLAG) : (F &= ~H_FLAG);
 	(P == 128) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F &= ~N_FLAG;
 	return 8;
@@ -1323,6 +1355,7 @@ static int op_undoc_decixl(void)	/* DEC IXL */
 	((P & 0xf) == 0xf) ? (F |= H_FLAG) : (F &= ~H_FLAG);
 	(P == 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= N_FLAG;
 	return 8;
@@ -1341,6 +1374,7 @@ static int op_undoc_decixh(void)	/* DEC IXH */
 	((P & 0xf) == 0xf) ? (F |= H_FLAG) : (F &= ~H_FLAG);
 	(P == 127) ? (F |= P_FLAG) : (F &= ~P_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	F |= N_FLAG;
 	return 8;

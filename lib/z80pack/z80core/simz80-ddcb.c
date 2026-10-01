@@ -332,6 +332,7 @@ static int op_tb0ixd(int data)		/* BIT 0,(IX+d) */
 {
 	F &= ~(N_FLAG | S_FLAG);
 	F |= H_FLAG;
+	SET_XY((WORD) (IX + data) >> 8);
 	(memrdr(IX + data) & 1) ? (F &= ~(Z_FLAG | P_FLAG))
 				: (F |= (Z_FLAG | P_FLAG));
 	return 20;
@@ -341,6 +342,7 @@ static int op_tb1ixd(int data)		/* BIT 1,(IX+d) */
 {
 	F &= ~(N_FLAG | S_FLAG);
 	F |= H_FLAG;
+	SET_XY((WORD) (IX + data) >> 8);
 	(memrdr(IX + data) & 2) ? (F &= ~(Z_FLAG | P_FLAG))
 				: (F |= (Z_FLAG | P_FLAG));
 	return 20;
@@ -350,6 +352,7 @@ static int op_tb2ixd(int data)		/* BIT 2,(IX+d) */
 {
 	F &= ~(N_FLAG | S_FLAG);
 	F |= H_FLAG;
+	SET_XY((WORD) (IX + data) >> 8);
 	(memrdr(IX + data) & 4) ? (F &= ~(Z_FLAG | P_FLAG))
 				: (F |= (Z_FLAG | P_FLAG));
 	return 20;
@@ -359,6 +362,7 @@ static int op_tb3ixd(int data)		/* BIT 3,(IX+d) */
 {
 	F &= ~(N_FLAG | S_FLAG);
 	F |= H_FLAG;
+	SET_XY((WORD) (IX + data) >> 8);
 	(memrdr(IX + data) & 8) ? (F &= ~(Z_FLAG | P_FLAG))
 				: (F |= (Z_FLAG | P_FLAG));
 	return 20;
@@ -368,6 +372,7 @@ static int op_tb4ixd(int data)		/* BIT 4,(IX+d) */
 {
 	F &= ~(N_FLAG | S_FLAG);
 	F |= H_FLAG;
+	SET_XY((WORD) (IX + data) >> 8);
 	(memrdr(IX + data) & 16) ? (F &= ~(Z_FLAG | P_FLAG))
 				 : (F |= (Z_FLAG | P_FLAG));
 	return 20;
@@ -377,6 +382,7 @@ static int op_tb5ixd(int data)		/* BIT 5,(IX+d) */
 {
 	F &= ~(N_FLAG | S_FLAG);
 	F |= H_FLAG;
+	SET_XY((WORD) (IX + data) >> 8);
 	(memrdr(IX + data) & 32) ? (F &= ~(Z_FLAG | P_FLAG))
 				 : (F |= (Z_FLAG | P_FLAG));
 	return 20;
@@ -386,6 +392,7 @@ static int op_tb6ixd(int data)		/* BIT 6,(IX+d) */
 {
 	F &= ~(N_FLAG | S_FLAG);
 	F |= H_FLAG;
+	SET_XY((WORD) (IX + data) >> 8);
 	(memrdr(IX + data) & 64) ? (F &= ~(Z_FLAG | P_FLAG))
 				 : (F |= (Z_FLAG | P_FLAG));
 	return 20;
@@ -395,6 +402,7 @@ static int op_tb7ixd(int data)		/* BIT 7,(IX+d) */
 {
 	F &= ~N_FLAG;
 	F |= H_FLAG;
+	SET_XY((WORD) (IX + data) >> 8);
 	if (memrdr(IX + data) & 128) {
 		F &= ~(Z_FLAG | P_FLAG);
 		F |= S_FLAG;
@@ -517,6 +525,7 @@ static int op_rlcixd(int data)		/* RLC (IX+d) */
 	F &= ~(H_FLAG | N_FLAG);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(parity[P]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	return 23;
 }
@@ -537,6 +546,7 @@ static int op_rrcixd(int data)		/* RRC (IX+d) */
 	F &= ~(H_FLAG | N_FLAG);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(parity[P]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	return 23;
 }
@@ -557,6 +567,7 @@ static int op_rlixd(int data)		/* RL (IX+d) */
 	F &= ~(H_FLAG | N_FLAG);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(parity[P]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	return 23;
 }
@@ -577,6 +588,7 @@ static int op_rrixd(int data)		/* RR (IX+d) */
 	F &= ~(H_FLAG | N_FLAG);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(parity[P]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	return 23;
 }
@@ -594,6 +606,7 @@ static int op_slaixd(int data)		/* SLA (IX+d) */
 	F &= ~(H_FLAG | N_FLAG);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(parity[P]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	return 23;
 }
@@ -613,6 +626,7 @@ static int op_sraixd(int data)		/* SRA (IX+d) */
 	F &= ~(H_FLAG | N_FLAG);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(parity[P]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	return 23;
 }
@@ -630,6 +644,7 @@ static int op_srlixd(int data)		/* SRL (IX+d) */
 	F &= ~(H_FLAG | N_FLAG);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(parity[P]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	return 23;
 }
@@ -658,6 +673,7 @@ static int op_undoc_sllixd(int data)	/* SLL (IX+d) */
 	F &= ~(H_FLAG | N_FLAG);
 	(P) ? (F &= ~Z_FLAG) : (F |= Z_FLAG);
 	(P & 128) ? (F |= S_FLAG) : (F &= ~S_FLAG);
+	SET_XY(P);
 	(parity[P]) ? (F &= ~P_FLAG) : (F |= P_FLAG);
 	return 23;
 }

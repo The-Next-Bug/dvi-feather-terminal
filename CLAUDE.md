@@ -68,7 +68,7 @@ git submodule update --init          # lib/pico-sdk (2.3.1), not its submodules 
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
 scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, lz, machine (boots CP/M 2.2 from a FAT32 RAM volume)
-CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~90 s, optimised, no sanitisers): EXZ80DOC and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
+CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimised, no sanitisers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default, the only one) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
 ```

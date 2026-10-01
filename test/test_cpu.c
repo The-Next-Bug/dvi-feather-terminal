@@ -1,6 +1,7 @@
 // The Z80 CPU against the instruction exercisers on the Z80TESTS disk, run
-// under CP/M 2.2 on the host machine: EXZ80DOC (documented flags) and
-// CPUTEST (SuperSoft Diagnostics II, also the undocumented X/Y flags).
+// under CP/M 2.2 on the host machine: EXZ80DOC (documented flags), EXZ80ALL
+// (all flags, the undocumented X/Y too) and CPUTEST (SuperSoft Diagnostics
+// II).
 // Slow (minutes): not part of the default run; scripts/test.sh runs it with
 // CPU_TESTS=1, or run build/test/test_cpu [program...] directly (any
 // program on B:, only reporting how it ended). The console is echoed as the
@@ -82,13 +83,17 @@ int main(int argc, char **argv) {
 		for (int i = 1; i < argc; ++i)
 			CHECK(run_program(argv[i], minutes));
 	} else {
-		// zexdoc's line per instruction group ends in "OK" or "ERROR ****".
-		CHECK(run_program("EXZ80DOC", minutes));
-		CHECK(strstr(screen, "All tests successful") != NULL);
-		CHECK(strstr(screen, "ERROR") == NULL);
+		// The exercisers' line per instruction group ends in "OK" or
+		// "ERROR ****".
+		static const char *const exercisers[] = {"EXZ80DOC", "EXZ80ALL"};
+		for (unsigned i = 0; i < sizeof exercisers / sizeof exercisers[0]; ++i) {
+			CHECK(run_program(exercisers[i], minutes));
+			CHECK(strstr(screen, "All tests successful") != NULL);
+			CHECK(strstr(screen, "ERROR") == NULL);
+		}
 		CHECK(run_program("CPUTEST", minutes));
 		CHECK(strstr(screen, "CPU IS Z80") != NULL);
-		CHECK(strstr(screen, "CPU FAILED") == NULL);
+		CHECK(strstr(screen, "CPU TESTS OK") != NULL);
 	}
 	drives_unmount_all();
 	f_unmount("");

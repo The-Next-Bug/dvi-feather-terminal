@@ -243,8 +243,11 @@ A after 3 seconds (any key stops that), or shows its menu:
 - **N**: make a new blank disk: name, then 8" floppy, 4 MB or 8 MB
   (an 8 MB one takes a few seconds to write).
 - **I**: install the built-in disk images onto the card: `CPM22` (CP/M 2.2
-  with its tools: boots), `Z80TESTS` (Z80 instruction exercisers and
-  `CPUTEST`, a benchmark) and `EMPTY` (a blank disk). They are kept
+  with its tools: boots), `Z80TESTS` (the Z80 instruction exercisers
+  `EXZ80DOC` and `EXZ80ALL`, about 10 minutes each at full speed, and the
+  `CPUTEST` diagnostics; `PRELIM` needs an emulator that runs block moves
+  in one go, as z80pack's cpmsim does, and wrecks CP/M here: reset after
+  it) and `EMPTY` (a blank disk). They are kept
   compressed in flash (about 240 KB) to start a blank card with; existing
   files are only replaced if you say so.
 - **S**: CPU speed test (a JP loop for a second, in Z80 MHz).
