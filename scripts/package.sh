@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Package finished builds into a release ZIP: for every target built under
-# BUILD_DIR, its UF2, BIN and build-info; plus flashing instructions, the
-# third-party notices and licence texts, CHANGES.md (from the git history since the previous tag), SHA256SUMS and the
+# BUILD_DIR, its UF2, BIN and build-info, and the UF2 again as
+# sdcard-<target>/FIRMWARE.UF2 (for the CP/M monitor's update from the
+# card); plus flashing instructions, the third-party notices and licence texts, CHANGES.md (from the git history since the previous tag), SHA256SUMS and the
 # source of the built commit. CHANGES.md is also written next to the ZIP for
 # use as release notes.
 #
@@ -40,6 +41,8 @@ for f in "${infos[@]}"; do
   cp "$dir/dvi_terminal.uf2" "$stage/dvi_terminal-$target.uf2"
   cp "$dir/dvi_terminal.bin" "$stage/dvi_terminal-$target.bin"
   cp "$f" "$stage/build-info-$target.txt"
+  mkdir -p "$stage/sdcard-$target"
+  cp "$dir/dvi_terminal.uf2" "$stage/sdcard-$target/FIRMWARE.UF2"
 done
 cp docs/FLASHING.txt docs/THIRD-PARTY.md "$stage/"
 
@@ -59,7 +62,7 @@ licence lib/fatfs/LICENSE.txt FatFs-BSD-1-Clause.txt
 licence assets/fonts/Terminus-OFL.txt Terminus-OFL-1.1.txt
 licence docs/licenses/GPL-2.0.txt GPL-2.0.txt
 scripts/changelog.sh "$sha" | tee "$stage/CHANGES.md" > "$DIST_DIR/CHANGES.md"
-(cd "$stage" && sha256sum -- *.uf2 *.bin > SHA256SUMS)
+(cd "$stage" && sha256sum -- *.uf2 *.bin sdcard-*/FIRMWARE.UF2 > SHA256SUMS)
 
 # Source of exactly the commit that was built. The submodules (pico-sdk,
 # z80pack) are not included; pico-sdk's commit is recorded in

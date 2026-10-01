@@ -67,7 +67,7 @@ CMake or Arm GCC on the dev host. Use the scripts:
 git submodule update --init          # lib/pico-sdk (2.3.1), not its submodules (lib/z80pack is vendored)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, lz, machine (boots CP/M 2.2 from a FAT32 RAM volume)
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, uf2, lz, machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimised, no sanitisers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default, the only one) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
@@ -197,7 +197,7 @@ status line (row 24); UART0 on GP0/GP1.
   into the 8" CP/M directory); host tests in test_machine (machine_host
   answers ESC [ 6 n through host_cpr_reply). `src/monitor.[ch]`
   (portable): menu (boot, mount, list, new blank disk, install, speed
-  test, rescan), 3 s autoboot. `src/drivepanel.[ch]` (portable): SET-UP's
+  test, rescan, firmware update), 3 s autoboot. `src/drivepanel.[ch]` (portable): SET-UP's
   Drives panel (D in CP/M mode); main.c defers its FatFs work to the main
   loop (setup_feed runs inside the USB stack). Status line: drive letters
   only, reverse while accessed. `src/diskimg.[ch]` + `src/lz.[ch]` (portable)
@@ -211,6 +211,23 @@ status line (row 24); UART0 on GP0/GP1.
   saves and reboots (watchdog). In SET-UP, M leaves for the monitor. F11
   is the machine's reset key in CP/M mode (kbd_set_reset_key; terminal
   mode keeps ESC [ 23 ~).
+  Firmware update (bd n3k): the monitor's U, offered when /FIRMWARE.UF2
+  is on the card (monitor_platform_t firmware_* hooks; stubbed in
+  test_machine). `src/uf2.[ch]` (portable; test_uf2 also checks
+  build/pico2-dvi-sock/dvi_terminal.uf2 when built): skips other families
+  (the E10 block numbers its own sequence); ours in order, ascending
+  addresses, PICOBIN marker in the first 4 KB; CRC of the image as flashed
+  (gaps 0xff). `src/fwupdate.[ch]` (RP2350): stage = check again while
+  programming the staging area (flash offset 2 MB; images up to
+  NVFLASH_OFFSET - 2 MB), verify by CRC; the monitor then renames the file
+  to FIRMWARE.OLD and unmounts; the commit (fwupdate_commit_image,
+  interrupts off for good) copies sector by sector through a 4 KB RAM
+  buffer, skipping equal sectors, then watchdog_reboot. It must read
+  nothing from the old image (.rodata is in flash):
+  `scripts/check_fwupdate.py` (run by build.sh) follows its calls in the
+  .dis and fails on 0x10xxxxxx literals, or if the image reaches the
+  staging area. nvflash_erase/program/read: raw access, interrupts off
+  per operation.
   SRAM: ~55 KB heap left with 2 banks; newlib's localtime/scanf cost ~20 KB,
   so the clock avoids them.
 - `tools/hostbridge.py`: run a host program with the terminal as display,

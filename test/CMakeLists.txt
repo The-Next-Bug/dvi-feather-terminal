@@ -35,6 +35,10 @@ unit_test(keyname keyname.c)
 unit_test(settings settings.c crc32.c)
 unit_test(setup setup.c settings.c crc32.c screen.c term.c vtparse.c)
 unit_test(splash splash.c)
+unit_test(uf2 uf2.c crc32.c)
+# Also checks the firmware build/pico2-dvi-sock made, if there is one.
+target_compile_definitions(test_uf2 PRIVATE
+  FIRMWARE_UF2="${CMAKE_CURRENT_LIST_DIR}/../build/pico2-dvi-sock/dvi_terminal.uf2")
 target_sources(test_splash PRIVATE ${LOGO_SOURCES})
 
 # Third-party code: built without our warnings-as-errors (still sanitised).

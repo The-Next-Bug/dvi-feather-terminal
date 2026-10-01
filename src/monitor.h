@@ -22,7 +22,21 @@ typedef struct {
 	// Show the console's text so far (NULL: nothing to do). Called during
 	// long operations, which hold up the caller's main loop.
 	void (*flush)(void);
+	// The firmware update from MONITOR_FIRMWARE (NULL: not offered; see
+	// fwupdate.h). check: whether the file can be installed, with a line
+	// about it (or why not) in info. stage: write it to flash beside the
+	// running firmware (false: why in info). commit: install it and restart
+	// (returns only on the host).
+	bool (*firmware_check)(const char *path, char *info, size_t n);
+	bool (*firmware_stage)(const char *path, void (*progress)(void *ctx, uint32_t done, uint32_t total),
+		void *ctx, char *info, size_t n);
+	void (*firmware_commit)(void);
 } monitor_platform_t;
+
+// On the card; renamed to MONITOR_FIRMWARE_OLD once staged, so it is not
+// installed twice by mistake. 8.3 names: FatFs has no long names here.
+#define MONITOR_FIRMWARE "/FIRMWARE.UF2"
+#define MONITOR_FIRMWARE_OLD "/FIRMWARE.OLD"
 
 typedef enum {
 	MONITOR_NONE,

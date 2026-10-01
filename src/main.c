@@ -37,6 +37,7 @@
 #include "diag.h"
 #include "drivepanel.h"
 #include "drives.h"
+#include "fwupdate.h"
 #include "keyname.h"
 #include "machine.h"
 #include "monitor.h"
@@ -548,7 +549,17 @@ static void cpm_flush(void) {
 	video_update(&screen);
 }
 
-static const monitor_platform_t cpm_monitor = {.write = cpm_write, .card_info = cpm_card_info, .flush = cpm_flush};
+// The monitor's U (fwupdate.h). The commit leaves the screen as the
+// monitor's last flush drew it: core 1 keeps showing it from RAM while the
+// flash is rewritten.
+static const monitor_platform_t cpm_monitor = {
+	.write = cpm_write,
+	.card_info = cpm_card_info,
+	.flush = cpm_flush,
+	.firmware_check = fwupdate_check,
+	.firmware_stage = fwupdate_stage,
+	.firmware_commit = fwupdate_commit,
+};
 
 // F11: reset the machine and boot from drive A, as the reset button of a
 // real one would; with no disk in A, the monitor instead.
