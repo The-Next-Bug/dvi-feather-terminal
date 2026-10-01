@@ -1,37 +1,27 @@
 #ifndef RASTER_H
 #define RASTER_H
 
-// Rasterise screen lines into the pixel format the DVI renderer encodes.
-// Portable C (no pico-sdk), host-tested.
+// Rasterise screen lines for the HSTX renderer, and compose scanlines from
+// them. Portable C (no pico-sdk), host-tested.
 //
 // The display is 800x600. 80 columns use 8-pixel cells and the 8x16 font
 // (640 px, centred); 132 columns use 6-pixel cells and the 6x13 font
-// (792 px). Every text row is 24 scanlines, so 25 rows (24 + status) fill
-// the screen: the glyph is centred with blank padding above and below.
+// (792 px, centred). Every text row is 24 scanlines, so 25 rows (24 +
+// status) fill the screen: the glyph is centred with blank padding above
+// and below.
 //
 // Line-drawing, block and shade glyphs (glyph_is_connector) extend their
 // top and bottom rows into that padding so vertical lines join up. Each
-// line therefore stores font-height + 2 scanlines: a top padding row, the
-// glyph rows and a bottom padding row; raster_stored_row maps a scanline to
-// the stored row that shows it.
+// line therefore stores font-height + 2 rows: a top padding row, the glyph
+// rows and a bottom padding row; raster_stored_row maps a scanline to the
+// stored row that shows it.
 //
-// PicoDVI's tmds_encode_font_2bpp encoder takes, per colour plane, one byte
-// of 8 pixels per 8-pixel group plus a 2-bit "set" level and 2-bit "clear"
-// level per group. Each line therefore holds, for every stored row and plane
-// (0 = blue, 1 = green, 2 = red), a row of pixel bits, and per plane one
-// level pair for each group.
-//
-// Per group and plane, the pair is the highest and lowest level the
-// overlapping cells show there (their bg, and their fg where the glyph has
-// ink), and each pixel's bit picks whichever of the two is nearer its
-// colour. That is exact whenever a group's cells show at most two levels per
-// plane: always for 80 columns (one cell per group), and in 132 columns for
-// the usual cases (one background, adjacent inked cells of one level).
-//
-// The encoder works in 64-pixel units, so it encodes RASTER_WIDTH (832)
-// pixels per line. Only the 800 displayed pixels are stored per row; for the
-// last 32 it reads 4 bytes past the row, and the TMDS buffers have slack for
-// the output, which is never displayed.
+// raster_render_line (core 0, when a line changes) applies the attributes:
+// per stored row and cell, a byte of the cell's pixels (bit i = pixel i, set
+// = foreground) with bold, underline and blink already drawn, and per cell
+// the colours as shown (reverse video applied). raster_compose (core 1, per
+// scanline) turns a stored row into pixels: any colour per cell, so every
+// cell is exact in both widths.
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -40,31 +30,25 @@
 
 #define RASTER_ACTIVE_WIDTH 800
 #define RASTER_ACTIVE_HEIGHT 600
-#define RASTER_WIDTH 832
-#define RASTER_BYTES (RASTER_ACTIVE_WIDTH / 8)
-#define RASTER_GROUPS (RASTER_WIDTH / 8)
-#define RASTER_COLOUR_WORDS (RASTER_GROUPS / 8) // 8 groups of 4 bits per word
-#define RASTER_PLANES 3
 #define RASTER_ROW_HEIGHT 24
 #define RASTER_MAX_FONT_ROWS 16
 #define RASTER_STORED_ROWS (RASTER_MAX_FONT_ROWS + 2)
+// A composed scanline: two 16-bit pixels per word, the first in the low half.
+#define RASTER_LINE_WORDS (RASTER_ACTIVE_WIDTH / 2)
 
 typedef struct {
-	uint8_t bits[RASTER_STORED_ROWS][RASTER_PLANES][RASTER_BYTES];
-	uint32_t colour[RASTER_PLANES][RASTER_COLOUR_WORDS]; // per group: set level | clear level << 2
+	uint8_t bits[RASTER_STORED_ROWS][SCREEN_MAX_COLS]; // per stored row and cell
+	uint8_t fg[SCREEN_MAX_COLS], bg[SCREEN_MAX_COLS];  // RGB222, as shown
 } raster_line_t;
 
 static inline unsigned raster_cell_width(unsigned cols) {
 	return cols > 80 ? 6 : 8;
 }
 
-// Centred, rounded down to a whole 8-pixel group, so no group is part
-// border and part text: such a group would need black for the border as
-// well as the cells' two levels, which the encoder cannot show (on a
-// non-black background the background went black there). 132 columns
-// (792 px) start at 0, 4 px left of centre; 80 columns are centred exactly.
+// Centred: 80 columns at 80 px, 132 at 4 px. Always even, so cells start
+// on whole words of the composed scanline.
 static inline unsigned raster_x_offset(unsigned cols) {
-	return (RASTER_ACTIVE_WIDTH - cols * raster_cell_width(cols)) / 2 / 8 * 8;
+	return (RASTER_ACTIVE_WIDTH - cols * raster_cell_width(cols)) / 2;
 }
 
 static inline unsigned raster_font_rows(unsigned cols) {
@@ -89,14 +73,18 @@ static inline unsigned raster_stored_row(unsigned cols, unsigned sy) {
 #define RASTER_REVERSE 0x01   // swap every cell's fg and bg (DECSCNM)
 #define RASTER_BLINK_OFF 0x02 // blink phase off: hide blinking cells' glyphs
 
-// Render a screen line of `cols` cells (80 or 132). cursor_col is the column
-// of the cursor if it is on this line, or -1: that cell's fg is given a level
-// even where the glyph has no ink, so the renderer's cursor (which swaps each
-// pixel between its group's two levels) shows on blank cells. Underlined
-// cells get a line on the glyph's bottom row; bold cells are emboldened
-// (each glyph row ORed with itself shifted a pixel right). Returns whether any cell
-// blinks, i.e. whether the line needs re-rendering when the phase changes.
-bool raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned cols, int cursor_col,
-	unsigned flags);
+// Render a screen line of `cols` cells (80 or 132). Underlined cells get a
+// line on the glyph's bottom row; bold cells are emboldened (each glyph row
+// ORed with itself shifted a pixel right, within the cell). Returns whether
+// any cell blinks, i.e. whether the line needs re-rendering when the phase
+// changes.
+bool raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned cols, unsigned flags);
+
+// Compose stored row sr of line into RASTER_LINE_WORDS words of pixels:
+// colours[c] is RGB222 colour c as a pixel in both halves of a word (the
+// renderer's pixel format; c is 0-63). The border is 0 (black). The cell at
+// cursor_col (-1 for none) is shown inverted: fg and bg swap pixel by pixel.
+void raster_compose(uint32_t *px, const raster_line_t *line, unsigned cols, unsigned sr, int cursor_col,
+	const uint32_t colours[64]);
 
 #endif

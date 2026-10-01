@@ -45,8 +45,8 @@ cp docs/FLASHING.txt "$stage/"
 scripts/changelog.sh "$sha" | tee "$stage/CHANGES.md" > "$DIST_DIR/CHANGES.md"
 (cd "$stage" && sha256sum -- *.uf2 *.bin > SHA256SUMS)
 
-# Source of exactly the commit that was built. Submodules (pico-sdk, PicoDVI)
-# are not included; their commits are recorded in build-info-*.txt.
+# Source of exactly the commit that was built. The pico-sdk submodule is not
+# included; its commit is recorded in build-info-*.txt.
 mkdir -p "$stage/source"
 git archive --format=tar "$sha" | tar -x -C "$stage/source"
 

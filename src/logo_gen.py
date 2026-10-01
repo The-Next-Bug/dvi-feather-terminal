@@ -8,12 +8,13 @@ palette, with or without alpha; alpha is composited over black), at most
 800 x 576 pixels and a multiple of 8 pixels wide. It is shown as is: scale
 it beforehand.
 
-The display has 4 levels (RGB222) per colour plane, and per 8-pixel group
-each plane shows at most two of them. Each channel is rounded to the
-nearest level; groups with more than two levels get the pair with the least
-squared error against the source. To fit in RAM the planes that are not all
-black must show the same levels (a single-hue or grey logo): the firmware
-unpacks one plane's pixels and shows them in each plane of `planes`.
+The display has 4 levels (RGB222) per colour plane. Each channel is rounded
+to the nearest level, and per 8-pixel group to at most two levels (the pair
+with the least squared error against the source): the PicoDVI encoder
+needed that, the HSTX renderer does not (bd follow-up). The planes that are
+not all black must show the same levels (a single-hue or grey logo): the
+firmware decodes one plane's levels and shows them, tinted, in each plane
+of `planes`.
 
 The output defines `const splash_image_t NAME` (see src/splash.h): the
 levels, row by row, run-length encoded as bytes `level << 6 | (run - 1)`.
@@ -147,7 +148,7 @@ def main():
         sys.exit(f"{args.source}: {width}x{height}; need at most {MAX_WIDTH}x{MAX_HEIGHT} "
                  "and a width that is a multiple of 8")
 
-    # Planes 0 blue, 1 green, 2 red, as in RGB222 and the encoder.
+    # Planes 0 blue, 1 green, 2 red, as in RGB222 (and TMDS lanes 0-2).
     rounded = [[[nearest(px[2 - p], range(4)) for px in row] for row in rows] for p in range(3)]
     planes = [p for p in range(3) if any(any(r) for r in rounded[p])]
     if any(rounded[p] != rounded[planes[0]] for p in planes[1:]):

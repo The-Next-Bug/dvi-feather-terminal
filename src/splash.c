@@ -1,36 +1,61 @@
 #include "splash.h"
 
-#include <string.h>
+bool splash_check(const splash_image_t *img) {
+	if (img->width % 2 || img->width > RASTER_ACTIVE_WIDTH || img->height > SPLASH_HEIGHT)
+		return false;
+	size_t pixels = 0;
+	for (size_t i = 0; i < img->size; ++i)
+		pixels += (img->data[i] & 0x3fu) + 1;
+	return pixels == (size_t)img->width * img->height;
+}
 
-// One image row of levels; static to keep it off the (small) stack.
-static uint8_t levels[RASTER_ACTIVE_WIDTH];
+splash_decoder_t splash_decoder_init(const splash_image_t *img, const uint8_t *data) {
+	splash_decoder_t d = {
+		.data = data,
+		.end = data + img->size,
+		.width = img->width,
+		.height = img->height,
+		// Even, so the image starts on a whole word of pixels.
+		.x0 = (uint16_t)((RASTER_ACTIVE_WIDTH - img->width) / 4 * 2),
+		.y0 = (uint16_t)((SPLASH_HEIGHT - img->height) / 2),
+	};
+	return d;
+}
 
-typedef struct {
-	const uint8_t *data, *end;
-	unsigned level, left; // the current run
-} runs_t;
-
-static bool next_level(runs_t *r, uint8_t *level) {
-	if (!r->left) {
-		if (r->data == r->end)
-			return false;
-		r->level = *r->data >> 6;
-		r->left = (*r->data++ & 0x3fu) + 1;
+void splash_compose(uint16_t *px, splash_decoder_t *d, unsigned y, const uint16_t colours[4]) {
+	unsigned x = 0;
+	if (y >= d->y0 && y < d->y0 + d->height) {
+		for (; x < d->x0; ++x)
+			px[x] = 0;
+		unsigned todo = d->width;
+		while (todo) {
+			if (!d->left) {
+				if (d->data == d->end)
+					break; // not for a checked image: the rest stays black
+				d->level = *d->data >> 6;
+				d->left = (*d->data++ & 0x3fu) + 1;
+			}
+			unsigned n = d->left < todo ? d->left : todo;
+			uint16_t c = colours[d->level];
+			for (unsigned i = 0; i < n; ++i)
+				px[x++] = c;
+			d->left -= n;
+			todo -= n;
+		}
 	}
-	--r->left;
-	*level = (uint8_t)r->level;
-	return true;
+	for (; x < RASTER_ACTIVE_WIDTH; ++x)
+		px[x] = 0;
 }
 
 splash_tint_t splash_tint(const splash_image_t *img, uint8_t fg, bool mono) {
 	splash_tint_t t;
-	unsigned level[RASTER_PLANES], max = 0;
-	for (int p = 0; p < RASTER_PLANES; ++p) {
+	unsigned level[3], max = 0;
+	for (int p = 0; p < 3; ++p) {
 		level[p] = fg >> 2 * p & 3;
 		max = level[p] > max ? level[p] : max;
 	}
 	bool grey = level[0] == level[1] && level[1] == level[2] && !mono;
-	for (int p = 0; p < RASTER_PLANES; ++p) {
+	for (int p = 0; p < 3; ++p) {
 		if (grey)
 			t.shift[p] = img->planes >> p & 1 ? 0 : SPLASH_PLANE_OFF;
 		else
@@ -39,54 +64,12 @@ splash_tint_t splash_tint(const splash_image_t *img, uint8_t fg, bool mono) {
 	return t;
 }
 
-void splash_shift_map(unsigned shift, uint8_t map[256]) {
-	for (unsigned b = 0; b < 256; ++b) {
-		unsigned out = 0;
-		for (unsigned i = 0; i < 8; i += 2) { // four 2-bit levels
-			unsigned v = b >> i & 3;
-			out |= (v > shift ? v - shift : 0) << i;
-		}
-		map[b] = (uint8_t)out;
+uint8_t splash_tint_colour(const splash_tint_t *t, unsigned level) {
+	unsigned c = 0;
+	for (int p = 0; p < 3; ++p) {
+		unsigned shift = t->shift[p];
+		if (shift != SPLASH_PLANE_OFF && level > shift)
+			c |= (level - shift) << 2 * p;
 	}
-}
-
-bool splash_unpack(splash_row_t *rows, const splash_image_t *img) {
-	memset(rows, 0, SPLASH_HEIGHT * sizeof *rows);
-	unsigned w = img->width, h = img->height;
-	if (w % 8 || w > RASTER_ACTIVE_WIDTH || h > SPLASH_HEIGHT)
-		return false;
-	// Centred on whole groups: each group is inside or outside the image.
-	unsigned x0 = (RASTER_ACTIVE_WIDTH - w) / 2 / 8 * 8, y0 = (SPLASH_HEIGHT - h) / 2;
-
-	runs_t r = { img->data, img->data + img->size, 0, 0 };
-	for (unsigned y = 0; y < h; ++y) {
-		for (unsigned x = 0; x < w; ++x) {
-			if (!next_level(&r, &levels[x])) {
-				memset(rows, 0, SPLASH_HEIGHT * sizeof *rows);
-				return false;
-			}
-		}
-		splash_row_t *row = &rows[y0 + y];
-		for (unsigned x = 0; x < w; x += 8) {
-			unsigned lo = 3, hi = 0;
-			for (unsigned i = 0; i < 8; ++i) {
-				unsigned v = levels[x + i];
-				lo = v < lo ? v : lo;
-				hi = v > hi ? v : hi;
-			}
-			// The nearer of the two levels, ties going to lo (as in raster.c);
-			// logo_gen.py leaves at most two per group, so this is exact.
-			unsigned bits = 0;
-			for (unsigned i = 0; i < 8; ++i)
-				bits |= (2 * levels[x + i] > lo + hi ? 1u : 0u) << i;
-			unsigned g = (x0 + x) / 8;
-			row->bits[g] = (uint8_t)bits;
-			row->colour[g / 8] |= (uint32_t)(hi | lo << 2) << 4 * (g % 8);
-		}
-	}
-	if (r.left || r.data != r.end) {
-		memset(rows, 0, SPLASH_HEIGHT * sizeof *rows);
-		return false;
-	}
-	return true;
+	return (uint8_t)c;
 }

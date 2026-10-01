@@ -64,7 +64,7 @@ Everything installs under `.toolchain/` (git-ignored); there is no system
 CMake or Arm GCC on the dev host. Use the scripts:
 
 ```bash
-git submodule update --init          # lib/pico-sdk (2.3.1), lib/PicoDVI (not their submodules)
+git submodule update --init          # lib/pico-sdk (2.3.1) (not its submodules)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
 scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash
@@ -102,16 +102,28 @@ status line (row 24); UART0 on GP0/GP1.
   ignored unless `c1_controls` (keeps UTF-8 safe); OSC/DCS/APC discarded.
 - `src/term.[ch]` (portable): VT100/VT102 emulation on the screen; replies
   (DA, DSR/CPR, DECREQTPARM) through a callback.
-- `src/raster.[ch]` (portable): screen line -> pixel buffers for the PicoDVI
-  `tmds_encode_font_2bpp` encoder, fed an identity "font" row so each byte
-  is its own 8-pixel pattern. Per 8-px group and colour plane the encoder
-  has two levels; raster picks them per group (exact for 80 cols, exact in
-  the usual 132-col cases). Stored rows per line = font rows + 2 padding
-  rows; connectors (line drawing, blocks, shades) extend into the padding.
-  Handles underline, blink phase, bold (emboldened), reverse, cursor cell.
-- `src/video.[ch]` (RP2350): libdvi setup, core 1 scanline loop
-  (encode 832 px/line into TMDS buffers with slack, cursor inversion),
-  `video_update()` on core 0 rasterises dirty slots, cursor slot and blink.
+- `src/raster.[ch]` (portable): `raster_render_line` (core 0) turns a
+  screen line into, per stored row and cell, a byte of the cell's pixels
+  (bit i = pixel i, set = fg) plus per-cell fg/bg (RGB222, reverse
+  applied). Stored rows per line = font rows + 2 padding rows; connectors
+  (line drawing, blocks, shades) extend into the padding. Handles
+  underline, blink phase, bold (emboldened, within the cell), reverse.
+  `raster_compose` (core 1) makes a scanline of RGB565 pixel pairs from a
+  stored row through a 64-entry colour table, inverting the cursor cell;
+  every cell is exact in both widths. 132 cols centred at x = 4.
+- `src/hstx_dvi.[ch]` (RP2350): DVI from the HSTX on the DVI Sock pins
+  (GP12-19 = HSTX bits 0-7: D0 0/1, CK 2/3, D2 4/5, D1 6/7). clk_sys = 10 x
+  pixel clock, clk_hstx = clk_sys / 2 (set explicitly: the SDK leaves it
+  undivided from clk_sys); RGB565 through the TMDS expander; two chained
+  DMA channels, reloaded by DMA_IRQ_0 with blanking command lists and
+  per-line pixels from a callback. `HSTX_MODE` 0 = 800x600@60 with libdvi's
+  timing (clk_hstx 200 MHz, above the 150 MHz rating: dmt.8.1), 1 = @56,
+  2 = CVT-RB. `src/hstx_test.c` -> `hstx_test.uf2`: test pattern.
+- `src/video.[ch]` (RP2350): core 1 composes scanlines (raster_compose or
+  splash_compose) into a ring of 4 line buffers, at most 2 lines ahead of
+  the DMA interrupt (also on core 1), latching mode/cursor/splash per
+  frame; counts late lines. `video_update()` on core 0 rasterises dirty
+  slots and the blink phase.
 - `src/keyboard.[ch]` (portable): HID boot keyboard reports -> VT100 key
   codes (DECCKM, DECKPAM, LNM, Num/Caps Lock, autorepeat via kbd_tick).
 - `src/usbkbd.[ch]` + `src/tusb_config.h` (USB_KEYBOARD builds, the
@@ -129,7 +141,8 @@ status line (row 24); UART0 on GP0/GP1.
   cells in the old defaults).
   `src/setup.[ch]` (portable): SET-UP panel over the bottom text rows
   (one row per setting, plus two preview rows under Palette: ANSI colours
-  as fg and as bg, spaced so no 8-px group holds two samples in 132 cols)
+  as fg and as bg, spaced so no 8-px group held two samples in 132 cols
+  under the old PicoDVI encoder)
   (key bytes in, save/cancel out); main.c saves/restores those rows. Opened
   by F12 or Pause (keyboard.c SET-UP callback) or host `CSI ? 999 ~` (term.c bumps
   `setup_requests` and term_write stops after it; later bytes are keys).
@@ -143,13 +156,14 @@ status line (row 24); UART0 on GP0/GP1.
 - `src/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
   RTS/CTS. `src/demo.[ch]`: opt-in startup demo. `src/diag.[ch]`: VIDEO_DIAG.
 - `src/logo_gen.py` + `cmake/logo.cmake`: PNG -> run-length encoded 2-bit
-  levels (one hue, <=2 levels per 8-px group). `src/splash.[ch]` (portable)
-  unpacks it into full-width encoder rows; `video_splash()` puts them in the
-  raster memory of slots 0-16 and core 1 shows them for scanlines 0-575
-  (status line from its slot); power-on/reset only, never on RIS.
-  `splash_tint()` maps the Colors text colour to per-plane level shifts;
-  core 1 remaps the 13 colour words of shifted planes per splash scanline
-  (`splash_map`), so no extra per-row colour arrays are stored.
+  levels (one hue; still <=2 levels per 8-px group, no longer needed).
+  `src/splash.[ch]` (portable): `splash_check`, and `splash_compose`
+  decodes the runs a scanline at a time (in order from the frame start; runs
+  cross row ends) through 4 level colours (`splash_tint` +
+  `splash_tint_colour`). `video_splash()` copies the data into the text
+  slots' raster memory (core 1 must not read flash) and core 1 shows it for
+  scanlines 0-575 (status line from its slot); power-on/reset only, never
+  on RIS.
 - `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus 8x16,
   misc-fixed 6x13) generated at build time; glyph codes in `src/font.h`.
 - `tools/hostbridge.py`: run a host program with the terminal as display,
@@ -167,14 +181,13 @@ status line (row 24); UART0 on GP0/GP1.
     dmt.10).
   - Core 1 must never touch flash or `const` data (which lands in flash):
     keep its data non-const/static and its code `__not_in_flash_func`.
-  - `tmds_encode_font_2bpp` processes 64 px per loop pass: widths must be
-    multiples of 64; it overruns otherwise (hence the TMDS buffer slack).
+  - The HSTX DMA reads line buffers in SRAM at high bus priority; a line
+    not composed in time shows stale pixels (video_stats().late), it does
+    not break sync.
   - The 2 KB core 0 stack is small: big scratch arrays are static.
-  - Heap = SRAM left after .bss (code is in SRAM too). libdvi's dvi_init
-    mallocs 3 x 4.8 KB TMDS buffers, which video.c swaps for heap-allocated
-    ones with slack; malloc failure panics silently (crash before video).
-    The RP2350 has room, but check `__end__` in the .elf.map when adding
-    big static data or libraries.
+  - Heap = SRAM left after .bss (code is in SRAM too); malloc failure
+    panics silently. The RP2350 has room (raster[] is ~66 KB), but check
+    `__end__` in the .elf.map when adding big static data or libraries.
   - Pin functions for CTS/RTS use `GPIO_FUNC_UART` (UART_FUNCSEL_NUM is
     wrong for GPIO 2/3 on RP2350).
 - Git: work on a branch, merge to `main` with `git merge --no-ff`, push only
