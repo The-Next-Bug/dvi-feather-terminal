@@ -9,6 +9,8 @@
 #   TOOLCHAIN_DIR   toolchain location (default: <repo>/.toolchain)
 #   SERIAL_FLOW_CONTROL  ON for RTS/CTS on UART0 (default: OFF; see README)
 #   CMAKE_ARGS      extra arguments for the CMake configure step
+#   SDCARD          a mounted SD card: FIRMWARE.UF2 is copied to its root, for
+#                   the CP/M monitor's U (update the firmware from the card)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -78,6 +80,19 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
   echo "git_describe=$(git describe --always --dirty 2>/dev/null || echo unknown)"
   echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$out/build-info.txt"
+
+# The firmware update (src/fwupdate.c) must not read the old image's flash
+# while it overwrites it.
+python3 scripts/check_fwupdate.py "$out"
+
+# The name the CP/M monitor's U looks for (8.3: no long names on the card).
+cp "$out/dvi_terminal.uf2" "$out/FIRMWARE.UF2"
+if [[ -n "${SDCARD:-}" ]]; then
+  [[ -d "$SDCARD" ]] || { echo "error: SDCARD=$SDCARD is not a directory" >&2; exit 1; }
+  cp "$out/FIRMWARE.UF2" "$SDCARD/FIRMWARE.UF2"
+  sync
+  echo "copied FIRMWARE.UF2 to $SDCARD"
+fi
 
 cat "$out/build-info.txt"
 "$TOOLCHAIN_DIR/arm-none-eabi/bin/arm-none-eabi-size" "$out/dvi_terminal.elf"

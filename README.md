@@ -260,6 +260,29 @@ A after 3 seconds (any key stops that), or shows its menu:
 - **S**: CPU speed test (a JP loop for a second, in Z80 MHz).
 - **C**: check the card again (after changing it).
 - **R**: resume the CPU, after leaving it from SET-UP.
+- **U**: update the firmware from `FIRMWARE.UF2` in the card's root (shown
+  only when the file is there; see "Updating the firmware from the SD
+  card").
+
+#### Updating the firmware from the SD card
+
+Copy the new `dvi_terminal.uf2` to the card's root as `FIRMWARE.UF2` (8.3
+names only; the release ZIP has it as `sdcard-<target>/FIRMWARE.UF2`, and
+`SDCARD=/media/<you>/<card> scripts/build.sh` copies it there), put the card
+in, set Mode to "CP/M machine" and press **U** in the monitor. It reads the
+file through and checks it (a UF2 for the RP2350 with a bootable image that
+fits), shows its size and asks; **Y** then:
+
+1. writes the image to the upper half of the flash, beside the running
+   firmware, and reads it back (the dots). Any problem up to here leaves
+   the board as it was;
+2. renames the file to `FIRMWARE.OLD`, so it is not installed twice, and
+   closes the disks;
+3. copies the image over the running firmware (a few seconds; the screen
+   says not to power off) and restarts with it. The settings are kept.
+
+If the power fails during step 3 the board will not start: flash it over
+USB with BOOTSEL as in `docs/FLASHING.txt`, which always works.
 
 In CP/M mode the New line (LNM) setting is not used: Return sends CR
 alone, as CP/M expects (a following LF would wait as a key press, which
@@ -365,7 +388,7 @@ scanline timing, fault reports).
 
 | Path | Contents |
 |---|---|
-| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100 codes), `splash.[ch]` (startup logo decoding), `settings.[ch]` (settings records), `setup.[ch]` (SET-UP panel), `demo.[ch]`, and for the Z80 machine `machine.[ch]` (z80pack glue; `z80pack/` holds its configuration headers), `monitor.[ch]`, `drives.[ch]` (disk images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel), `cpm/` (the CP/M 2.2 BIOS and boot loader, see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in images), `crc32.[ch]`. RP2350: `sdcard.[ch]` (SPI SD card for FatFs), `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]` (scanlines on core 1), `hstx_test.c` (test pattern), `serial.[ch]` (UART with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors, written at the DVI clock), `usbkbd.[ch]` and `tusb_config.h` (TinyUSB host, `USB_KEYBOARD` builds), `diag.[ch]` (VIDEO_DIAG), `main.c`. `font_gen.py` builds the font tables, `logo_gen.py` the logo, `diskimg_gen.py` the compressed disk images |
+| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100 codes), `splash.[ch]` (startup logo decoding), `settings.[ch]` (settings records), `setup.[ch]` (SET-UP panel), `demo.[ch]`, and for the Z80 machine `machine.[ch]` (z80pack glue; `z80pack/` holds its configuration headers), `monitor.[ch]`, `drives.[ch]` (disk images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel), `cpm/` (the CP/M 2.2 BIOS and boot loader, see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in images), `crc32.[ch]`, `uf2.[ch]` (UF2 file checks for the firmware update). RP2350: `sdcard.[ch]` (SPI SD card for FatFs), `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]` (scanlines on core 1), `hstx_test.c` (test pattern), `serial.[ch]` (UART with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors, written at the DVI clock), `fwupdate.[ch]` (firmware update from the SD card), `usbkbd.[ch]` and `tusb_config.h` (TinyUSB host, `USB_KEYBOARD` builds), `diag.[ch]` (VIDEO_DIAG), `main.c`. `font_gen.py` builds the font tables, `logo_gen.py` the logo, `diskimg_gen.py` the compressed disk images |
 | `test/` | Host unit tests (plain CMake + gcc with ASan/UBSan, no pico-sdk) |
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see above) |
 | `lib/pico-sdk` | Pinned submodule (plus its `lib/tinyusb`) |
@@ -405,8 +428,12 @@ scripts/package.sh                   # every built target -> dist/dvi-terminal-<
 ```
 
 `scripts/build.sh` takes `TARGET` (see the board table above),
-`SERIAL_FLOW_CONTROL` and `CMAKE_ARGS` (extra configure arguments, e.g.
-`CMAKE_ARGS=-DVIDEO_DIAG=ON`, or `-DUSB_KEYBOARD=OFF`). Plain `cmake -S . -B build/x` also works and
+`SERIAL_FLOW_CONTROL`, `CMAKE_ARGS` (extra configure arguments, e.g.
+`CMAKE_ARGS=-DVIDEO_DIAG=ON`, or `-DUSB_KEYBOARD=OFF`) and `SDCARD` (a
+mounted card to copy `FIRMWARE.UF2` to). It also writes
+`build/<target>/FIRMWARE.UF2` and runs `scripts/check_fwupdate.py`, which
+fails the build if the firmware update's final copy could read the flash it
+overwrites. Plain `cmake -S . -B build/x` also works and
 picks up `.toolchain/` automatically.
 
 Toolchain versions are pinned in **`toolchain.env`**, the single source of

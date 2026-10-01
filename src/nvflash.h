@@ -17,6 +17,9 @@
 
 #define NVFLASH_SECTORS 2
 #define NVFLASH_PAGE_SIZE 256
+#define NVFLASH_SECTOR_SIZE 4096u
+// Where the settings sectors start, from the start of flash.
+#define NVFLASH_OFFSET (PICO_FLASH_SIZE_BYTES - (NVFLASH_SECTORS + 1) * NVFLASH_SECTOR_SIZE)
 
 // At boot, while the boot-time flash setup is valid (before video_init
 // raises clk_sys).
@@ -31,5 +34,17 @@ const uint8_t *nvflash_sector(unsigned i);
 // Erase sector i and program page (in RAM: the ROM reads it while the flash
 // is out of XIP mode) to its start. Returns whether it reads back correctly.
 bool nvflash_write(unsigned i, const uint8_t page[NVFLASH_PAGE_SIZE]);
+
+// Raw access for the firmware update (fwupdate.c), at offsets from the
+// start of flash. Interrupts on this core are off during each erase and
+// program, as the flash is out of XIP mode then and a handler reading const
+// data would read garbage.
+
+// Erase len bytes (whole sectors) at offset.
+void nvflash_erase(uint32_t offset, uint32_t len);
+// Program len bytes (whole pages) at offset from data (in RAM).
+void nvflash_program(uint32_t offset, const uint8_t *data, uint32_t len);
+// The flash at offset, read uncached (sees what was just written).
+const uint8_t *nvflash_read(uint32_t offset);
 
 #endif

@@ -349,7 +349,43 @@ static void flush(void) {
 	++flushes;
 }
 
-static const monitor_platform_t monitor_platform = {.write = console_text, .card_info = card_info, .flush = flush};
+// The firmware update's platform side, stubbed: the file's first byte says
+// whether it checks ('G'ood) and stages ('S' too).
+static unsigned stages, commits;
+
+static char firmware_first(const char *path) {
+	FIL f;
+	char c = 0;
+	UINT got;
+	if (f_open(&f, path, FA_READ) == FR_OK) {
+		f_read(&f, &c, 1, &got);
+		f_close(&f);
+	}
+	return c;
+}
+
+static bool firmware_check(const char *path, char *info, size_t n) {
+	bool ok = firmware_first(path) == 'G' || firmware_first(path) == 'S';
+	snprintf(info, n, "%s", ok ? "test firmware" : "not a UF2 file");
+	return ok;
+}
+
+static bool firmware_stage(const char *path, void (*progress)(void *, uint32_t, uint32_t), void *ctx, char *info,
+	size_t n) {
+	++stages;
+	for (uint32_t done = 0; done <= 128 * 1024; done += 512)
+		progress(ctx, done, 128 * 1024);
+	bool ok = firmware_first(path) == 'S';
+	snprintf(info, n, "%s", ok ? "" : "flash verify failed");
+	return ok;
+}
+
+static void firmware_commit(void) {
+	++commits;
+}
+
+static const monitor_platform_t monitor_platform = {.write = console_text, .card_info = card_info, .flush = flush,
+	.firmware_check = firmware_check, .firmware_stage = firmware_stage, .firmware_commit = firmware_commit};
 
 // The whole menu was shown, up to its prompt (lpt.8: it was cut short).
 static bool menu_shown(void) {
@@ -450,6 +486,72 @@ static void test_monitor_autoboot(void) {
 	CHECK_EQ(monitor_tick(MONITOR_AUTOBOOT_MS), MONITOR_NONE);
 }
 
+static void write_file(const char *path, const char *text) {
+	FIL f;
+	UINT n;
+	CHECK_EQ(f_open(&f, path, FA_WRITE | FA_CREATE_ALWAYS), FR_OK);
+	CHECK_EQ(f_write(&f, text, (UINT)strlen(text), &n), FR_OK);
+	CHECK_EQ(f_close(&f), FR_OK);
+}
+
+// U: offered only with FIRMWARE.UF2 on the card; checks, asks, stages,
+// renames the file, closes the card and commits.
+static void test_monitor_firmware(void) {
+	FILINFO info;
+	clear_screen();
+	monitor_enter(NULL, false);
+	CHECK(strstr(screen, "U       update") == NULL);
+	CHECK_EQ(keys("u"), MONITOR_NONE);
+	CHECK(strstr(screen, "Checking") == NULL);
+
+	// Refused by the check: nothing staged.
+	write_file(MONITOR_FIRMWARE, "BAD");
+	clear_screen();
+	monitor_enter(NULL, false);
+	CHECK(strstr(screen, "U       update the firmware from FIRMWARE.UF2") != NULL);
+	stages = commits = 0;
+	CHECK_EQ(keys("u"), MONITOR_NONE);
+	CHECK(strstr(screen, "cannot install it: not a UF2 file") != NULL);
+	CHECK(menu_shown());
+	CHECK_EQ(stages, 0);
+
+	// Declined.
+	write_file(MONITOR_FIRMWARE, "GOOD");
+	clear_screen();
+	CHECK_EQ(keys("u"), MONITOR_NONE);
+	CHECK(strstr(screen, "test firmware\r\nInstall it and restart (Y/N)? ") != NULL);
+	CHECK_EQ(keys("xn"), MONITOR_NONE);
+	CHECK(menu_shown());
+	CHECK_EQ(stages, 0);
+
+	// Staging fails: the file stays, nothing committed.
+	clear_screen();
+	CHECK_EQ(keys("uy"), MONITOR_NONE);
+	CHECK(strstr(screen, ".... failed: flash verify failed\r\nNothing was changed.") != NULL);
+	CHECK_EQ(stages, 1);
+	CHECK_EQ(commits, 0);
+	CHECK_EQ(f_stat(MONITOR_FIRMWARE, &info), FR_OK);
+	CHECK(menu_shown());
+
+	// Installed: renamed (replacing an older FIRMWARE.OLD), committed; on the
+	// host the monitor then carries on with the card mounted again.
+	write_file(MONITOR_FIRMWARE_OLD, "older");
+	write_file(MONITOR_FIRMWARE, "STAGES");
+	clear_screen();
+	flushes = 0;
+	CHECK_EQ(keys("uy"), MONITOR_NONE);
+	CHECK(strstr(screen, "firmware....\r\n") != NULL); // 128 KB, a dot per 32 KB
+	CHECK(strstr(screen, "do not power off") != NULL);
+	CHECK_EQ(commits, 1);
+	CHECK_EQ(f_stat(MONITOR_FIRMWARE, &info), FR_NO_FILE);
+	CHECK_EQ(f_stat(MONITOR_FIRMWARE_OLD, &info), FR_OK);
+	CHECK_EQ(info.fsize, 6);
+	CHECK(strstr(screen, "A: CPM22") != NULL);
+	CHECK(strstr(screen, "U       update") == NULL);
+	CHECK(menu_shown());
+	f_unlink(MONITOR_FIRMWARE_OLD);
+}
+
 // On a card's usual 32 KB clusters a blank disk reaches the card many
 // sectors at a time (multi-block writes), not one by one (lpt.9).
 static void test_blank_disk_chunks(void) {
@@ -481,6 +583,7 @@ int main(void) {
 	RUN(test_no_disk_boot_rom);
 	RUN(test_monitor_fresh_card);
 	RUN(test_monitor_autoboot);
+	RUN(test_monitor_firmware);
 	RUN(test_blank_disk_chunks);
 	drives_unmount_all();
 	f_unmount("");

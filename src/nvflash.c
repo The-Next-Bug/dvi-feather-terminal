@@ -1,11 +1,13 @@
 #include "nvflash.h"
 
+#include <assert.h>
 #include <string.h>
 
 #include "pico/stdlib.h"
 #include "pico/bootrom.h"
 #include "hardware/clocks.h"
 #include "hardware/flash.h"
+#include "hardware/sync.h"
 
 // 03h reads (XIP after nvflash_retime) are rated to 50 MHz on the usual QSPI
 // parts.
@@ -13,7 +15,7 @@
 
 // Below the last sector (nvflash.h). The old layout's first sector is now
 // the second, so a record saved there is still found.
-#define NVFLASH_OFFSET (PICO_FLASH_SIZE_BYTES - (NVFLASH_SECTORS + 1) * FLASH_SECTOR_SIZE)
+static_assert(NVFLASH_SECTOR_SIZE == FLASH_SECTOR_SIZE, "");
 
 extern char __flash_binary_end;
 static bool usable; // the sectors are clear of the program image
@@ -45,9 +47,27 @@ static void write_sector(uint32_t offset, const uint8_t *page) {
 	nvflash_retime();
 }
 
-const uint8_t *nvflash_sector(unsigned i) {
+const uint8_t *nvflash_read(uint32_t offset) {
 	// Uncached, so a read-back sees the flash, not the XIP cache.
-	return (const uint8_t *)(XIP_NOCACHE_NOALLOC_BASE + NVFLASH_OFFSET + i * FLASH_SECTOR_SIZE);
+	return (const uint8_t *)(XIP_NOCACHE_NOALLOC_BASE + offset);
+}
+
+const uint8_t *nvflash_sector(unsigned i) {
+	return nvflash_read(NVFLASH_OFFSET + i * FLASH_SECTOR_SIZE);
+}
+
+void nvflash_erase(uint32_t offset, uint32_t len) {
+	uint32_t irq = save_and_disable_interrupts();
+	flash_range_erase(offset, len);
+	nvflash_retime();
+	restore_interrupts(irq);
+}
+
+void nvflash_program(uint32_t offset, const uint8_t *data, uint32_t len) {
+	uint32_t irq = save_and_disable_interrupts();
+	flash_range_program(offset, data, len);
+	nvflash_retime();
+	restore_interrupts(irq);
 }
 
 bool nvflash_write(unsigned i, const uint8_t page[NVFLASH_PAGE_SIZE]) {
