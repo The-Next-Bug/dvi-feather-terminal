@@ -544,7 +544,11 @@ static const char *cpm_card_info(void) {
 	return text;
 }
 
-static const monitor_platform_t cpm_monitor = {.write = cpm_write, .card_info = cpm_card_info};
+static void cpm_flush(void) {
+	video_update(&screen);
+}
+
+static const monitor_platform_t cpm_monitor = {.write = cpm_write, .card_info = cpm_card_info, .flush = cpm_flush};
 
 // F11: reset the machine and boot from drive A, as the reset button of a
 // real one would; with no disk in A, the monitor instead.

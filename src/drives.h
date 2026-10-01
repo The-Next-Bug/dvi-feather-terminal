@@ -17,6 +17,7 @@
 // (FatFs), host-tested.
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define DRIVES 8
@@ -64,8 +65,15 @@ void drives_unmount_all(void);
 const char *drives_name(unsigned drive);
 drives_format_t drives_format(unsigned drive);
 
-// Create /DISKS80/<name>.DSK as a blank (formatted, empty) disk of format f.
-drives_result_t drives_create(const char *name, drives_format_t f);
+// Progress of a long write: done of total bytes.
+typedef void (*drives_progress_t)(void *ctx, uint32_t done, uint32_t total);
+
+// Create /DISKS80/<name>.DSK as a blank (formatted, empty) disk of format f,
+// writing buf_size bytes at a time from buf (scratch; a multiple of 512
+// bytes and at least 512: bigger is faster, FatFs passes whole sectors on
+// to the card). progress, if not NULL, is called after each write.
+drives_result_t drives_create(const char *name, drives_format_t f, uint8_t *buf, size_t buf_size,
+	drives_progress_t progress, void *ctx);
 
 // The format of image name in /DISKS80 (by its size), DRIVES_NONE if it is
 // not there or not an image.

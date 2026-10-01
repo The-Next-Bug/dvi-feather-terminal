@@ -1,6 +1,7 @@
 // microSD over SPI for FatFs (sdcard.h). The SD Physical Layer Simplified
 // Specification's SPI mode: CMD0 into SPI mode, CMD8 for v2 cards, ACMD41
-// until ready, CMD58 for the addressing, then CMD17/CMD24 per block.
+// until ready, CMD58 for the addressing, then CMD17 per block read, CMD24
+// for a single block written and CMD25 for several.
 
 #include "sdcard.h"
 
@@ -23,13 +24,16 @@
 #define CMD16 16  // SET_BLOCKLEN
 #define CMD17 17  // READ_SINGLE_BLOCK
 #define CMD24 24  // WRITE_BLOCK
+#define CMD25 25  // WRITE_MULTIPLE_BLOCK
 #define CMD55 55  // APP_CMD
 #define CMD58 58  // READ_OCR
 #define ACMD41 41 // SD_SEND_OP_COND
 
 #define R1_IDLE 0x01
 #define R1_ILLEGAL 0x04
-#define TOKEN_START 0xfe
+#define TOKEN_START 0xfe       // a block read, or written by CMD24
+#define TOKEN_START_MULTI 0xfc // each block written by CMD25
+#define TOKEN_STOP 0xfd        // ends CMD25
 
 static sdcard_type_t type;
 static uint32_t blocks;
@@ -231,25 +235,35 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
 	return RES_OK;
 }
 
+// Send a data block after a write command: the card answers with a data
+// response xxx0sss1 (sss = 010 accepted), then is busy while it programs.
+static bool write_block(uint8_t token, const uint8_t *buf) {
+	xfer(0xff);
+	xfer(token);
+	spi_write_blocking(SD_SPI, buf, BLOCK);
+	xfer(0xff); // CRC, unchecked
+	xfer(0xff);
+	return (xfer(0xff) & 0x1f) == 0x05 && wait_ready(500);
+}
+
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
 	if (pdrv != 0 || type == SDCARD_NONE)
 		return RES_NOTRDY;
-	for (; count; --count, ++sector, buff += BLOCK) {
-		bool ok = false;
-		if (command(CMD24, address(sector)) == 0) {
-			xfer(0xff);
-			xfer(TOKEN_START);
-			spi_write_blocking(SD_SPI, buff, BLOCK);
-			xfer(0xff); // CRC, unchecked
-			xfer(0xff);
-			// Data response xxx0sss1: sss = 010 accepted; then busy.
-			ok = (xfer(0xff) & 0x1f) == 0x05 && wait_ready(500);
-		}
-		deselect();
-		if (!ok)
-			return RES_ERROR;
+	bool ok = false;
+	if (count == 1) {
+		ok = command(CMD24, address(sector)) == 0 && write_block(TOKEN_START, buff);
+	} else if (command(CMD25, address(sector)) == 0) {
+		ok = true;
+		for (; ok && count; --count, buff += BLOCK)
+			ok = write_block(TOKEN_START_MULTI, buff);
+		// The stop token ends the transfer, also after a rejected block;
+		// the card is busy again while it finishes.
+		xfer(TOKEN_STOP);
+		xfer(0xff);
+		ok = wait_ready(500) && ok;
 	}
-	return RES_OK;
+	deselect();
+	return ok ? RES_OK : RES_ERROR;
 }
 
 DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {

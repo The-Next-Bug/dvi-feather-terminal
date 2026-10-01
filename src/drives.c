@@ -111,7 +111,8 @@ drives_format_t drives_format(unsigned d) {
 	return d < DRIVES ? drive[d].format : DRIVES_NONE;
 }
 
-drives_result_t drives_create(const char *name, drives_format_t f) {
+drives_result_t drives_create(const char *name, drives_format_t f, uint8_t *buf, size_t buf_size,
+	drives_progress_t progress, void *ctx) {
 	char upper[DRIVES_NAME_MAX + 1], path[32];
 	const drives_geometry_t *g = drives_geometry(f);
 	if (!g || !normalise(name, upper))
@@ -126,13 +127,14 @@ drives_result_t drives_create(const char *name, drives_format_t f) {
 		return DRIVES_EXISTS;
 	if (r != FR_OK)
 		return DRIVES_IO_ERROR;
-	static uint8_t blank[512];
-	memset(blank, BLANK, sizeof blank);
+	memset(buf, BLANK, buf_size);
 	bool ok = true;
-	for (uint32_t left = g->size; ok && left;) {
-		UINT n = left < sizeof blank ? (UINT)left : (UINT)sizeof blank, written;
-		ok = f_write(&file, blank, n, &written) == FR_OK && written == n;
-		left -= n;
+	for (uint32_t done = 0; ok && done < g->size;) {
+		UINT n = g->size - done < buf_size ? (UINT)(g->size - done) : (UINT)buf_size, written;
+		ok = f_write(&file, buf, n, &written) == FR_OK && written == n;
+		done += n;
+		if (progress)
+			progress(ctx, done, g->size);
 	}
 	ok = f_close(&file) == FR_OK && ok;
 	if (!ok) {

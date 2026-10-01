@@ -11,6 +11,7 @@
 
 static uint8_t *ram;
 static size_t ram_sectors;
+static unsigned max_write;
 
 void diskio_ram_init(size_t sectors) {
 	free(ram);
@@ -22,6 +23,12 @@ void diskio_ram_free(void) {
 	free(ram);
 	ram = NULL;
 	ram_sectors = 0;
+}
+
+unsigned diskio_ram_max_write(void) {
+	unsigned n = max_write;
+	max_write = 0;
+	return n;
 }
 
 DSTATUS disk_status(BYTE pdrv) {
@@ -47,6 +54,8 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
 	if (sector + count > ram_sectors)
 		return RES_PARERR;
 	memcpy(ram + sector * 512, buff, count * 512u);
+	if (count > max_write)
+		max_write = count;
 	return RES_OK;
 }
 

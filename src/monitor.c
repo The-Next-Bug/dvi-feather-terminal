@@ -34,14 +34,46 @@ static bool can_resume;
 static bool autobooting;
 static uint32_t autoboot_at;
 
+// Text as it is, any length.
+static void put(const char *text) {
+	plat->write(text);
+}
+
+// Formatted text, up to a line or so (longer is cut short: put long text).
 static void say(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 static void say(const char *fmt, ...) {
-	char text[160];
+	char text[256];
 	va_list ap;
 	va_start(ap, fmt);
 	vsnprintf(text, sizeof text, fmt, ap);
 	va_end(ap);
-	plat->write(text);
+	put(text);
+}
+
+// Show what was written so far: the main loop does not run during long
+// operations (writing disk images).
+static void flush(void) {
+	if (plat->flush)
+		plat->flush();
+}
+
+// Progress of a long write: a dot per PROGRESS_STEP bytes.
+#define PROGRESS_STEP (256u * 1024)
+static unsigned dots;
+
+static void progress_start(void) {
+	dots = 0;
+	flush();
+}
+
+static void progress(void *ctx, uint32_t done, uint32_t total) {
+	(void)ctx;
+	(void)total;
+	if (dots < done / PROGRESS_STEP) {
+		for (; dots < done / PROGRESS_STEP; ++dots)
+			put(".");
+		flush();
+	}
 }
 
 // ---- the card and the drive assignments ----
@@ -96,13 +128,13 @@ static void show_menu(void) {
 	say("\r\nZ80 CP/M machine (z80pack Z80 core)\r\n");
 	show_card();
 	show_drives();
-	say("\r\n  Return  boot from drive A        M  mount a disk on a drive\r\n");
+	put("\r\n  Return  boot from drive A        M  mount a disk on a drive\r\n");
 	if (can_resume)
-		say("  R       resume the running CPU\r\n");
-	say("  L       list the disks            N  new blank disk (8\", 4 MB, 8 MB)\r\n"
-		"  I       install the built-in disks\r\n"
-		"  S       CPU speed test            C  check the card again\r\n"
-		"  F11 resets the machine; F12 SET-UP (Drives, Mode)\r\n> ");
+		put("  R       resume the running CPU\r\n");
+	put("  L       list the disks            N  new blank disk (8\", 4 MB, 8 MB)\r\n");
+	put("  I       install the built-in disks\r\n");
+	put("  S       CPU speed test            C  check the card again\r\n");
+	put("  F11 resets the machine; F12 SET-UP (Drives, Mode)\r\n> ");
 }
 
 static void list_disks(void) {
@@ -124,8 +156,10 @@ static void list_disks(void) {
 		say("(FD 8\" floppy, 4MB/8MB hard disks, ? not a disk image)\r\n");
 }
 
+// Scratch for installing (the LZ window) and for blank disks.
+static uint8_t window[LZ_WINDOW];
+
 static void install(bool overwrite) {
-	static uint8_t window[LZ_WINDOW];
 	if (mount_result != FR_OK) {
 		say("No card.\r\n");
 		return;
@@ -141,17 +175,11 @@ static void install(bool overwrite) {
 		if (mounted_on >= 0)
 			drives_unmount((unsigned)mounted_on);
 		say("%-9s", img->name);
-		switch (diskimg_install(img, overwrite, window)) {
-		case DISKIMG_WRITTEN:
-			say("written\r\n");
-			break;
-		case DISKIMG_EXISTS:
-			say("already there\r\n");
-			break;
-		case DISKIMG_FAILED:
-			say("FAILED\r\n");
-			break;
-		}
+		progress_start();
+		diskimg_result_t r = diskimg_install(img, overwrite, window, progress, NULL);
+		if (dots)
+			put(" ");
+		put(r == DISKIMG_WRITTEN ? "written\r\n" : r == DISKIMG_EXISTS ? "already there\r\n" : "FAILED\r\n");
 		if (mounted_on >= 0)
 			drives_mount((unsigned)mounted_on, img->name);
 	}
@@ -294,8 +322,9 @@ static void create_disk(drives_format_t f) {
 		[DRIVES_EXISTS] = "there is a disk of that name",
 		[DRIVES_IO_ERROR] = "card error",
 	};
-	drives_result_t r = drives_create(line, f);
-	say("%s\r\n", r == DRIVES_OK ? "done: M mounts it" : why[r] ? why[r] : "failed");
+	progress_start();
+	drives_result_t r = drives_create(line, f, window, sizeof window, progress, NULL);
+	say("%s%s\r\n", dots ? " " : "", r == DRIVES_OK ? "done: M mounts it" : why[r] ? why[r] : "failed");
 	show_menu();
 }
 

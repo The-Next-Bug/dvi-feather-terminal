@@ -3,7 +3,7 @@
 
 // microSD card on SPI0 for FatFs (it implements FatFs's disk_* functions
 // for drive 0): SD v1 (SDSC) and v2 (SDSC/SDHC/SDXC) cards in SPI mode,
-// polled, single 512-byte blocks.
+// polled, 512-byte blocks (written several at a time).
 //
 // Pins (SPI0): GP4 MISO (card DO), GP5 CS, GP6 SCK, GP7 MOSI (card DI);
 // 3V3 and GND. The adapter has no card-detect line: a card is found by

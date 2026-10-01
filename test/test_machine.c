@@ -113,13 +113,32 @@ static void test_fat32_volume(void) {
 	CHECK_EQ(fs.fs_type, FS_FAT32);
 }
 
+// Progress callbacks seen: how many, and the last one.
+static struct {
+	unsigned calls;
+	uint32_t done, total;
+} progress_seen;
+
+static void progress(void *ctx, uint32_t done, uint32_t total) {
+	CHECK(ctx == &progress_seen);
+	CHECK(done > progress_seen.done || !progress_seen.calls);
+	++progress_seen.calls;
+	progress_seen.done = done;
+	progress_seen.total = total;
+}
+
 static void test_install(void) {
-	for (unsigned i = 0; i < diskimg_count; ++i)
-		CHECK_EQ(diskimg_install(&diskimg_list[i], false, window), DISKIMG_WRITTEN);
+	for (unsigned i = 0; i < diskimg_count; ++i) {
+		memset(&progress_seen, 0, sizeof progress_seen);
+		CHECK_EQ(diskimg_install(&diskimg_list[i], false, window, progress, &progress_seen), DISKIMG_WRITTEN);
+		CHECK(progress_seen.calls > 0);
+		CHECK_EQ(progress_seen.done, diskimg_list[i].size);
+		CHECK_EQ(progress_seen.total, diskimg_list[i].size);
+	}
 	CHECK(fat_file_exists("/DISKS80/CPM22.DSK"));
 	// Installed already: left alone unless asked.
-	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), false, window), DISKIMG_EXISTS);
-	CHECK_EQ(diskimg_install(diskimg_find("EMPTY"), true, window), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), false, window, NULL, NULL), DISKIMG_EXISTS);
+	CHECK_EQ(diskimg_install(diskimg_find("EMPTY"), true, window, NULL, NULL), DISKIMG_WRITTEN);
 }
 
 static void test_mount(void) {
@@ -190,9 +209,21 @@ static void test_write_persists(void) {
 // and F, seen by CP/M with their capacities (STAT), written to; an empty
 // drive is a select error.
 static void test_hard_disks(void) {
-	CHECK_EQ(drives_create("HD8", DRIVES_HD8), DRIVES_OK);
-	CHECK_EQ(drives_create("HD4", DRIVES_HD4), DRIVES_OK);
-	CHECK_EQ(drives_create("HD8", DRIVES_HD4), DRIVES_EXISTS);
+	memset(&progress_seen, 0, sizeof progress_seen);
+	CHECK_EQ(drives_create("HD8", DRIVES_HD8, window, sizeof window, progress, &progress_seen), DRIVES_OK);
+	CHECK_EQ(progress_seen.calls, (drives_geometry(DRIVES_HD8)->size + sizeof window - 1) / sizeof window);
+	CHECK_EQ(progress_seen.done, drives_geometry(DRIVES_HD8)->size);
+	FIL f;
+	uint8_t last[DRIVES_SECTOR];
+	UINT n;
+	CHECK_EQ(f_open(&f, "/DISKS80/HD8.DSK", FA_READ), FR_OK);
+	CHECK_EQ(f_size(&f), drives_geometry(DRIVES_HD8)->size);
+	CHECK_EQ(f_lseek(&f, f_size(&f) - sizeof last), FR_OK);
+	CHECK_EQ(f_read(&f, last, sizeof last, &n), FR_OK);
+	CHECK(last[0] == 0xe5 && last[sizeof last - 1] == 0xe5);
+	f_close(&f);
+	CHECK_EQ(drives_create("HD4", DRIVES_HD4, window, sizeof window, NULL, NULL), DRIVES_OK);
+	CHECK_EQ(drives_create("HD8", DRIVES_HD4, window, sizeof window, NULL, NULL), DRIVES_EXISTS);
 	CHECK_EQ(drives_mount(4, "HD8"), DRIVES_OK);
 	CHECK_EQ(drives_mount(5, "HD4"), DRIVES_OK);
 	CHECK_EQ(drives_format(4), DRIVES_HD8);
@@ -347,7 +378,19 @@ static const char *card_info(void) {
 	return "RAM, 40 MB";
 }
 
-static const monitor_platform_t monitor_platform = {.write = console_text, .card_info = card_info};
+static unsigned flushes;
+
+static void flush(void) {
+	++flushes;
+}
+
+static const monitor_platform_t monitor_platform = {.write = console_text, .card_info = card_info, .flush = flush};
+
+// The whole menu was shown, up to its prompt (lpt.8: it was cut short).
+static bool menu_shown(void) {
+	return strstr(screen, "C  check the card again\r\n") && strstr(screen, "F12 SET-UP (Drives, Mode)\r\n> ") &&
+		screen_len >= 2 && strcmp(screen + screen_len - 2, "> ") == 0;
+}
 
 static monitor_action_t keys(const char *s) {
 	monitor_action_t a = MONITOR_NONE;
@@ -385,6 +428,16 @@ static void test_monitor_fresh_card(void) {
 	CHECK(strstr(screen, "no such disk") != NULL);
 	CHECK_EQ(keys("l"), MONITOR_NONE);
 	CHECK(strstr(screen, "Z80TESTS") != NULL);
+	CHECK(menu_shown());
+
+	// A new 8 MB disk: progress dots, shown as they come (flush).
+	clear_screen();
+	flushes = 0;
+	CHECK_EQ(keys("nbig\r3"), MONITOR_NONE);
+	CHECK(strstr(screen, "Writing BIG.DSK (8160 KB)... ............................... done") != NULL);
+	CHECK(flushes >= 31);
+	CHECK(menu_shown());
+	CHECK_EQ(drives_image_format("BIG"), DRIVES_HD8);
 
 	// The assignments survive checking the card again (DRIVES.CFG).
 	clear_screen();
@@ -409,6 +462,7 @@ static void test_monitor_fresh_card(void) {
 	clear_screen();
 	monitor_enter(NULL, true);
 	CHECK(strstr(screen, "R       resume") != NULL);
+	CHECK(menu_shown());
 	CHECK_EQ(keys("r"), MONITOR_RUN);
 	type("DIR B:\r");
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
@@ -431,6 +485,22 @@ static void test_monitor_autoboot(void) {
 	CHECK_EQ(monitor_tick(MONITOR_AUTOBOOT_MS), MONITOR_NONE);
 }
 
+// On a card's usual 32 KB clusters a blank disk reaches the card many
+// sectors at a time (multi-block writes), not one by one (lpt.9).
+static void test_blank_disk_chunks(void) {
+	drives_unmount_all();
+	f_unmount("");
+	diskio_ram_init(VOLUME_SECTORS);
+	static uint8_t work[4096];
+	const MKFS_PARM opt = {.fmt = FM_ANY, .au_size = 32768};
+	CHECK_EQ(f_mkfs("", &opt, work, sizeof work), FR_OK);
+	CHECK_EQ(f_mount(&fs, "", 1), FR_OK);
+	diskio_ram_max_write();
+	CHECK_EQ(drives_create("HD8", DRIVES_HD8, window, sizeof window, NULL, NULL), DRIVES_OK);
+	CHECK(diskio_ram_max_write() >= sizeof window / 512);
+	CHECK_EQ(drives_image_format("HD8"), DRIVES_HD8);
+}
+
 int main(void) {
 	srand(1);
 	RUN(test_fat32_volume);
@@ -445,6 +515,7 @@ int main(void) {
 	RUN(test_no_disk_boot_rom);
 	RUN(test_monitor_fresh_card);
 	RUN(test_monitor_autoboot);
+	RUN(test_blank_disk_chunks);
 	drives_unmount_all();
 	f_unmount("");
 	diskio_ram_free();

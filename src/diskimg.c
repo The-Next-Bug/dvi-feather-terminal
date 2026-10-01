@@ -10,8 +10,10 @@
 
 typedef struct {
 	FIL *file;
-	uint32_t crc;
+	uint32_t crc, done, total;
 	bool failed;
+	diskimg_progress_t progress;
+	void *ctx;
 } sink_t;
 
 static bool write_chunk(void *ctx, const uint8_t *data, size_t len) {
@@ -22,6 +24,9 @@ static bool write_chunk(void *ctx, const uint8_t *data, size_t len) {
 		s->failed = true;
 		return false;
 	}
+	s->done += (uint32_t)len;
+	if (s->progress)
+		s->progress(s->ctx, s->done, s->total);
 	return true;
 }
 
@@ -36,7 +41,8 @@ const diskimg_t *diskimg_find(const char *name) {
 	return NULL;
 }
 
-diskimg_result_t diskimg_install(const diskimg_t *img, bool overwrite, uint8_t *window) {
+diskimg_result_t diskimg_install(const diskimg_t *img, bool overwrite, uint8_t *window,
+	diskimg_progress_t progress, void *ctx) {
 	char path[32];
 	snprintf(path, sizeof path, "/DISKS80/%s.DSK", img->name);
 	FRESULT r = f_mkdir("/DISKS80");
@@ -49,7 +55,7 @@ diskimg_result_t diskimg_install(const diskimg_t *img, bool overwrite, uint8_t *
 		return DISKIMG_EXISTS;
 	if (r != FR_OK)
 		return DISKIMG_FAILED;
-	sink_t s = {.file = &file};
+	sink_t s = {.file = &file, .total = img->size, .progress = progress, .ctx = ctx};
 	bool ok = lz_decode(img->data, img->data_len, img->size, window, write_chunk, &s) && !s.failed &&
 		s.crc == img->crc;
 	ok = f_close(&file) == FR_OK && ok;
