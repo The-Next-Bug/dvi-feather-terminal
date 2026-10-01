@@ -81,6 +81,7 @@ build:
     name: "dvi-terminal-$TARGET-$CI_COMMIT_SHORT_SHA"
     paths:
       - build/$TARGET/dvi_terminal.uf2
+      - build/$TARGET/hstx_test.uf2
       - build/$TARGET/dvi_terminal.bin
       - build/$TARGET/dvi_terminal.elf
       - build/$TARGET/dvi_terminal.dis

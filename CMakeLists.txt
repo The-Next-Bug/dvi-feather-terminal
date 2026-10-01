@@ -144,3 +144,16 @@ endif()
 pico_enable_stdio_uart(dvi_terminal 0)
 pico_enable_stdio_usb(dvi_terminal 0)
 pico_add_extra_outputs(dvi_terminal)
+
+# HSTX DVI bring-up test pattern (bd dmt.8.1): hstx_test.uf2 next to the
+# terminal. HSTX_MODE picks the timing (see src/hstx_dvi.h).
+set(HSTX_MODE 0 CACHE STRING "HSTX video mode: 0 800x600@60, 1 800x600@56, 2 800x600@60 reduced blanking")
+add_executable(hstx_test src/hstx_test.c src/hstx_dvi.c)
+target_include_directories(hstx_test PRIVATE src)
+set_source_files_properties(src/hstx_test.c src/hstx_dvi.c PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
+target_compile_definitions(hstx_test PRIVATE HSTX_MODE=${HSTX_MODE})
+target_link_libraries(hstx_test pico_stdlib hardware_dma hardware_vreg)
+pico_set_binary_type(hstx_test copy_to_ram)
+pico_enable_stdio_uart(hstx_test 1)
+pico_enable_stdio_usb(hstx_test 0)
+pico_add_extra_outputs(hstx_test)
