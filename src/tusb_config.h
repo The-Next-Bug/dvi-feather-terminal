@@ -1,7 +1,7 @@
 #ifndef TUSB_CONFIG_H
 #define TUSB_CONFIG_H
 
-// TinyUSB: host only, on the RP2040/RP2350 native USB port (root hub port
+// TinyUSB: host only, on the RP2350 native USB port (root hub port
 // 0), for HID keyboards. CFG_TUSB_MCU and CFG_TUSB_OS come from pico-sdk.
 
 #define CFG_TUH_ENABLED 1

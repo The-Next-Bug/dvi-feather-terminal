@@ -1,20 +1,24 @@
 # dvi-feather-terminal
 
-A VT100 serial terminal with DVI output for RP2040/RP2350 boards: UART in,
+A VT100 serial terminal with DVI output for RP2350 boards: UART in,
 800x600 DVI out, 80 or 132 columns by 24 rows plus a status line. It is
-meant to become the console for later RP2040/RP2350 "compute" boards (e.g.
-RunCPM). On the Pico 2, a USB keyboard on the board's USB port types to the
-host over the same UART; `tools/hostbridge.py` drives the host side from a
-PC instead.
+meant to become the console for later "compute" boards (e.g. RunCPM). A USB
+keyboard on the board's USB port types to the host over the same UART;
+`tools/hostbridge.py` drives the host side from a PC instead.
 
-Supported boards (both verified on hardware):
+Supported board (verified on hardware):
 
 | `TARGET` | Board | DVI pins (PicoDVI config) |
 |---|---|---|
-| `feather-rp2040-dvi` (default) | [Adafruit Feather RP2040 DVI](https://www.adafruit.com/product/5710) | D0-D2 GP18/20/22, clock GP16, inverted pairs (`adafruit_feather_dvi_cfg`) |
-| `pico2-dvi-sock` | Raspberry Pi Pico 2 (RP2350) with the Pico DVI Sock | D0-D2 GP12/18/16, clock GP14 (`pico_sock_cfg`) |
+| `pico2-dvi-sock` (default) | Raspberry Pi Pico 2 (RP2350) with the Pico DVI Sock | D0-D2 GP12/18/16, clock GP14 (`pico_sock_cfg`) |
 
-Releases (`vX.Y.Z` tags) ship both firmware images; see `docs/FLASHING.txt`.
+The name comes from where the project started: it was first built for the
+[Adafruit Feather RP2040 DVI](https://www.adafruit.com/product/5710), and
+that board was supported up to v0.4.0. The firmware has since outgrown the
+RP2040 (SRAM, and the USB keyboard crashed it at the DVI clock), so RP2040
+builds were dropped; the name stayed.
+
+Releases (`vX.Y.Z` tags) ship the firmware image; see `docs/FLASHING.txt`.
 
 ## Features
 
@@ -32,7 +36,7 @@ Releases (`vX.Y.Z` tags) ship both firmware images; see `docs/FLASHING.txt`.
 - **Attributes**: SGR bold (bright and emboldened), underline, blink,
   reverse; colours 8/16, 256 and 24-bit, shown with the display's 64 colours
   (RGB222).
-- **Keyboard** (Pico 2 only): USB keyboard on the native USB port (host
+- **Keyboard**: USB keyboard on the native USB port (host
   mode, see [USB keyboard](#usb-keyboard)); keys go to the host on UART0 TX.
 - **Status line** (row 24): width, build id, line settings, `kbd` while a
   keyboard is attached, `echo` when local echo is on, and the last key sent to
@@ -74,13 +78,12 @@ with ordinary output, but a long burst that scrolls the whole screen can
 overrun it (the 4 KB receive buffer fills and characters go missing). To use
 hardware RTS/CTS:
 
-1. Wire the handshake lines (on the Feather these are the STEMMA QT pins,
-   so that port is then not available for I2C):
+1. Wire the handshake lines:
 
    | Board pin | Signal | Serial adapter |
    |---|---|---|
-   | GP3 (Feather SCL) | RTS out: terminal ready to receive | CTS |
-   | GP2 (Feather SDA) | CTS in: host ready to receive | RTS |
+   | GP3 | RTS out: terminal ready to receive | CTS |
+   | GP2 | CTS in: host ready to receive | RTS |
 
 2. Build with flow control on:
    ```sh
@@ -93,17 +96,14 @@ hardware RTS/CTS:
    `tools/hostbridge.py --rtscts ...`.
 
 The status line then shows `RTS/CTS` and a `hold` count of how often the
-terminal paused the host. Do not enable it without the wires: the Feather
-has pull-ups on SDA/SCL, so an unconnected CTS reads as "hold" and the
-terminal would never send its replies (device attribute and cursor position
-reports) to the host.
+terminal paused the host. Do not enable it without the wires: an
+unconnected CTS only floats on the pin's weak pull, and if it reads as
+"hold" the terminal never sends its replies (device attribute and cursor
+position reports) to the host.
 
 ## USB keyboard
 
-**Pico 2 (`pico2-dvi-sock`) only.** The Feather RP2040 DVI build leaves the
-keyboard out (`USB_KEYBOARD` defaults to OFF there): with it, that board
-crashed, and it is not yet known why (bd `dvi-feather-terminal-dmt.20`).
-`-DUSB_KEYBOARD=ON` builds it in anyway, for experiments.
+Built in by default; `-DUSB_KEYBOARD=OFF` leaves it out.
 
 Plug a USB keyboard into the Pico 2's micro-USB port through an OTG adapter
 or cable; a hub (or a keyboard with one built in) works too. The firmware is
@@ -148,7 +148,7 @@ default background and, below it, as a background under default text.
 
 It opens from:
 
-- **F12** (or Pause) on a USB keyboard (Pico 2). While it is open, data from the
+- **F12** (or Pause) on a USB keyboard. While it is open, data from the
   host waits in the receive buffer (with RTS/CTS the host is held off).
 - **`CSI ? 999 ~`** (`ESC [ ? 9 9 9 ~`) from the host, a sequence private to
   this terminal. The bytes the host sends next are taken as keys, so it can
@@ -169,7 +169,9 @@ sequence number and a CRC, so a save cut short by a power loss keeps the
 previous settings; flashing new firmware keeps them too. A save holds up the
 terminal for the erase (typically 30-50 ms); the picture stays up, as the
 program runs from RAM. The flash is written with the 400 MHz DVI clock
-running: its serial clock is kept at 25-50 MHz (see `src/nvflash.c`).
+running: the ROM's erase/program routines run its serial clock at
+clk_sys / 12, and reads are set back to at most 50 MHz afterwards (see
+`src/nvflash.c`).
 
 ## Startup logo
 
@@ -196,7 +198,7 @@ the rest of the program; `-DLOGO_IN_FLASH=OFF` keeps the old behaviour.
 
 `tools/hostbridge.py` runs a program on this PC with the terminal as its
 display: its output goes out over the serial adapter, and your keystrokes
-here (and on a USB keyboard on a Pico 2) plus the terminal's replies
+here (and on a USB keyboard on the terminal) plus the terminal's replies
 come back as its input. Ctrl-] quits; Ctrl-\ opens [SET-UP](#set-up).
 
 ```sh
@@ -218,7 +220,7 @@ its 2bpp text encoder at 800x600p60 (400 MHz, 1.3 V).
   Williams' DEC state machine), the VT100 emulation (`src/term.c`) on a cell
   buffer (`src/screen.c`), rasterisation of changed lines into per-line
   pixel buffers (`src/raster.c`, driven by `video_update` in
-  `src/video.c`), and on the RP2350 the USB keyboard: TinyUSB host
+  `src/video.c`), and the USB keyboard: TinyUSB host
   (`src/usbkbd.c`) with boot protocol reports turned into VT100 key codes
   (`src/keyboard.c`).
 - **Core 1** encodes those buffers to TMDS one scanline at a time and draws
@@ -230,16 +232,16 @@ cells sharing a group show at most two levels per plane — true for normal
 text on one background and for reverse video. 80 columns is always exact.
 
 The firmware runs entirely from SRAM (`COPY_TO_RAM`, default ON), as
-PicoDVI's apps do: the Feather's boot2 reads flash with the slow 03h command
-at clk_sys / 4, and at DVI clocks above 252 MHz flash execution hangs (bd
-`dvi-feather-terminal-dmt.10`). `-DVIDEO_DIAG=ON` adds bring-up diagnostics
-on UART0 TX (boot markers, core 1 scanline timing, fault reports).
+PicoDVI's apps do: the boot-time flash (XIP) setup is chosen for clk_sys up
+to 150 MHz, far below the 400 MHz DVI clock (bd `dvi-feather-terminal-dmt.10`).
+`-DVIDEO_DIAG=ON` adds bring-up diagnostics on UART0 TX (boot markers, core 1
+scanline timing, fault reports).
 
 ## Layout
 
 | Path | Contents |
 |---|---|
-| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100 codes), `splash.[ch]` (startup logo unpacking), `settings.[ch]` (settings records), `setup.[ch]` (SET-UP panel), `demo.[ch]`. RP2040/RP2350: `video.[ch]` (libdvi, core 1), `serial.[ch]` (UART with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors, written at the DVI clock), `usbkbd.[ch]` and `tusb_config.h` (TinyUSB host, `USB_KEYBOARD` builds), `diag.[ch]` (VIDEO_DIAG), `main.c`. `font_gen.py` builds the font tables, `logo_gen.py` the logo |
+| `src/` | Firmware. Portable and host-tested: `screen.[ch]` (cell buffer), `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation), `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100 codes), `splash.[ch]` (startup logo unpacking), `settings.[ch]` (settings records), `setup.[ch]` (SET-UP panel), `demo.[ch]`. RP2350: `video.[ch]` (libdvi, core 1), `serial.[ch]` (UART with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors, written at the DVI clock), `usbkbd.[ch]` and `tusb_config.h` (TinyUSB host, `USB_KEYBOARD` builds), `diag.[ch]` (VIDEO_DIAG), `main.c`. `font_gen.py` builds the font tables, `logo_gen.py` the logo |
 | `test/` | Host unit tests (plain CMake + gcc with ASan/UBSan, no pico-sdk) |
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see above) |
 | `lib/pico-sdk`, `lib/PicoDVI` | Pinned submodules (plus pico-sdk's `lib/tinyusb`) |
@@ -271,15 +273,13 @@ git submodule update --init          # pico-sdk, PicoDVI (not their submodules)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # the one we need
 scripts/setup-toolchain.sh           # CMake, Arm GNU Toolchain, picotool
 scripts/test.sh                      # host unit tests
-scripts/build.sh                     # -> build/feather-rp2040-dvi/dvi_terminal.uf2, build-info.txt
-TARGET=pico2-dvi-sock scripts/build.sh   # -> build/pico2-dvi-sock/...
+scripts/build.sh                     # -> build/pico2-dvi-sock/dvi_terminal.uf2, build-info.txt
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<rev>.zip, dist/CHANGES.md
 ```
 
 `scripts/build.sh` takes `TARGET` (see the board table above),
 `SERIAL_FLOW_CONTROL` and `CMAKE_ARGS` (extra configure arguments, e.g.
-`CMAKE_ARGS=-DVIDEO_DIAG=ON`, or `-DUSB_KEYBOARD=ON/OFF` to override the
-per-chip default: ON for RP2350, OFF for RP2040). Plain `cmake -S . -B build/x` also works and
+`CMAKE_ARGS=-DVIDEO_DIAG=ON`, or `-DUSB_KEYBOARD=OFF`). Plain `cmake -S . -B build/x` also works and
 picks up `.toolchain/` automatically.
 
 Toolchain versions are pinned in **`toolchain.env`**, the single source of
@@ -290,7 +290,7 @@ by moving their submodules.
 ## CI
 
 - `test` — host unit tests (JUnit report).
-- `build` — firmware per target (matrix: both boards); UF2/BIN/ELF/
+- `build` — firmware per target (matrix, one entry per board); UF2/BIN/ELF/
   disassembly/map and `build-info.txt` artifacts.
 - `package` — ZIP with UF2 and BIN per target, `FLASHING.txt`, `CHANGES.md`
   (commits since the previous tag), `SHA256SUMS` and the source of the built

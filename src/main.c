@@ -1,11 +1,10 @@
-// DVI serial terminal for the Adafruit Feather RP2040 DVI.
+// DVI serial terminal for the Raspberry Pi Pico 2 (RP2350) with the Pico DVI Sock.
 //
 // Core 1 renders the screen over DVI (video.c). Core 0 receives UART0 into
 // a ring buffer (serial.c), feeds it to the VT100 emulator (term.c) that
 // owns rows 0-23, queues its replies back on UART0 TX, and rasterises changed
 // lines; row 24 is a status line. With -DSERIAL_FLOW_CONTROL=ON, UART0 uses
-// RTS/CTS on GP3/GP2 (the STEMMA QT pins). With USB_KEYBOARD (RP2350 builds),
-// a USB keyboard on the native USB port (usbkbd.c) types to the host through
+// RTS/CTS on GP3/GP2. With USB_KEYBOARD (the default), a USB keyboard on the native USB port (usbkbd.c) types to the host through
 // UART0 TX.
 //
 // At power-on/reset, with STARTUP_LOGO (the default), the logo (splash.h)
@@ -58,7 +57,7 @@
 #define SERIAL_FLOW_CONTROL 0
 #endif
 
-// UART0 hardware flow control pins (RP2040 UART0 CTS/RTS function).
+// UART0 hardware flow control pins (UART0 CTS/RTS function).
 #define CTS_PIN 2
 #define RTS_PIN 3
 #define TERM_COLS 80
@@ -391,8 +390,8 @@ int main(void) {
 	// with LOGO_IN_FLASH, the logo.
 	nvflash_retime();
 	// After video_init: the baud divisor depends on the final clk_peri.
-	// Diagnostic builds write to UART0 with blocking calls, which an unwired
-	// CTS (pulled up on the Feather) would hold off forever: RTS only there.
+	// Diagnostic builds write to UART0 with blocking calls, which a CTS that
+	// is unwired or held off would block forever: RTS only there.
 	serial_init(uart0, settings_baud_rate(&settings), PICO_DEFAULT_UART_TX_PIN, PICO_DEFAULT_UART_RX_PIN,
 		SERIAL_FLOW_CONTROL && !VIDEO_DIAG ? CTS_PIN : SERIAL_NO_PIN,
 		SERIAL_FLOW_CONTROL ? RTS_PIN : SERIAL_NO_PIN);

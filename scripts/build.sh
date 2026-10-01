@@ -3,7 +3,7 @@
 # from scripts/setup-toolchain.sh.
 #
 # Environment overrides:
-#   TARGET          board target (default: feather-rp2040-dvi; see below)
+#   TARGET          board target (default: pico2-dvi-sock; see below)
 #   BUILD_DIR       output root; the build lands in BUILD_DIR/TARGET (default: build)
 #   BUILD_TYPE      CMake build type (default: Release)
 #   TOOLCHAIN_DIR   toolchain location (default: <repo>/.toolchain)
@@ -14,7 +14,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-TARGET="${TARGET:-feather-rp2040-dvi}"
+TARGET="${TARGET:-pico2-dvi-sock}"
 BUILD_DIR="${BUILD_DIR:-build}"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
 SERIAL_FLOW_CONTROL="${SERIAL_FLOW_CONTROL:-OFF}"
@@ -22,10 +22,6 @@ TOOLCHAIN_DIR="${TOOLCHAIN_DIR:-$ROOT/.toolchain}"
 
 # Targets: pico-sdk board and PicoDVI pin configuration.
 case "$TARGET" in
-  feather-rp2040-dvi)
-    pico_board=adafruit_feather_rp2040
-    dvi_config=adafruit_feather_dvi_cfg
-    ;;
   pico2-dvi-sock) # Raspberry Pi Pico 2 (RP2350) with the Pico DVI Sock
     pico_board=pico2
     dvi_config=pico_sock_cfg
@@ -47,9 +43,9 @@ for sub in lib/pico-sdk lib/PicoDVI; do
     exit 1
   }
 done
-# The USB keyboard (RP2350 builds) needs it; without it pico-sdk quietly
-# drops USB support and the link fails later.
-[[ "$TARGET" != pico2-dvi-sock || -f lib/pico-sdk/lib/tinyusb/src/tusb.h ]] || {
+# The USB keyboard needs it; without it pico-sdk quietly drops USB support
+# and the link fails later.
+[[ -f lib/pico-sdk/lib/tinyusb/src/tusb.h ]] || {
   echo "error: TinyUSB missing; run: git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb" >&2
   exit 1
 }

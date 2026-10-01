@@ -68,8 +68,7 @@ git submodule update --init          # lib/pico-sdk (2.3.1), lib/PicoDVI (not th
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
 scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash
-scripts/build.sh                     # TARGET=feather-rp2040-dvi (default) -> build/<target>/dvi_terminal.uf2
-TARGET=pico2-dvi-sock scripts/build.sh   # RP2350: Pico 2 + Pico DVI Sock
+scripts/build.sh                     # TARGET=pico2-dvi-sock (default, the only one) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
 ```
 
@@ -81,8 +80,7 @@ need seconds to sync), `LOGO_IN_FLASH` (default ON, experimental dmt.25: logo da
 `.flashdata` section read via XIP after `nvflash_retime()`; frees ~19 KB of
 SRAM), `STARTUP_DEMO` (default OFF),
 `VIDEO_DIAG` (UART0 TX diagnostics, default OFF; also prints
-panic() text), `USB_KEYBOARD` (TinyUSB host keyboard; default ON for RP2350,
-OFF for RP2040, where it crashed: dmt.20),
+panic() text), `USB_KEYBOARD` (TinyUSB host keyboard; default ON),
 `COPY_TO_RAM` (default ON; must stay ON, see below).
 
 Always run `scripts/test.sh` and a firmware build before handing work
@@ -91,9 +89,11 @@ dev host; Docker is not usable for CI simulation).
 
 ## Architecture Overview
 
-VT100 serial terminal with DVI output for the Adafruit Feather RP2040 DVI
-and a Pico 2 with the Pico DVI Sock. 800x600p60 (400 MHz, 1.3 V); 80 or 132
-columns x 24 rows plus a status line (row 24); UART0 on GP0/GP1.
+VT100 serial terminal with DVI output for a Pico 2 (RP2350) with the Pico
+DVI Sock. RP2040 (Feather RP2040 DVI) support was dropped (dmt.29): out of
+SRAM, and the USB keyboard crashed it (dmt.20); CMake rejects non-RP2350
+boards. 800x600p60 (400 MHz, 1.3 V); 80 or 132 columns x 24 rows plus a
+status line (row 24); UART0 on GP0/GP1.
 
 - `src/screen.[ch]` (portable): cell buffer: glyph code, RGB222 fg/bg and
   attribute bits per cell; `row_map` (display row -> line slot) so
@@ -109,12 +109,12 @@ columns x 24 rows plus a status line (row 24); UART0 on GP0/GP1.
   the usual 132-col cases). Stored rows per line = font rows + 2 padding
   rows; connectors (line drawing, blocks, shades) extend into the padding.
   Handles underline, blink phase, bold (emboldened), reverse, cursor cell.
-- `src/video.[ch]` (RP2040/RP2350): libdvi setup, core 1 scanline loop
+- `src/video.[ch]` (RP2350): libdvi setup, core 1 scanline loop
   (encode 832 px/line into TMDS buffers with slack, cursor inversion),
   `video_update()` on core 0 rasterises dirty slots, cursor slot and blink.
 - `src/keyboard.[ch]` (portable): HID boot keyboard reports -> VT100 key
   codes (DECCKM, DECKPAM, LNM, Num/Caps Lock, autorepeat via kbd_tick).
-- `src/usbkbd.[ch]` + `src/tusb_config.h` (USB_KEYBOARD builds, RP2350 by
+- `src/usbkbd.[ch]` + `src/tusb_config.h` (USB_KEYBOARD builds, the
   default): TinyUSB host on the native USB port, boot keyboards only; keys
   go to the serial TX queue. The board does not power VBUS in host mode
   (5 V fed into the VBUS pin).
@@ -136,12 +136,10 @@ columns x 24 rows plus a status line (row 24); UART0 on GP0/GP1.
 - `src/keyname.[ch]` (portable): key bytes -> "ESC [A", "^C", ... for the
   status line's last-key field (which replaced the rx/tx/err counters).
 - `src/nvflash.[ch]`: last 2 flash sectors. Read at boot before
-  video_init; `nvflash_retime()` after the clock change. RP2350: SDK
+  video_init; `nvflash_retime()` after the clock change. SDK
   flash_range_* (ROM uses QMI clkdiv 12) + `rom_flash_select_xip_read_mode`
   03h at <=50 MHz afterwards (the boot XIP stub the SDK replays assumes
-  <=150 MHz). RP2040: own erase/program sequence that sets SSI BAUDR for
-  <=25 MHz between ROM flash_exit_xip and erase (ROM default 6 = 67 MHz),
-  then boot2 copy + BAUDR for reads. No flash_safe_execute (core 1 in RAM).
+  <=150 MHz). No flash_safe_execute (core 1 in RAM).
 - `src/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
   RTS/CTS. `src/demo.[ch]`: opt-in startup demo. `src/diag.[ch]`: VIDEO_DIAG.
 - `src/logo_gen.py` + `cmake/logo.cmake`: PNG -> run-length encoded 2-bit
@@ -164,18 +162,19 @@ columns x 24 rows plus a status line (row 24); UART0 on GP0/GP1.
 - Style: C11, tabs, K&R braces, comments explain why; match surrounding
   code. Portable modules must not include pico-sdk headers (host-tested).
 - Hardware constraints learned the hard way:
-  - Code must run from SRAM (`COPY_TO_RAM`): boot2 reads flash with 03h at
-    clk_sys/4 and flash execution hangs above ~252 MHz (dmt.10).
+  - Code must run from SRAM (`COPY_TO_RAM`): the boot XIP setup assumes
+    clk_sys <= 150 MHz (on the RP2040, flash execution hung above ~252 MHz:
+    dmt.10).
   - Core 1 must never touch flash or `const` data (which lands in flash):
     keep its data non-const/static and its code `__not_in_flash_func`.
   - `tmds_encode_font_2bpp` processes 64 px per loop pass: widths must be
     multiples of 64; it overruns otherwise (hence the TMDS buffer slack).
   - The 2 KB core 0 stack is small: big scratch arrays are static.
-  - RP2040 heap = SRAM left after .bss (code is in SRAM too). libdvi's
-    dvi_init mallocs 3 x 4.8 KB TMDS buffers, which video.c swaps for
-    heap-allocated ones with slack: ~15 KB of heap is needed at boot, and
-    malloc failure panics silently (crash before video; RP2350 unaffected).
-    Check `__end__` in the .elf.map when adding static data or libraries.
+  - Heap = SRAM left after .bss (code is in SRAM too). libdvi's dvi_init
+    mallocs 3 x 4.8 KB TMDS buffers, which video.c swaps for heap-allocated
+    ones with slack; malloc failure panics silently (crash before video).
+    The RP2350 has room, but check `__end__` in the .elf.map when adding
+    big static data or libraries.
   - Pin functions for CTS/RTS use `GPIO_FUNC_UART` (UART_FUNCSEL_NUM is
     wrong for GPIO 2/3 on RP2350).
 - Git: work on a branch, merge to `main` with `git merge --no-ff`, push only

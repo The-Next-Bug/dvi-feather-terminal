@@ -72,7 +72,7 @@ build:
   needs: []
   parallel:
     matrix:
-      - TARGET: [feather-rp2040-dvi, pico2-dvi-sock]
+      - TARGET: [pico2-dvi-sock]
   script:
     - git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb
     - scripts/setup-toolchain.sh

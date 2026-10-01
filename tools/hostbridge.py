@@ -20,8 +20,8 @@ This is how to try vttest, vim, top and friends on the terminal from a PC
 with `stty cols 132` (or start with --cols 132).
 
 With --rtscts the serial port uses RTS/CTS flow control (wire the adapter's
-RTS to the Feather's CTS, GP2/SDA, and its CTS to the Feather's RTS,
-GP3/SCL), so bulk output never overruns the terminal.
+RTS to the terminal's CTS, GP2, and its CTS to the terminal's RTS,
+GP3), so bulk output never overruns the terminal.
 
 Only the Python standard library is needed.
 """

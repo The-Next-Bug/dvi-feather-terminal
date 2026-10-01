@@ -6,7 +6,7 @@ This project uses **bd** (beads) for issue tracking. Run `bd prime` for full wor
 constraints, git and bd conventions) is in `CLAUDE.md` under "Build & Test",
 "Architecture Overview" and "Conventions & Patterns"; read those first.
 In short: `scripts/test.sh` (host tests), `scripts/build.sh`
-(`TARGET=feather-rp2040-dvi` or `pico2-dvi-sock`), toolchain in `.toolchain/`
+(`TARGET=pico2-dvi-sock`, the only target; RP2040 was dropped), toolchain in `.toolchain/`
 via `scripts/setup-toolchain.sh`; firmware must run from SRAM
 (`COPY_TO_RAM`), and hardware checks are done by the user.
 
