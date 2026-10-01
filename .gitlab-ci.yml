@@ -5,7 +5,7 @@
 # custom image or container registry is needed. The cache, keyed on that
 # file, holds the verified downloads (~200 MB) and the picotool build; each
 # job unpacks them (~25 s) rather than caching ~1.2 GB of unpacked toolchain.
-# pico-sdk and z80pack are pinned submodules.
+# pico-sdk is a pinned submodule; z80pack is vendored (lib/z80pack).
 
 # Branch and tag pipelines only. A merge request shows its branch's pipeline;
 # a separate MR pipeline would drop the rule-less test/build jobs and leave
@@ -50,8 +50,8 @@ variables:
       - .toolchain/downloads/
       - .toolchain/picotool/
 
-# Host unit tests for the portable code; needs only CMake (and the z80pack
-# submodule's disk images).
+# Host unit tests for the portable code; needs only CMake (and z80pack's
+# disk images, vendored in lib/z80pack).
 test:
   extends: .toolchain
   stage: test

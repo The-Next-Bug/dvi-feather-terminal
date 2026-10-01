@@ -64,7 +64,7 @@ Everything installs under `.toolchain/` (git-ignored); there is no system
 CMake or Arm GCC on the dev host. Use the scripts:
 
 ```bash
-git submodule update --init          # lib/pico-sdk (2.3.1), lib/z80pack (not their submodules)
+git submodule update --init          # lib/pico-sdk (2.3.1), not its submodules (lib/z80pack is vendored)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
 scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, lz, machine (boots CP/M 2.2 from a FAT32 RAM volume)
@@ -172,9 +172,9 @@ status line (row 24); UART0 on GP0/GP1.
 - Z80 CP/M machine (Mode setting "CP/M machine", bd lpt): the screen and
   keyboard become the console of a z80pack picosim-compatible machine on
   core 0 (`main.c` cpm_*: 10 ms CPU slices between keyboard, disks, screen).
-  `src/machine.[ch]` (portable): z80pack's Z80 core (`lib/z80pack`
-  submodule, MIT; only z80core + iodevices/sd-fdc.c, built by
-  `cmake/z80pack.cmake`) configured by `src/z80pack/{sim,simmem,simio,
+  `src/machine.[ch]` (portable): z80pack's Z80 core (`lib/z80pack`,
+  vendored, MIT: UPSTREAM.md has the commit and our local changes; only
+  z80core + iodevices/sd-fdc.c, built by `cmake/z80pack.cmake`) configured by `src/z80pack/{sim,simmem,simio,
   simport}.h`; picosim's port map (SIO1 0/1 console, SIO2 2/3 = UART0, FDC
   4, MMU 64, clock 65/66 without localtime, 60 Hz timer 67, hwctl 160) and
   boot ROM; bank 0 64 KB + MACHINE_BANKS x 48 KB. Slices end from

@@ -359,7 +359,7 @@ scanline timing, fault reports).
 | `test/` | Host unit tests (plain CMake + gcc with ASan/UBSan, no pico-sdk) |
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see above) |
 | `lib/pico-sdk` | Pinned submodule (plus its `lib/tinyusb`) |
-| `lib/z80pack` | Pinned submodule: z80pack (Z80 core, picosim disk images) |
+| `lib/z80pack` | Vendored part of z80pack (Z80 core, z80asm, picosim disk images); `UPSTREAM.md` gives the commit and local changes |
 | `lib/fatfs` | ChaN's FatFs R0.15a, vendored (see its README) |
 | `assets/logo/` | The startup logo (PNG used by the build, JPEG original) |
 | `assets/fonts/` | Terminus Font 8x16 (SIL OFL 1.1) and misc-fixed 6x13 (public domain); see its README |
@@ -386,7 +386,7 @@ Everything installs under `.toolchain/` in the repo (git-ignored); only
 needed.
 
 ```sh
-git submodule update --init          # pico-sdk and z80pack (not their submodules)
+git submodule update --init          # pico-sdk (not its submodules; z80pack is vendored)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # the one we need
 scripts/setup-toolchain.sh           # CMake, Arm GNU Toolchain, picotool
 scripts/test.sh                      # host unit tests
