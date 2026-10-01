@@ -186,9 +186,8 @@ void video_init(void) {
 	dvi_init(&dvi0, next_striped_spin_lock_num(), next_striped_spin_lock_num());
 	// Swap libdvi's TMDS buffers for ones with slack for the encoder. These
 	// are allocated in the same heap space rather than static: dvi_init
-	// mallocs its own first (3 x 4.8 KB), so static copies would need that
-	// much heap on top, and the RP2040 does not have it (malloc failing
-	// panics at boot, silently outside VIDEO_DIAG builds).
+	// mallocs its own first (3 x 4.8 KB), so this reuses that memory
+	// rather than adding static copies on top.
 	for (int i = 0; i < DVI_N_TMDS_BUFFERS; ++i) {
 		uint32_t *buf;
 		queue_remove_blocking_u32(&dvi0.q_tmds_free, &buf);

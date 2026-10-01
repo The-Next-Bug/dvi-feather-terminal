@@ -3,19 +3,17 @@ Flashing the DVI terminal firmware
 
 Files: dvi_terminal-<target>.uf2 for each supported board:
 
-  feather-rp2040-dvi  Adafruit Feather RP2040 DVI
   pico2-dvi-sock      Raspberry Pi Pico 2 (RP2350) with the Pico DVI Sock
 
-Both use UART0 on GP0 (TX) and GP1 (RX). The UF2s are not interchangeable:
-the RP2040 and RP2350 bootloaders each reject the other's image.
+It uses UART0 on GP0 (TX) and GP1 (RX). RP2040 boards (such as the
+Adafruit Feather RP2040 DVI) are no longer supported.
 
 1. Hold the BOOT button, press and release RESET, then release BOOT.
    (Or hold BOOT while plugging in USB.) The board appears as a USB drive
-   named RPI-RP2.
+   named RP2350.
 
 2. Copy the .uf2 for your board onto that drive. The board reboots into
-   the new firmware when the copy finishes. (The Pico 2 shows up as
-   RP2350 rather than RPI-RP2.)
+   the new firmware when the copy finishes.
 
    picotool also works: picotool load -x dvi_terminal-<target>.uf2
 
@@ -24,7 +22,7 @@ the RP2040 and RP2350 bootloaders each reject the other's image.
    then the terminal starts (at once if data arrives on the RX pin, UART0
    115200 8N1, or a key is pressed).
 
-4. Optional USB keyboard (Pico 2 only): after flashing, unplug the PC from
+4. Optional USB keyboard: after flashing, unplug the PC from
    the USB port, connect the keyboard there through an OTG adapter, and
    power the board with 5 V into VBUS (pin 40): in host mode the board does
    not power the keyboard itself. Never feed 5 V in while a PC is plugged

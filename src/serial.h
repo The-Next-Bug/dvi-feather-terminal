@@ -1,7 +1,7 @@
 #ifndef SERIAL_H
 #define SERIAL_H
 
-// The host serial line on a UART (UART0 on the Feather), interrupt-driven
+// The host serial line on a UART (UART0 here), interrupt-driven
 // on core 0.
 //
 // Receive: bytes go into a ring buffer, drained by the main loop. With
