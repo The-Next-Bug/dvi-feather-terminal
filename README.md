@@ -174,9 +174,11 @@ A new baud rate or framing applies as soon as it is saved: the host has to
 be switched to match (opened from the host, SET-UP's own keys then arrive
 at the new settings too).
 
-Settings live in the last two 4 KB sectors of the flash, used in turn with a
-sequence number and a CRC, so a save cut short by a power loss keeps the
-previous settings; flashing new firmware keeps them too. A save holds up the
+Settings live in the two 4 KB sectors before the last one of the flash, used
+in turn with a sequence number and a CRC, so a save cut short by a power loss
+keeps the previous settings; flashing new firmware keeps them too. (The last
+sector is erased by every UF2 flash: the SDK's RP2350-E10 workaround block
+for 0x10ffff00 wraps round to it.) A save holds up the
 terminal for the erase (typically 30-50 ms); the picture stays up, as the
 program runs from RAM. The flash is written with the 400 MHz DVI clock
 running: the ROM's erase/program routines run its serial clock at

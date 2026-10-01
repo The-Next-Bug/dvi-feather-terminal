@@ -11,7 +11,9 @@
 // parts.
 #define READ_SCK_MAX_HZ 50000000u
 
-#define NVFLASH_OFFSET (PICO_FLASH_SIZE_BYTES - NVFLASH_SECTORS * FLASH_SECTOR_SIZE)
+// Below the last sector (nvflash.h). The old layout's first sector is now
+// the second, so a record saved there is still found.
+#define NVFLASH_OFFSET (PICO_FLASH_SIZE_BYTES - (NVFLASH_SECTORS + 1) * FLASH_SECTOR_SIZE)
 
 extern char __flash_binary_end;
 static bool usable; // the sectors are clear of the program image

@@ -1,8 +1,11 @@
 #ifndef NVFLASH_H
 #define NVFLASH_H
 
-// The last NVFLASH_SECTORS sectors of the board's flash, for settings kept
-// across power cycles. Written with the DVI clock running (400 MHz): the
+// NVFLASH_SECTORS sectors near the end of the board's flash, for settings
+// kept across power cycles and reflashing. The very last sector is left
+// alone: the SDK's UF2 files start with an RP2350-E10 workaround block for
+// 0x10ffff00, which wraps round to the last page of a smaller flash and so
+// erases that sector on every drag-and-drop flash. Written with the DVI clock running (400 MHz): the
 // flash serial clock is kept within spec at any clk_sys, see nvflash.c.
 //
 // Writing blocks core 0 for the sector erase (typically 30-50 ms, up to

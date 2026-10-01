@@ -150,7 +150,8 @@ status line (row 24); UART0 on GP0/GP1.
   `setup_requests` and term_write stops after it; later bytes are keys).
 - `src/keyname.[ch]` (portable): key bytes -> "ESC [A", "^C", ... for the
   status line's last-key field (which replaced the rx/tx/err counters).
-- `src/nvflash.[ch]`: last 2 flash sectors. Read at boot before
+- `src/nvflash.[ch]`: the 2 flash sectors before the last (UF2 files' E10
+  workaround block at 0x10ffff00 wraps to the last sector and erases it). Read at boot before
   video_init; `nvflash_retime()` after the clock change. SDK
   flash_range_* (ROM uses QMI clkdiv 12) + `rom_flash_select_xip_read_mode`
   03h at <=50 MHz afterwards (the boot XIP stub the SDK replays assumes
