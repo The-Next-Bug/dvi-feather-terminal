@@ -11,6 +11,7 @@
 char screen[HOST_SCREEN_SIZE];
 size_t screen_len;
 bool host_echo;
+const char *host_cpr_reply;
 char aux_sent[256];
 size_t aux_len;
 
@@ -37,6 +38,9 @@ static void console_out(uint8_t c) {
 	}
 	screen[screen_len++] = (char)c;
 	screen[screen_len] = '\0';
+	if (host_cpr_reply && c == 'n' && screen_len >= 4 && memcmp(screen + screen_len - 4, "\x1b[6n", 4) == 0)
+		for (const char *r = host_cpr_reply; *r; ++r)
+			machine_key((uint8_t)*r);
 }
 
 static void aux_out(uint8_t c) {

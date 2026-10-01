@@ -2,6 +2,7 @@
 """Compress CP/M disk images into a C source for the firmware (diskimg.h).
 
 Usage: diskimg_gen.py OUTPUT.c [--system NAME BOOT BIOS CPMBIN RELOC MSIZE]
+                        [--file NAME CPMNAME HOSTFILE ...]
                         NAME=IMAGE [NAME=IMAGE ...]
 
 Each IMAGE is compressed as an LZ4 block with match offsets below
@@ -18,6 +19,10 @@ offset 0x880) moved to MSIZE K with the relocation bitmap RELOC (one bit
 per byte, set where the byte is the high byte of an address in CCP/BDOS;
 made by comparing with MOVCPM's 62K output, see src/cpm/README.md), then
 the BIOS BIOS (src/cpm/build.sh).
+
+--file (any number) adds HOSTFILE to the CP/M file system of image NAME (an
+8" floppy, user 0) as CPMNAME (8.3, e.g. WORMS.COM); the name must not be
+there already.
 """
 
 import sys
@@ -156,6 +161,81 @@ def put_system(image, boot_file, bios_file, cpm_file, reloc_file, msize):
     image[0:len(system)] = system
 
 
+# The 8" floppy's CP/M file system (src/cpm/bios.asm's DPB and TRANS).
+FD_SECTORS = 26
+FD_SKEW = [1, 7, 13, 19, 25, 5, 11, 17, 23, 3, 9, 15, 21,
+           2, 8, 14, 20, 26, 6, 12, 18, 24, 4, 10, 16, 22]
+FD_RESERVED_TRACKS = 2
+FD_BLOCK = 1024
+FD_BLOCKS = 243          # DSM + 1
+FD_DIR_ENTRIES = 64      # DRM + 1, in blocks 0 and 1
+FD_DIR_BLOCKS = 2
+EXTENT_RECORDS = 128     # 16 KB per directory entry (EXM 0)
+
+
+def fd_sector_offset(record):
+    """Image offset of logical 128-byte record (after the system tracks)."""
+    track = FD_RESERVED_TRACKS + record // FD_SECTORS
+    sector = FD_SKEW[record % FD_SECTORS] - 1
+    return (track * FD_SECTORS + sector) * SECTOR
+
+
+def fd_block(image, block, data=None):
+    """Read block (or write data to it) through the skew."""
+    per_block = FD_BLOCK // SECTOR
+    out = b""
+    for i in range(per_block):
+        off = fd_sector_offset(block * per_block + i)
+        if data is None:
+            out += bytes(image[off:off + SECTOR])
+        else:
+            image[off:off + SECTOR] = data[i * SECTOR:(i + 1) * SECTOR]
+    return out
+
+
+def add_file(image, cpm_name, host_file):
+    """host_file into the CP/M directory of image (a bytearray), user 0."""
+    base, _, ext = cpm_name.upper().partition(".")
+    if not (1 <= len(base) <= 8 and len(ext) <= 3):
+        sys.exit(f"{cpm_name}: not an 8.3 name")
+    name = base.ljust(8).encode() + ext.ljust(3).encode()
+    with open(host_file, "rb") as f:
+        data = f.read()
+    records = -(-len(data) // SECTOR)
+    data = data.ljust(records * SECTOR, b"\x1a")
+
+    directory = bytearray(b"".join(fd_block(image, b) for b in range(FD_DIR_BLOCKS)))
+    used = set(range(FD_DIR_BLOCKS))
+    free_entries = []
+    for i in range(FD_DIR_ENTRIES):
+        entry = directory[i * 32:(i + 1) * 32]
+        if entry[0] == 0xE5:
+            free_entries.append(i)
+            continue
+        if bytes(c & 0x7F for c in entry[1:12]) == name:
+            sys.exit(f"{cpm_name}: already on the disk")
+        used.update(b for b in entry[16:32] if b)
+    free_blocks = [b for b in range(FD_BLOCKS) if b not in used]
+    blocks_needed = -(-records * SECTOR // FD_BLOCK)
+    extents = max(1, -(-records // EXTENT_RECORDS))
+    if blocks_needed > len(free_blocks) or extents > len(free_entries):
+        sys.exit(f"{cpm_name}: no room on the disk")
+
+    blocks = free_blocks[:blocks_needed]
+    block_data = data.ljust(blocks_needed * FD_BLOCK, b"\x1a")
+    for i, b in enumerate(blocks):
+        fd_block(image, b, block_data[i * FD_BLOCK:(i + 1) * FD_BLOCK])
+    per_extent = EXTENT_RECORDS * SECTOR // FD_BLOCK
+    for x in range(extents):
+        ext_blocks = blocks[x * per_extent:(x + 1) * per_extent]
+        rc = min(EXTENT_RECORDS, records - x * EXTENT_RECORDS)
+        entry = bytes([0]) + name + bytes([x, 0, 0, rc]) + bytes(ext_blocks).ljust(16, b"\0")
+        i = free_entries[x]
+        directory[i * 32:(i + 1) * 32] = entry
+    for b in range(FD_DIR_BLOCKS):
+        fd_block(image, b, directory[b * FD_BLOCK:(b + 1) * FD_BLOCK])
+
+
 def main():
     if len(sys.argv) < 3:
         sys.exit(__doc__)
@@ -165,6 +245,10 @@ def main():
     if args and args[0] == "--system":
         system = args[1:7]
         args = args[7:]
+    files = []
+    while args and args[0] == "--file":
+        files.append(args[1:4])
+        args = args[4:]
     images = []
     for arg in args:
         name, path = arg.split("=", 1)
@@ -172,10 +256,13 @@ def main():
             sys.exit(f"{name}: image names are 1-8 upper-case letters and digits")
         with open(path, "rb") as f:
             data = f.read()
+        data = bytearray(data)
         if system and system[0] == name:
-            data = bytearray(data)
             put_system(data, *system[1:5], int(system[5]))
-            data = bytes(data)
+        for image_name, cpm_name, host_file in files:
+            if image_name == name:
+                add_file(data, cpm_name, host_file)
+        data = bytes(data)
         packed = compress(data)
         if decompress(packed, len(data)) != data:
             sys.exit(f"{path}: compression check failed")
