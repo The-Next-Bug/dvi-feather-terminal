@@ -32,11 +32,15 @@ typedef struct {
 	uint8_t newline;    // LNM at power-on/RIS: 1 on
 	uint8_t colours;    // index: see settings_colours
 	uint8_t palette;    // 1: mono, SGR colours ignored (term_set_palette)
+	uint8_t mode;       // SETTINGS_MODE_*: what the screen and keyboard are for
 } settings_t;
+
+#define SETTINGS_MODE_TERMINAL 0 // a serial terminal on UART0
+#define SETTINGS_MODE_CPM 1      // the console of the Z80 CP/M machine (machine.h)
 
 // The settings, in settings_t order, with the values each can take (the
 // first choice need not be the default) and their names for SET-UP.
-#define SETTINGS_FIELDS 8
+#define SETTINGS_FIELDS 9
 #define SETTINGS_MAX_CHOICES 9
 
 typedef struct {

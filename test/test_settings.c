@@ -26,7 +26,7 @@ static void erase_all(void) {
 
 static void test_round_trip(void) {
 	settings_t in = {.columns = 132, .backspace = 0x08, .local_echo = 1, .baud = 4, .framing = 4,
-		.newline = 1, .colours = 2, .palette = 1}, out;
+		.newline = 1, .colours = 2, .palette = 1, .mode = SETTINGS_MODE_CPM}, out;
 	uint8_t rec[SETTINGS_RECORD_SIZE];
 	uint32_t seq = 0;
 	settings_encode(&in, 0x12345678, rec);
@@ -39,6 +39,7 @@ static void test_round_trip(void) {
 	CHECK_EQ(out.newline, 1);
 	CHECK_EQ(out.colours, 2);
 	CHECK_EQ(out.palette, 1);
+	CHECK_EQ(out.mode, SETTINGS_MODE_CPM);
 	CHECK_EQ(seq, 0x12345678);
 	CHECK_EQ(rec[SETTINGS_RECORD_SIZE - 1], 0xff); // unused bytes stay erased
 }

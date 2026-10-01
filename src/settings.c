@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "crc32.h"
 #include "screen.h" // RGB222
 
 #define COUNT(a) (sizeof(a) / sizeof((a)[0]))
@@ -53,6 +54,7 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 	{"New line (LNM)", 2, {0, 1}, {"off", "on"}},
 	{"Colors", 4, {0, 1, 2, 3}, {"white", "green", "amber", "blue"}},
 	{"Palette", 2, {0, 1}, {"color", "mono"}},
+	{"Mode", 2, {SETTINGS_MODE_TERMINAL, SETTINGS_MODE_CPM}, {"terminal", "CP/M machine"}},
 };
 
 unsigned settings_baud_rate(const settings_t *s) {
@@ -93,18 +95,6 @@ settings_colours_t settings_colours(const settings_t *s) {
 	return c;
 }
 
-// CRC-32 (IEEE, reflected), bitwise: a table would cost 1 KB of RAM for a
-// few hundred bytes checked at boot and on save.
-static uint32_t crc32_update(uint32_t crc, const uint8_t *data, size_t len) {
-	crc = ~crc;
-	while (len--) {
-		crc ^= *data++;
-		for (int i = 0; i < 8; ++i)
-			crc = crc >> 1 ^ (0xedb88320u & -(crc & 1));
-	}
-	return ~crc;
-}
-
 static uint32_t get32(const uint8_t *p) {
 	return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
 }
@@ -122,7 +112,7 @@ static uint32_t record_crc(const uint8_t *rec, unsigned len) {
 
 void settings_defaults(settings_t *s) {
 	*s = (settings_t){.columns = 80, .backspace = 0x7f, .local_echo = 0, .baud = BAUD_DEFAULT,
-		.framing = 0, .newline = 0, .colours = 0, .palette = 0};
+		.framing = 0, .newline = 0, .colours = 0, .palette = 0, .mode = SETTINGS_MODE_TERMINAL};
 }
 
 void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_RECORD_SIZE]) {

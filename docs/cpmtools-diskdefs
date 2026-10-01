@@ -1,0 +1,40 @@
+# cpmtools disk definitions for the DVI terminal's Z80 machine disk images
+# (/DISKS80/*.DSK). Append them to cpmtools' diskdefs file (where cpmtools
+# was installed, e.g. /usr/share/diskdefs or /usr/local/share/diskdefs),
+# then e.g.: cpmls -f dvi-hd8 DISK.DSK
+
+# 8" SSSD floppy (z80pack picosim); cpmtools' own ibm-3740 is the same.
+diskdef dvi-fd
+  seclen 128
+  tracks 77
+  sectrk 26
+  blocksize 1024
+  maxdir 64
+  skew 6
+  boottrk 2
+  os 2.2
+end
+
+# 4 MB hard disk (z80pack's cpmsim format); cpmtools' own z80pack-hd is the same.
+diskdef dvi-hd4
+  seclen 128
+  tracks 255
+  sectrk 128
+  blocksize 2048
+  maxdir 1024
+  skew 0
+  boottrk 0
+  os 2.2
+end
+
+# 8 MB hard disk.
+diskdef dvi-hd8
+  seclen 128
+  tracks 256
+  sectrk 255
+  blocksize 4096
+  maxdir 1024
+  skew 0
+  boottrk 0
+  os 2.2
+end

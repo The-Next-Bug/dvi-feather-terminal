@@ -37,6 +37,10 @@ option(COPY_TO_RAM "Run the whole program from SRAM instead of flash" ON)
 # Video timing (src/hstx_dvi.h): 800x600 at 60 Hz needs clk_hstx at 200 MHz,
 # beyond its 150 MHz rating; the others are fallbacks with slower clocks.
 set(HSTX_MODE 0 CACHE STRING "HSTX video mode: 0 800x600@60, 1 800x600@56, 2 800x600@60 reduced blanking")
+# Z80 CP/M machine (Mode setting): 48 KB memory banks besides the 64 KB of
+# bank 0. CP/M 2.2 needs none, CP/M 3 one; MP/M wants as many as it was
+# generated for.
+set(MACHINE_BANKS 2 CACHE STRING "Z80 machine: number of 48 KB banks (MMU port 64)")
 
 include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
@@ -54,6 +58,8 @@ message(STATUS "USB_KEYBOARD: ${USB_KEYBOARD}")
 set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
 include(cmake/fonts.cmake)
 include(cmake/logo.cmake)
+include(cmake/diskimg.cmake)
+include(cmake/z80pack.cmake)
 
 # Runs on every build; rewrites term_build.h only when git state changes.
 add_custom_target(build_info
@@ -64,14 +70,22 @@ add_custom_target(build_info
   VERBATIM)
 
 add_executable(dvi_terminal
+  src/crc32.c
   src/demo.c
   src/diag.c
+  src/diskimg.c
+  src/drivepanel.c
+  src/drives.c
   src/hstx_dvi.c
   src/keyname.c
+  src/lz.c
+  src/machine.c
   src/main.c
+  src/monitor.c
   src/nvflash.c
   src/raster.c
   src/screen.c
+  src/sdcard.c
   src/settings.c
   src/setup.c
   src/term.c
@@ -80,18 +94,23 @@ add_executable(dvi_terminal
   src/video.c
   src/vtparse.c
   ${FONT_SOURCES}
+  ${DISKIMG_SOURCES}
+  ${Z80PACK_SOURCES}
+  ${FATFS_SOURCES}
 )
-add_dependencies(dvi_terminal build_info)
+add_dependencies(dvi_terminal build_info diskimg_data)
 
 target_include_directories(dvi_terminal PRIVATE
   src
   ${GENERATED}
+  ${Z80PACK_INCLUDE_DIRS}
+  ${FATFS_INCLUDE_DIR}
 )
 
 # Warnings for our sources only, not the SDK's.
-set_source_files_properties(src/demo.c src/diag.c src/hstx_dvi.c src/keyboard.c src/keyname.c src/main.c src/nvflash.c src/raster.c
-  src/screen.c src/settings.c src/setup.c src/splash.c src/term.c src/serial.c src/usbkbd.c src/video.c
-  src/vtparse.c
+set_source_files_properties(src/crc32.c src/demo.c src/diag.c src/diskimg.c src/drivepanel.c src/drives.c src/hstx_dvi.c src/keyboard.c
+  src/keyname.c src/lz.c src/machine.c src/main.c src/monitor.c src/nvflash.c src/raster.c src/screen.c src/sdcard.c
+  src/settings.c src/setup.c src/splash.c src/term.c src/serial.c src/usbkbd.c src/video.c src/vtparse.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 
 target_compile_definitions(dvi_terminal PRIVATE
@@ -103,6 +122,9 @@ target_compile_definitions(dvi_terminal PRIVATE
   VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>
   USB_KEYBOARD=$<BOOL:${USB_KEYBOARD}>
   SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>
+  MACHINE_BANKS=${MACHINE_BANKS}
+  # The built-in disk images stay in flash (read by core 0 when installed).
+  DISKIMG_IN_FLASH=1
   # The compose loop needs very little stack.
   PICO_CORE1_STACK_SIZE=0x200
 )
@@ -113,7 +135,9 @@ target_link_libraries(dvi_terminal
   hardware_flash
   hardware_uart
   hardware_dma
+  hardware_spi
   hardware_vreg
+  hardware_watchdog
 )
 
 if(STARTUP_LOGO)

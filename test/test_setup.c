@@ -201,6 +201,32 @@ static void test_colours_preview(void) {
 	CHECK(fg == blue && bg == black);
 }
 
+static void test_machine_menu_key(void) {
+	open_with(80);
+	CHECK_EQ(send("m", 0), SETUP_NONE); // terminal mode: not offered
+	u.machine_menu = true;
+	CHECK_EQ(send("M", 0), SETUP_MACHINE);
+	CHECK_EQ(send("m", 0), SETUP_MACHINE);
+	CHECK_EQ(send("D", 0), SETUP_DRIVES);
+
+	screen_t s;
+	screen_init(&s, 80, FG, BG);
+	setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG);
+	char help[81] = "";
+	for (unsigned c = 0; c < 80; ++c)
+		help[c] = (char)screen_glyph(&s, c, SCREEN_ROWS - 2);
+	CHECK(strstr(help, "D drives  M monitor") != NULL);
+}
+
+static void test_mode_setting(void) {
+	open_with(80);
+	CHECK_EQ(u.values.mode, SETTINGS_MODE_TERMINAL);
+	for (unsigned i = 0; i < SETUP_ITEMS - 1; ++i)
+		send("\x1b[B", 0);
+	CHECK_EQ(send(" ", 0), SETUP_REDRAW);
+	CHECK_EQ(u.values.mode, SETTINGS_MODE_CPM);
+}
+
 int main(void) {
 	RUN(test_space_and_arrows_change_columns);
 	RUN(test_down_selects_next_setting);
@@ -211,5 +237,7 @@ int main(void) {
 	RUN(test_message_cleared_by_next_key);
 	RUN(test_draw_marks_current_choice);
 	RUN(test_colours_preview);
+	RUN(test_machine_menu_key);
+	RUN(test_mode_setting);
 	return tests_done();
 }

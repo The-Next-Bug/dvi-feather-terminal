@@ -36,6 +36,10 @@ void usbkbd_init(kbd_output_t output, kbd_setup_t setup, void *ctx) {
 	tusb_init(0, &host);
 }
 
+void usbkbd_set_reset_key(kbd_setup_t reset) {
+	kbd_set_reset_key(&kbd, reset);
+}
+
 void usbkbd_poll(const kbd_modes_t *modes) {
 	poll_modes = modes;
 	tuh_task();

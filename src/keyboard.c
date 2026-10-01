@@ -21,6 +21,7 @@ enum {
 	KEY_SLASH = 0x38,
 	KEY_CAPS_LOCK = 0x39,
 	KEY_F1 = 0x3a,
+	KEY_F11 = 0x44,
 	KEY_F12 = 0x45,
 	KEY_PAUSE = 0x48, // SET-UP, as is F12
 	KEY_INSERT = 0x49,
@@ -261,6 +262,10 @@ void kbd_set_setup_key(kbd_t *k, kbd_setup_t setup) {
 	k->setup = setup;
 }
 
+void kbd_set_reset_key(kbd_t *k, kbd_setup_t reset) {
+	k->reset = reset;
+}
+
 bool kbd_report(kbd_t *k, const uint8_t report[8], const kbd_modes_t *modes, uint32_t now_ms) {
 	const uint8_t *keys = report + 2;
 	// Too many keys down: the keyboard reports ErrorRollOver in every slot
@@ -283,6 +288,8 @@ bool kbd_report(kbd_t *k, const uint8_t report[8], const kbd_modes_t *modes, uin
 		} else if (key == KEY_F12 || key == KEY_PAUSE) {
 			if (k->setup)
 				k->setup(k->output_ctx);
+		} else if (key == KEY_F11 && k->reset) {
+			k->reset(k->output_ctx); // no repeat
 		} else {
 			send(k, key, modes);
 			k->repeat_key = key;

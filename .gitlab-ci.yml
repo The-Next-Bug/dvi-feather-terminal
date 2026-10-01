@@ -5,7 +5,7 @@
 # custom image or container registry is needed. The cache, keyed on that
 # file, holds the verified downloads (~200 MB) and the picotool build; each
 # job unpacks them (~25 s) rather than caching ~1.2 GB of unpacked toolchain.
-# pico-sdk is a pinned submodule.
+# pico-sdk and z80pack are pinned submodules.
 
 # Branch and tag pipelines only. A merge request shows its branch's pipeline;
 # a separate MR pipeline would drop the rule-less test/build jobs and leave
@@ -50,7 +50,8 @@ variables:
       - .toolchain/downloads/
       - .toolchain/picotool/
 
-# Host unit tests for the portable terminal code; needs only CMake.
+# Host unit tests for the portable code; needs only CMake (and the z80pack
+# submodule's disk images).
 test:
   extends: .toolchain
   stage: test
@@ -95,6 +96,8 @@ package:
   stage: package
   needs: [test, build]
   script:
+    # For TinyUSB's licence text, which the package ships.
+    - git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb
     - BUILD_DIR=build DIST_DIR=dist scripts/package.sh
   artifacts:
     name: "dvi-terminal-$CI_COMMIT_REF_SLUG"

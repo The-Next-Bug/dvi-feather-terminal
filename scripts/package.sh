@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Package finished builds into a release ZIP: for every target built under
-# BUILD_DIR, its UF2, BIN and build-info; plus flashing instructions,
-# CHANGES.md (from the git history since the previous tag), SHA256SUMS and the
+# BUILD_DIR, its UF2, BIN and build-info; plus flashing instructions, the
+# third-party notices and licence texts, CHANGES.md (from the git history since the previous tag), SHA256SUMS and the
 # source of the built commit. CHANGES.md is also written next to the ZIP for
 # use as release notes.
 #
@@ -41,12 +41,29 @@ for f in "${infos[@]}"; do
   cp "$dir/dvi_terminal.bin" "$stage/dvi_terminal-$target.bin"
   cp "$f" "$stage/build-info-$target.txt"
 done
-cp docs/FLASHING.txt "$stage/"
+cp docs/FLASHING.txt docs/THIRD-PARTY.md "$stage/"
+
+# Licence texts of the third-party code and data in the firmware
+# (docs/THIRD-PARTY.md lists them), from the sources the build used. TinyUSB
+# is pico-sdk's submodule: lib/pico-sdk/lib/tinyusb must be checked out.
+mkdir -p "$stage/licenses"
+licence() {
+  [[ -f "$1" ]] || { echo "error: licence text $1 missing (submodules checked out?)" >&2; exit 1; }
+  cp "$1" "$stage/licenses/$2"
+}
+licence lib/pico-sdk/LICENSE.TXT pico-sdk-BSD-3-Clause.txt
+licence lib/pico-sdk/src/rp2_common/cmsis/stub/CMSIS/LICENSE.txt Apache-2.0.txt
+licence lib/pico-sdk/lib/tinyusb/LICENSE tinyusb-MIT.txt
+licence lib/z80pack/LICENSE z80pack-MIT.txt
+licence lib/fatfs/LICENSE.txt FatFs-BSD-1-Clause.txt
+licence assets/fonts/Terminus-OFL.txt Terminus-OFL-1.1.txt
+licence docs/licenses/GPL-2.0.txt GPL-2.0.txt
 scripts/changelog.sh "$sha" | tee "$stage/CHANGES.md" > "$DIST_DIR/CHANGES.md"
 (cd "$stage" && sha256sum -- *.uf2 *.bin > SHA256SUMS)
 
-# Source of exactly the commit that was built. The pico-sdk submodule is not
-# included; its commit is recorded in build-info-*.txt.
+# Source of exactly the commit that was built. The submodules (pico-sdk,
+# z80pack) are not included; pico-sdk's commit is recorded in
+# build-info-*.txt, z80pack's in the source's git tree.
 mkdir -p "$stage/source"
 git archive --format=tar "$sha" | tar -x -C "$stage/source"
 

@@ -17,6 +17,13 @@
 // F12 or Pause key, or when the host sends CSI ? 999 ~ (then keys come from UART0
 // RX too, so it can be driven from the host's keyboard). The settings are
 // kept in flash (nvflash.c, settings.c); the saved width is the power-on one.
+//
+// With the Mode setting at "CP/M machine", the screen and keyboard are
+// instead the console of a Z80 CP/M machine (machine.c, z80pack's CPU core)
+// run on core 0 between the other work, with its disks on a microSD card
+// (sdcard.c, drives.c) and UART0 as its second serial port. The monitor
+// (monitor.c) boots it and manages the disks. Changing Mode restarts the
+// board.
 
 #include <assert.h>
 #include <stdio.h>
@@ -24,11 +31,17 @@
 
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
+#include "hardware/watchdog.h"
 
 #include "demo.h"
 #include "diag.h"
+#include "drivepanel.h"
+#include "drives.h"
 #include "keyname.h"
+#include "machine.h"
+#include "monitor.h"
 #include "nvflash.h"
+#include "sdcard.h"
 #include "screen.h"
 #include "settings.h"
 #include "setup.h"
@@ -73,6 +86,9 @@
 #define TERM_ROWS (SCREEN_ROWS - 1)
 #define STATUS_ROW (SCREEN_ROWS - 1)
 #define STATUS_INTERVAL_MS 250
+#define CPU_SLICE_US 10000 // the Z80 runs this long between the other work
+#define CPM_KEY_QUEUE 64   // a power of two
+#define DRIVE_LIGHT_MS 150 // a drive letter stays lit this long after an access
 #define SETUP_TOP (TERM_ROWS - SETUP_ROWS)
 
 static_assert(NVFLASH_SECTORS == SETTINGS_SLOTS && NVFLASH_PAGE_SIZE == SETTINGS_RECORD_SIZE,
@@ -103,7 +119,25 @@ static struct {
 	screen_line_t saved[SETUP_ROWS];
 	uint32_t saved_reverse;
 	bool saved_cursor;
+	// CP/M mode: the Drives panel (D), over the same rows.
+	bool drives_open, drives_apply;
+	drivepanel_t drives;
 } setup;
+
+static_assert(DRIVEPANEL_ROWS <= SETUP_ROWS, "the Drives panel fits SET-UP's rows");
+
+// The Z80 machine (CP/M mode). Keys are queued here and handed to the CPU
+// or the monitor from the main loop, never from inside the USB stack.
+static struct {
+	bool on;      // Mode was CP/M at power-on
+	bool running; // the CPU runs; otherwise the monitor has the console
+	bool reset_requested; // F11, from inside the USB stack
+	uint8_t keys[CPM_KEY_QUEUE];
+	unsigned key_head, key_tail;
+	uint32_t khz; // last measured emulated clock
+	uint32_t light_until[DRIVES]; // ms: the drive's letter is lit until then
+	uint8_t lit;  // drive letters shown lit on the status line
+} cpm;
 
 // With VIDEO_DIAG, report core 1's timing on UART0 TX twice a second.
 static void diag_poll(void) {
@@ -128,11 +162,35 @@ static void setup_draw_panel(void) {
 	setup_draw(&setup.ui, &screen, SETUP_TOP, title, colours.status_fg, colours.status_bg);
 }
 
-// Key bytes for SET-UP. A save or cancel is left for the main loop (the
-// keyboard calls this from inside the USB stack); later bytes are dropped.
+static void drives_draw_panel(void) {
+	for (unsigned r = DRIVEPANEL_ROWS; r < SETUP_ROWS; ++r)
+		screen_clear_line(&screen, SETUP_TOP + r, colours.status_fg, colours.status_bg);
+	drivepanel_draw(&setup.drives, &screen, SETUP_TOP, colours.status_fg, colours.status_bg);
+}
+
+// A key for the Drives panel. Mounting is left for the main loop.
+static void drives_feed(uint8_t c, uint32_t now) {
+	drivepanel_action_t a = drivepanel_input(&setup.drives, c, now);
+	if (a == DRIVEPANEL_REDRAW) {
+		drives_draw_panel();
+	} else if (a == DRIVEPANEL_APPLY) {
+		setup.drives_apply = true;
+	} else if (a == DRIVEPANEL_CANCEL) {
+		setup.drives_open = false;
+		setup_draw_panel();
+	}
+}
+
+// Key bytes for SET-UP. A save, cancel or anything touching the SD card is
+// left for the main loop (the keyboard calls this from inside the USB
+// stack); later bytes are dropped.
 static void setup_feed(const uint8_t *data, size_t len) {
 	uint32_t now = to_ms_since_boot(get_absolute_time());
-	for (size_t i = 0; i < len && setup.action == SETUP_NONE; ++i) {
+	for (size_t i = 0; i < len && setup.action == SETUP_NONE && !setup.drives_apply; ++i) {
+		if (setup.drives_open) {
+			drives_feed(data[i], now);
+			continue;
+		}
 		setup_action_t a = setup_input(&setup.ui, data[i], now);
 		if (a == SETUP_REDRAW)
 			setup_draw_panel();
@@ -146,9 +204,12 @@ static void setup_enter(bool from_host) {
 	settings_t current = settings;
 	current.columns = screen.cols;
 	current.backspace = term.backspace_bs ? 0x08 : 0x7f;
-	current.newline = term.newline_mode;
+	// CP/M mode keeps LNM off (apply_settings): the saved choice stands.
+	current.newline = cpm.on ? settings.newline : term.newline_mode;
 	setup_open(&setup.ui, &current);
+	setup.ui.machine_menu = cpm.on;
 	setup.active = true;
+	setup.drives_open = setup.drives_apply = false;
 	setup.from_host = from_host;
 	setup.action = SETUP_NONE;
 	for (unsigned r = 0; r < SETUP_ROWS; ++r)
@@ -169,12 +230,14 @@ static void apply_line(const settings_t *s) {
 }
 
 // Use settings s: the line, the modes RIS resets to (also set now) and the
-// colours. The width is only used at power-on and by SET-UP; local echo is
+// colours. In CP/M mode LNM stays off: CP/M wants Return as CR alone (a
+// following LF waits as a key, which stops DIR and TYPE early) and sends
+// CR LF itself. The width is only used at power-on and by SET-UP; local echo is
 // read from `settings` as keys are sent.
 static void apply_settings(const settings_t *s) {
 	apply_line(s);
 	term_set_defaults(&term, &(term_defaults_t){.backspace_bs = s->backspace == 0x08,
-		.newline_mode = s->newline});
+		.newline_mode = s->newline && !cpm.on});
 	colours = settings_colours(s);
 	term_set_colours(&term, colours.fg, colours.bold_fg, colours.bg);
 	term_set_palette(&term, s->palette);
@@ -188,6 +251,7 @@ static void setup_leave(bool apply) {
 	screen_set_reverse_rows(&screen, setup.saved_reverse);
 	screen.cursor_visible = setup.saved_cursor;
 	setup.active = false;
+	setup.drives_open = setup.drives_apply = false;
 	if (!apply)
 		return;
 	apply_settings(&setup.ui.values);
@@ -206,20 +270,60 @@ static bool setup_save(void) {
 	return true;
 }
 
+// The Drives panel's pending mount, or its Escape key timeout.
+static void drives_service(void) {
+	if (setup.drives_apply) {
+		setup.drives_apply = false;
+		bool failed;
+		unsigned changed = drivepanel_apply(&setup.drives, &failed);
+		drivepanel_open(&setup.drives); // as now mounted
+		setup.drives.message = failed ? "A disk could not be mounted (not a disk image?)"
+			: changed ? "Done: type ^C at the CP/M prompt to use the changed drives"
+			: "No changes";
+		drives_draw_panel();
+	} else if (drivepanel_tick(&setup.drives, to_ms_since_boot(get_absolute_time())) == DRIVEPANEL_CANCEL) {
+		setup.drives_open = false;
+		setup_draw_panel();
+	}
+}
+
 // Run SET-UP's pending save or cancel, or the Escape key timeout.
 static void setup_service(void) {
+	if (setup.drives_open && setup.action == SETUP_NONE) {
+		drives_service();
+		return;
+	}
 	if (setup.action == SETUP_NONE)
 		setup.action = setup_tick(&setup.ui, to_ms_since_boot(get_absolute_time()));
 	setup_action_t a = setup.action;
 	setup.action = SETUP_NONE;
 	if (a == SETUP_CANCEL) {
 		setup_leave(false);
+	} else if (a == SETUP_DRIVES) {
+		drivepanel_open(&setup.drives);
+		setup.drives_open = true;
+		drives_draw_panel();
+	} else if (a == SETUP_MACHINE) {
+		setup_leave(false);
+		cpm.running = false;
+		monitor_enter(NULL, true);
 	} else if (a == SETUP_SAVE) {
 		// The erase holds core 0 for tens of ms: say so first.
 		setup.ui.message = "Saving...";
 		setup_draw_panel();
 		video_update(&screen);
 		if (setup_save()) {
+			if (settings.mode != (cpm.on ? SETTINGS_MODE_CPM : SETTINGS_MODE_TERMINAL)) {
+				// The other mode starts from a clean power-on.
+				setup.ui.message = "Restarting...";
+				setup_draw_panel();
+				video_update(&screen);
+				if (cpm.on)
+					drives_flush();
+				watchdog_reboot(0, 0, 0);
+				while (true)
+					tight_loop_contents();
+			}
 			setup_leave(true);
 		} else {
 			setup.ui.message = "Saving to flash failed";
@@ -238,11 +342,16 @@ static void send_key(void *ctx, const uint8_t *data, size_t len) {
 		setup_feed(data, len);
 		return;
 	}
-	serial_write(data, len);
+	if (cpm.on) {
+		for (size_t i = 0; i < len && cpm.key_head - cpm.key_tail < CPM_KEY_QUEUE; ++i)
+			cpm.keys[cpm.key_head++ % CPM_KEY_QUEUE] = data[i];
+	} else {
+		serial_write(data, len);
+	}
 	last_key.len = (uint8_t)(len < sizeof last_key.data ? len : sizeof last_key.data);
 	memcpy(last_key.data, data, last_key.len);
 	++last_key.count;
-	if (term_started && settings.local_echo)
+	if (term_started && settings.local_echo && !cpm.on)
 		term_write(&term, data, len);
 }
 
@@ -256,6 +365,14 @@ static void setup_key(void *ctx) {
 		setup.action = SETUP_CANCEL;
 	else
 		setup.open_requested = true;
+}
+
+// F11 in CP/M mode: the Z80 machine's reset button (cpm_step acts on it).
+static void reset_key(void *ctx) {
+	(void)ctx;
+	key_pressed = true;
+	if (term_started && !setup.active)
+		cpm.reset_requested = true;
 }
 
 // The terminal modes that change what keys send (none before it starts).
@@ -338,7 +455,180 @@ static size_t run_demo(uint8_t *buf, size_t max) {
 // Replies to the host (device attributes, cursor position reports).
 static void send_reply(void *ctx, const uint8_t *data, size_t len) {
 	(void)ctx;
-	serial_write(data, len);
+	if (cpm.on) {
+		for (size_t i = 0; i < len; ++i)
+			machine_key(data[i]);
+	} else {
+		serial_write(data, len);
+	}
+}
+
+// ---- CP/M mode: the Z80 machine's platform and the monitor's ----
+
+static uint64_t cpm_clock_us(void) {
+	return time_us_64();
+}
+
+static void cpm_console_out(uint8_t c) {
+	term_write(&term, &c, 1);
+}
+
+static void cpm_aux_out(uint8_t c) {
+	serial_write(&c, 1);
+}
+
+static bool cpm_aux_in(uint8_t *c) {
+	return serial_read(c, 1) == 1;
+}
+
+static uint8_t cpm_disk_read(unsigned drive, unsigned track, unsigned sector, uint8_t *buf) {
+	return drives_read(drive, track, sector, buf);
+}
+
+static uint8_t cpm_disk_write(unsigned drive, unsigned track, unsigned sector, const uint8_t *buf) {
+	return drives_write(drive, track, sector, buf);
+}
+
+// Queued keys to the CPU while it runs (as many as it has room for), else
+// to the monitor.
+static void cpm_feed_keys(uint32_t now_ms) {
+	while (cpm.key_tail != cpm.key_head) {
+		uint8_t c = cpm.keys[cpm.key_tail % CPM_KEY_QUEUE];
+		if (cpm.running) {
+			if (!machine_key(c))
+				return;
+		} else if (monitor_key(c, now_ms) == MONITOR_RUN) {
+			cpm.running = true;
+		}
+		++cpm.key_tail;
+	}
+}
+
+// The CPU waits (HALT, the speed limit): keep the keyboard, UART0 and the
+// screen going.
+static void cpm_idle(void) {
+	keyboard_poll();
+	serial_poll();
+	if (cpm.running)
+		cpm_feed_keys(to_ms_since_boot(get_absolute_time()));
+	video_update(&screen);
+}
+
+static uint8_t cpm_disk_format(unsigned drive) {
+	return (uint8_t)drives_format(drive);
+}
+
+static const machine_platform_t cpm_platform = {
+	.clock_us = cpm_clock_us,
+	.idle = cpm_idle,
+	.console_out = cpm_console_out,
+	.aux_out = cpm_aux_out,
+	.aux_in = cpm_aux_in,
+	.disk_read = cpm_disk_read,
+	.disk_write = cpm_disk_write,
+	.disk_format = cpm_disk_format,
+};
+
+static void cpm_write(const char *text) {
+	term_puts(&term, text);
+}
+
+static const char *cpm_card_info(void) {
+	static char text[32];
+	sdcard_type_t type = sdcard_type();
+	if (type == SDCARD_NONE)
+		return NULL;
+	uint32_t mb = sdcard_blocks() / 2048;
+	snprintf(text, sizeof text, "%s, %lu.%lu GB", type == SDCARD_SDHC ? "SDHC/SDXC" : "SDSC",
+		(unsigned long)(mb / 1024), (unsigned long)(mb % 1024 * 10 / 1024));
+	return text;
+}
+
+static void cpm_flush(void) {
+	video_update(&screen);
+}
+
+static const monitor_platform_t cpm_monitor = {.write = cpm_write, .card_info = cpm_card_info, .flush = cpm_flush};
+
+// F11: reset the machine and boot from drive A, as the reset button of a
+// real one would; with no disk in A, the monitor instead.
+static void cpm_reset(void) {
+	cpm.reset_requested = false;
+	cpm.key_tail = cpm.key_head; // typed-ahead keys were for the old run
+	drives_flush();
+	if (!drives_name(0)) {
+		cpm.running = false;
+		monitor_enter("Reset: no disk in drive A", false);
+		return;
+	}
+	term_puts(&term, "\r\n*** Reset\r\n");
+	machine_reset();
+	cpm.running = true;
+}
+
+// Run the CPU for a slice, or the monitor's countdown.
+static void cpm_step(void) {
+	uint32_t now = to_ms_since_boot(get_absolute_time());
+	if (cpm.reset_requested)
+		cpm_reset();
+	cpm_feed_keys(now);
+	if (!setup.active) {
+		if (cpm.running) {
+			if (machine_run(CPU_SLICE_US) == MACHINE_STOPPED) {
+				cpm.running = false;
+				monitor_enter(machine_stop_reason(), false);
+			}
+		} else if (monitor_tick(now) == MONITOR_RUN) {
+			cpm.running = true;
+		}
+	}
+	drives_poll(now);
+}
+
+// Drives accessed light up on the status line, like a drive's busy light.
+static uint8_t drive_lights(uint32_t now) {
+	uint8_t accessed = drives_activity(), lit = 0;
+	for (unsigned d = 0; d < DRIVES; ++d) {
+		if (accessed & 1u << d)
+			cpm.light_until[d] = now + DRIVE_LIGHT_MS;
+		if ((int32_t)(cpm.light_until[d] - now) > 0)
+			lit |= (uint8_t)(1u << d);
+	}
+	return lit;
+}
+
+static void draw_cpm_status(void) {
+	static uint32_t next_speed_ms;
+	uint32_t now = to_ms_since_boot(get_absolute_time());
+	if ((int32_t)(now - next_speed_ms) >= 0) {
+		next_speed_ms = now + 1000;
+		cpm.khz = machine_speed_khz();
+	}
+	cpm.lit = drive_lights(now);
+	char text[SCREEN_MAX_COLS + 1] = " CP/M |";
+	unsigned letter_col[DRIVES];
+	// The drives' letters, "-" for an empty one; SET-UP's Drives panel
+	// shows what is mounted.
+	size_t n = strlen(text);
+	for (unsigned d = 0; d < DRIVES && n + 2 < sizeof text; ++d) {
+		letter_col[d] = (unsigned)n + 1;
+		text[n++] = ' ';
+		text[n++] = drives_name(d) ? (char)('A' + d) : '-';
+		text[n] = '\0';
+	}
+	if (cpm.running)
+		snprintf(text + n, sizeof text - n, " | %lu.%02lu MHz", (unsigned long)(cpm.khz / 1000),
+			(unsigned long)(cpm.khz % 1000 / 10));
+	else
+		snprintf(text + n, sizeof text - n, " | monitor");
+	n = strlen(text);
+	snprintf(text + n, sizeof text - n, "%s | %s", keyboards_attached() ? " | kbd" : "", TERM_BUILD_ID);
+	screen_clear_line(&screen, STATUS_ROW, colours.status_fg, colours.status_bg);
+	screen_puts(&screen, 0, STATUS_ROW, text, colours.status_fg, colours.status_bg);
+	for (unsigned d = 0; d < DRIVES; ++d)
+		if (cpm.lit & 1u << d && drives_name(d))
+			screen_put(&screen, letter_col[d], STATUS_ROW, (uint8_t)('A' + d), colours.status_bg,
+				colours.status_fg);
 }
 
 typedef struct {
@@ -415,6 +705,7 @@ int main(void) {
 	if (STARTUP_DEMO && !input)
 		pending = run_demo(buf, sizeof buf);
 
+	cpm.on = settings.mode == SETTINGS_MODE_CPM;
 	screen_init(&screen, settings.columns, colours.fg, colours.bg);
 	term_init(&term, &screen, 0, TERM_ROWS, colours.fg, colours.bg);
 	apply_settings(&settings);
@@ -423,31 +714,57 @@ int main(void) {
 	status_t shown = status_now();
 	unsigned shown_resets = term.screen_resets;
 	unsigned setup_requests = term.setup_requests;
-	draw_status(&shown);
+	if (cpm.on)
+		draw_cpm_status();
+	else
+		draw_status(&shown);
 
 	char banner[SCREEN_MAX_COLS + 1];
 	snprintf(banner, sizeof banner, "DVI Feather Terminal build %s (%s, %s)\r\n",
 		TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
 	term_puts(&term, banner);
-	term_puts(&term, SERIAL_FLOW_CONTROL ? "UART0 on TX (GP0) / RX (GP1), RTS (GP3) / CTS (GP2)\r\n\r\n"
-		: "UART0 on TX (GP0) / RX (GP1)\r\n\r\n");
-	if (pending)
-		term_write(&term, buf, pending);
+	if (cpm.on) {
+		// UART input before now was for the terminal, not the Z80.
+		term_puts(&term, "Z80 CP/M machine: UART0 (GP0/GP1) is its second serial port\r\n");
+		machine_init(&cpm_platform);
+#if USB_KEYBOARD
+		usbkbd_set_reset_key(reset_key);
+#endif
+		monitor_start(&cpm_monitor, true, to_ms_since_boot(get_absolute_time()));
+	} else {
+		term_puts(&term, SERIAL_FLOW_CONTROL ? "UART0 on TX (GP0) / RX (GP1), RTS (GP3) / CTS (GP2)\r\n\r\n"
+			: "UART0 on TX (GP0) / RX (GP1)\r\n\r\n");
+		if (pending)
+			term_write(&term, buf, pending);
+	}
 	video_update(&screen);
 
 	absolute_time_t next_status = make_timeout_time_ms(STATUS_INTERVAL_MS);
 	while (true) {
-		// While SET-UP is open from the keyboard, host data waits in the
-		// receive buffer; opened by the host, what it sends are keys.
-		size_t n = setup.active && !setup.from_host ? 0 : serial_read(buf, sizeof buf);
-		if (setup.active) {
-			setup_feed(buf, n);
-		} else {
-			size_t used = n ? term_write(&term, buf, n) : 0;
+		if (cpm.on) {
+			cpm_step();
+			// A drive light changed: show it now, not at the next status update.
+			if (drive_lights(to_ms_since_boot(get_absolute_time())) != cpm.lit)
+				draw_cpm_status();
+			// The Z80's output asked for SET-UP (CSI ? 999 ~).
 			if (term.setup_requests != setup_requests) {
 				setup_requests = term.setup_requests;
-				setup_enter(true);
-				setup_feed(buf + used, n - used);
+				if (!setup.active)
+					setup_enter(false);
+			}
+		} else {
+			// While SET-UP is open from the keyboard, host data waits in the
+			// receive buffer; opened by the host, what it sends are keys.
+			size_t n = setup.active && !setup.from_host ? 0 : serial_read(buf, sizeof buf);
+			if (setup.active) {
+				setup_feed(buf, n);
+			} else {
+				size_t used = n ? term_write(&term, buf, n) : 0;
+				if (term.setup_requests != setup_requests) {
+					setup_requests = term.setup_requests;
+					setup_enter(true);
+					setup_feed(buf + used, n - used);
+				}
 			}
 		}
 		keyboard_poll();
@@ -464,14 +781,21 @@ int main(void) {
 		// whether or not the width changes.
 		if (term.screen_resets != shown_resets) {
 			shown_resets = term.screen_resets;
-			draw_status(&shown);
+			if (cpm.on)
+				draw_cpm_status();
+			else
+				draw_status(&shown);
 		}
 		if (time_reached(next_status)) {
 			next_status = make_timeout_time_ms(STATUS_INTERVAL_MS);
-			status_t st = status_now();
-			if (!status_equal(&st, &shown)) {
-				shown = st;
-				draw_status(&shown);
+			if (cpm.on) {
+				draw_cpm_status();
+			} else {
+				status_t st = status_now();
+				if (!status_equal(&st, &shown)) {
+					shown = st;
+					draw_status(&shown);
+				}
 			}
 		}
 		video_update(&screen);
