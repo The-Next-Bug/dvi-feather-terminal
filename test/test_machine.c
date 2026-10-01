@@ -272,6 +272,50 @@ static void test_benchmark(void) {
 	CHECK(strstr(screen, "PIP") != NULL);
 }
 
+// WORMS (src/cpm/worms.asm) on the CPM22 disk: colour worms, the options,
+// the screen size from a cursor position report, any key back to CP/M.
+static void test_worms(void) {
+	// No size report from this console: 24 x 80; a worm per colour.
+	clear_screen();
+	CHECK(type("WORMS -D 0 -N 2\r"));
+	CHECK_EQ(run_until("\x1b[92m", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "\x1b[?25l") != NULL);
+	CHECK(strstr(screen, "\x1b[91m") != NULL);
+	CHECK(strstr(screen, "\x1b[24;1H") != NULL); // they start bottom left
+	CHECK(type("x"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "\x1b[?25h") != NULL);
+
+	clear_screen();
+	CHECK(type("WORMS -X\r"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "Usage: WORMS") != NULL);
+
+	// Monochrome: no colour codes.
+	clear_screen();
+	CHECK(type("WORMS -D0 -M\r"));
+	CHECK_EQ(run_until("\x1b[23;", 10), MACHINE_RUNNING);
+	for (int i = 0; i < 20; ++i)
+		machine_run(1000);
+	for (char sgr[] = "\x1b[91m"; sgr[3] <= '6'; ++sgr[3])
+		CHECK(strstr(screen, sgr) == NULL);
+	CHECK(type("x"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+
+	// A terminal answering 24 x 132: the field fills 132 columns.
+	clear_screen();
+	host_cpr_reply = "\x1b[24;132R";
+	CHECK(type("WORMS -D 0 -F\r"));
+	CHECK_EQ(run_until("\x1b[24;1H", 10), MACHINE_RUNNING);
+	host_cpr_reply = NULL;
+	char row[133];
+	memset(row, '.', 132);
+	row[132] = '\0';
+	CHECK(strstr(screen, row) != NULL);
+	CHECK(type("x"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+}
+
 static void test_bye_halts(void) {
 	clear_screen();
 	CHECK(type("BYE\r"));
@@ -432,6 +476,7 @@ int main(void) {
 	RUN(test_hard_disks);
 	RUN(test_drive_panel);
 	RUN(test_benchmark);
+	RUN(test_worms);
 	RUN(test_bye_halts);
 	RUN(test_no_disk_boot_rom);
 	RUN(test_monitor_fresh_card);

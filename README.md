@@ -230,6 +230,13 @@ built-in `CPM22` is a 62K CP/M 2.2 with a BIOS for the eight drives and the
 three formats (`src/cpm`); z80pack's CP/M 3 and MP/M II images keep their
 own BIOSes, with four floppy drives.
 
+`CPM22` also carries `WORMS` (`src/cpm/worms.asm`): worms wandering about
+the screen after BSD worms(6), each in its own colour and glyph. It asks the
+terminal for the screen size, so it fills 132 columns too. Options:
+`-N` worms (1-40, default 3), `-L` length (2-255, 16), `-D` milliseconds per
+step (40; 0 as fast as the Z80 goes), `-F` a field of dots to eat, `-T` a
+trail of dots, `-M` no colour. Any key ends it; e.g. `WORMS -N 10 -L 30 -F`.
+
 ### The monitor
 
 At power-on in CP/M mode the monitor mounts the card and boots from drive

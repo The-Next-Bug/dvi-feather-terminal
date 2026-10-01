@@ -192,7 +192,10 @@ status line (row 24); UART0 on GP0/GP1.
   drive at SELDSK, boot.asm), assembled at build time by build.sh with
   z80pack's z80asm built by the host cc; CCP+BDOS = picosim's 64K cpm.bin
   relocated with ccpbdos.rel (from MOVCPM 62 *); diskimg_gen.py --system
-  writes the system tracks of CPM22 (README there). `src/monitor.[ch]`
+  writes the system tracks of CPM22 (README there); worms.asm (Z80
+  mnemonics) -> WORMS.COM, put on CPM22 by diskimg_gen.py --file (writes
+  into the 8" CP/M directory); host tests in test_machine (machine_host
+  answers ESC [ 6 n through host_cpr_reply). `src/monitor.[ch]`
   (portable): menu (boot, mount, list, new blank disk, install, speed
   test, rescan), 3 s autoboot. `src/drivepanel.[ch]` (portable): SET-UP's
   Drives panel (D in CP/M mode); main.c defers its FatFs work to the main

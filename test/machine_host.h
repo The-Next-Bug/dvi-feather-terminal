@@ -21,6 +21,9 @@ extern const machine_platform_t host_platform;
 extern char screen[HOST_SCREEN_SIZE];
 extern size_t screen_len;
 extern bool host_echo;
+// When set, the console answers a cursor position request (ESC [ 6 n) with
+// this, as a terminal would.
+extern const char *host_cpr_reply;
 // What the CPU sent to the second serial port (the first 256 bytes).
 extern char aux_sent[256];
 extern size_t aux_len;

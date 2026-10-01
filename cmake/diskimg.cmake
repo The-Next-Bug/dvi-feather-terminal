@@ -22,13 +22,16 @@ set(CPM_OUT "${GENERATED}/cpm")
 find_program(HOST_CC NAMES cc gcc clang REQUIRED)
 file(GLOB _z80asm_sources "${Z80PACK_DIR}/z80asm/*.[ch]")
 add_custom_command(
-  OUTPUT ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin
+  OUTPUT ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin ${CPM_OUT}/worms.com
   COMMAND ${CMAKE_COMMAND} -E env CC=${HOST_CC} ${CPM_DIR}/build.sh ${CPM_OUT}
-  DEPENDS ${CPM_DIR}/build.sh ${CPM_DIR}/boot.asm ${CPM_DIR}/bios.asm ${_z80asm_sources}
-  COMMENT "Assembling the CP/M 2.2 boot loader and BIOS"
+  DEPENDS ${CPM_DIR}/build.sh ${CPM_DIR}/boot.asm ${CPM_DIR}/bios.asm ${CPM_DIR}/worms.asm
+    ${_z80asm_sources}
+  COMMENT "Assembling the CP/M 2.2 boot loader, BIOS and WORMS"
   VERBATIM)
 set(DISKIMG_SYSTEM --system CPM22 ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin
   ${Z80PACK_DIR}/picosim/srccpm2/cpm.bin ${CPM_DIR}/ccpbdos.rel 62)
+# Our programs on the CPM22 disk.
+set(DISKIMG_FILES --file CPM22 WORMS.COM ${CPM_OUT}/worms.com)
 
 set(_diskimg_files)
 foreach(_image IN LISTS DISKIMG_IMAGES)
@@ -39,8 +42,9 @@ endforeach()
 add_custom_command(
   OUTPUT ${DISKIMG_SOURCES}
   COMMAND ${CMAKE_COMMAND} -E make_directory ${GENERATED}
-  COMMAND Python3::Interpreter ${DISKIMG_GEN} ${DISKIMG_SOURCES} ${DISKIMG_SYSTEM} ${DISKIMG_IMAGES}
-  DEPENDS ${DISKIMG_GEN} ${_diskimg_files} ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin
+  COMMAND Python3::Interpreter ${DISKIMG_GEN} ${DISKIMG_SOURCES} ${DISKIMG_SYSTEM} ${DISKIMG_FILES}
+    ${DISKIMG_IMAGES}
+  DEPENDS ${DISKIMG_GEN} ${_diskimg_files} ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin ${CPM_OUT}/worms.com
     ${Z80PACK_DIR}/picosim/srccpm2/cpm.bin ${CPM_DIR}/ccpbdos.rel
   COMMENT "Compressing the built-in CP/M disk images"
   VERBATIM)
