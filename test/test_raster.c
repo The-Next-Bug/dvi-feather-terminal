@@ -50,8 +50,9 @@ static unsigned shown(unsigned cols, unsigned sy, unsigned x) {
 // Whether pixel i of glyph g is set on scanline sy (0-23) of a text row:
 // the glyph centred in the row, with connectors extended to the edges.
 static unsigned glyph_pixel(unsigned cols, uint8_t g, unsigned sy, unsigned i) {
-	const uint8_t *font = cols > 80 ? font_6x13 : font_8x16;
+	const uint8_t *font = cols > 80 ? font_132 : font_8x16;
 	int rows = (int)raster_font_rows(cols), gy = (int)sy - (int)raster_pad_top(cols);
+	gy = gy < 0 ? -1 : gy / (int)raster_font_scale(cols);
 	if (gy < 0 || gy >= rows) {
 		if (!glyph_is_connector(g))
 			return 0;
@@ -90,11 +91,12 @@ static void test_layout(void) {
 	CHECK_EQ(SCREEN_ROWS * RASTER_ROW_HEIGHT, RASTER_ACTIVE_HEIGHT);
 	// Scanlines map onto top padding, every glyph row in order, bottom padding.
 	for (unsigned cols = 80; cols <= 132; cols += 52) {
-		unsigned rows = raster_font_rows(cols), top = raster_pad_top(cols);
+		unsigned rows = raster_font_rows(cols), top = raster_pad_top(cols), k = raster_font_scale(cols);
 		CHECK(rows + 2 <= RASTER_STORED_ROWS);
+		CHECK(top + rows * k <= RASTER_ROW_HEIGHT); // padding may be empty (6x12)
 		CHECK_EQ(raster_x_offset(cols) % 2, 0); // cells start on whole words
 		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
-			unsigned want = sy < top ? 0 : sy < top + rows ? sy - top + 1 : rows + 1;
+			unsigned want = sy < top ? 0 : sy < top + rows * k ? (sy - top) / k + 1 : rows + 1;
 			CHECK_EQ(raster_stored_row(cols, sy), want);
 		}
 	}
@@ -178,9 +180,9 @@ static void test_connectors_join(void) {
 		screen_init(&s, cols, RGB222(2, 2, 2), 0);
 		screen_puts(&s, 0, 0, "\xc5\xc9gjpqy|", RGB222(2, 2, 2), 0); // Å É descenders and a bar
 		render(screen_line(&s, 0), cols, 0);
-		unsigned top = raster_pad_top(cols), rows = raster_font_rows(cols);
+		unsigned top = raster_pad_top(cols), height = raster_glyph_height(cols);
 		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
-			if (sy >= top && sy < top + rows)
+			if (sy >= top && sy < top + height)
 				continue;
 			for (unsigned x = x0; x < x0 + 8 * w; ++x)
 				CHECK_EQ(shown(cols, sy, x), 0);
@@ -218,14 +220,18 @@ static void test_cursor_inverts_cell(void) {
 static void test_underline(void) {
 	for (unsigned cols = 80; cols <= 132; cols += 52) {
 		unsigned x0 = raster_x_offset(cols), w = raster_cell_width(cols);
-		unsigned bottom = raster_pad_top(cols) + raster_font_rows(cols) - 1;
+		// The bottom glyph row covers raster_font_scale scanlines.
+		unsigned k = raster_font_scale(cols), bottom = raster_pad_top(cols) + raster_glyph_height(cols) - 1;
 		screen_init(&s, cols, RGB222(2, 2, 2), 0);
 		for (unsigned c = 0; c < 3; ++c)
 			screen_put_attr(&s, c, 0, ' ', RGB222(0, 3, 0), 0, SCREEN_ATTR_UNDERLINE);
 		render(screen_line(&s, 0), cols, 0);
 		for (unsigned x = x0; x < x0 + 3 * w; ++x) {
-			CHECK_EQ(shown(cols, bottom, x), RGB222(0, 3, 0));
-			CHECK_EQ(shown(cols, bottom - 1, x), 0);
+			for (unsigned i = 0; i < k; ++i)
+				CHECK_EQ(shown(cols, bottom - i, x), RGB222(0, 3, 0));
+			CHECK_EQ(shown(cols, bottom - k, x), 0);
+			if (bottom + 1 < RASTER_ROW_HEIGHT)
+				CHECK_EQ(shown(cols, bottom + 1, x), 0);
 		}
 		CHECK_EQ(shown(cols, bottom, x0 + 3 * w), 0);
 	}
@@ -262,8 +268,8 @@ static void test_blink(void) {
 static void test_bold(void) {
 	for (unsigned cols = 80; cols <= 132; cols += 52) {
 		unsigned x0 = raster_x_offset(cols), w = raster_cell_width(cols);
-		const uint8_t *font = cols > 80 ? font_6x13 : font_8x16;
-		unsigned rows = raster_font_rows(cols), top = raster_pad_top(cols);
+		const uint8_t *font = cols > 80 ? font_132 : font_8x16;
+		unsigned rows = raster_font_rows(cols), top = raster_pad_top(cols), k = raster_font_scale(cols);
 		const uint8_t fg = RGB222(3, 3, 3);
 		screen_init(&s, cols, RGB222(2, 2, 2), 0);
 		screen_put_attr(&s, 0, 0, 'I', fg, 0, SCREEN_ATTR_BOLD);
@@ -273,8 +279,8 @@ static void test_bold(void) {
 			unsigned g = font[gy * FONT_GLYPHS + 'I'], bold = (g | g << 1) & ((1u << w) - 1);
 			unsigned v = font[gy * FONT_GLYPHS + GLYPH_DEC_GRAPHICS('x')];
 			for (unsigned i = 0; i < w; ++i) {
-				CHECK_EQ(shown(cols, top + gy, x0 + i), (bold >> i & 1) ? fg : 0);
-				CHECK_EQ(shown(cols, top + gy, x0 + w + i), (v >> i & 1) ? fg : 0);
+				CHECK_EQ(shown(cols, top + gy * k, x0 + i), (bold >> i & 1) ? fg : 0);
+				CHECK_EQ(shown(cols, top + gy * k, x0 + w + i), (v >> i & 1) ? fg : 0);
 			}
 		}
 	}

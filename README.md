@@ -14,7 +14,9 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
 
 - **Display**: 800x600p60 over DVI/HDMI. 80 columns use Terminus 8x16 in
   8-pixel cells (centered, 80-pixel borders); 132 columns use misc-fixed
-  6x13 in 6-pixel cells (792 pixels, centered). Rows are 24 pixels high;
+  6x12 at double height (each glyph row on two scanlines, like a VT100) in
+  6-pixel cells (792 pixels, centered; `FONT_132` picks 6x10 doubled or
+  the older 6x13 at single height instead). Rows are 24 pixels high;
   line drawing, block and shade characters join up between rows.
 - **Emulation**: VT100/VT102. Cursor movement, scrolling regions, erase,
   insert/delete lines and characters, tab stops, G0/G1 character sets
@@ -451,6 +453,7 @@ submodule.
 | `LOGO_IN_FLASH` | ON | experimental: keep the logo data in flash, copied out only while it shows (saves about 19 KB of SRAM); OFF copies it into SRAM with the program |
 | `STARTUP_DEMO` | OFF | run the demo after the logo |
 | `MACHINE_BANKS` | 2 | Z80 machine: 48 KB banks besides bank 0 (each costs 48 KB of SRAM; a third does not fit) |
+| `FONT_132` | 6x12 | 132-column font: `6x12` at double height (fills the 24-pixel rows; accented capitals can touch descenders above), `6x10` at double height (2 blank lines above and below), or `6x13` at single height (more space between lines) |
 | `HSTX_MODE` | 0 | 0: 800x600 at 60 Hz; 1: at 56 Hz (clk_hstx 180 MHz); 2: 60 Hz reduced blanking (177 MHz). 1 and 2 are slower fallbacks |
 | `VIDEO_DIAG` | OFF | bring-up diagnostics on UART0 TX: boot markers, core 1 scanline timing, fault reports |
 | `COPY_TO_RAM` | ON | run from SRAM; must stay ON (see [How it works](#how-it-works)) |
@@ -489,7 +492,7 @@ The screen buffer stores one-byte glyph codes (see `src/font.h`): ASCII at
 0x20-0x7E, Latin-1 at 0xA0-0xFF, DEC Special Graphics (line drawing) at
 0x01-0x1F, and shades/blocks/double-line box drawing at 0x80-0x9F. The
 tables are generated at build time: 8x16 from Terminus Font for 80 columns,
-6x13 from misc-fixed for 132. Glyphs a font lacks (control pictures, scan
+misc-fixed for 132 (6x12 at double height; 6x10 or 6x13 with `FONT_132`). Glyphs a font lacks (control pictures, scan
 lines, half blocks) are drawn by `font_gen.py`.
 
 ### Startup logo
@@ -546,7 +549,7 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | `lib/z80pack` | Vendored part of z80pack (Z80 core, z80asm, picosim disk images); `UPSTREAM.md` gives the commit and local changes |
 | `lib/fatfs` | ChaN's FatFs R0.15a, vendored (see its README) |
 | `assets/logo/` | The startup logo (PNG used by the build, JPEG original) |
-| `assets/fonts/` | Terminus Font 8x16 (SIL OFL 1.1) and misc-fixed 6x13 (public domain); see its README |
+| `assets/fonts/` | Terminus Font 8x16 (SIL OFL 1.1) and misc-fixed 6x12, 6x10 and 6x13 (public domain); see its README |
 | `cmake/build_info.cmake` | Generates `term_build.h` (git describe, commit, date) on every build |
 | `cmake/fonts.cmake` | Font table generation, shared by the firmware and host tests |
 | `scripts/` | `setup-toolchain.sh`, `build.sh`, `test.sh`, `package.sh`, `changelog.sh` |
@@ -613,7 +616,7 @@ This project's own code and documentation are under the MIT license; see
 
 Terminus Font is © Dimitar Toshkov Zhekov under the SIL Open Font License
 1.1; see `assets/fonts/Terminus-OFL.txt`. The 8x16 table generated from it
-is a derivative and stays under that license. The misc-fixed 6x13 font is
+is a derivative and stays under that license. The misc-fixed 6x12, 6x10 and 6x13 fonts are
 public domain. pico-sdk is BSD-3-Clause, as is the pico-examples HSTX DVI
 example `src/hstx_dvi.c` follows.
 

@@ -14,7 +14,7 @@ used). The project's own code is under the MIT licence, in `LICENSE`.
 | z80pack `z80core/log.h` (David McNaughton, from ESP-IDF) | Logging macros compiled into the CPU core | Apache-2.0 | `licenses/Apache-2.0.txt` |
 | [FatFs](http://elm-chan.org/fsw/ff/) R0.15a (ChaN) | FAT file system on the SD card (`lib/fatfs`) | 1-clause BSD | `licenses/FatFs-BSD-1-Clause.txt` |
 | [Terminus Font](https://terminus-font.sourceforge.net/) 8x16 (Dimitar Toshkov Zhekov) | 80-column glyphs (the generated table is a derivative) | SIL OFL 1.1 | `licenses/Terminus-OFL-1.1.txt` |
-| misc-fixed 6x13 (X.Org) | 132-column glyphs | Public domain | - |
+| misc-fixed 6x12, 6x10 and 6x13 (X.Org) | 132-column glyphs | Public domain | - |
 | newlib and libgcc (Arm GNU Toolchain) | C library and compiler runtime | newlib: BSD-style licences; libgcc: GPL-3.0 with the GCC Runtime Library Exception | in the toolchain's `license.txt` |
 
 ## Built-in CP/M disk images

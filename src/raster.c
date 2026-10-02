@@ -16,7 +16,7 @@ static inline unsigned stored_glyph_row(const uint8_t *glyphs, unsigned rows, un
 
 bool raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned cols, unsigned flags) {
 	const unsigned w = raster_cell_width(cols), rows = raster_font_rows(cols);
-	const uint8_t *glyphs = cols > 80 ? font_6x13 : font_8x16;
+	const uint8_t *glyphs = cols > 80 ? font_132 : font_8x16;
 	const unsigned cell_mask = (1u << w) - 1;
 	const bool reverse = flags & RASTER_REVERSE;
 

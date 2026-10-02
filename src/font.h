@@ -6,7 +6,8 @@
 
 // Font tables generated at build time by src/font_gen.py:
 //   font_8x16  Terminus Font 8x16, for 80 columns
-//   font_6x13  misc-fixed 6x13, for 132 columns
+//   font_132   for 132 columns, by the FONT_132 build option: misc-fixed
+//              6x12 or 6x10 (shown at double height), or 6x13
 //
 // Glyph codes, as stored in the screen buffer (the same in both fonts):
 //   0x00        blank
@@ -22,7 +23,6 @@
 
 #define FONT_GLYPHS 256
 #define FONT_8X16_HEIGHT 16
-#define FONT_6X13_HEIGHT 13
 
 #define GLYPH_DEC_GRAPHICS(c) ((uint8_t)((c) - 0x5F)) // c in 0x60-0x7E
 
@@ -39,7 +39,14 @@
 #define GLYPH_DOUBLE_UL 0x8E // ╝
 
 extern const uint8_t font_8x16[FONT_8X16_HEIGHT * FONT_GLYPHS];
-extern const uint8_t font_6x13[FONT_6X13_HEIGHT * FONT_GLYPHS];
+
+// cmake/fonts.cmake (FONT_132) defines FONT_132_HEIGHT, the font's glyph
+// rows, and FONT_132_SCALE, the scanlines each is shown on.
+#ifdef FONT_132_HEIGHT
+extern const uint8_t font_132[FONT_132_HEIGHT * FONT_GLYPHS];
+#define FONT_132_NAME \
+	(FONT_132_HEIGHT == 12 ? "misc-fixed 6x12" : FONT_132_HEIGHT == 10 ? "misc-fixed 6x10" : "misc-fixed 6x13")
+#endif
 
 // Glyphs that join the cells above and below (line drawing, blocks,
 // shades): the renderer extends their top and bottom rows into the blank

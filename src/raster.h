@@ -5,10 +5,12 @@
 // them. Portable C (no pico-sdk), host-tested.
 //
 // The display is 800x600. 80 columns use 8-pixel cells and the 8x16 font
-// (640 px, centred); 132 columns use 6-pixel cells and the 6x13 font
-// (792 px, centred). Every text row is 24 scanlines, so 25 rows (24 +
-// status) fill the screen: the glyph is centred with blank padding above
-// and below.
+// (640 px, centred); 132 columns use 6-pixel cells (792 px, centred) and
+// the FONT_132 font: by default 6x12 at double height, each glyph row on
+// two scanlines (no 6-pixel-wide font is taller), or 6x10 doubled, or 6x13
+// as is. Every text row is 24 scanlines,
+// so 25 rows (24 + status) fill the screen: the glyph is centred with
+// blank padding above and below (none for 6x12, which fills the row).
 //
 // Line-drawing, block and shade glyphs (glyph_is_connector) extend their
 // top and bottom rows into that padding so vertical lines join up. Each
@@ -26,7 +28,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "font.h"
 #include "screen.h"
+
+#ifndef FONT_132_HEIGHT
+#error "FONT_132_HEIGHT and FONT_132_SCALE come from cmake/fonts.cmake (FONT_DEFINITIONS)"
+#endif
 
 #define RASTER_ACTIVE_WIDTH 800
 #define RASTER_ACTIVE_HEIGHT 600
@@ -51,22 +58,32 @@ static inline unsigned raster_x_offset(unsigned cols) {
 	return (RASTER_ACTIVE_WIDTH - cols * raster_cell_width(cols)) / 2;
 }
 
+// Glyph rows in the font, and the scanlines each one is shown on.
 static inline unsigned raster_font_rows(unsigned cols) {
-	return cols > 80 ? 13 : 16;
+	return cols > 80 ? FONT_132_HEIGHT : 16;
+}
+
+static inline unsigned raster_font_scale(unsigned cols) {
+	return cols > 80 ? FONT_132_SCALE : 1;
+}
+
+// Scanlines the glyph covers, and the padding scanlines above it.
+static inline unsigned raster_glyph_height(unsigned cols) {
+	return raster_font_rows(cols) * raster_font_scale(cols);
 }
 
 static inline unsigned raster_pad_top(unsigned cols) {
-	return (RASTER_ROW_HEIGHT - raster_font_rows(cols)) / 2;
+	return (RASTER_ROW_HEIGHT - raster_glyph_height(cols)) / 2;
 }
 
 // The stored row shown on scanline sy (0-23) of a text row.
 static inline unsigned raster_stored_row(unsigned cols, unsigned sy) {
-	unsigned rows = raster_font_rows(cols), top = raster_pad_top(cols);
+	unsigned top = raster_pad_top(cols);
 	if (sy < top)
 		return 0;
-	if (sy < top + rows)
-		return sy - top + 1;
-	return rows + 1;
+	if (sy < top + raster_glyph_height(cols))
+		return (sy - top) / raster_font_scale(cols) + 1;
+	return raster_font_rows(cols) + 1;
 }
 
 // Flags for raster_render_line.
