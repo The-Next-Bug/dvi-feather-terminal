@@ -82,7 +82,11 @@ need seconds to sync), `LOGO_IN_FLASH` (default ON, experimental dmt.25: logo da
 SRAM), `STARTUP_DEMO` (default OFF),
 `VIDEO_DIAG` (UART0 TX diagnostics, default OFF; also prints
 panic() text), `USB_KEYBOARD` (TinyUSB host keyboard; default ON),
-`COPY_TO_RAM` (default ON; must stay ON, see below), `MACHINE_BANKS` (Z80
+`COPY_TO_RAM` (default ON; must stay ON, see below), `FONT_132` (6x12 at
+double height, default, fills the 24-line rows; 6x10 doubled; 6x13 single;
+cmake/fonts.cmake's FONT_DEFINITIONS give raster.h FONT_132_HEIGHT/SCALE;
+test_raster_<variant> covers the others; a build dir keeps its cached value),
+`MACHINE_BANKS` (Z80
 machine: 48 KB banks besides bank 0, default 2; each costs 48 KB of SRAM).
 
 Always run `scripts/test.sh` and a firmware build before handing work
@@ -177,7 +181,8 @@ status line (row 24); UART0 on GP0/GP1.
   scanlines 0-575 (status line from its slot); power-on/reset only, never
   on RIS.
 - `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus 8x16,
-  misc-fixed 6x13) generated at build time; glyph codes in `src/font.h`.
+  misc-fixed 6x12/6x10 doubled or 6x13 by FONT_132: raster_font_scale)
+  generated at build time; glyph codes in `src/font.h`.
 - Z80 CP/M machine (Mode setting "CP/M machine", bd lpt): the screen and
   keyboard become the console of a z80pack picosim-compatible machine on
   core 0 (`main.c` cpm_*: 10 ms CPU slices between keyboard, disks, screen).
