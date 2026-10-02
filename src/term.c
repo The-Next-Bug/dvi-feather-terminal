@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "font.h"
+#include "palette.h"
 
 #define BEL 0x07
 #define BS 0x08
@@ -15,9 +16,6 @@
 #define CR 0x0d
 #define SO 0x0e
 #define SI 0x0f
-
-// Attribute fg/bg values 16-79 are direct RGB222 colours (from SGR 38/48).
-#define DIRECT_COLOUR(rgb) ((uint8_t)(16 + (rgb)))
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -30,64 +28,13 @@ static unsigned abs_row(const term_t *t, unsigned row) {
 	return t->top + row;
 }
 
-uint8_t term_ansi_colour(unsigned n) {
-	static const uint8_t palette[16] = {
-		RGB222(0, 0, 0), RGB222(2, 0, 0), RGB222(0, 2, 0), RGB222(2, 2, 0),
-		RGB222(0, 0, 2), RGB222(2, 0, 2), RGB222(0, 2, 2), RGB222(2, 2, 2),
-		RGB222(1, 1, 1), RGB222(3, 0, 0), RGB222(0, 3, 0), RGB222(3, 3, 0),
-		RGB222(0, 0, 3), RGB222(3, 0, 3), RGB222(0, 3, 3), RGB222(3, 3, 3),
-	};
-	return palette[n & 15];
-}
-
-// Mono: how bright an SGR colour is. 0: black or the default; 1: normal;
-// 2: bright (ANSI 8-15, or a 256-colour/direct colour with a full channel).
-static unsigned mono_level(uint8_t c) {
-	if (c == TERM_DEFAULT_COLOUR || c == 0)
-		return 0;
-	if (c < 16)
-		return c < 8 ? 1 : 2;
-	uint8_t rgb = (uint8_t)(c - 16);
-	if (!rgb)
-		return 0;
-	return (rgb >> 4 & 3) == 3 || (rgb >> 2 & 3) == 3 || (rgb & 3) == 3 ? 2 : 1;
-}
-
-void term_mono_colours(const term_colours_t *d, uint8_t fg, uint8_t bg, bool bold, uint8_t *out_fg,
-	uint8_t *out_bg) {
-	unsigned b = mono_level(bg);
-	if (b) {
-		// Inverse: the (bright) text colour behind, text in the background's.
-		*out_bg = b == 2 ? d->bold_fg : d->fg;
-		*out_fg = d->bg;
-		return;
-	}
-	*out_bg = d->bg;
-	*out_fg = bold || mono_level(fg) == 2 ? d->bold_fg : d->fg;
-}
-
-static uint8_t attr_colour(const term_t *t, uint8_t c, bool bold, bool is_fg) {
-	if (c == TERM_DEFAULT_COLOUR) {
-		if (!is_fg)
-			return t->default_bg;
-		return bold ? t->bold_fg : t->default_fg;
-	}
-	if (c < 16)
-		return term_ansi_colour(c < 8 && bold && is_fg ? c + 8u : c);
-	return (uint8_t)(c - 16);
-}
-
-// Colours for printed text: bold brightens the fg, reverse swaps.
+// Palette index for printed text: bold brightens default text and ANSI 0-7;
+// reverse swaps.
 static void text_colours(const term_t *t, uint8_t *fg, uint8_t *bg) {
 	const term_attr_t *a = &t->cur.attr;
-	uint8_t f, b;
-	if (t->mono) {
-		const term_colours_t d = {t->default_fg, t->bold_fg, t->default_bg};
-		term_mono_colours(&d, a->fg, a->bg, a->bold, &f, &b);
-	} else {
-		f = attr_colour(t, a->fg, a->bold, true);
-		b = attr_colour(t, a->bg, false, false);
-	}
+	uint8_t f = a->fg == TERM_DEFAULT_COLOUR ? (a->bold ? PALETTE_BOLD_TEXT : PALETTE_TEXT)
+		: (uint8_t)(a->fg < 8 && a->bold ? a->fg + 8 : a->fg);
+	uint8_t b = a->bg == TERM_DEFAULT_COLOUR ? PALETTE_BACKGROUND : (uint8_t)a->bg;
 	*fg = a->reverse ? b : f;
 	*bg = a->reverse ? f : b;
 }
@@ -95,14 +42,8 @@ static void text_colours(const term_t *t, uint8_t *fg, uint8_t *bg) {
 // Colours for erased cells: the current background (as xterm's "background
 // colour erase"), default foreground.
 static void erase_colours(const term_t *t, uint8_t *fg, uint8_t *bg) {
-	*fg = t->default_fg;
-	if (t->mono) {
-		uint8_t unused;
-		const term_colours_t d = {t->default_fg, t->bold_fg, t->default_bg};
-		term_mono_colours(&d, TERM_DEFAULT_COLOUR, t->cur.attr.bg, false, &unused, bg);
-	} else {
-		*bg = attr_colour(t, t->cur.attr.bg, false, false);
-	}
+	*fg = PALETTE_TEXT;
+	*bg = t->cur.attr.bg == TERM_DEFAULT_COLOUR ? PALETTE_BACKGROUND : (uint8_t)t->cur.attr.bg;
 }
 
 static void sync_cursor(term_t *t) {
@@ -298,7 +239,7 @@ static void set_reverse_screen(term_t *t, bool on) {
 // redraws it when it sees screen_resets change).
 static void set_columns(term_t *t, unsigned n) {
 	bool visible = t->screen->cursor_visible;
-	screen_init(t->screen, n, t->default_fg, t->default_bg);
+	screen_init(t->screen, n, PALETTE_TEXT, PALETTE_BACKGROUND);
 	++t->screen_resets;
 	t->screen->cursor_visible = visible;
 	set_reverse_screen(t, t->reverse_screen);
@@ -329,6 +270,10 @@ static void set_mode(term_t *t, bool dec, unsigned mode, bool on) {
 
 // ---------------------------------------------------------------------------
 // SGR
+
+static uint8_t channel(unsigned v) {
+	return (uint8_t)(v > 255 ? 255 : v);
+}
 
 static void sgr(term_t *t, const vtparse_t *p) {
 	term_attr_t *a = &t->cur.attr;
@@ -366,23 +311,15 @@ static void sgr(term_t *t, const vtparse_t *p) {
 		else if (v >= 100 && v <= 107)
 			a->bg = (uint8_t)(v - 100 + 8);
 		else if ((v == 38 || v == 48) && i + 1 < n) {
-			// 38;5;n (256 colours) or 38;2;r;g;b (direct), reduced to RGB222.
-			uint8_t *dst = v == 38 ? &a->fg : &a->bg;
+			// 38;5;n (256 colours) or 38;2;r;g;b (direct: the nearest entry).
+			uint16_t *dst = v == 38 ? &a->fg : &a->bg;
 			if (p->params[i + 1] == 5 && i + 2 < n) {
-				unsigned c = p->params[i + 2];
-				if (c < 16)
-					*dst = (uint8_t)c;
-				else if (c < 232) { // 6x6x6 cube: levels 0-5 to 0-3
-					c -= 16;
-					*dst = DIRECT_COLOUR(RGB222((c / 36) * 3 / 5, (c / 6 % 6) * 3 / 5, (c % 6) * 3 / 5));
-				} else { // grey ramp
-					unsigned g = (c - 232) * 4 / 24;
-					*dst = DIRECT_COLOUR(RGB222(g, g, g));
-				}
+				if (p->params[i + 2] < 256)
+					*dst = (uint16_t)p->params[i + 2];
 				i += 2;
 			} else if (p->params[i + 1] == 2 && i + 4 < n) {
-				*dst = DIRECT_COLOUR(RGB222(p->params[i + 2] >> 6, p->params[i + 3] >> 6,
-					p->params[i + 4] >> 6));
+				*dst = palette_nearest(channel(p->params[i + 2]), channel(p->params[i + 3]),
+					channel(p->params[i + 4]));
 				i += 4;
 			} else {
 				i = n; // malformed: stop
@@ -589,7 +526,7 @@ static void esc_dispatch(term_t *t, const vtparse_t *p, uint8_t final) {
 			t->margin_bottom = t->rows - 1;
 			for (unsigned row = 0; row < t->rows; ++row)
 				for (unsigned col = 0; col < cols(t); ++col)
-					screen_put(t->screen, col, abs_row(t, row), 'E', t->default_fg, t->default_bg);
+					screen_put(t->screen, col, abs_row(t, row), 'E', PALETTE_TEXT, PALETTE_BACKGROUND);
 			move_to(t, 0, 0);
 		}
 		return; // ESC # 3-6 (double height/width): ignored
@@ -665,9 +602,8 @@ static void on_parse(vtparse_t *p, vtparse_action_t action, uint8_t ch) {
 // ---------------------------------------------------------------------------
 // API
 
-void term_init(term_t *t, screen_t *screen, unsigned top, unsigned rows, uint8_t fg, uint8_t bg) {
-	*t = (term_t){ .screen = screen, .top = top, .rows = rows, .default_fg = fg, .default_bg = bg,
-		.bold_fg = RGB222(3, 3, 3) };
+void term_init(term_t *t, screen_t *screen, unsigned top, unsigned rows) {
+	*t = (term_t){ .screen = screen, .top = top, .rows = rows };
 	vtparse_init(&t->parser, on_parse, t);
 	reset(t);
 	sync_cursor(t);
@@ -692,19 +628,6 @@ void term_set_defaults(term_t *t, const term_defaults_t *d) {
 	t->defaults = *d;
 	t->backspace_bs = d->backspace_bs;
 	t->newline_mode = d->newline_mode;
-}
-
-void term_set_palette(term_t *t, bool mono) {
-	t->mono = mono;
-}
-
-void term_set_colours(term_t *t, uint8_t fg, uint8_t bold_fg, uint8_t bg) {
-	const uint8_t from[] = {t->default_fg, t->bold_fg, t->default_bg};
-	const uint8_t to[] = {fg, bold_fg, bg};
-	screen_recolour(t->screen, t->top, t->top + t->rows - 1, from, to, 3);
-	t->default_fg = fg;
-	t->bold_fg = bold_fg;
-	t->default_bg = bg;
 }
 
 void term_set_columns(term_t *t, unsigned cols) {

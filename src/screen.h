@@ -5,8 +5,9 @@
 // code renders. Portable C with no pico-sdk dependency, so it is unit-tested
 // on the host.
 //
-// Each cell holds a glyph code (see font.h), RGB222 (0bRRGGBB) foreground
-// and background colours, and attribute bits (underline, blink). The screen
+// Each cell holds a glyph code (see font.h), foreground and background
+// colours as palette indices (palette.h: what they look like is decided at
+// display time), and attribute bits (underline, blink, bold). The screen
 // is 80 or 132 columns wide. Rows in reverse_rows are shown with every
 // cell's fg and bg swapped (DECSCNM).
 //
@@ -24,6 +25,7 @@
 #define SCREEN_MAX_COLS 132
 #define SCREEN_ROWS 25 // 24 text rows + a status line
 
+// A 6-bit colour 0bRRGGBB (the logo's tint and the HSTX test pattern).
 #define RGB222(r, g, b) ((uint8_t)(((r) & 3) << 4 | ((g) & 3) << 2 | ((b) & 3)))
 
 // Cell attribute bits.
@@ -67,11 +69,6 @@ uint8_t screen_attr(const screen_t *s, unsigned col, unsigned row);
 void screen_set_reverse_rows(screen_t *s, uint32_t mask);
 
 void screen_clear_line(screen_t *s, unsigned row, uint8_t fg, uint8_t bg);
-
-// In rows top..bottom (inclusive), change every fg or bg colour equal to
-// from[i] into to[i] (the first match), e.g. for new default colours.
-void screen_recolour(screen_t *s, unsigned top, unsigned bottom, const uint8_t *from, const uint8_t *to,
-	unsigned n);
 
 // Copy a row's cells out, or put saved cells back (e.g. under an overlay).
 // Out-of-range rows are ignored.

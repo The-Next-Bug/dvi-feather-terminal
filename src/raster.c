@@ -43,7 +43,7 @@ bool raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned 
 }
 
 void raster_compose(uint32_t *px, const raster_line_t *line, unsigned cols, unsigned sr, int cursor_col,
-		const uint32_t colours[64]) {
+		const uint32_t colours[256]) {
 	const unsigned pairs = raster_cell_width(cols) / 2, border = raster_x_offset(cols) / 2;
 	const uint8_t *bits = line->bits[sr];
 	uint32_t *p = px;
@@ -53,7 +53,7 @@ void raster_compose(uint32_t *px, const raster_line_t *line, unsigned cols, unsi
 		unsigned b = bits[c];
 		if ((int)c == cursor_col)
 			b = ~b;
-		uint32_t fg = colours[line->fg[c] & 63], bg = colours[line->bg[c] & 63];
+		uint32_t fg = colours[line->fg[c]], bg = colours[line->bg[c]];
 		// Two pixels per word: pixel 2k in the low half, from bit 2k.
 		for (unsigned k = 0; k < pairs; ++k, b >>= 2) {
 			uint32_t m = (0u - (b & 1)) & 0xffffu;

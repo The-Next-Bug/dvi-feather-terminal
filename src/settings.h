@@ -30,8 +30,8 @@ typedef struct {
 	uint8_t baud;       // index: see settings_baud_rate
 	uint8_t framing;    // index: see settings_framing
 	uint8_t newline;    // LNM at power-on/RIS: 1 on
-	uint8_t colours;    // index: see settings_colours
-	uint8_t palette;    // 1: mono, SGR colours ignored (term_set_palette)
+	uint8_t colours;    // hue: PALETTE_HUE_* (palette.h)
+	uint8_t palette;    // 1: mono, every colour a level of the hue (palette.h)
 	uint8_t mode;       // SETTINGS_MODE_*: what the screen and keyboard are for
 } settings_t;
 
@@ -62,11 +62,13 @@ unsigned settings_baud_rate(const settings_t *s);
 // Data bits (7 or 8), parity ('N', 'E' or 'O') and stop bits (1 or 2).
 void settings_framing(const settings_t *s, unsigned *data_bits, char *parity, unsigned *stop_bits);
 
-// The colours of the "Colors" setting (RGB222). With the mono palette the
-// status line is the text colours reversed.
+// What the Colors and Palette settings give besides the palette table
+// (palette_build(table, s->colours, s->palette)): the status line's palette
+// indices (white in colour: bright white on blue; otherwise the text
+// colours reversed) and the logo's hue.
 typedef struct {
-	uint8_t fg, bold_fg, bg;      // default text
-	uint8_t status_fg, status_bg; // the status line and the SET-UP panel
+	uint8_t status_fg, status_bg; // palette indices: the status line and the SET-UP panel
+	uint8_t logo_fg;              // RGB222 text colour, for splash_tint
 } settings_colours_t;
 
 settings_colours_t settings_colours(const settings_t *s);

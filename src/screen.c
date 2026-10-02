@@ -78,26 +78,6 @@ void screen_clear_line(screen_t *s, unsigned row, uint8_t fg, uint8_t bg) {
 		fill_slot(s, s->row_map[row], fg, bg);
 }
 
-static uint8_t recolour(uint8_t c, const uint8_t *from, const uint8_t *to, unsigned n) {
-	for (unsigned i = 0; i < n; ++i)
-		if (c == from[i])
-			return to[i];
-	return c;
-}
-
-void screen_recolour(screen_t *s, unsigned top, unsigned bottom, const uint8_t *from, const uint8_t *to,
-	unsigned n) {
-	for (unsigned row = top; row <= bottom && row < SCREEN_ROWS; ++row) {
-		unsigned slot = s->row_map[row];
-		screen_line_t *line = &s->lines[slot];
-		for (unsigned col = 0; col < SCREEN_MAX_COLS; ++col) {
-			line->fg[col] = recolour(line->fg[col], from, to, n);
-			line->bg[col] = recolour(line->bg[col], from, to, n);
-		}
-		s->dirty |= 1u << slot;
-	}
-}
-
 void screen_save_row(const screen_t *s, unsigned row, screen_line_t *out) {
 	if (row < SCREEN_ROWS)
 		*out = *screen_line(s, row);

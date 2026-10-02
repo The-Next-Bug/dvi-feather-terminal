@@ -302,6 +302,27 @@ static void test_worms(void) {
 	CHECK(type("x"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 
+	// -C: 256-colour rainbows, each worm from its own place on the wheel
+	// (worm 0 from red, worm 1 seven steps on), stepping on per head.
+	clear_screen();
+	CHECK(type("WORMS -D 0 -N 2 -C\r"));
+	CHECK_EQ(run_until("\x1b[38;5;154m", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "\x1b[38;5;202m") != NULL);
+	for (int i = 0; i < 20; ++i)
+		machine_run(1000);
+	CHECK(strstr(screen, "\x1b[38;5;208m") != NULL);
+	CHECK(strstr(screen, "\x1b[91m") == NULL);
+	CHECK(type("x"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("WORMS -D0 -C -M\r")); // -M still wins
+	CHECK_EQ(run_until("\x1b[23;", 10), MACHINE_RUNNING);
+	for (int i = 0; i < 20; ++i)
+		machine_run(1000);
+	CHECK(strstr(screen, "38;5;") == NULL);
+	CHECK(type("x"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+
 	// A terminal answering 24 x 132: the field fills 132 columns.
 	clear_screen();
 	host_cpr_reply = "\x1b[24;132R";

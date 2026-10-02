@@ -1,7 +1,7 @@
 #include <string.h>
 
 #include "setup.h"
-#include "term.h"
+#include "palette.h"
 #include "test.h"
 
 #define FG RGB222(3, 3, 3)
@@ -157,26 +157,31 @@ static void test_colours_preview(void) {
 		if (!digits && screen_glyph(&s, c, preview) == '0')
 			digits = c;
 	}
+	// Palette indices: the palette on screen shows what they look like.
 	uint8_t fg, bg;
 	screen_colours(&s, text_col, preview, &fg, &bg);
-	CHECK_EQ(fg, RGB222(2, 2, 2)); // white
-	CHECK_EQ(bg, 0);
+	CHECK_EQ(fg, PALETTE_TEXT);
+	CHECK_EQ(bg, PALETTE_BACKGROUND);
 	screen_colours(&s, text_col + 5, preview, &fg, &bg); // "Bold"
-	CHECK_EQ(fg, RGB222(3, 3, 3));
+	CHECK_EQ(fg, PALETTE_BOLD_TEXT);
 	CHECK(screen_attr(&s, text_col + 5, preview) & SCREEN_ATTR_BOLD);
+	unsigned status_col = text_col + 12; // " Status "
+	screen_colours(&s, status_col, preview, &fg, &bg);
+	CHECK(fg == PALETTE_BOLD_TEXT && bg == PALETTE_BLUE); // white, colour
 	for (unsigned i = 0; i < 16; ++i) {
 		unsigned col = digits + 2 * i;
 		screen_colours(&s, col, preview, &fg, &bg);
-		CHECK_EQ(fg, term_ansi_colour(i)); // as text
-		CHECK_EQ(bg, 0);
+		CHECK_EQ(fg, i); // as text
+		CHECK_EQ(bg, PALETTE_BACKGROUND);
 		screen_colours(&s, col, preview + 1, &fg, &bg);
-		CHECK_EQ(fg, RGB222(2, 2, 2)); // as background
-		CHECK_EQ(bg, term_ansi_colour(i));
+		CHECK_EQ(bg, i); // as background
+		CHECK(fg != bg);
 		screen_colours(&s, col + 1, preview + 1, &fg, &bg);
-		CHECK_EQ(bg, 0); // spaced out with the default background
+		CHECK_EQ(bg, PALETTE_BACKGROUND); // spaced out with the default background
 	}
 
-	// Colors -> blue and Palette -> mono: the preview follows both.
+	// Colors -> blue and Palette -> mono: the samples keep their indices
+	// (the owner shows the edited palette); the status sample follows.
 	for (unsigned i = 0; i < 6; ++i)
 		send("\x1b[B", 0);
 	send("\x1b[D", 0); // white -> blue (wraps)
@@ -184,21 +189,10 @@ static void test_colours_preview(void) {
 	CHECK_EQ(u.values.colours, 3);
 	CHECK_EQ(u.values.palette, 1);
 	setup_draw(&u, &s, top, "", FG, BG);
-	// Mono, blue phosphor: as text, normal colours blue and bright ones
-	// bright blue; as backgrounds, inverse (bright ones bright), black plain.
-	const uint8_t blue = RGB222(0, 1, 3), bright = RGB222(0, 2, 3), black = 0;
-	screen_colours(&s, text_col, preview, &fg, &bg);
-	CHECK(fg == blue && bg == black);
 	screen_colours(&s, digits + 2, preview, &fg, &bg); // red as text
-	CHECK(fg == blue && bg == black);
-	screen_colours(&s, digits + 18, preview, &fg, &bg); // bright red as text
-	CHECK(fg == bright && bg == black);
-	screen_colours(&s, digits + 2, preview + 1, &fg, &bg); // red as background
-	CHECK(fg == black && bg == blue);
-	screen_colours(&s, digits + 18, preview + 1, &fg, &bg); // bright red
-	CHECK(fg == black && bg == bright);
-	screen_colours(&s, digits, preview + 1, &fg, &bg); // black as background
-	CHECK(fg == blue && bg == black);
+	CHECK(fg == 1 && bg == PALETTE_BACKGROUND);
+	screen_colours(&s, status_col, preview, &fg, &bg);
+	CHECK(fg == PALETTE_BACKGROUND && bg == PALETTE_TEXT);
 }
 
 static void test_machine_menu_key(void) {
@@ -215,7 +209,18 @@ static void test_machine_menu_key(void) {
 	char help[81] = "";
 	for (unsigned c = 0; c < 80; ++c)
 		help[c] = (char)screen_glyph(&s, c, SCREEN_ROWS - 2);
-	CHECK(strstr(help, "D drives  M monitor") != NULL);
+	CHECK(strstr(help, "T demo  D drives  M monitor") != NULL);
+}
+
+// T shows the demo screen, in either mode.
+static void test_demo_key(void) {
+	open_with(80);
+	CHECK_EQ(send("t", 0), SETUP_DEMO);
+	CHECK_EQ(send("T", 0), SETUP_DEMO);
+	screen_t s;
+	screen_init(&s, 80, FG, BG);
+	setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG);
+	CHECK(row_contains(&s, SCREEN_ROWS - 2, "T demo"));
 }
 
 static void test_mode_setting(void) {
@@ -238,6 +243,7 @@ int main(void) {
 	RUN(test_draw_marks_current_choice);
 	RUN(test_colours_preview);
 	RUN(test_machine_menu_key);
+	RUN(test_demo_key);
 	RUN(test_mode_setting);
 	return tests_done();
 }
