@@ -1,5 +1,6 @@
 #include <string.h>
 
+#include "palette.h"
 #include "screen.h"
 #include "settings.h"
 #include "test.h"
@@ -153,28 +154,23 @@ static void test_line_and_colours(void) {
 	settings_framing(&s, &bits, &parity, &stop);
 	CHECK(bits == 7 && parity == 'E' && stop == 1);
 	settings_colours_t c = settings_colours(&s);
-	CHECK_EQ(c.fg, RGB222(2, 2, 2)); // white, as before settings had colours
-	CHECK_EQ(c.bold_fg, RGB222(3, 3, 3));
-	CHECK_EQ(c.bg, 0);
-	CHECK_EQ(c.status_fg, RGB222(3, 3, 3)); // the status line as before too
-	CHECK_EQ(c.status_bg, RGB222(0, 0, 2));
-	s.colours = 2; // amber
+	CHECK_EQ(c.status_fg, PALETTE_BOLD_TEXT); // white: bright white on blue, as before
+	CHECK_EQ(c.status_bg, PALETTE_BLUE);
+	CHECK_EQ(c.logo_fg, RGB222(2, 2, 2));
+	s.colours = 2; // amber: the text colours reversed
 	c = settings_colours(&s);
-	CHECK_EQ(c.fg, RGB222(2, 1, 0));
-	CHECK_EQ(c.bold_fg, RGB222(3, 2, 0));
-	CHECK_EQ(c.status_bg, RGB222(2, 1, 0)); // the status line follows
-	// Each set's status line differs from its text background.
-	for (s.colours = 0; s.colours < 4; ++s.colours) {
-		c = settings_colours(&s);
-		CHECK(c.status_bg != c.bg);
-		CHECK(c.status_fg != c.status_bg);
-	}
-	// Mono: the status line is the text colours reversed (white's too).
+	CHECK_EQ(c.status_fg, PALETTE_BACKGROUND);
+	CHECK_EQ(c.status_bg, PALETTE_TEXT);
+	CHECK_EQ(c.logo_fg, RGB222(2, 1, 0));
+	// Mono: the text colours reversed, white's too.
 	s.palette = 1;
 	for (s.colours = 0; s.colours < 4; ++s.colours) {
 		c = settings_colours(&s);
-		CHECK(c.status_fg == c.bg && c.status_bg == c.fg);
+		CHECK(c.status_fg == PALETTE_BACKGROUND && c.status_bg == PALETTE_TEXT);
 	}
+	s.colours = 9; // out of range: white
+	s.palette = 0;
+	CHECK_EQ(settings_colours(&s).status_bg, PALETTE_BLUE);
 	// Every field's labels and values line up and the defaults are choices.
 	settings_defaults(&s);
 	for (unsigned i = 0; i < SETTINGS_FIELDS; ++i) {

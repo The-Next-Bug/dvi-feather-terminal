@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "crc32.h"
+#include "palette.h"
 #include "screen.h" // RGB222
 
 #define COUNT(a) (sizeof(a) / sizeof((a)[0]))
@@ -28,19 +29,9 @@ static const struct {
 	{7, 'E', 1}, {7, 'O', 1}, {7, 'N', 1}, {7, 'N', 2},
 };
 
-// Normal text colours (bold is each lit channel one level brighter), and
-// the status line's.
-static const struct {
-	uint8_t fg, bg, status_fg, status_bg;
-} colour_sets[] = {
-	// white on black; white on blue status line
-	{RGB222(2, 2, 2), RGB222(0, 0, 0), RGB222(3, 3, 3), RGB222(0, 0, 2)},
-	// green phosphor; reversed status line
-	{RGB222(0, 2, 0), RGB222(0, 0, 0), RGB222(0, 0, 0), RGB222(0, 2, 0)},
-	// amber phosphor; reversed status line
-	{RGB222(2, 1, 0), RGB222(0, 0, 0), RGB222(0, 0, 0), RGB222(2, 1, 0)},
-	// blue phosphor; reversed status line
-	{RGB222(0, 1, 3), RGB222(0, 0, 0), RGB222(0, 0, 0), RGB222(0, 1, 3)},
+// The text colour of each hue, for the logo's tint.
+static const uint8_t logo_fgs[PALETTE_HUES] = {
+	RGB222(2, 2, 2), RGB222(0, 2, 0), RGB222(2, 1, 0), RGB222(0, 1, 3),
 };
 
 const settings_field_t settings_fields[SETTINGS_FIELDS] = {
@@ -68,31 +59,14 @@ void settings_framing(const settings_t *s, unsigned *data_bits, char *parity, un
 	*stop_bits = framings[i].stop_bits;
 }
 
-static uint8_t brighter(uint8_t c) {
-	uint8_t out = 0;
-	for (unsigned shift = 0; shift < 6; shift += 2) {
-		unsigned level = c >> shift & 3;
-		out |= (uint8_t)((level && level < 3 ? level + 1 : level) << shift);
-	}
-	return out;
-}
-
 settings_colours_t settings_colours(const settings_t *s) {
-	unsigned i = s->colours < COUNT(colour_sets) ? s->colours : 0;
-	settings_colours_t c = {
-		.fg = colour_sets[i].fg,
-		.bold_fg = brighter(colour_sets[i].fg),
-		.bg = colour_sets[i].bg,
-		.status_fg = colour_sets[i].status_fg,
-		.status_bg = colour_sets[i].status_bg,
+	unsigned hue = s->colours < PALETTE_HUES ? s->colours : PALETTE_HUE_WHITE;
+	bool blue_bar = hue == PALETTE_HUE_WHITE && !s->palette;
+	return (settings_colours_t){
+		.status_fg = blue_bar ? PALETTE_BOLD_TEXT : PALETTE_BACKGROUND,
+		.status_bg = blue_bar ? PALETTE_BLUE : PALETTE_TEXT,
+		.logo_fg = logo_fgs[hue],
 	};
-	if (s->palette) {
-		// Mono: nothing outside the text colours, so the status line is
-		// them reversed (the phosphor sets already are; white's was blue).
-		c.status_fg = c.bg;
-		c.status_bg = c.fg;
-	}
-	return c;
 }
 
 static uint32_t get32(const uint8_t *p) {

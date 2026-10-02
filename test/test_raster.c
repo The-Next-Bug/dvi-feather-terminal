@@ -8,9 +8,9 @@
 static screen_t s;
 static raster_line_t out;
 
-// The renderer's colour table for these tests: RGB222 colour c as the
-// "pixel" c, so composed pixels read back as RGB222.
-static uint32_t identity[64];
+// The palette for these tests: index c as the "pixel" c, so composed pixels
+// read back as palette indices (the RGB222() values below are just indices).
+static uint32_t identity[256];
 
 // The scanline last composed from `out`, and what it was composed for.
 static uint32_t px[RASTER_LINE_WORDS];
@@ -21,13 +21,13 @@ static struct {
 } composed;
 
 static void render(const screen_line_t *line, unsigned cols, unsigned flags) {
-	for (unsigned c = 0; c < 64; ++c)
+	for (unsigned c = 0; c < 256; ++c)
 		identity[c] = c | c << 16;
 	raster_render_line(&out, line, cols, flags);
 	composed.valid = false;
 }
 
-// The colour (RGB222) of pixel x on scanline sy of `out`, with the cursor on
+// The colour (palette index) of pixel x on scanline sy of `out`, with the cursor on
 // cell cursor (-1: none).
 static unsigned shown_at(unsigned cols, unsigned sy, unsigned x, int cursor) {
 	unsigned sr = raster_stored_row(cols, sy);
@@ -106,7 +106,7 @@ static void test_any_colours_exact(void) {
 	for (unsigned cols = 80; cols <= 132; cols += 52) {
 		screen_init(&s, cols, 0, 0);
 		for (unsigned c = 0; c < cols; ++c)
-			screen_put(&s, c, 0, (uint8_t)(0x21 + c % 94), (uint8_t)(c * 7 % 64), (uint8_t)(c * 13 % 64));
+			screen_put(&s, c, 0, (uint8_t)(0x21 + c % 94), (uint8_t)(c * 7 % 256), (uint8_t)(c * 13 % 256));
 		CHECK_EQ(mismatches(0), 0);
 		// Full blocks of three levels side by side (the old encoder's worst case).
 		screen_init(&s, cols, 0, 0);
@@ -295,7 +295,7 @@ static void test_reverse(void) {
 	CHECK_EQ(shown(80, 12, 10), 0); // border stays black
 }
 
-// The demo screen, all 64 colours as adjacent backgrounds included, is
+// The demo screen, the xterm colours as adjacent backgrounds included, is
 // pixel-exact in both widths.
 static void test_demo(void) {
 	for (unsigned cols = 80; cols <= 132; cols += 52) {

@@ -38,7 +38,7 @@
 
 typedef struct {
 	uint8_t bits[RASTER_STORED_ROWS][SCREEN_MAX_COLS]; // per stored row and cell
-	uint8_t fg[SCREEN_MAX_COLS], bg[SCREEN_MAX_COLS];  // RGB222, as shown
+	uint8_t fg[SCREEN_MAX_COLS], bg[SCREEN_MAX_COLS];  // palette indices, as shown
 } raster_line_t;
 
 static inline unsigned raster_cell_width(unsigned cols) {
@@ -81,10 +81,10 @@ static inline unsigned raster_stored_row(unsigned cols, unsigned sy) {
 bool raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned cols, unsigned flags);
 
 // Compose stored row sr of line into RASTER_LINE_WORDS words of pixels:
-// colours[c] is RGB222 colour c as a pixel in both halves of a word (the
-// renderer's pixel format; c is 0-63). The border is 0 (black). The cell at
+// colours[c] is palette index c as a pixel in both halves of a word (the
+// renderer's pixel format). The border is 0 (black). The cell at
 // cursor_col (-1 for none) is shown inverted: fg and bg swap pixel by pixel.
 void raster_compose(uint32_t *px, const raster_line_t *line, unsigned cols, unsigned sr, int cursor_col,
-	const uint32_t colours[64]);
+	const uint32_t colours[256]);
 
 #endif

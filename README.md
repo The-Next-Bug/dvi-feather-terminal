@@ -34,8 +34,8 @@ Releases (`vX.Y.Z` tags) ship the firmware image; see `docs/FLASHING.txt`.
   DECALN, RIS, REP. Replies to DA, DSR/CPR and DECREQTPARM go back on UART0
   TX.
 - **Attributes**: SGR bold (bright and emboldened), underline, blink,
-  reverse; colours 8/16, 256 and 24-bit, shown with the display's 64 colours
-  (RGB222).
+  reverse; colours 8/16, 256 (the xterm palette, exact) and 24-bit (the
+  nearest of those 256).
 - **Keyboard**: USB keyboard on the native USB port (host
   mode, see [USB keyboard](#usb-keyboard)); keys go to the host on UART0 TX.
 - **Status line** (row 24): width, build id, line settings, `kbd` while a
@@ -56,9 +56,10 @@ Releases (`vX.Y.Z` tags) ship the firmware image; see `docs/FLASHING.txt`.
   CP/M 2.2 (and CP/M 3 / MP/M II disk images) from a microSD card, on
   [z80pack](https://github.com/udo-munk/z80pack)'s CPU core. See
   [Z80 CP/M machine](#z80-cpm-machine).
-- **Demo** (opt-in, `-DSTARTUP_DEMO=ON`): after the logo, alternates
-  between 80 and 132 columns every 5 seconds until the first byte arrives
-  or a key is pressed.
+- **Demo**: a test screen of colours, fonts and line drawing that
+  alternates between 80 and 132 columns every 5 seconds. **T** in SET-UP
+  shows it until a key is pressed; with `-DSTARTUP_DEMO=ON` it also runs
+  after the logo until the first byte arrives or a key is pressed.
 
 Not yet (tracked in bd): flow control as a SET-UP setting, an ADM-3A
 terminal type, alternate screen, VT52 mode, double-width/height lines,
@@ -148,13 +149,17 @@ A panel over the bottom text rows for the settings kept in flash:
 | Baud rate | 300 - 115200 | default 115200 |
 | Data/parity/stop | 8N1, 8E1, 8O1, 8N2, 7E1, 7O1, 7N1, 7N2 | default 8N1 |
 | New line (LNM) | off, on | LNM at power-on and after RIS: Return sends CR LF, and LF also returns the cursor |
-| Colors | white, green, amber, blue | text colors: white, or green, amber or blue phosphor, on black; bold is one level brighter; the status line, SET-UP panel and startup logo match (white keeps the logo's own colors). Changing them recolors what is on screen |
-| Palette | color, mono | mono shows SGR colors (the 16 ANSI ones, 256-color and 24-bit) only as brightness within the Colors setting's colors: bright colors (and bold) in the bright shade; a background other than black as inverse (bright ones in the bright shade), text on it in the background color. The status line and SET-UP panel become the text colors reversed, and with white the startup logo shows in grey. Text already on screen keeps its colors |
+| Colors | white, green, amber, blue | white: the 16 ANSI colors as on a VGA screen. Green, amber or blue phosphor: the 16 ANSI colors (default text and bold included) become shades of that hue, by brightness (black; dark grey; the normal colors; default text; the bright colors; bold); 256-color and 24-bit colors stay in color. The status line, SET-UP panel and startup logo match (white keeps the logo's own colors) |
+| Palette | color, mono | mono: every color, 256-color and 24-bit too, is a shade of the Colors hue (white: grey) by its brightness, so colors of similar brightness look alike. The status line and SET-UP panel become the text colors reversed, and with white the startup logo shows in grey |
 | Mode | terminal, CP/M machine | what the screen and keyboard are for: a serial terminal on UART0, or the console of the [Z80 CP/M machine](#z80-cpm-machine). Saving a new mode restarts the board |
 
 Under Palette, two rows preview both color settings: default text, bold and
 the status line, then each of the 16 ANSI colors (0-F) as text on the
-default background and, below it, as a background under default text.
+default background and, below it, as a background. While SET-UP is open the
+whole screen shows the edited Colors and Palette; leaving without saving
+puts the old ones back. Changing either recolors everything on screen, text
+already there included: the screen holds palette entries, and only the
+table that turns them into pixels changes.
 
 It opens from:
 
@@ -167,7 +172,10 @@ It opens from:
 
 Up/Down select a setting, Left/Right or Space change it, **Return** saves
 it to flash and applies it (a new width clears the screen, as DECCOLM
-does), **Esc** (or F12 again) leaves without saving. The panel opens
+does), **Esc** (or F12 again) leaves without saving. **T** shows the demo
+screen in the edited colors until a key is pressed; the terminal's screen
+is not kept (there is no memory for a copy), so SET-UP comes back over a
+cleared screen, as after a width change. The panel opens
 with the width, Backspace mode and LNM currently in use, so Return alone
 makes a DECCOLM, DECBKM or LNM switch from the host the power-on default.
 A new baud rate or framing applies as soon as it is saved: the host has to
@@ -235,7 +243,10 @@ the screen after BSD worms(6), each in its own colour and glyph. It asks the
 terminal for the screen size, so it fills 132 columns too. Options:
 `-N` worms (1-40, default 3), `-L` length (2-255, 16), `-D` milliseconds per
 step (40; 0 as fast as the Z80 goes), `-F` a field of dots to eat, `-T` a
-trail of dots, `-M` no colour. Any key ends it; e.g. `WORMS -N 10 -L 30 -F`.
+trail of dots, `-C` 256-colour rainbow worms (each head steps round a
+30-colour hue wheel from the xterm palette, so the bodies are gradients),
+`-M` no colour. Any key ends it; e.g. `WORMS -N 10 -L 30 -F` or
+`WORMS -C -N 6 -L 40`.
 
 ### The monitor
 
@@ -383,6 +394,18 @@ The firmware runs entirely from SRAM (`COPY_TO_RAM`, default ON): the
 boot-time flash (XIP) setup is chosen for clk_sys up to 150 MHz, far below the 400 MHz DVI clock (bd `dvi-feather-terminal-dmt.10`).
 `-DVIDEO_DIAG=ON` adds bring-up diagnostics on UART0 TX (boot markers, core 1
 scanline timing, fault reports).
+
+### Resources used
+
+As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
+
+| Resource | Used | Free |
+|---|---|---|
+| SRAM (520 KB) | about 480 KB: code 165 KB, data 26 KB, buffers 288 KB (Z80 memory 160 KB, raster memory 64.5 KB, disk-image window 16 KB, screen 13 KB, ...) | about 32 KB, plus most of the two 4 KB scratch banks. A third Z80 bank (48 KB) does not fit |
+| Flash (4 MB) | firmware 442 KB; firmware-update staging area (upper 2 MB, used only during an update); settings (2 sectors); the last sector is left blank | about 1.5 MB below 2 MB for the firmware to grow into |
+| Clocks | clk_sys 400 MHz at 1.3 V, HSTX 200 MHz, USB 48 MHz | |
+| Peripherals | HSTX (DVI), 2 DMA channels, UART0, SPI0 (SD card), USB (host), TIMER0, watchdog | 14 DMA channels, all three PIO blocks, UART1, SPI1, I2C0/1, PWM, ADC, TIMER1, TRNG, SHA-256, the QMI's second chip select (PSRAM) |
+| GPIO | GP0/1 UART0, GP2/3 RTS/CTS (flow control builds only), GP4-7 SD card, GP12-19 DVI Sock | GP8-11, GP20-22, GP26-28 (GP26-28 can be analogue inputs), and GP2/3 without flow control |
 
 ## Layout
 

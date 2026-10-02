@@ -4,41 +4,39 @@
 #include <string.h>
 
 #include "font.h"
+#include "palette.h"
 
-#define BLACK RGB222(0, 0, 0)
-#define GREY RGB222(2, 2, 2)
-#define DIM RGB222(1, 1, 1)
-#define WHITE RGB222(3, 3, 3)
-#define TITLE_BG RGB222(0, 0, 2)
+// Palette indices.
+#define BLACK PALETTE_BLACK
+#define GREY PALETTE_TEXT
+#define DIM PALETTE_DIM
+#define WHITE PALETTE_BOLD_TEXT
+#define TITLE_BG PALETTE_BLUE
 
 static const char *const names[8] = {
 	"Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White",
 };
 
-// ANSI colour n (0-7) at a given level: bit 0 red, bit 1 green, bit 2 blue.
-static uint8_t ansi(unsigned n, unsigned lvl) {
-	return RGB222(n & 1 ? lvl : 0, n & 2 ? lvl : 0, n & 4 ? lvl : 0);
-}
-
+// ANSI colour n (0-7: bit 0 red, bit 1 green, bit 2 blue), normal or bright.
 static uint8_t normal(unsigned n) {
-	return ansi(n, 2);
+	return (uint8_t)n;
 }
 
 static uint8_t bright(unsigned n) {
-	return n == 0 ? DIM : ansi(n, 3);
+	return (uint8_t)(n + 8);
 }
 
 // A hue wheel for the rainbow rows: red, yellow, green, cyan, blue, magenta.
-static uint8_t rainbow(unsigned i, unsigned lvl) {
+static uint8_t rainbow(unsigned i, int is_bright) {
 	static const uint8_t hues[6] = { 1, 3, 2, 6, 4, 5 };
-	return ansi(hues[i % 6], lvl);
+	return is_bright ? bright(hues[i % 6]) : normal(hues[i % 6]);
 }
 
 static void fill_row(screen_t *s, unsigned row, const char *text, unsigned offset, int bright_hues) {
 	size_t len = strlen(text);
 	for (unsigned c = 0; c < s->cols; ++c)
 		screen_put(s, c, row, (uint8_t)text[(c + offset) % len],
-			rainbow(c + offset, bright_hues ? 3 : 2), BLACK);
+			rainbow(c + offset, bright_hues), BLACK);
 }
 
 static void box(screen_t *s, unsigned col, unsigned row, unsigned w, unsigned h, int dbl, uint8_t fg) {
@@ -126,12 +124,14 @@ void demo_draw(screen_t *s, unsigned cols, const char *status) {
 	screen_puts(s, half + 2, 17, "Font: ", GREY, BLACK);
 	screen_puts(s, half + 8, 17, w > 80 ? "misc-fixed 6x13" : "Terminus 8x16", bright(3), BLACK);
 
-	// All 64 RGB222 colours as background swatches.
-	screen_puts(s, 1, 21, "RGB222", GREY, BLACK);
-	for (unsigned c = 0; c < 64; ++c)
-		screen_put(s, 8 + c, 21, ' ', BLACK, (uint8_t)c);
+	// The 240 colours above the ANSI ones (cube and grey ramp) as
+	// background swatches, as many as fit, evenly spaced.
+	screen_puts(s, 1, 21, "xterm", GREY, BLACK);
+	unsigned swatches = w - 8;
+	for (unsigned c = 0; c < swatches; ++c)
+		screen_put(s, 7 + c, 21, ' ', BLACK, (uint8_t)(16 + c * 240 / swatches));
 
-	screen_puts(s, 1, 23, "Mode switches every 5 s; send data to UART0 (115200 8N1) to start the terminal.",
+	screen_puts(s, 1, 23, "Switches between 80 and 132 columns every 5 s; any key ends the demo.",
 		DIM, BLACK);
 
 	screen_clear_line(s, SCREEN_ROWS - 1, WHITE, TITLE_BG);

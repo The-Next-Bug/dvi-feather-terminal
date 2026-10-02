@@ -1,13 +1,14 @@
 ;	WORMS: worms wander about the screen, after BSD worms(6), in colour.
 ;
-;	WORMS [-D ms] [-F] [-L length] [-N number] [-T] [-M]
+;	WORMS [-C] [-D ms] [-F] [-L length] [-N number] [-T] [-M]
 ;
+;	-C	  256 colours: rainbow worms (see RAINBOW)
 ;	-D ms	  delay between steps (default 40; 0: as fast as it goes)
 ;	-F	  fill the screen with a field of dots for the worms to eat
 ;	-L length segments per worm, 2-255 (default 16)
 ;	-N number worms, 1-40 (default 3)
 ;	-T	  worms leave a trail of dots
-;	-M	  monochrome: no colour codes
+;	-M	  monochrome: no colour codes (also with -C)
 ;
 ;	Any key ends it. Written for the terminal's VT100 emulation: the
 ;	screen size comes from a cursor position report (24 x 80 if none
@@ -32,6 +33,7 @@ CLKCMD	EQU	65		;clock: register select
 CLKDAT	EQU	66		;clock: register data (0: seconds)
 ESC	EQU	1BH
 MAXW	EQU	40
+NWHEEL	EQU	30		;colours on the -C hue wheel
 NONE	EQU	0FFH		;x of a segment not on the screen yet
 
 	ORG	100H
@@ -81,6 +83,8 @@ ARG1:	CALL	SKIPSP
 	RET	NZ
 	CALL	NEXT
 	RET	C
+	CP	'C'
+	JR	Z,ARGC
 	CP	'F'
 	JR	Z,ARGF
 	CP	'T'
@@ -95,6 +99,9 @@ ARG1:	CALL	SKIPSP
 	JR	Z,ARGN
 	SCF
 	RET
+ARGC:	LD	A,1
+	LD	(C256),A
+	JR	ARG1
 ARGF:	LD	A,1
 	LD	(FIELD),A
 	JR	ARG1
@@ -368,6 +375,16 @@ SETF:	LD	(HL),NONE
 SETO:	LD	(HL),0
 	INC	HL
 	DJNZ	SETO
+	LD	HL,WPHASE	;-C: each worm from its own place on the wheel
+	LD	B,MAXW
+	XOR	A
+SETP:	LD	(HL),A
+	INC	HL
+	ADD	A,7
+	CP	NWHEEL
+	JR	C,SETP1
+	SUB	NWHEEL
+SETP1:	DJNZ	SETP
 	LD	HL,SINIT
 	CALL	PUTS
 	LD	A,(FIELD)
@@ -620,12 +637,17 @@ REFDEC:	CALL	REFADR
 
 ;	Draw worm WORM's glyph in its colour at (column C, row B).
 DRWORM:	CALL	GOTO
+	LD	A,(C256)
+	OR	A
+	JR	NZ,DRW2
 	LD	A,(WORM)
 DRW1:	SUB	6		;colour: SGR 91-96 by WORM mod 6
 	JR	NC,DRW1
 	ADD	A,6+91
 	CALL	COLOUR
-	LD	A,(WORM)	;glyph: by WORM mod 8
+	JR	DRW3
+DRW2:	CALL	RAINBOW
+DRW3:	LD	A,(WORM)	;glyph: by WORM mod 8
 	AND	7
 	LD	E,A
 	LD	D,0
@@ -776,6 +798,37 @@ COLOUR:	LD	HL,MONO
 	LD	A,'m'
 	JP	PUTC
 
+;	-C: worm WORM's next colour on the hue wheel, as SGR 38;5;n (unless
+;	-M). Every head drawn is one step on, so a worm's body is a rainbow.
+RAINBOW:
+	LD	A,(WORM)
+	LD	E,A
+	LD	D,0
+	LD	HL,WPHASE
+	ADD	HL,DE
+	LD	A,(HL)
+	INC	A
+	CP	NWHEEL
+	JR	C,RAIN1
+	XOR	A
+RAIN1:	LD	(HL),A
+	LD	E,A
+	LD	HL,WHEEL
+	ADD	HL,DE
+	LD	A,(MONO)
+	OR	A
+	RET	NZ
+	LD	A,1		;CURCOL: not an SGR colour of ours, so COLOUR 0
+	LD	(CURCOL),A	;is sent again for the tail
+	PUSH	HL
+	LD	HL,S256
+	CALL	PUTS
+	POP	HL
+	LD	A,(HL)
+	CALL	PUTDEC
+	LD	A,'m'
+	JP	PUTC
+
 ;	A in decimal (0-255); keeps BC, DE.
 PUTDEC:	PUSH	BC
 	PUSH	DE
@@ -834,13 +887,19 @@ PUTC:	PUSH	BC
 DX:	DB	1,1,1,0,-1,-1,-1,0
 DY:	DB	-1,0,1,1,1,0,-1,-1
 GLYPHS:	DB	'O*#$%0@~'
+;	-C's hue wheel: the xterm colour cube's saturated edge, red, yellow,
+;	green, cyan, blue, magenta and back, five steps an edge.
+WHEEL:	DB	196,202,208,214,220,226,190,154,118,82
+	DB	46,47,48,49,50,51,45,39,33,27
+	DB	21,57,93,129,165,201,200,199,198,197
 
 SASK:	DB	ESC,'[999;999H',ESC,'[6n',0
 SINIT:	DB	ESC,'[0m',ESC,'[?25l',ESC,'[2J',0	;also CURCOL 0
+S256:	DB	ESC,'[38;5;',0
 SBYE:	DB	ESC,'[0m',ESC,'[2J',ESC,'[H',ESC,'[?25h',0
-SUSAGE:	DB	'Usage: WORMS [-D ms] [-F] [-L length] [-N number] [-T] [-M]',13,10
-	DB	'  -D delay per step (40)  -F field to eat  -L 2-255 (16)',13,10
-	DB	'  -N 1-40 worms (3)  -T leave a trail  -M monochrome',13,10,'$'
+SUSAGE:	DB	'Usage: WORMS [-C] [-D ms] [-F] [-L length] [-N number] [-T] [-M]',13,10
+	DB	'  -C 256-colour rainbows  -D delay per step (40)  -F field to eat',13,10
+	DB	'  -L 2-255 (16)  -N 1-40 worms (3)  -T leave a trail  -M monochrome',13,10,'$'
 SROOM:	DB	'Not enough memory for that many worms.',13,10,'$'
 
 ROWS:	DB	24
@@ -853,6 +912,7 @@ UNITMS:	DW	1
 FIELD:	DB	0
 TRAIL:	DB	' '
 MONO:	DB	0
+C256:	DB	0
 CURCOL:	DB	0
 WORM:	DB	0
 HX:	DB	0
@@ -865,6 +925,7 @@ TOP:	DW	0
 WORIENT: DS	MAXW		;heading of each worm
 WHEAD:	DS	MAXW		;head segment of each worm (follows WORIENT)
 WSEGS:	DS	MAXW*2		;address of each worm's segments
+WPHASE:	DS	MAXW		;-C: each worm's place on the wheel
 CANDS:	DS	8
 ROWTAB:	DS	2*255
 	DS	128

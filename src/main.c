@@ -42,6 +42,7 @@
 #include "machine.h"
 #include "monitor.h"
 #include "nvflash.h"
+#include "palette.h"
 #include "sdcard.h"
 #include "screen.h"
 #include "settings.h"
@@ -80,9 +81,6 @@
 #define LOGO_MS 10000
 #endif
 
-// The logo's screen; the terminal's colours are a setting.
-#define FG RGB222(2, 2, 2)
-#define BG RGB222(0, 0, 0)
 
 #define TERM_ROWS (SCREEN_ROWS - 1)
 #define STATUS_ROW (SCREEN_ROWS - 1)
@@ -102,7 +100,13 @@ static bool key_pressed; // before the terminal started: ends the logo and demo
 
 static settings_t settings;          // as saved in flash
 static settings_target_t save_target;
-static settings_colours_t colours;   // in use (the status line's too)
+static settings_colours_t colours;   // in use: the status line's
+// The palette shown (built from the Colors and Palette settings).
+static struct {
+	uint16_t table[PALETTE_SIZE];
+	bool built;
+	uint8_t hue, mono;
+} palette;
 
 // The last key sequence sent to the host, for the status line.
 static struct {
@@ -123,6 +127,10 @@ static struct {
 	// CP/M mode: the Drives panel (D), over the same rows.
 	bool drives_open, drives_apply;
 	drivepanel_t drives;
+	// The demo screen (T), over the whole screen until a key.
+	bool demo, demo_end;
+	unsigned demo_cols, term_cols;
+	absolute_time_t demo_switch;
 } setup;
 
 static_assert(DRIVEPANEL_ROWS <= SETUP_ROWS, "the Drives panel fits SET-UP's rows");
@@ -157,16 +165,32 @@ static void diag_poll(void) {
 	diag_heartbeat();
 }
 
+// Show the palette of s's Colors and Palette settings (from the next
+// frame). From the main loop only: it may wait for a frame.
+static void show_palette(const settings_t *s) {
+	if (palette.built && palette.hue == s->colours && palette.mono == s->palette)
+		return;
+	palette_build(palette.table, s->colours, s->palette);
+	video_set_palette(palette.table);
+	palette.built = true;
+	palette.hue = s->colours;
+	palette.mono = s->palette;
+}
+
+// The panels are drawn in the edited settings' colours, like the preview
+// (setup_service shows their palette).
 static void setup_draw_panel(void) {
 	char title[SCREEN_MAX_COLS + 1];
 	snprintf(title, sizeof title, "  DVI Terminal build %s", TERM_BUILD_ID);
-	setup_draw(&setup.ui, &screen, SETUP_TOP, title, colours.status_fg, colours.status_bg);
+	settings_colours_t c = settings_colours(&setup.ui.values);
+	setup_draw(&setup.ui, &screen, SETUP_TOP, title, c.status_fg, c.status_bg);
 }
 
 static void drives_draw_panel(void) {
+	settings_colours_t c = settings_colours(&setup.ui.values);
 	for (unsigned r = DRIVEPANEL_ROWS; r < SETUP_ROWS; ++r)
-		screen_clear_line(&screen, SETUP_TOP + r, colours.status_fg, colours.status_bg);
-	drivepanel_draw(&setup.drives, &screen, SETUP_TOP, colours.status_fg, colours.status_bg);
+		screen_clear_line(&screen, SETUP_TOP + r, c.status_fg, c.status_bg);
+	drivepanel_draw(&setup.drives, &screen, SETUP_TOP, c.status_fg, c.status_bg);
 }
 
 // A key for the Drives panel. Mounting is left for the main loop.
@@ -187,6 +211,10 @@ static void drives_feed(uint8_t c, uint32_t now) {
 // stack); later bytes are dropped.
 static void setup_feed(const uint8_t *data, size_t len) {
 	uint32_t now = to_ms_since_boot(get_absolute_time());
+	if (setup.demo) {
+		setup.demo_end |= len > 0; // any key; the rest of it is dropped
+		return;
+	}
 	for (size_t i = 0; i < len && setup.action == SETUP_NONE && !setup.drives_apply; ++i) {
 		if (setup.drives_open) {
 			drives_feed(data[i], now);
@@ -198,6 +226,16 @@ static void setup_feed(const uint8_t *data, size_t len) {
 		else if (a != SETUP_NONE)
 			setup.action = a;
 	}
+}
+
+// Save the rows under the panel and draw it there.
+static void setup_cover(void) {
+	for (unsigned r = 0; r < SETUP_ROWS; ++r)
+		screen_save_row(&screen, SETUP_TOP + r, &setup.saved[r]);
+	setup.saved_reverse = screen.reverse_rows;
+	screen_set_reverse_rows(&screen, screen.reverse_rows & ~(((1u << SETUP_ROWS) - 1) << SETUP_TOP));
+	screen.cursor_visible = false;
+	setup_draw_panel();
 }
 
 static void setup_enter(bool from_host) {
@@ -213,13 +251,9 @@ static void setup_enter(bool from_host) {
 	setup.drives_open = setup.drives_apply = false;
 	setup.from_host = from_host;
 	setup.action = SETUP_NONE;
-	for (unsigned r = 0; r < SETUP_ROWS; ++r)
-		screen_save_row(&screen, SETUP_TOP + r, &setup.saved[r]);
-	setup.saved_reverse = screen.reverse_rows;
+	setup.demo = false;
 	setup.saved_cursor = screen.cursor_visible;
-	screen_set_reverse_rows(&screen, screen.reverse_rows & ~(((1u << SETUP_ROWS) - 1) << SETUP_TOP));
-	screen.cursor_visible = false;
-	setup_draw_panel();
+	setup_cover();
 }
 
 // The serial line settings of s.
@@ -231,7 +265,7 @@ static void apply_line(const settings_t *s) {
 }
 
 // Use settings s: the line, the modes RIS resets to (also set now) and the
-// colours. In CP/M mode LNM stays off: CP/M wants Return as CR alone (a
+// palette (the status line follows at its next redraw). In CP/M mode LNM stays off: CP/M wants Return as CR alone (a
 // following LF waits as a key, which stops DIR and TYPE early) and sends
 // CR LF itself. The width is only used at power-on and by SET-UP; local echo is
 // read from `settings` as keys are sent.
@@ -240,8 +274,7 @@ static void apply_settings(const settings_t *s) {
 	term_set_defaults(&term, &(term_defaults_t){.backspace_bs = s->backspace == 0x08,
 		.newline_mode = s->newline && !cpm.on});
 	colours = settings_colours(s);
-	term_set_colours(&term, colours.fg, colours.bold_fg, colours.bg);
-	term_set_palette(&term, s->palette);
+	show_palette(s);
 }
 
 // Put the rows back; with apply, use the edited settings now, and the width
@@ -253,8 +286,10 @@ static void setup_leave(bool apply) {
 	screen.cursor_visible = setup.saved_cursor;
 	setup.active = false;
 	setup.drives_open = setup.drives_apply = false;
-	if (!apply)
+	if (!apply) {
+		show_palette(&settings); // back from SET-UP's preview
 		return;
+	}
 	apply_settings(&setup.ui.values);
 	if (setup.ui.values.columns != screen.cols)
 		term_set_columns(&term, setup.ui.values.columns);
@@ -288,8 +323,46 @@ static void drives_service(void) {
 	}
 }
 
-// Run SET-UP's pending save or cancel, or the Escape key timeout.
+// The demo screen at cols, with `what` on its status line.
+static void draw_demo(unsigned cols, const char *what) {
+	char status[SCREEN_MAX_COLS + 1];
+	snprintf(status, sizeof status, " demo | %u x 24 | build %s (%s, %s) | %s",
+		cols, TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE, what);
+	demo_draw(&screen, cols, status);
+}
+
+// SET-UP's demo (T): in the edited palette, alternating widths until a key.
+// The terminal's screen is not kept (a copy would cost 13 KB of SRAM): it
+// comes back cleared, at its width, as after DECCOLM, under SET-UP again.
+static void setup_demo_start(void) {
+	setup.demo = true;
+	setup.demo_end = false;
+	setup.term_cols = screen.cols;
+	setup.demo_cols = screen.cols;
+	setup.demo_switch = make_timeout_time_ms(DEMO_INTERVAL_MS);
+	draw_demo(setup.demo_cols, "any key: back to SET-UP");
+}
+
+static void setup_demo_service(void) {
+	if (setup.demo_end) {
+		setup.demo = false;
+		term_set_columns(&term, setup.term_cols); // clears; the status line follows
+		setup_cover();
+	} else if (time_reached(setup.demo_switch)) {
+		setup.demo_switch = make_timeout_time_ms(DEMO_INTERVAL_MS);
+		setup.demo_cols = setup.demo_cols == 80 ? 132 : 80;
+		draw_demo(setup.demo_cols, "any key: back to SET-UP");
+	}
+}
+
+// Run SET-UP's pending save or cancel, the demo, or the Escape key
+// timeout, and show the edited Colors and Palette.
 static void setup_service(void) {
+	show_palette(&setup.ui.values);
+	if (setup.demo) {
+		setup_demo_service();
+		return;
+	}
 	if (setup.drives_open && setup.action == SETUP_NONE) {
 		drives_service();
 		return;
@@ -300,6 +373,8 @@ static void setup_service(void) {
 	setup.action = SETUP_NONE;
 	if (a == SETUP_CANCEL) {
 		setup_leave(false);
+	} else if (a == SETUP_DEMO) {
+		setup_demo_start();
 	} else if (a == SETUP_DRIVES) {
 		drivepanel_open(&setup.drives);
 		setup.drives_open = true;
@@ -362,7 +437,9 @@ static void setup_key(void *ctx) {
 	key_pressed = true;
 	if (!term_started)
 		return;
-	if (setup.active)
+	if (setup.demo)
+		setup.demo_end = true; // back to SET-UP, like any key
+	else if (setup.active)
 		setup.action = SETUP_CANCEL;
 	else
 		setup.open_requested = true;
@@ -428,7 +505,7 @@ static bool show_logo(uint8_t *buf, size_t max, size_t *n) {
 	*n = 0;
 	// In the hue of the Colors setting (white keeps the logo's own colours,
 	// or with the mono palette shows it grey).
-	splash_tint_t tint = splash_tint(&splash_logo, colours.fg, settings.palette);
+	splash_tint_t tint = splash_tint(&splash_logo, colours.logo_fg, settings.palette);
 	if (!video_splash(&splash_logo, &tint))
 		return false;
 	bool input = wait_for_input(make_timeout_time_ms(LOGO_MS), buf, max, n);
@@ -440,11 +517,8 @@ static bool show_logo(uint8_t *buf, size_t max, size_t *n) {
 // Cycle the demo until UART0 receives something or a key is pressed; return
 // what arrived.
 static size_t run_demo(uint8_t *buf, size_t max) {
-	char status[SCREEN_MAX_COLS + 1];
 	for (unsigned cols = 80;; cols = cols == 80 ? 132 : 80) {
-		snprintf(status, sizeof status, " demo | %u x 24 | build %s (%s, %s)",
-			cols, TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
-		demo_draw(&screen, cols, status);
+		draw_demo(cols, "data or a key: start");
 		video_update(&screen);
 
 		size_t n;
@@ -616,6 +690,8 @@ static void draw_cpm_status(void) {
 		cpm.khz = machine_speed_khz();
 	}
 	cpm.lit = drive_lights(now);
+	if (setup.demo)
+		return; // the demo has the status line
 	char text[SCREEN_MAX_COLS + 1] = " CP/M |";
 	unsigned letter_col[DRIVES];
 	// The drives' letters, "-" for an empty one; SET-UP's Drives panel
@@ -658,6 +734,8 @@ static bool status_equal(const status_t *a, const status_t *b) {
 }
 
 static void draw_status(const status_t *st) {
+	if (setup.demo)
+		return; // the demo has the status line; DECCOLM after it redraws
 	char key[32] = "";
 	if (st->keys_sent) {
 		char name[24];
@@ -687,6 +765,7 @@ int main(void) {
 	colours = settings_colours(&settings); // the status line under the logo uses them
 
 	video_init();
+	show_palette(&settings);
 	// Before anything reads flash at the new clock: the settings saves and,
 	// with LOGO_IN_FLASH, the logo.
 	nvflash_retime();
@@ -703,7 +782,7 @@ int main(void) {
 	diag_mark("usbkbd_init done");
 #endif
 
-	screen_init(&screen, TERM_COLS, FG, BG);
+	screen_init(&screen, TERM_COLS, PALETTE_TEXT, PALETTE_BACKGROUND);
 	video_start(&screen);
 	diag_mark("video_start done (core 1 launched)");
 
@@ -717,8 +796,8 @@ int main(void) {
 		pending = run_demo(buf, sizeof buf);
 
 	cpm.on = settings.mode == SETTINGS_MODE_CPM;
-	screen_init(&screen, settings.columns, colours.fg, colours.bg);
-	term_init(&term, &screen, 0, TERM_ROWS, colours.fg, colours.bg);
+	screen_init(&screen, settings.columns, PALETTE_TEXT, PALETTE_BACKGROUND);
+	term_init(&term, &screen, 0, TERM_ROWS);
 	apply_settings(&settings);
 	term_set_reply(&term, send_reply, NULL);
 	term_started = true;

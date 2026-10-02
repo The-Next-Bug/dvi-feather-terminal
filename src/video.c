@@ -9,6 +9,7 @@
 
 #include "diag.h"
 #include "hstx_dvi.h"
+#include "palette.h"
 #include "raster.h"
 #include "splash.h"
 
@@ -37,8 +38,13 @@ static volatile uint32_t requested = UINT32_MAX; // last line handed to the DMA
 static volatile uint32_t composed;               // lines composed so far
 static volatile uint32_t late_lines;
 
-// RGB222 colour c as an RGB565 pixel in both halves of a word.
-static uint32_t colour_words[64];
+// The palette (video_set_palette): index c as an RGB565 pixel in both
+// halves of a word. Two tables: core 0 fills the one core 1 is not using,
+// and core 1 switches at the start of a frame, so no frame mixes the two.
+static uint32_t palette_words[2][PALETTE_SIZE];
+static volatile uint8_t palette_next; // core 0: the table for the next frame
+static volatile uint8_t palette_used; // core 1: the table of the current frame
+static bool core1_launched;
 
 // diag_frames counts frames in every build: video_splash waits on it.
 static volatile uint32_t diag_frames, diag_max_cycles;
@@ -74,6 +80,7 @@ static struct {
 	int cursor_col; // -1: not shown this frame
 	splash_decoder_t decoder;
 	uint16_t colours[4];
+	const uint32_t *palette;
 } frame;
 
 static void __not_in_flash_func(start_frame)(uint32_t n) {
@@ -84,6 +91,9 @@ static void __not_in_flash_func(start_frame)(uint32_t n) {
 	frame.cursor_row = s->cursor_row;
 	frame.cursor_col = cursor_on ? (int)s->cursor_col : -1;
 	frame.splash = splash_state;
+	uint8_t p = palette_next;
+	palette_used = p;
+	frame.palette = palette_words[p];
 	if (frame.splash == SPLASH_SHOW) {
 		frame.decoder = splash_start;
 		for (int i = 0; i < 4; ++i)
@@ -107,7 +117,8 @@ static void __not_in_flash_func(compose)(uint32_t seq) {
 	uint row = y / RASTER_ROW_HEIGHT;
 	const raster_line_t *line = &raster[frame.s->row_map[row]];
 	uint sr = raster_stored_row(frame.cols, y % RASTER_ROW_HEIGHT);
-	raster_compose(px, line, frame.cols, sr, row == frame.cursor_row ? frame.cursor_col : -1, colour_words);
+	raster_compose(px, line, frame.cols, sr, row == frame.cursor_row ? frame.cursor_col : -1,
+		frame.palette);
 }
 
 // The DMA interrupt (core 1) wants line y's pixels: the next in order.
@@ -160,10 +171,21 @@ void video_init(void) {
 	hstx_dvi_init();
 	diag_reinit(115200);
 	diag_mark("clocks and HSTX set up");
-	for (uint c = 0; c < 64; ++c) {
-		uint32_t px = hstx_rgb565((uint8_t)c);
-		colour_words[c] = px | px << 16;
+}
+
+void video_set_palette(const uint16_t colours[PALETTE_SIZE]) {
+	uint8_t t = palette_next;
+	if (core1_launched) {
+		// Until core 1 has taken the last table, the other may still be
+		// in use.
+		while (palette_used != t)
+			tight_loop_contents();
+		t ^= 1;
 	}
+	for (uint c = 0; c < PALETTE_SIZE; ++c)
+		palette_words[t][c] = colours[c] | (uint32_t)colours[c] << 16;
+	__dmb(); // the table before core 1 can pick it
+	palette_next = t;
 }
 
 void video_update(screen_t *screen) {
@@ -222,6 +244,7 @@ void video_start(screen_t *screen) {
 	video_screen = screen;
 	video_update(screen);
 	diag_mark("screen rasterised; launching core 1");
+	core1_launched = true;
 	multicore_launch_core1(core1_main);
 }
 

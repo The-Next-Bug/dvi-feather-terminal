@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 
+#include "palette.h"
 #include "screen.h"
 #include "splash.h"
 
@@ -15,6 +16,13 @@
 // set up the HSTX. Call before any peripheral that depends on
 // clk_sys/clk_peri (e.g. the UART) is initialised.
 void video_init(void);
+
+// Show the screen's palette indices in these colours (RGB565; see
+// palette_build) from the next frame, without re-rendering anything. Call
+// before video_start too (until then nothing is shown in them). From core
+// 0's main loop: it may wait up to a frame for core 1 to take the previous
+// table.
+void video_set_palette(const uint16_t colours[PALETTE_SIZE]);
 
 // Rasterise every dirty line of the screen and clear its dirty flags. Call
 // from core 0 after changing the screen; changes are not shown until then.

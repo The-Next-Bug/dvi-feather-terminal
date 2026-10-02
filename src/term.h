@@ -8,7 +8,7 @@
 // cursor movement, scrolling regions, erasing, line and character
 // insert/delete (VT102), tab stops, character sets (G0/G1: ASCII, UK, DEC
 // Special Graphics), modes (including DECSCNM reverse screen), save/restore
-// cursor, SGR colours, underline and blink, DECBKM (what Backspace sends, for
+// cursor, SGR colours (as palette indices: palette.h), underline and blink, DECBKM (what Backspace sends, for
 // the keyboard), and replies to
 // device attribute and status requests, and REP (repeat character, which
 // ncurses uses under TERM=xterm-16color).
@@ -33,15 +33,10 @@
 #include "screen.h"
 #include "vtparse.h"
 
-#define TERM_DEFAULT_COLOUR 0xff // SGR 39 / 49: the terminal's default fg/bg
+#define TERM_DEFAULT_COLOUR 0x100 // SGR 39 / 49: the terminal's default fg/bg
 #define TERM_SETUP_PARAM 999     // CSI ? 999 ~: open SET-UP
 
 typedef void (*term_reply_t)(void *ctx, const uint8_t *data, size_t len);
-
-// Default colours (RGB222): text, bold text, background.
-typedef struct {
-	uint8_t fg, bold_fg, bg;
-} term_colours_t;
 
 // Modes that RIS resets to (SET-UP settings) rather than off.
 typedef struct {
@@ -50,7 +45,7 @@ typedef struct {
 } term_defaults_t;
 
 typedef struct {
-	uint8_t fg, bg; // ANSI colour 0-15, or TERM_DEFAULT_COLOUR
+	uint16_t fg, bg; // palette index 0-255, or TERM_DEFAULT_COLOUR
 	bool bold, underline, blink, reverse;
 } term_attr_t;
 
@@ -65,10 +60,7 @@ typedef struct {
 typedef struct {
 	screen_t *screen;
 	unsigned top, rows;
-	uint8_t default_fg, default_bg; // RGB222
-	uint8_t bold_fg;                // default fg with bold (RGB222)
 	term_defaults_t defaults;
-	bool mono;                      // SGR colours as brightness only (term_mono_colours)
 
 	vtparse_t parser;
 	term_cursor_t cur;   // row relative to top
@@ -93,9 +85,11 @@ typedef struct {
 } term_t;
 
 // Reset the terminal (as RIS), clear its rows, home the cursor and show it.
-// fg/bg are the colours of SGR 0 text (RGB222); bold default text is bright
-// white until term_set_colours.
-void term_init(term_t *t, screen_t *screen, unsigned top, unsigned rows, uint8_t fg, uint8_t bg);
+// Cells get palette indices: default text PALETTE_TEXT (bold:
+// PALETTE_BOLD_TEXT) on PALETTE_BACKGROUND, ANSI colours 0-15 (bold brightens
+// 0-7 to 8-15), 256-colour ones as they are and direct ones the nearest
+// xterm entry; reverse swaps fg and bg.
+void term_init(term_t *t, screen_t *screen, unsigned top, unsigned rows);
 
 // Where replies to the host (device attributes, cursor position reports)
 // go. Without one they are dropped.
@@ -110,28 +104,7 @@ void term_puts(term_t *t, const char *text);
 // Set these modes now and as the values RIS resets them to.
 void term_set_defaults(term_t *t, const term_defaults_t *d);
 
-// Change the default colours (RGB222). Cells already on the terminal's rows
-// in the old default colours are changed to the new ones.
-void term_set_colours(term_t *t, uint8_t fg, uint8_t bold_fg, uint8_t bg);
-
 // Switch to 80 or 132 columns, as DECCOLM does (clears the whole screen).
 void term_set_columns(term_t *t, unsigned cols);
-
-// The RGB222 colour for ANSI colour n (0-15).
-uint8_t term_ansi_colour(unsigned n);
-
-// Mono: from now on SGR colours (ANSI, 256-colour and direct) only choose
-// brightness within the default colours (see term_mono_colours); bold,
-// underline, blink and reverse still apply. Text already on screen keeps
-// its colours.
-void term_set_palette(term_t *t, bool mono);
-
-// Mono: the colours for text in SGR colours fg and bg (0-15, 16 + RGB222 for
-// 256-colour/direct ones, or TERM_DEFAULT_COLOUR), before reverse. Bright
-// colours (and bold) use the bold colour; a background other than black or
-// the default shows inverse: the text colour (bright ones the bold colour)
-// behind text in the background colour.
-void term_mono_colours(const term_colours_t *defaults, uint8_t fg, uint8_t bg, bool bold, uint8_t *out_fg,
-	uint8_t *out_bg);
 
 #endif

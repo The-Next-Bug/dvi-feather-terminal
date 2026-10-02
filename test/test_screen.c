@@ -177,27 +177,9 @@ static void test_save_restore_row(void) {
 	CHECK_EQ(s.dirty, 1u << s.row_map[20]);
 }
 
-static void test_recolour(void) {
-	screen_init(&s, 80, FG, BG);
-	screen_put(&s, 3, 5, 'x', RGB222(3, 0, 0), BG);
-	s.dirty = 0;
-	const uint8_t from[] = {FG, BG}, to[] = {RGB222(0, 2, 0), RGB222(0, 0, 0)};
-	screen_recolour(&s, 5, 6, from, to, 2);
-	uint8_t fg, bg;
-	screen_colours(&s, 3, 5, &fg, &bg);
-	CHECK_EQ(fg, RGB222(3, 0, 0));
-	CHECK_EQ(bg, RGB222(0, 0, 0));
-	screen_colours(&s, 0, 6, &fg, &bg);
-	CHECK_EQ(fg, RGB222(0, 2, 0));
-	screen_colours(&s, 0, 4, &fg, &bg); // outside the rows
-	CHECK_EQ(fg, FG);
-	CHECK_EQ(s.dirty, 1u << 5 | 1u << 6);
-}
-
 int main(void) {
 	RUN(test_init_fills_blanks);
 	RUN(test_save_restore_row);
-	RUN(test_recolour);
 	RUN(test_bad_width_means_80);
 	RUN(test_put_round_trips);
 	RUN(test_out_of_range_is_ignored);

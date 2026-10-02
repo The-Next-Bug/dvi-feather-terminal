@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "term.h" // term_ansi_colour
+#include "palette.h"
 
 #define NAME_WIDTH 18
 // Settings with more choices than this show only the current one, as
@@ -96,6 +96,9 @@ setup_action_t setup_input(setup_t *u, uint8_t c, uint32_t now_ms) {
 		if (u->machine_menu)
 			return SETUP_DRIVES;
 		break;
+	case 't':
+	case 'T':
+		return SETUP_DEMO;
 	default:
 		break;
 	}
@@ -110,40 +113,39 @@ setup_action_t setup_tick(setup_t *u, uint32_t now_ms) {
 	return SETUP_NONE;
 }
 
-// The preview rows: samples in the colours of values' Colors and Palette.
-// The first shows default text, bold and the status line, then each ANSI
-// colour as text on the default background; the second, under those, each
-// as a background under default text. Spaced out (once so that no 8-pixel
-// group at 132 columns held two samples, for the PicoDVI encoder).
+// The preview rows: samples of default text, bold and the status line,
+// then each ANSI colour as text on the default background and, under
+// those, as a background. They are palette indices like everything else,
+// so they show the palette on screen: the owner shows values' palette
+// while SET-UP is open (only the status line's indices follow values
+// here). Spaced out (once so that no 8-pixel group at 132 columns held two
+// samples, for the PicoDVI encoder).
 static void draw_colours_preview(screen_t *s, unsigned row, const settings_t *values) {
 	settings_colours_t c = settings_colours(values);
+	const uint8_t fg = PALETTE_TEXT, bg = PALETTE_BACKGROUND;
 	unsigned col = 3 + NAME_WIDTH;
-	screen_puts(s, col, row, " Text ", c.fg, c.bg);
-	screen_puts(s, col, row + 1, "      ", c.fg, c.bg);
+	screen_puts(s, col, row, " Text ", fg, bg);
+	screen_puts(s, col, row + 1, "      ", fg, bg);
 	col += 6;
 	for (const char *p = "Bold "; *p; ++p, ++col) {
-		screen_put_attr(s, col, row, (uint8_t)*p, c.bold_fg, c.bg, SCREEN_ATTR_BOLD);
-		screen_put(s, col, row + 1, ' ', c.fg, c.bg);
+		screen_put_attr(s, col, row, (uint8_t)*p, PALETTE_BOLD_TEXT, bg, SCREEN_ATTR_BOLD);
+		screen_put(s, col, row + 1, ' ', fg, bg);
 	}
 	screen_puts(s, col, row, " Status ", c.status_fg, c.status_bg);
-	screen_puts(s, col, row + 1, "        ", c.fg, c.bg);
+	screen_puts(s, col, row + 1, "        ", fg, bg);
 	col += 8;
 	for (unsigned i = 0; i < 16; ++i, col += 2) {
-		uint8_t text_fg = term_ansi_colour(i), text_bg = c.bg; // i as text
-		uint8_t back_fg = c.fg, back_bg = term_ansi_colour(i);  // i as background
-		if (values->palette) {
-			const term_colours_t d = {c.fg, c.bold_fg, c.bg};
-			term_mono_colours(&d, (uint8_t)i, TERM_DEFAULT_COLOUR, false, &text_fg, &text_bg);
-			term_mono_colours(&d, TERM_DEFAULT_COLOUR, (uint8_t)i, false, &back_fg, &back_bg);
-		}
+		// On the dark backgrounds the digit is bright, on the others black.
+		uint8_t back_fg = i == PALETTE_BLACK || i == PALETTE_BLUE || i == PALETTE_DIM ? PALETTE_BOLD_TEXT
+			: PALETTE_BLACK;
 		uint8_t digit = (uint8_t)"0123456789ABCDEF"[i];
-		screen_put(s, col, row, ' ', c.fg, c.bg);
-		screen_put(s, col, row + 1, ' ', c.fg, c.bg);
-		screen_put(s, col + 1, row, digit, text_fg, text_bg);
-		screen_put(s, col + 1, row + 1, digit, back_fg, back_bg);
+		screen_put(s, col, row, ' ', fg, bg);
+		screen_put(s, col, row + 1, ' ', fg, bg);
+		screen_put(s, col + 1, row, digit, (uint8_t)i, bg);
+		screen_put(s, col + 1, row + 1, digit, back_fg, (uint8_t)i);
 	}
-	screen_put(s, col, row, ' ', c.fg, c.bg);
-	screen_put(s, col, row + 1, ' ', c.fg, c.bg);
+	screen_put(s, col, row, ' ', fg, bg);
+	screen_put(s, col, row + 1, ' ', fg, bg);
 }
 
 void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, uint8_t fg, uint8_t bg) {
@@ -184,6 +186,6 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 	if (u->message)
 		screen_puts(s, 3, top + SETUP_ROWS - 2, u->message, fg, bg);
 	screen_puts(s, 0, top + SETUP_ROWS - 1, u->machine_menu
-		? " Up/Down select  Left/Right change  Return save  Esc cancel  D drives  M monitor"
-		: " Up/Down select   Left/Right/Space change   Return save   Esc cancel", fg, bg);
+		? " Arrows select/change  Return save  Esc cancel  T demo  D drives  M monitor"
+		: " Up/Down select   Left/Right/Space change   Return save   Esc cancel   T demo", fg, bg);
 }

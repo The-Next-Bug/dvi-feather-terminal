@@ -97,21 +97,30 @@ SRAM, and the USB keyboard crashed it (dmt.20); CMake rejects non-RP2350
 boards. 800x600p60 (400 MHz, 1.3 V); 80 or 132 columns x 24 rows plus a
 status line (row 24); UART0 on GP0/GP1.
 
-- `src/screen.[ch]` (portable): cell buffer: glyph code, RGB222 fg/bg and
-  attribute bits per cell; `row_map` (display row -> line slot) so
+- `src/screen.[ch]` (portable): cell buffer: glyph code, fg/bg palette
+  indices and attribute bits per cell; `row_map` (display row -> line slot) so
   scrolling rotates indices; `dirty` bit per slot; `reverse_rows` mask.
 - `src/vtparse.[ch]` (portable): Paul Williams' DEC parser. C1 (0x80-0x9F)
   ignored unless `c1_controls` (keeps UTF-8 safe); OSC/DCS/APC discarded.
 - `src/term.[ch]` (portable): VT100/VT102 emulation on the screen; replies
-  (DA, DSR/CPR, DECREQTPARM) through a callback.
+  (DA, DSR/CPR, DECREQTPARM) through a callback. Writes palette indices
+  only (nothing depends on the palette): default fg 7, bold default 15, bg
+  0; bold brightens 0-7 to 8-15; 38;5;n as is; 24-bit -> palette_nearest.
+- `src/palette.[ch]` (portable, bd pb2): the xterm-256 palette as RGB565
+  from Colors (hue) x Palette (mono): white/colour = our ANSI set + xterm
+  16-255; phosphor/colour = 0-15 a ramp in the hue by bands (7 at 2/3, 15
+  full) + xterm 16-255; mono = all 256 as a ramp by luma (floor 35%).
+  main.c show_palette() -> video_set_palette (two 256-word tables, core 1
+  switches at frame start). A palette change re-renders nothing. While
+  SET-UP is open the edited palette is shown (restored on cancel).
 - `src/raster.[ch]` (portable): `raster_render_line` (core 0) turns a
   screen line into, per stored row and cell, a byte of the cell's pixels
-  (bit i = pixel i, set = fg) plus per-cell fg/bg (RGB222, reverse
+  (bit i = pixel i, set = fg) plus per-cell fg/bg (palette indices, reverse
   applied). Stored rows per line = font rows + 2 padding rows; connectors
   (line drawing, blocks, shades) extend into the padding. Handles
   underline, blink phase, bold (emboldened, within the cell), reverse.
   `raster_compose` (core 1) makes a scanline of RGB565 pixel pairs from a
-  stored row through a 64-entry colour table, inverting the cursor cell;
+  stored row through the 256-entry palette table, inverting the cursor cell;
   every cell is exact in both widths. 132 cols centred at x = 4.
 - `src/hstx_dvi.[ch]` (RP2350): DVI from the HSTX on the DVI Sock pins
   (GP12-19 = HSTX bits 0-7: D0 0/1, CK 2/3, D2 4/5, D1 6/7). clk_sys = 10 x
@@ -136,12 +145,11 @@ status line (row 24); UART0 on GP0/GP1.
   one byte per setting, append-only) in two flash sectors used in turn.
   Settings (settings_fields[] drives the record, validation and SET-UP
   labels; append only): columns, backspace (DECBKM RIS value), local_echo,
-  baud, framing, newline (LNM RIS value), colours, palette (mono: SGR
-  colours -> brightness/inverse of the defaults, term_mono_colours; the
-  SET-UP preview uses it too), mode (terminal / CP/M machine). CRC-32 in
+  baud, framing, newline (LNM RIS value), colours (hue), palette (mono),
+  mode (terminal / CP/M machine); settings_colours() gives the status
+  line's indices and the logo's tint. CRC-32 in
   `src/crc32.[ch]` (shared with the disk images). main.c apply_settings()
-  -> serial_configure, term_set_defaults, term_set_colours (recolours
-  cells in the old defaults).
+  -> serial_configure, term_set_defaults, show_palette.
   `src/setup.[ch]` (portable): SET-UP panel over the bottom text rows
   (one row per setting, plus two preview rows under Palette: ANSI colours
   as fg and as bg, spaced so no 8-px group held two samples in 132 cols
@@ -208,7 +216,10 @@ status line (row 24); UART0 on GP0/GP1.
   diskio (GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI; 400 kHz init, 25 MHz).
   `lib/fatfs`: ChaN FatFs R0.15a vendored (ffconf: FIND, MKFS, CP437,
   NORTC, no LFN). Host tests use `test/diskio_ram.c`. Changing Mode
-  saves and reboots (watchdog). In SET-UP, M leaves for the monitor. F11
+  saves and reboots (watchdog). In SET-UP, M leaves for the monitor.
+  SET-UP's T (both modes) shows the demo until a key (main.c
+  setup_demo_*; status line draws skip it), then term_set_columns clears
+  the screen (no 13 KB copy) and SET-UP is redrawn over it. F11
   is the machine's reset key in CP/M mode (kbd_set_reset_key; terminal
   mode keeps ESC [ 23 ~).
   Firmware update (bd n3k): the monitor's U, offered when /FIRMWARE.UF2
@@ -228,12 +239,41 @@ status line (row 24); UART0 on GP0/GP1.
   .dis and fails on 0x10xxxxxx literals, or if the image reaches the
   staging area. nvflash_erase/program/read: raw access, interrupts off
   per operation.
-  SRAM: ~55 KB heap left with 2 banks; newlib's localtime/scanf cost ~20 KB,
-  so the clock avoids them.
+  newlib's localtime/scanf cost ~20 KB of SRAM, so the clock avoids them.
 - `tools/hostbridge.py`: run a host program with the terminal as display,
   typing on the PC.
 - CI (`.gitlab-ci.yml`): test -> build (matrix of targets) -> package ->
   release (tags `vX.Y.Z`). Pipeline status is not visible from here.
+
+## Resource budget (v0.5.0, MACHINE_BANKS=2)
+
+SRAM is the tight resource; peripherals and pins are mostly free.
+
+- SRAM (520 KB): .text 165 KB, .data 26 KB (fonts, Z80 tables, video code
+  copied to RAM), .bss 288 KB; `__end__` 0x20077f4c, so ~32 KB free below
+  0x20080000 (no malloc user); pb2's palette (tables + code) moved it to
+  0x200790d8, ~28 KB free. Scratch X: core 1's stack is in .bss, so
+  nearly all 4 KB free; scratch Y: 2 KB core 0 stack, ~2 KB free. Biggest
+  .bss: Z80 banks 96 KB + bank 0 64 KB, raster 64.5 KB, monitor `window`
+  16 KB, screen 13 KB, setup 8 KB, line_buf 6.4 KB, drives 4.5 KB, UART
+  RX ring 4 KB, fwupdate `sector` 4 KB. A third Z80 bank (48 KB) does not
+  fit. bd 3of: share the monitor's window with fwupdate (~5 KB back).
+- Flash (4 MB): image 0-0x6e980 (442 KB); free to 2 MB (image growth;
+  fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used
+  only during an update, up to the new image's length); settings
+  0x3fd000-0x3fefff; last sector left blank (E10). New persistent storage
+  has to come out of the image's growth room or lower the image cap.
+- Clocks: clk_sys 400 MHz at 1.3 V, clk_hstx 200 MHz, clk_usb 48 MHz. Core
+  load not measured (video_stats().late shows core 1 falling behind).
+- In use: HSTX; DMA ch x2 + DMA_IRQ_0 (core 1); UART0 + its IRQ; SPI0
+  (polled); USB host + USBCTRL_IRQ; TIMER0 (time base, SDK alarm pool);
+  watchdog (reboots only). Free: 14 DMA channels, DMA_IRQ_1-3, all of PIO0-2
+  (12 SMs), UART1, SPI1, I2C0/1, PWM, ADC, TIMER1, TRNG, SHA-256, QMI CS1
+  (PSRAM; GP8 can carry its select).
+- GPIO: GP0/1 UART0, GP2/3 CTS/RTS (only with SERIAL_FLOW_CONTROL), GP4-7
+  SD, GP12-19 DVI Sock, GP25 LED (VIDEO_DIAG only), GP23/24/29 board
+  internal. Free: GP8-11, GP20-22, GP26-28 (ADC capable), and GP2/3 when
+  flow control is off.
 
 ## Conventions & Patterns
 
@@ -250,8 +290,9 @@ status line (row 24); UART0 on GP0/GP1.
     not break sync.
   - The 2 KB core 0 stack is small: big scratch arrays are static.
   - Heap = SRAM left after .bss (code is in SRAM too); malloc failure
-    panics silently. The RP2350 has room (raster[] is ~66 KB), but check
-    `__end__` in the .elf.map when adding big static data or libraries.
+    panics silently (nothing links malloc today). Check `__end__` in the
+    .elf.map when adding big static data or libraries: see "Resource
+    budget".
   - Pin functions for CTS/RTS use `GPIO_FUNC_UART` (UART_FUNCSEL_NUM is
     wrong for GPIO 2/3 on RP2350).
 - Git: work on a branch, merge to `main` with `git merge --no-ff`, push only
