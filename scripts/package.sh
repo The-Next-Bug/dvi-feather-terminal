@@ -44,7 +44,7 @@ for f in "${infos[@]}"; do
   mkdir -p "$stage/sdcard-$target"
   cp "$dir/dvi_terminal.uf2" "$stage/sdcard-$target/FIRMWARE.UF2"
 done
-cp docs/FLASHING.txt docs/THIRD-PARTY.md "$stage/"
+cp LICENSE docs/FLASHING.txt docs/THIRD-PARTY.md "$stage/"
 
 # Licence texts of the third-party code and data in the firmware
 # (docs/THIRD-PARTY.md lists them), from the sources the build used. TinyUSB

@@ -3,7 +3,7 @@
 The firmware image (`dvi_terminal-*.uf2` / `.bin`) contains code and data
 from the projects below. Their licence texts are in `licenses/` in the
 release package (`scripts/package.sh` copies them from the sources the build
-used).
+used). The project's own code is under the MIT licence, in `LICENSE`.
 
 | Component | Used for | Licence | Text |
 |---|---|---|---|
@@ -32,9 +32,10 @@ Z80 machine's monitor can write to an SD card:
   and this firmware redistribute CP/M on that basis. It is not an
   open-source licence: the grant was made to that site and its community.
 - `Z80TESTS` (z80pack `cpmsim/disks/library/z80tests.dsk`): Z80 instruction
-  exercisers `EXZ80DOC` and `PRELIM` (© 1994 Frank D. Cringle, GPL-2.0 or
-  later, as modified for z80pack; their sources `EX.MAC`, `EXZ80DOC.MAC` and
-  `PRELIM.MAC` are on the same disk; licence text
+  exercisers `EXZ80DOC`, `EXZ80ALL` and `PRELIM` (© 1994 Frank D. Cringle,
+  GPL-2.0 or later, as modified for z80pack; `EXZ80ALL` is built by us from
+  the same source with all flags tested; their sources `EX.MAC`,
+  `EXZ80DOC.MAC`, `EXZ80ALL.MAC` and `PRELIM.MAC` are on the same disk; licence text
   `licenses/GPL-2.0.txt`), and `CPUTEST` (SuperSoft Diagnostics II), as
   distributed with z80pack.
 - `EMPTY`: a blank, formatted CP/M disk.
