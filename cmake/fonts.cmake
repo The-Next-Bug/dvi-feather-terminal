@@ -59,5 +59,11 @@ endfunction()
 font_table(font_8x16 "${GENERATED}/font_8x16.c" Uni2-Terminus16.psf.gz 8 16)
 # Bold text in 80 columns: Terminus's own bold face (in flash: SRAM is short).
 font_table(font_8x16_bold "${GENERATED}/font_8x16_bold.c" Uni2-TerminusBold16.psf.gz 8 16 FLASH)
+# 80 columns at full width (10-pixel cells), with its bold face; in flash.
+font_table(font_10x20 "${GENERATED}/font_10x20.c" Uni2-Terminus20x10.psf.gz 10 20 FLASH)
+font_table(font_10x20_bold "${GENERATED}/font_10x20_bold.c" Uni2-TerminusBold20x10.psf.gz 10 20 FLASH)
 font_132(${FONT_132} FONT_132_SOURCE FONT_DEFINITIONS)
-set(FONT_SOURCES "${GENERATED}/font_8x16.c" "${GENERATED}/font_8x16_bold.c" ${FONT_132_SOURCE})
+# Every font but the 132-column one (which FONT_132 picks).
+set(FONT_COMMON_SOURCES "${GENERATED}/font_8x16.c" "${GENERATED}/font_8x16_bold.c" "${GENERATED}/font_10x20.c"
+  "${GENERATED}/font_10x20_bold.c")
+set(FONT_SOURCES ${FONT_COMMON_SOURCES} ${FONT_132_SOURCE})

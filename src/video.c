@@ -46,6 +46,7 @@ static volatile uint8_t palette_next; // core 0: the table for the next frame
 static volatile uint8_t palette_used; // core 1: the table of the current frame
 static bool core1_launched;
 static volatile bool blank_next; // video_set_blank, latched per frame
+static volatile bool wide80;     // video_set_wide80: the layout of 80 columns
 
 // diag_frames counts frames in every build: video_splash waits on it.
 static volatile uint32_t diag_frames, diag_max_cycles;
@@ -78,7 +79,8 @@ static struct {
 	const screen_t *s;
 	bool blank;
 	uint8_t splash;
-	uint cols, cursor_row;
+	raster_layout_t layout;
+	uint cursor_row;
 	int cursor_col; // -1: not shown this frame
 	splash_decoder_t decoder;
 	uint16_t colours[4];
@@ -88,7 +90,7 @@ static struct {
 static void __not_in_flash_func(start_frame)(uint32_t n) {
 	const screen_t *s = video_screen;
 	frame.s = s;
-	frame.cols = s->cols;
+	frame.layout = raster_layout(s->cols, wide80);
 	bool cursor_on = s->cursor_visible && !(n / CURSOR_BLINK_FRAMES & 1);
 	frame.cursor_row = s->cursor_row;
 	frame.cursor_col = cursor_on ? (int)s->cursor_col : -1;
@@ -124,8 +126,8 @@ static void __not_in_flash_func(compose)(uint32_t seq) {
 	}
 	uint row = y / RASTER_ROW_HEIGHT;
 	const raster_line_t *line = &raster[frame.s->row_map[row]];
-	uint sr = raster_stored_row(frame.cols, y % RASTER_ROW_HEIGHT);
-	raster_compose(px, line, frame.cols, sr, row == frame.cursor_row ? frame.cursor_col : -1,
+	uint sr = raster_stored_row(frame.layout, y % RASTER_ROW_HEIGHT);
+	raster_compose(px, line, frame.layout, sr, row == frame.cursor_row ? frame.cursor_col : -1,
 		frame.palette);
 }
 
@@ -200,6 +202,14 @@ void video_set_blank(bool blank) {
 	blank_next = blank;
 }
 
+void video_set_wide80(bool wide) {
+	if (wide == wide80)
+		return;
+	wide80 = wide;
+	if (video_screen)
+		video_screen->dirty = (1u << SCREEN_ROWS) - 1; // all in the new layout
+}
+
 void video_update(screen_t *screen) {
 	// Blink: flip the phase every BLINK_HALF_PERIOD_MS and re-render the lines
 	// that have blinking cells. (The cursor is core 1's, from the screen.)
@@ -230,7 +240,8 @@ void video_update(screen_t *screen) {
 			continue;
 		unsigned flags = (blink_off ? RASTER_BLINK_OFF : 0) |
 			(screen->reverse_rows >> slot_row[slot] & 1 ? RASTER_REVERSE : 0);
-		bool blinks = raster_render_line(&raster[slot], &screen->lines[slot], screen->cols, flags);
+		bool blinks = raster_render_line(&raster[slot], &screen->lines[slot], raster_layout(screen->cols, wide80),
+			flags);
 		if (blinks)
 			blink_slots |= 1u << slot;
 		else

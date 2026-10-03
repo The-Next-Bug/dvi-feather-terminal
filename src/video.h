@@ -30,6 +30,11 @@ void video_set_palette(const uint16_t colours[PALETTE_SIZE]);
 // on waking, and the screen goes on being updated underneath.
 void video_set_blank(bool blank);
 
+// 80 columns in 10-pixel cells at the full width (the 10x20 font), or
+// centred in 8-pixel cells (8x16). The screen is rendered again; until
+// then a frame may show lines of the old layout.
+void video_set_wide80(bool wide);
+
 // Rasterise every dirty line of the screen and clear its dirty flags. Call
 // from core 0 after changing the screen; changes are not shown until then.
 void video_update(screen_t *screen);

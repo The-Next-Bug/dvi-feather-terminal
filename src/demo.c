@@ -78,7 +78,7 @@ static void colour_row(screen_t *s, unsigned row, const char *label, int style) 
 	}
 }
 
-void demo_draw(screen_t *s, unsigned cols, const char *status) {
+void demo_draw(screen_t *s, unsigned cols, const char *font, const char *status) {
 	screen_init(s, cols, GREY, BLACK);
 	const unsigned w = s->cols;
 	char text[SCREEN_MAX_COLS + 1];
@@ -122,7 +122,7 @@ void demo_draw(screen_t *s, unsigned cols, const char *status) {
 	for (unsigned i = 0; i < 9; ++i)
 		screen_put(s, half + 2 + 2 * i, 16, (uint8_t)(GLYPH_SHADE_LIGHT + i), bright(5), BLACK);
 	screen_puts(s, half + 2, 17, "Font: ", GREY, BLACK);
-	screen_puts(s, half + 8, 17, w > 80 ? FONT_132_NAME : "Terminus 8x16", bright(3), BLACK);
+	screen_puts(s, half + 8, 17, font, bright(3), BLACK);
 
 	// The 240 colours above the ANSI ones (cube and grey ramp) as
 	// background swatches, as many as fit, evenly spaced.

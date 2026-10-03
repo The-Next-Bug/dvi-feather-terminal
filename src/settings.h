@@ -35,6 +35,7 @@ typedef struct {
 	uint8_t mode;       // SETTINGS_MODE_*: what the screen and keyboard are for
 	uint8_t status_line; // 1: shown; 0: row 24 left blank (the text area stays 24 rows)
 	uint8_t blank_after; // minutes without a key before the screen blanks; 0: never (blank.h)
+	uint8_t wide80;      // 1: 80 columns at the full width (10x20); 0: centred (8x16)
 } settings_t;
 
 #define SETTINGS_MODE_TERMINAL 0 // a serial terminal on UART0
@@ -42,7 +43,7 @@ typedef struct {
 
 // The settings, in settings_t order, with the values each can take (the
 // first choice need not be the default) and their names for SET-UP.
-#define SETTINGS_FIELDS 11
+#define SETTINGS_FIELDS 12
 #define SETTINGS_MAX_CHOICES 9
 
 typedef struct {

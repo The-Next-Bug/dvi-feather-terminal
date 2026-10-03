@@ -249,6 +249,21 @@ static void test_reboot_key(void) {
 }
 
 // U opens the firmware update, in either mode; the help line says so.
+static void test_wide80_setting(void) {
+	open_with(80);
+	CHECK_EQ(u.values.wide80, 0);
+	send("\x1b[A", 0); // up from the first setting: the last
+	CHECK_EQ(u.item, offsetof(settings_t, wide80));
+	CHECK_EQ(send(" ", 0), SETUP_REDRAW);
+	CHECK_EQ(u.values.wide80, 1);
+	static screen_t scr;
+	screen_init(&scr, 80, FG, BG);
+	setup_draw(&u, &scr, 0, "", FG, BG, BORDER);
+	unsigned r = 1 + offsetof(settings_t, wide80) + 2; // the preview rows come before it
+	CHECK(row_contains(&scr, r, "> 80 columns"));
+	CHECK(row_contains(&scr, r, " 8x16 centered   10x20 full width "));
+}
+
 static void test_firmware_key(void) {
 	for (int machine = 0; machine <= 1; ++machine) {
 		open_with(80);
@@ -285,8 +300,8 @@ static void test_status_line_setting(void) {
 static void test_blank_after_setting(void) {
 	open_with(80);
 	CHECK_EQ(u.values.blank_after, 0);
-	send("\x1b[A", 0); // up from the first setting: the last
-	CHECK_EQ(u.item, offsetof(settings_t, blank_after));
+	for (unsigned i = 0; i < offsetof(settings_t, blank_after); ++i)
+		send("\x1b[B", 0);
 	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
 	CHECK_EQ(u.values.blank_after, 1);
 	send("\x1b[D\x1b[D", 0); // wraps
@@ -351,6 +366,7 @@ int main(void) {
 	RUN(test_machine_menu_key);
 	RUN(test_demo_key);
 	RUN(test_reboot_key);
+	RUN(test_wide80_setting);
 	RUN(test_firmware_key);
 	RUN(test_mode_setting);
 	RUN(test_status_line_setting);

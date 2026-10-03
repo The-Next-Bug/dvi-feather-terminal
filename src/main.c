@@ -46,6 +46,7 @@
 #include "monitor.h"
 #include "nvflash.h"
 #include "palette.h"
+#include "raster.h"
 #include "sdcard.h"
 #include "screen.h"
 #include "settings.h"
@@ -363,6 +364,7 @@ static void apply_settings(const settings_t *s) {
 	term_set_defaults(&term, &(term_defaults_t){.backspace_bs = s->backspace == 0x08,
 		.newline_mode = s->newline && !cpm.on});
 	default_columns = s->columns;
+	video_set_wide80(s->wide80);
 	blank_init(&blank, s->blank_after * 60000u, to_ms_since_boot(get_absolute_time()));
 	colours = settings_colours(s);
 	show_palette(s);
@@ -420,7 +422,7 @@ static void draw_demo(unsigned cols, const char *what) {
 	char status[SCREEN_MAX_COLS + 1];
 	snprintf(status, sizeof status, " demo | %u x 24 | build %s (%s, %s) | %s",
 		cols, TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE, what);
-	demo_draw(&screen, cols, status);
+	demo_draw(&screen, cols, raster_font_name(raster_layout(cols, settings.wide80)), status);
 }
 
 // SET-UP's demo (T): in the edited palette, alternating widths until a key.

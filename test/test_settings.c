@@ -27,7 +27,8 @@ static void erase_all(void) {
 
 static void test_round_trip(void) {
 	settings_t in = {.columns = 132, .backspace = 0x08, .local_echo = 1, .baud = 4, .framing = 4,
-		.newline = 1, .colours = 2, .palette = 1, .mode = SETTINGS_MODE_CPM, .blank_after = 30}, out;
+		.newline = 1, .colours = 2, .palette = 1, .mode = SETTINGS_MODE_CPM, .blank_after = 30,
+		.wide80 = 1}, out;
 	uint8_t rec[SETTINGS_RECORD_SIZE];
 	uint32_t seq = 0;
 	settings_encode(&in, 0x12345678, rec);
@@ -43,6 +44,7 @@ static void test_round_trip(void) {
 	CHECK_EQ(out.mode, SETTINGS_MODE_CPM);
 	CHECK_EQ(out.status_line, 0); // hidden
 	CHECK_EQ(out.blank_after, 30);
+	CHECK_EQ(out.wide80, 1);
 	CHECK_EQ(seq, 0x12345678);
 	CHECK_EQ(rec[SETTINGS_RECORD_SIZE - 1], 0xff); // unused bytes stay erased
 }
@@ -141,6 +143,7 @@ static void test_older_record(void) {
 	CHECK_EQ(settings_baud_rate(&probe), 115200);
 	CHECK_EQ(probe.status_line, 1); // records before it: shown
 	CHECK_EQ(probe.blank_after, 0);  // never
+	CHECK_EQ(probe.wide80, 0);       // centred
 	CHECK_EQ(seq, 3);
 }
 

@@ -117,15 +117,20 @@ status line (row 24); UART0 on GP0/GP1.
   main.c show_palette() -> video_set_palette (two 256-word tables, core 1
   switches at frame start). A palette change re-renders nothing. While
   SET-UP is open the edited palette is shown (restored on cancel).
-- `src/raster.[ch]` (portable): `raster_render_line` (core 0) turns a
-  screen line into, per stored row and cell, a byte of the cell's pixels
-  (bit i = pixel i, set = fg) plus per-cell fg/bg (palette indices, reverse
+- `src/raster.[ch]` (portable): three layouts (raster_layout_t: 80 cols
+  8x16 centred, 80 cols 10x20 at full width = the "80 columns" setting via
+  video_set_wide80, 132 cols). `raster_render_line` (core 0) turns a
+  screen line into, per stored row, a bit string of the cells' pixels
+  (cell c from bit c * width, 100 bytes per row for every layout;
+  raster_cell_bits reads one) plus per-cell fg/bg (palette indices, reverse
   applied). Stored rows per line = font rows + 2 padding rows; connectors
   (line drawing, blocks, shades) extend into the padding. Handles
-  underline, blink phase, bold (emboldened, within the cell), reverse.
-  `raster_compose` (core 1) makes a scanline of RGB565 pixel pairs from a
-  stored row through the 256-entry palette table, inverting the cursor cell;
-  every cell is exact in both widths. 132 cols centred at x = 4.
+  underline, blink phase, bold (bold face, or a smear in 132 cols),
+  reverse. `raster_compose` (core 1) makes a scanline of RGB565 pixel pairs
+  from a stored row through the 256-entry palette table, inverting the
+  cursor cell; every cell is exact in every layout. 132 cols centred at
+  x = 4. Core 1's helpers are ternaries, no tables (GCC's CSWTCH tables
+  land in RAM, but check the .dis when changing them).
 - `src/hstx_dvi.[ch]` (RP2350): DVI from the HSTX on the DVI Sock pins
   (GP12-19 = HSTX bits 0-7: D0 0/1, CK 2/3, D2 4/5, D1 6/7). clk_sys = 10 x
   pixel clock, clk_hstx = clk_sys / 2 (set explicitly: the SDK leaves it
@@ -185,9 +190,10 @@ status line (row 24); UART0 on GP0/GP1.
   scanlines 0-575 (status line from its slot); power-on/reset only, never
   on RIS.
 - `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus 8x16
-  and its bold face, misc-fixed 6x12/6x10 doubled or 6x13 by FONT_132:
-  raster_font_scale) generated at build time, glyph-major; glyph codes in
-  `src/font.h`. Tables built with FLASH (font_8x16_bold) stay in flash
+  and 10x20 (16-bit rows) with their bold faces, misc-fixed 6x12/6x10
+  doubled or 6x13 by FONT_132: raster_font_scale) generated at build time,
+  glyph-major; glyph codes in `src/font.h`. Tables built with FLASH
+  (font_8x16_bold, font_10x20, font_10x20_bold) stay in flash
   (FONT_FLASH_DATA, `.flashdata.font`) and are read through XIP by core 0
   only (raster_render_line); without a bold face (132 cols) bold is a
   1-px smear that never fills the cell's last column.
@@ -269,9 +275,11 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   copied to RAM), .bss 288 KB; `__end__` 0x20077f4c, so ~32 KB free below
   0x20080000 (no malloc user); pb2's palette (tables + code) moved it to
   0x200790d8, ~28 KB free; the qur QoL branch (taller SET-UP, fwpanel's
-  FATFS, code) to 0x2007b570, ~18.6 KB free. Scratch X: core 1's stack is in .bss, so
+  FATFS, code) to 0x2007b570, ~18.6 KB free; qur.8's packed raster rows
+  (fonts 10x20 and the bold faces in flash) back to 0x2007aa00, ~22 KB
+  free. Scratch X: core 1's stack is in .bss, so
   nearly all 4 KB free; scratch Y: 2 KB core 0 stack, ~2 KB free. Biggest
-  .bss: Z80 banks 96 KB + bank 0 64 KB, raster 64.5 KB, monitor `window`
+  .bss: Z80 banks 96 KB + bank 0 64 KB, raster 60 KB, monitor `window`
   16 KB, screen 13 KB, setup 8 KB, line_buf 6.4 KB, drives 4.5 KB, UART
   RX ring 4 KB, fwupdate `sector` 4 KB. A third Z80 bank (48 KB) does not
   fit. bd 3of: share the monitor's window with fwupdate (~5 KB back).
