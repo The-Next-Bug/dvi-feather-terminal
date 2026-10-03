@@ -221,6 +221,7 @@ static void reset(term_t *t) {
 	t->newline_mode = t->defaults.newline_mode;
 	t->backspace_bs = t->defaults.backspace_bs;
 	reset_tabs(t);
+	t->last_char = 0; // REP must not repeat a character from before the reset
 	t->screen->cursor_visible = true;
 	set_reverse_screen(t, false);
 	clear_band(t);
@@ -547,7 +548,7 @@ static void esc_dispatch(term_t *t, const vtparse_t *p, uint8_t final) {
 	case '=': t->keypad_app = true; break; // DECKPAM
 	case '>': t->keypad_app = false; break; // DECKPNM
 	case 'Z': device_attributes(t); break; // DECID
-	case 'c': reset(t); break; // RIS
+	case 'c': term_reset(t); break; // RIS
 	default: break;
 	}
 }
@@ -605,6 +606,13 @@ static void on_parse(vtparse_t *p, vtparse_action_t action, uint8_t ch) {
 void term_init(term_t *t, screen_t *screen, unsigned top, unsigned rows) {
 	*t = (term_t){ .screen = screen, .top = top, .rows = rows };
 	vtparse_init(&t->parser, on_parse, t);
+	reset(t);
+	sync_cursor(t);
+}
+
+// From RIS this runs inside the parser's callback; vtparse_reset allows that.
+void term_reset(term_t *t) {
+	vtparse_reset(&t->parser);
 	reset(t);
 	sync_cursor(t);
 }

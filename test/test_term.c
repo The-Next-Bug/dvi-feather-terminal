@@ -456,6 +456,62 @@ static void test_reset(void) {
 	CHECK_EQ(fg_at(0, ROWS - 1), FG);
 }
 
+// term_reset: the local reset (F11 in CP/M mode) undoes whatever a program
+// left behind.
+static void test_term_reset(void) {
+	setup();
+	put("\x1b[30;40;7m\x1b[?5h\x1b[5;10r\x1b[?6h\x1b[?25l\x1b[3;4Hx");
+	term_reset(&t);
+	CHECK(row_is(2, ""));
+	CHECK_CURSOR(0, 0); // homed, and the screen's cursor follows
+	CHECK(s.cursor_visible);
+	CHECK_EQ(s.reverse_rows, 0); // DECSCNM off
+	CHECK(!t.cur.origin_mode);
+	CHECK_EQ(t.margin_top, 0);
+	CHECK_EQ(t.margin_bottom, ROWS - 1);
+	put("\x1b[99Bx"); // margins and origin mode gone: down to the last row
+	CHECK_CURSOR(1, ROWS - 1);
+	CHECK_EQ(fg_at(0, ROWS - 1), FG); // default colours, not reversed
+	CHECK_EQ(bg_at(0, ROWS - 1), BG);
+	CHECK_EQ(bg_at(s.cols - 1, 0), BG); // and the screen was cleared with them
+	CHECK(row_is(STATUS, "status"));
+}
+
+// An unterminated OSC (or DCS) swallows everything after it; term_reset
+// gets the parser out.
+static void test_term_reset_recovers_wedged_parser(void) {
+	setup();
+	put("\x1b]0;no terminator ... ab");
+	CHECK(row_is(0, ""));
+	term_reset(&t);
+	put("ok");
+	CHECK(row_is(0, "ok"));
+	setup();
+	put("\x1bPq#0;2;0;0;0");
+	term_reset(&t);
+	put("ok");
+	CHECK(row_is(0, "ok"));
+	// Mid-CSI: the parameters collected so far are dropped too.
+	setup();
+	put("\x1b[31;4");
+	term_reset(&t);
+	put("ok");
+	CHECK(row_is(0, "ok"));
+	CHECK_EQ(fg_at(0, 0), FG);
+	CHECK_EQ(screen_attr(&s, 0, 0), 0);
+}
+
+// REP right after a reset has nothing to repeat.
+static void test_reset_forgets_rep_char(void) {
+	setup();
+	put("a");
+	term_reset(&t);
+	put("\x1b[3b");
+	CHECK(row_is(0, ""));
+	put("b\x1b" "c\x1b[3b"); // RIS too
+	CHECK(row_is(0, ""));
+}
+
 // ---------------------------------------------------------------------------
 // SGR
 
@@ -701,6 +757,9 @@ int main(void) {
 	RUN(test_tab_stops);
 	RUN(test_decaln);
 	RUN(test_reset);
+	RUN(test_term_reset);
+	RUN(test_term_reset_recovers_wedged_parser);
+	RUN(test_reset_forgets_rep_char);
 	RUN(test_sgr_colours);
 	RUN(test_sgr_extended_colours);
 	RUN(test_sgr_underline_blink);

@@ -146,6 +146,23 @@ static void test_c1_controls_when_enabled(void) {
 	EXPECT("\x1b[\xb1\xed", "C[1m]"); // GR bytes inside a sequence act as GL
 }
 
+static void test_reset(void) {
+	setup();
+	EXPECT("\x1b]0;stuck", ""); // unterminated OSC
+	vtparse_reset(&p);
+	EXPECT("ok", "P(o)P(k)");
+	EXPECT("\x1bPq#0", ""); // unterminated DCS
+	vtparse_reset(&p);
+	EXPECT("ok", "P(o)P(k)");
+	EXPECT("\x1b[?31;4", ""); // mid-CSI: marker and parameters dropped
+	vtparse_reset(&p);
+	EXPECT("m\x1b[m", "P(m)C[m]");
+	// c1_controls survives.
+	p.c1_controls = true;
+	vtparse_reset(&p);
+	EXPECT("\x9b" "1m", "C[1m]");
+}
+
 int main(void) {
 	RUN(test_text_and_controls);
 	RUN(test_escape_sequences);
@@ -157,5 +174,6 @@ int main(void) {
 	RUN(test_del_ignored_in_sequences);
 	RUN(test_c1_ignored_by_default);
 	RUN(test_c1_controls_when_enabled);
+	RUN(test_reset);
 	return tests_done();
 }
