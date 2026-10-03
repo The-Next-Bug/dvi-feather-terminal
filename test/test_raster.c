@@ -76,8 +76,6 @@ static unsigned wanted(const screen_line_t *line, raster_layout_t l, unsigned sy
 			int gy = (int)sy - (int)raster_pad_top(l);
 			gy = gy < 0 ? -1 : gy / (int)raster_font_scale(l);
 			lit = gy >= 0 && gy < (int)raster_font_rows(l) && raster_glyph_row(l, true, g, (unsigned)gy) >> i & 1;
-		} else {
-			lit |= i > 0 && i + 1 < w && glyph_pixel(l, g, sy, i - 1);
 		}
 	}
 	return lit ? line->fg[c] : line->bg[c];
@@ -317,9 +315,8 @@ static void test_blink(void) {
 	CHECK(lit > 0);
 }
 
-// Bold: in 80 columns Terminus's bold face; in 132 (no bold face) glyph
-// rows ORed with themselves shifted a pixel right, short of the cell's last
-// column so cells stay apart. Line-drawing glyphs keep their shape so they
+// Bold: in 80 columns Terminus's bold faces; in 132 (no bold face) the
+// normal glyph, bold being only the brighter colour. Line-drawing glyphs keep their shape so they
 // still join.
 static void test_bold(void) {
 	for (raster_layout_t l = 0; l < RASTER_LAYOUTS; ++l) {
@@ -333,8 +330,7 @@ static void test_bold(void) {
 		render(screen_line(&s, 0), l, 0);
 		for (unsigned gy = 0; gy < rows; ++gy) {
 			unsigned g = raster_glyph_row(l, false, 'I', gy);
-			unsigned bold = raster_has_bold_face(l) ? raster_glyph_row(l, true, 'I', gy)
-				: g | ((g << 1) & ((1u << w) - 1) >> 1);
+			unsigned bold = raster_has_bold_face(l) ? raster_glyph_row(l, true, 'I', gy) : g;
 			unsigned v = raster_glyph_row(l, false, GLYPH_DEC_GRAPHICS('x'), gy);
 			for (unsigned i = 0; i < w; ++i) {
 				CHECK_EQ(shown(l, top + gy * k, x0 + i), (bold >> i & 1) ? fg : 0);

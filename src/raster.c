@@ -56,11 +56,10 @@ bool raster_render_line(raster_line_t *out, const screen_line_t *line, raster_la
 		// Line drawing keeps its shape in bold, so it still joins.
 		bool bold = (attr & SCREEN_ATTR_BOLD) && !glyph_is_connector(g);
 		for (unsigned sr = 0; sr < rows + 2; ++sr) {
+			// No bold face (132 columns): the glyph as it is; bold shows
+			// only as the brighter colour term.c gives it. At 6 pixels a
+			// smear closes the gaps of m, w, # and the like.
 			unsigned m = hidden ? 0 : stored_glyph_row(l, bold && bold_face, rows, sr, g);
-			// No bold face: each row ORed with itself a pixel to the right,
-			// but not into the cell's last column, the gap to the next cell.
-			if (bold && !bold_face)
-				m |= (m << 1) & (cell_mask >> 1);
 			if (underline && sr == rows) // the glyph's bottom row
 				m = cell_mask;
 			put_cell_bits(out->bits[sr], w, c, m & cell_mask);

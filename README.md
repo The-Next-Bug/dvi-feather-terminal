@@ -26,7 +26,7 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
   save/restore cursor, DECALN, RIS, REP. Replies to DA, DSR/CPR and
   DECREQTPARM go back on UART0 TX. Checked with `vttest` (menus 1-3, 6 and
   8) through `tools/hostbridge.py`.
-- **Attributes**: SGR bold (bright and emboldened), underline, blink,
+- **Attributes**: SGR bold (bright, and in 80 columns the bold face), underline, blink,
   reverse; colors 8/16, 256 (the xterm palette, exact) and 24-bit (the
   nearest of those 256).
 - **Keyboard**: a USB keyboard on the Pico 2's USB port; see
@@ -506,8 +506,8 @@ The screen buffer stores one-byte glyph codes (see `src/font.h`): ASCII at
 tables are generated at build time: 8x16 and 10x20 from Terminus Font for
 80 columns (bold text in Terminus's bold faces; 10x20 and the bold faces
 stay in flash), misc-fixed for 132 (6x12 at double
-height; 6x10 or 6x13 with `FONT_132`; bold text is drawn a pixel wider,
-short of the gap to the next cell). Glyphs a font lacks (control pictures,
+height; 6x10 or 6x13 with `FONT_132`; no bold face fits 6 pixels, so bold
+text there is only brighter, as on a VT100). Glyphs a font lacks (control pictures,
 scan lines, half blocks) are drawn by `font_gen.py`.
 
 ### Startup logo

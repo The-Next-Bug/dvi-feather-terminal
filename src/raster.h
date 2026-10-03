@@ -129,9 +129,8 @@ static inline const char *raster_font_name(raster_layout_t l) {
 #define RASTER_BLINK_OFF 0x02 // blink phase off: hide blinking cells' glyphs
 
 // Render a screen line in layout l. Underlined cells get a line on the
-// glyph's bottom row; bold cells use the bold face, or without one are
-// emboldened (each glyph row ORed with itself shifted a pixel right, short
-// of the cell's last column). Returns whether any cell blinks, i.e.
+// glyph's bottom row; bold cells use the bold face, or without one (132
+// columns) keep the normal glyph: bold is then only the brighter colour. Returns whether any cell blinks, i.e.
 // whether the line needs re-rendering when the phase changes.
 bool raster_render_line(raster_line_t *out, const screen_line_t *line, raster_layout_t l, unsigned flags);
 

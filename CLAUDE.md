@@ -125,7 +125,7 @@ status line (row 24); UART0 on GP0/GP1.
   raster_cell_bits reads one) plus per-cell fg/bg (palette indices, reverse
   applied). Stored rows per line = font rows + 2 padding rows; connectors
   (line drawing, blocks, shades) extend into the padding. Handles
-  underline, blink phase, bold (bold face, or a smear in 132 cols),
+  underline, blink phase, bold (bold face; 132 cols: colour only),
   reverse. `raster_compose` (core 1) makes a scanline of RGB565 pixel pairs
   from a stored row through the 256-entry palette table, inverting the
   cursor cell; every cell is exact in every layout. 132 cols centred at
@@ -195,8 +195,8 @@ status line (row 24); UART0 on GP0/GP1.
   glyph-major; glyph codes in `src/font.h`. Tables built with FLASH
   (font_8x16_bold, font_10x20, font_10x20_bold) stay in flash
   (FONT_FLASH_DATA, `.flashdata.font`) and are read through XIP by core 0
-  only (raster_render_line); without a bold face (132 cols) bold is a
-  1-px smear that never fills the cell's last column.
+  only (raster_render_line); without a bold face (132 cols) bold is only
+  the brighter colour (a smear closed the gaps of m, w, #: qur.9).
 - Z80 CP/M machine (Mode setting "CP/M machine", bd lpt): the screen and
   keyboard become the console of a z80pack picosim-compatible machine on
   core 0 (`main.c` cpm_*: 10 ms CPU slices between keyboard, disks, screen).
