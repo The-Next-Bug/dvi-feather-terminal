@@ -224,7 +224,7 @@ status line (row 24); UART0 on GP0/GP1.
   into the 8" CP/M directory); host tests in test_machine (machine_host
   answers ESC [ 6 n through host_cpr_reply). `src/monitor.[ch]`
   (portable): menu (boot, mount, list, new blank disk, install, speed
-  test, rescan, firmware update), 3 s autoboot. `src/drivepanel.[ch]` (portable): SET-UP's
+  test, rescan), 3 s autoboot. `src/drivepanel.[ch]` (portable): SET-UP's
   Drives panel (D in CP/M mode); main.c defers its FatFs work to the main
   loop (setup_feed runs inside the USB stack). Status line: drive letters
   only, reverse while accessed. `src/diskimg.[ch]` + `src/lz.[ch]` (portable)
@@ -244,15 +244,14 @@ status line (row 24); UART0 on GP0/GP1.
   Firmware update (bd n3k): SET-UP's U in either mode (`src/fwpanel.[ch]`,
   portable, over SET-UP's rows; main.c fw_* platform: in terminal mode it
   f_mounts the card only while open, in CP/M mode it uses the monitor's
-  mount), and the monitor's U, offered when /FIRMWARE.UF2
-  is on the card (monitor_platform_t firmware_* hooks; stubbed in
-  test_machine). `src/uf2.[ch]` (portable; test_uf2 also checks
+  mount; stubbed in test_machine). The monitor's U was removed (qur.10):
+  SET-UP's is the only way. `src/uf2.[ch]` (portable; test_uf2 also checks
   build/pico2-dvi-sock/dvi_terminal.uf2 when built): skips other families
   (the E10 block numbers its own sequence); ours in order, ascending
   addresses, PICOBIN marker in the first 4 KB; CRC of the image as flashed
   (gaps 0xff). `src/fwupdate.[ch]` (RP2350): stage = check again while
   programming the staging area (flash offset 2 MB; images up to
-  NVFLASH_OFFSET - 2 MB), verify by CRC; the monitor then renames the file
+  NVFLASH_OFFSET - 2 MB), verify by CRC; fwpanel then renames the file
   to FIRMWARE.OLD and unmounts; the commit (fwupdate_commit_image,
   interrupts off for good) copies sector by sector through a 4 KB RAM
   buffer, skipping equal sectors, then watchdog_reboot. It must read

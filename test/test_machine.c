@@ -408,12 +408,11 @@ static void firmware_commit(void) {
 	++commits;
 }
 
-static const monitor_platform_t monitor_platform = {.write = console_text, .card_info = card_info, .flush = flush,
-	.firmware_check = firmware_check, .firmware_stage = firmware_stage, .firmware_commit = firmware_commit};
+static const monitor_platform_t monitor_platform = {.write = console_text, .card_info = card_info, .flush = flush};
 
 // The whole menu was shown, up to its prompt (lpt.8: it was cut short).
 static bool menu_shown(void) {
-	return strstr(screen, "C  check the card again\r\n") && strstr(screen, "F12 SET-UP (Drives, Mode)\r\n> ") &&
+	return strstr(screen, "C  check the card again\r\n") && strstr(screen, "F12 SET-UP (Drives, Mode, firmware update)\r\n> ") &&
 		screen_len >= 2 && strcmp(screen + screen_len - 2, "> ") == 0;
 }
 
@@ -518,62 +517,18 @@ static void write_file(const char *path, const char *text) {
 	CHECK_EQ(f_close(&f), FR_OK);
 }
 
-// U: offered only with FIRMWARE.UF2 on the card; checks, asks, stages,
-// renames the file, closes the card and commits.
-static void test_monitor_firmware(void) {
-	FILINFO info;
+// The firmware update is SET-UP's (U) only: the monitor neither offers nor
+// takes U, even with FIRMWARE.UF2 on the card, and points at SET-UP.
+static void test_monitor_no_firmware_update(void) {
+	write_file(FWPANEL_FILE, "STAGES");
 	clear_screen();
 	monitor_enter(NULL, false);
-	CHECK(strstr(screen, "U       update") == NULL);
-	CHECK_EQ(keys("u"), MONITOR_NONE);
-	CHECK(strstr(screen, "Checking") == NULL);
-
-	// Refused by the check: nothing staged.
-	write_file(MONITOR_FIRMWARE, "BAD");
-	clear_screen();
-	monitor_enter(NULL, false);
-	CHECK(strstr(screen, "U       update the firmware from FIRMWARE.UF2") != NULL);
-	stages = commits = 0;
-	CHECK_EQ(keys("u"), MONITOR_NONE);
-	CHECK(strstr(screen, "cannot install it: not a UF2 file") != NULL);
-	CHECK(menu_shown());
-	CHECK_EQ(stages, 0);
-
-	// Declined.
-	write_file(MONITOR_FIRMWARE, "GOOD");
+	CHECK(strstr(screen, "U  ") == NULL);
+	CHECK(strstr(screen, "F12 SET-UP (Drives, Mode, firmware update)") != NULL);
 	clear_screen();
 	CHECK_EQ(keys("u"), MONITOR_NONE);
-	CHECK(strstr(screen, "test firmware\r\nInstall it and restart (Y/N)? ") != NULL);
-	CHECK_EQ(keys("xn"), MONITOR_NONE);
-	CHECK(menu_shown());
-	CHECK_EQ(stages, 0);
-
-	// Staging fails: the file stays, nothing committed.
-	clear_screen();
-	CHECK_EQ(keys("uy"), MONITOR_NONE);
-	CHECK(strstr(screen, ".... failed: flash verify failed\r\nNothing was changed.") != NULL);
-	CHECK_EQ(stages, 1);
-	CHECK_EQ(commits, 0);
-	CHECK_EQ(f_stat(MONITOR_FIRMWARE, &info), FR_OK);
-	CHECK(menu_shown());
-
-	// Installed: renamed (replacing an older FIRMWARE.OLD), committed; on the
-	// host the monitor then carries on with the card mounted again.
-	write_file(MONITOR_FIRMWARE_OLD, "older");
-	write_file(MONITOR_FIRMWARE, "STAGES");
-	clear_screen();
-	flushes = 0;
-	CHECK_EQ(keys("uy"), MONITOR_NONE);
-	CHECK(strstr(screen, "firmware....\r\n") != NULL); // 128 KB, a dot per 32 KB
-	CHECK(strstr(screen, "do not power off") != NULL);
-	CHECK_EQ(commits, 1);
-	CHECK_EQ(f_stat(MONITOR_FIRMWARE, &info), FR_NO_FILE);
-	CHECK_EQ(f_stat(MONITOR_FIRMWARE_OLD, &info), FR_OK);
-	CHECK_EQ(info.fsize, 6);
-	CHECK(strstr(screen, "A: CPM22") != NULL);
-	CHECK(strstr(screen, "U       update") == NULL);
-	CHECK(menu_shown());
-	f_unlink(MONITOR_FIRMWARE_OLD);
+	CHECK_EQ(screen_len, 0);
+	f_unlink(FWPANEL_FILE);
 }
 
 // SET-UP's firmware update panel, with the same stubs.
@@ -640,7 +595,7 @@ static void test_firmware_panel(void) {
 
 	// No file: the check refuses it; leaving lets the card go.
 	panel_card = true;
-	f_unlink(MONITOR_FIRMWARE);
+	f_unlink(FWPANEL_FILE);
 	fwpanel_open(&p);
 	fwpanel_run(&p, &panel_platform);
 	CHECK_EQ(p.state, FWPANEL_FAILED);
@@ -649,7 +604,7 @@ static void test_firmware_panel(void) {
 	CHECK_EQ(panel_unmounts, 1);
 
 	// Declined with N, or Escape.
-	write_file(MONITOR_FIRMWARE, "GOOD");
+	write_file(FWPANEL_FILE, "GOOD");
 	for (const char *k = "N\x1b"; *k; ++k) {
 		fwpanel_open(&p);
 		fwpanel_run(&p, &panel_platform);
@@ -672,13 +627,13 @@ static void test_firmware_panel(void) {
 	CHECK(panel_row(&p, 3, "flash verify failed"));
 	CHECK_EQ(stages, 1);
 	CHECK_EQ(commits, 0);
-	CHECK_EQ(f_stat(MONITOR_FIRMWARE, &info), FR_OK);
+	CHECK_EQ(f_stat(FWPANEL_FILE, &info), FR_OK);
 	fwpanel_close(&p, &panel_platform);
 
 	// Installed: a progress bar (redrawn as it grows, not per block),
 	// renamed, the card closed for the commit, committed.
-	write_file(MONITOR_FIRMWARE_OLD, "older");
-	write_file(MONITOR_FIRMWARE, "STAGES");
+	write_file(FWPANEL_FILE_OLD, "older");
+	write_file(FWPANEL_FILE, "STAGES");
 	fwpanel_open(&p);
 	fwpanel_run(&p, &panel_platform);
 	fwpanel_input(&p, 'Y');
@@ -690,10 +645,10 @@ static void test_firmware_panel(void) {
 	CHECK(shown_row(4, "[##################################################] 100%"));
 	CHECK_EQ(commits, 1);
 	CHECK_EQ(panel_commit_unmounts, 1);
-	CHECK_EQ(f_stat(MONITOR_FIRMWARE, &info), FR_NO_FILE);
-	CHECK_EQ(f_stat(MONITOR_FIRMWARE_OLD, &info), FR_OK);
+	CHECK_EQ(f_stat(FWPANEL_FILE, &info), FR_NO_FILE);
+	CHECK_EQ(f_stat(FWPANEL_FILE_OLD, &info), FR_OK);
 	CHECK_EQ(info.fsize, 6);
-	f_unlink(MONITOR_FIRMWARE_OLD);
+	f_unlink(FWPANEL_FILE_OLD);
 }
 
 // On a card's usual 32 KB clusters a blank disk reaches the card many
@@ -727,7 +682,7 @@ int main(void) {
 	RUN(test_no_disk_boot_rom);
 	RUN(test_monitor_fresh_card);
 	RUN(test_monitor_autoboot);
-	RUN(test_monitor_firmware);
+	RUN(test_monitor_no_firmware_update);
 	RUN(test_firmware_panel);
 	RUN(test_blank_disk_chunks);
 	drives_unmount_all();

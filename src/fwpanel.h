@@ -2,8 +2,7 @@
 #define FWPANEL_H
 
 // SET-UP's firmware update panel (U, in either mode): install
-// /FIRMWARE.UF2 from the SD card as the monitor's U does, without going
-// through CP/M mode. Portable C (FatFs), host-tested; main.c opens it over
+// /FIRMWARE.UF2 from the SD card. Portable C (FatFs), host-tested; main.c opens it over
 // SET-UP's rows, feeds it keys and lets it do the work from its main loop
 // (fwpanel_run), never from inside the USB stack.
 //
@@ -17,6 +16,11 @@
 #include <stdint.h>
 
 #include "screen.h"
+
+// On the card; renamed to FWPANEL_FILE_OLD once staged, so it is not
+// installed twice by mistake. 8.3 names: FatFs has no long names here.
+#define FWPANEL_FILE "/FIRMWARE.UF2"
+#define FWPANEL_FILE_OLD "/FIRMWARE.OLD"
 
 #define FWPANEL_ROWS 8 // in a box: title line, blank, 3 text rows, blank, help, bottom line
 #define FWPANEL_INFO 96
@@ -75,9 +79,8 @@ void fwpanel_close(fwpanel_t *p, const fwpanel_platform_t *plat);
 
 void fwpanel_draw(const fwpanel_t *p, screen_t *s, unsigned top, uint8_t fg, uint8_t bg, uint8_t border);
 
-// Rename the installed file to FIRMWARE.OLD (replacing an older one), so
-// it is not installed twice by mistake. False if it could not be renamed.
-// Shared with the monitor.
+// Rename the installed file to FIRMWARE.OLD (replacing an older one). False
+// if it could not be renamed.
 bool fwpanel_retire_file(void);
 
 #endif

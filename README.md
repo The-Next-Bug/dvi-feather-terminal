@@ -352,9 +352,8 @@ A after 3 seconds (any key stops that), or shows its menu:
 - **S**: CPU speed test (a JP loop for a second, in Z80 MHz).
 - **C**: check the card again (after changing it).
 - **R**: resume the CPU, after leaving it from SET-UP.
-- **U**: update the firmware from `FIRMWARE.UF2` in the card's root (shown
-  only when the file is there; see
-  [Updating the firmware from the SD card](#updating-the-firmware-from-the-sd-card)).
+- **F12**: SET-UP, also for the
+  [firmware update](#updating-the-firmware-from-the-sd-card) (**U**).
 
 ### Running CP/M
 
@@ -410,12 +409,12 @@ Copy the new `dvi_terminal.uf2` to the card's root as `FIRMWARE.UF2` (8.3
 names only; the release ZIP has it as `sdcard-<target>/FIRMWARE.UF2`, and
 `SDCARD=/media/<you>/<card> scripts/build.sh` copies it there), put the card
 in, and press **U** in SET-UP (either mode; in terminal mode the card is
-mounted only for the update) or in the CP/M monitor. It reads the
+mounted only for the update). It reads the
 file through and checks it (a UF2 for the RP2350 with a bootable image that
 fits), shows its size and asks; **Y** then:
 
 1. writes the image to the upper half of the flash, beside the running
-   firmware, and reads it back (the progress bar, or the monitor's dots). Any problem up to here
+   firmware, and reads it back (the progress bar). Any problem up to here
    leaves the board as it was;
 2. renames the file to `FIRMWARE.OLD`, so it is not installed twice, and
    closes the disks;

@@ -4,7 +4,6 @@
 #include <string.h>
 
 #include "ff.h"
-#include "monitor.h" // MONITOR_FIRMWARE, MONITOR_FIRMWARE_OLD
 
 // The text starts inside the box (screen_frame).
 #define LEFT 1
@@ -52,8 +51,8 @@ static void progress(void *ctx, uint32_t done, uint32_t total) {
 }
 
 bool fwpanel_retire_file(void) {
-	f_unlink(MONITOR_FIRMWARE_OLD);
-	return f_rename(MONITOR_FIRMWARE, MONITOR_FIRMWARE_OLD) == FR_OK;
+	f_unlink(FWPANEL_FILE_OLD);
+	return f_rename(FWPANEL_FILE, FWPANEL_FILE_OLD) == FR_OK;
 }
 
 fwpanel_action_t fwpanel_run(fwpanel_t *p, const fwpanel_platform_t *plat) {
@@ -64,7 +63,7 @@ fwpanel_action_t fwpanel_run(fwpanel_t *p, const fwpanel_platform_t *plat) {
 			return FWPANEL_REDRAW;
 		}
 		p->mounted = true;
-		if (!plat->check(MONITOR_FIRMWARE, p->info, sizeof p->info)) {
+		if (!plat->check(FWPANEL_FILE, p->info, sizeof p->info)) {
 			fail(p, "FIRMWARE.UF2 cannot be installed:");
 			return FWPANEL_REDRAW;
 		}
@@ -76,7 +75,7 @@ fwpanel_action_t fwpanel_run(fwpanel_t *p, const fwpanel_platform_t *plat) {
 		return FWPANEL_NONE;
 	plat->show(p);
 	progress_ctx_t ctx = {p, plat};
-	if (!plat->stage(MONITOR_FIRMWARE, progress, &ctx, p->info, sizeof p->info)) {
+	if (!plat->stage(FWPANEL_FILE, progress, &ctx, p->info, sizeof p->info)) {
 		fail(p, "Writing it failed (nothing was changed):");
 		return FWPANEL_REDRAW;
 	}
