@@ -237,7 +237,8 @@ status line (row 24); UART0 on GP0/GP1.
   monitor. `src/sdcard.[ch]` (RP2350): polled SPI0 SD driver = FatFs
   diskio (GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI; 400 kHz init, 25 MHz).
   `lib/fatfs`: ChaN FatFs R0.15a vendored (ffconf: FIND, MKFS, CP437,
-  NORTC, no LFN). Host tests use `test/diskio_ram.c`. Changing Mode
+  NORTC, TINY (files share the volume's sector buffer), no LFN; ffconf.h
+  has CRLF line endings, edit it byte-wise). Host tests use `test/diskio_ram.c`. Changing Mode
   saves and reboots (watchdog). In SET-UP, M leaves for the monitor.
   SET-UP's T (both modes) shows the demo until a key (main.c
   setup_demo_*; status line draws skip it), then term_set_columns clears
@@ -273,19 +274,22 @@ status line (row 24); UART0 on GP0/GP1.
 
 SRAM is the tight resource; peripherals and pins are mostly free.
 
-- SRAM (520 KB): .text 165 KB, .data 26 KB (fonts, Z80 tables, video code
-  copied to RAM), .bss 288 KB; `__end__` 0x20077f4c, so ~32 KB free below
+- SRAM (520 KB): .text 170 KB, .data 20 KB (Z80 tables, video code
+  copied to RAM), .bss 302 KB (qur.23 figures); `__end__` 0x20077f4c, so ~32 KB free below
   0x20080000 (no malloc user); pb2's palette (tables + code) moved it to
   0x200790d8, ~28 KB free; the qur QoL branch (taller SET-UP, fwpanel's
   FATFS, code) to 0x2007b570, ~18.6 KB free; qur.8's packed raster rows
   (fonts 10x20 and the bold faces in flash) back to 0x2007aa00, ~22 KB
   free; qur.20's SRAM font pair (20 KB, 8x16 and the FONT_132 variants
-  dropped) to 0x2007dac4, ~9.3 KB free. Scratch X: core 1's stack is in
-  .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0 stack, ~2 KB free. Biggest
-  .bss: Z80 banks 96 KB + bank 0 64 KB, raster 60 KB, font_copy 20 KB,
-  monitor `window` 16 KB, screen 13 KB, setup 8 KB, line_buf 6.4 KB,
-  drives 4.5 KB, UART RX ring 4 KB, fwupdate `sector` 4 KB. A third Z80 bank (48 KB) does not
-  fit. bd 3of: share the monitor's window with fwupdate (~5 KB back).
+  dropped) to 0x2007dac4, ~9.3 KB free; qur.23 (no printf float, FatFs
+  tiny, 2 KB UART RX ring) to 0x2007af8c, ~20.1 KB free. Scratch X: core
+  1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
+  60 KB, font_copy 20 KB, monitor `window` 16 KB, screen 13 KB, setup
+  10 KB, line_buf 6.4 KB, fwupdate `sector` 4 KB, UART RX ring 2 KB. A
+  third Z80 bank (48 KB) does not fit. bd 3of: share the monitor's window
+  with fwupdate; a 4 KB LZ window (+32 KB of flash) would make it ~16 KB
+  back.
 - Flash (4 MB): image 0-0x6e980 (442 KB); free to 2 MB (image growth;
   fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used
   only during an update, up to the new image's length); settings

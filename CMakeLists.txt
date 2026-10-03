@@ -133,6 +133,10 @@ target_compile_definitions(dvi_terminal PRIVATE
   DISKIMG_IN_FLASH=1
   # The compose loop needs very little stack.
   PICO_CORE1_STACK_SIZE=0x200
+  # Nothing prints floating point: its printf code (and the soft-float it
+  # pulls in) would only take SRAM.
+  PICO_PRINTF_SUPPORT_FLOAT=0
+  PICO_PRINTF_SUPPORT_EXPONENTIAL=0
 )
 
 target_link_libraries(dvi_terminal
