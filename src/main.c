@@ -357,8 +357,21 @@ static void setup_demo_service(void) {
 	}
 }
 
-// Run SET-UP's pending save or cancel, the demo, or the Escape key
-// timeout, and show the edited Colors and Palette.
+// Restart the board from power-on (boot logo, settings read again): say so,
+// write back the drives' buffers, reboot.
+static void restart(void) {
+	setup.ui.message = "Restarting...";
+	setup_draw_panel();
+	video_update(&screen);
+	if (cpm.on)
+		drives_flush();
+	watchdog_reboot(0, 0, 0);
+	while (true)
+		tight_loop_contents();
+}
+
+// Run SET-UP's pending save or cancel, the demo, the reboot, or the Escape
+// key timeout, and show the edited Colors and Palette.
 static void setup_service(void) {
 	show_palette(&setup.ui.values);
 	if (setup.demo) {
@@ -377,6 +390,8 @@ static void setup_service(void) {
 		setup_leave(false);
 	} else if (a == SETUP_DEMO) {
 		setup_demo_start();
+	} else if (a == SETUP_REBOOT) {
+		restart(); // the last resort when the terminal is stuck
 	} else if (a == SETUP_DRIVES) {
 		drivepanel_open(&setup.drives);
 		setup.drives_open = true;
@@ -391,17 +406,8 @@ static void setup_service(void) {
 		setup_draw_panel();
 		video_update(&screen);
 		if (setup_save()) {
-			if (settings.mode != (cpm.on ? SETTINGS_MODE_CPM : SETTINGS_MODE_TERMINAL)) {
-				// The other mode starts from a clean power-on.
-				setup.ui.message = "Restarting...";
-				setup_draw_panel();
-				video_update(&screen);
-				if (cpm.on)
-					drives_flush();
-				watchdog_reboot(0, 0, 0);
-				while (true)
-					tight_loop_contents();
-			}
+			if (settings.mode != (cpm.on ? SETTINGS_MODE_CPM : SETTINGS_MODE_TERMINAL))
+				restart(); // the other mode starts from a clean power-on
 			setup_leave(true);
 		} else {
 			setup.ui.message = "Saving to flash failed";

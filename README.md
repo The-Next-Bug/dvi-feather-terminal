@@ -215,6 +215,7 @@ It opens from:
 | **Return** | save to flash and apply (a new width clears the screen, as DECCOLM does) |
 | **Esc**, F12 | leave without saving |
 | **T** | show the demo screen in the edited colors until a key is pressed |
+| **R** | reboot the board, as at power-on (unsaved changes are dropped; CP/M drives are written back first). The last resort when the terminal is stuck |
 | **D** | CP/M mode: the [Drives panel](#running-cpm) |
 | **M** | CP/M mode: back to the [monitor](#the-monitor) |
 
