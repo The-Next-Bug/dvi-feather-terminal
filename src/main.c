@@ -364,7 +364,6 @@ static void apply_settings(const settings_t *s) {
 	term_set_defaults(&term, &(term_defaults_t){.backspace_bs = s->backspace == 0x08,
 		.newline_mode = s->newline && !cpm.on});
 	default_columns = s->columns;
-	video_set_wide80(s->wide80);
 	blank_init(&blank, s->blank_after * 60000u, to_ms_since_boot(get_absolute_time()));
 	colours = settings_colours(s);
 	show_palette(s);
@@ -422,7 +421,7 @@ static void draw_demo(unsigned cols, const char *what) {
 	char status[SCREEN_MAX_COLS + 1];
 	snprintf(status, sizeof status, " demo | %u x 24 | build %s (%s, %s) | %s",
 		cols, TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE, what);
-	demo_draw(&screen, cols, raster_font_name(raster_layout(cols, settings.wide80)), status);
+	demo_draw(&screen, cols, raster_font_name(raster_layout(cols)), status);
 }
 
 // SET-UP's demo (T): in the edited palette, alternating widths until a key.
@@ -803,6 +802,76 @@ static void cpm_step(void) {
 	drives_poll(now);
 }
 
+// The Status line setting's debug choice: core 1's timing and core 0's
+// main-loop time, refreshed every STATUS_INTERVAL_MS in both modes.
+static struct {
+	char text[SCREEN_MAX_COLS + 1]; // as last drawn: redrawn as is between refreshes
+	uint32_t last_ms, frames, late;  // at the last refresh
+	uint32_t line_peak;              // compose cycles, since the debug line came on
+	uint32_t render_peak_us;         // likewise
+	uint32_t pass_start_us, pass_max_us, pass_peak_us; // main-loop passes
+} debug_status;
+
+static bool debug_status_on(void) {
+	return settings.status_line == SETTINGS_STATUS_DEBUG;
+}
+
+// One main-loop pass ends and the next starts.
+static void debug_status_pass(void) {
+	uint32_t now = time_us_32(), us = now - debug_status.pass_start_us;
+	debug_status.pass_start_us = now;
+	if (us > debug_status.pass_max_us)
+		debug_status.pass_max_us = us;
+}
+
+static unsigned percent(uint32_t part, uint32_t whole) {
+	return whole ? (unsigned)((part * 100 + whole / 2) / whole) : 0;
+}
+
+// " late T+N | line C/P% | F fps | loop M/Q ms | render R/S us | Z MHz":
+// late lines in all (+ since the last refresh); the longest scanline
+// compose as a share of a line's time, this refresh / the peak; frames a
+// second; the longest main-loop pass and the longest line render on core 0
+// (core 1 can show that line half drawn meanwhile), now / peak; in CP/M
+// mode the Z80's speed.
+static void debug_status_refresh(void) {
+	uint32_t now = to_ms_since_boot(get_absolute_time());
+	video_stats_t st = video_stats();
+	uint32_t ms = now - debug_status.last_ms;
+	if (ms > 4 * STATUS_INTERVAL_MS) {
+		// Just turned on (or the first time): the peaks start again.
+		debug_status.line_peak = debug_status.pass_peak_us = debug_status.render_peak_us = 0;
+		ms = 0;
+	}
+	if (st.max_line_cycles > debug_status.line_peak)
+		debug_status.line_peak = st.max_line_cycles;
+	uint32_t pass_us = debug_status.pass_max_us;
+	debug_status.pass_max_us = 0;
+	if (pass_us > debug_status.pass_peak_us)
+		debug_status.pass_peak_us = pass_us;
+	if (st.max_render_us > debug_status.render_peak_us)
+		debug_status.render_peak_us = st.max_render_us;
+	unsigned fps = ms ? (unsigned)(((st.frames - debug_status.frames) * 1000 + ms / 2) / ms) : 0;
+	char *t = debug_status.text;
+	size_t size = sizeof debug_status.text;
+	int n = snprintf(t, size, " late %lu+%lu | line %u/%u%% | %u fps | loop %lu/%lu ms | render %lu/%lu us",
+		(unsigned long)st.late, (unsigned long)(ms ? st.late - debug_status.late : 0),
+		percent(st.max_line_cycles, st.cycles_budget), percent(debug_status.line_peak, st.cycles_budget), fps,
+		(unsigned long)((pass_us + 500) / 1000), (unsigned long)((debug_status.pass_peak_us + 500) / 1000),
+		(unsigned long)st.max_render_us, (unsigned long)debug_status.render_peak_us);
+	if (cpm.on && cpm.running && n > 0 && (size_t)n < size)
+		snprintf(t + n, size - (size_t)n, " | %lu.%02lu MHz", (unsigned long)(cpm.khz / 1000),
+			(unsigned long)(cpm.khz % 1000 / 10));
+	debug_status.last_ms = now;
+	debug_status.frames = st.frames;
+	debug_status.late = st.late;
+}
+
+static void draw_debug_status(void) {
+	screen_clear_line(&screen, STATUS_ROW, colours.status_fg, colours.status_bg);
+	screen_puts(&screen, 0, STATUS_ROW, debug_status.text, colours.status_fg, colours.status_bg);
+}
+
 // Drives accessed light up on the status line, like a drive's busy light.
 static uint8_t drive_lights(uint32_t now) {
 	uint8_t accessed = drives_activity(), lit = 0;
@@ -825,6 +894,10 @@ static void draw_cpm_status(void) {
 	cpm.lit = drive_lights(now);
 	if (setup.demo || !status_shown())
 		return; // the demo has the status line
+	if (debug_status_on()) {
+		draw_debug_status();
+		return;
+	}
 	char text[SCREEN_MAX_COLS + 1] = " CP/M |";
 	unsigned letter_col[DRIVES];
 	// The drives' letters, "-" for an empty one; SET-UP's Drives panel
@@ -869,6 +942,10 @@ static bool status_equal(const status_t *a, const status_t *b) {
 static void draw_status(const status_t *st) {
 	if (setup.demo || !status_shown())
 		return; // the demo has the status line; DECCOLM after it redraws
+	if (debug_status_on()) {
+		draw_debug_status();
+		return;
+	}
 	char key[32] = "";
 	if (st->keys_sent) {
 		char name[24];
@@ -963,6 +1040,7 @@ int main(void) {
 	video_update(&screen);
 
 	absolute_time_t next_status = make_timeout_time_ms(STATUS_INTERVAL_MS);
+	debug_status.pass_start_us = time_us_32();
 	while (true) {
 		if (cpm.on) {
 			cpm_step();
@@ -1016,11 +1094,13 @@ int main(void) {
 		}
 		if (time_reached(next_status)) {
 			next_status = make_timeout_time_ms(STATUS_INTERVAL_MS);
+			if (debug_status_on())
+				debug_status_refresh();
 			if (cpm.on) {
 				draw_cpm_status();
 			} else {
 				status_t st = status_now();
-				if (!status_equal(&st, &shown)) {
+				if (debug_status_on() || !status_equal(&st, &shown)) {
 					shown = st;
 					draw_status(&shown);
 				}
@@ -1028,5 +1108,6 @@ int main(void) {
 		}
 		video_update(&screen);
 		diag_poll();
+		debug_status_pass();
 	}
 }

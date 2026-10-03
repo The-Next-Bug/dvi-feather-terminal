@@ -46,9 +46,8 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 	{"Colors", 4, {0, 1, 2, 3}, {"white", "green", "amber", "blue"}},
 	{"Palette", 2, {0, 1}, {"color", "mono"}},
 	{"Mode", 2, {SETTINGS_MODE_TERMINAL, SETTINGS_MODE_CPM}, {"terminal", "CP/M machine"}},
-	{"Status line", 2, {1, 0}, {"shown", "hidden"}},
+	{"Status line", 3, {1, 0, SETTINGS_STATUS_DEBUG}, {"shown", "hidden", "debug"}},
 	{"Blank after", 6, {0, 1, 5, 10, 30, 60}, {"never", "1 min", "5 min", "10 min", "30 min", "60 min"}},
-	{"80 columns", 2, {0, 1}, {"8x16 centered", "10x20 full width"}},
 };
 
 unsigned settings_baud_rate(const settings_t *s) {
@@ -90,7 +89,7 @@ static uint32_t record_crc(const uint8_t *rec, unsigned len) {
 void settings_defaults(settings_t *s) {
 	*s = (settings_t){.columns = 80, .backspace = 0x7f, .local_echo = 0, .baud = BAUD_DEFAULT,
 		.framing = 0, .newline = 0, .colours = 0, .palette = 0, .mode = SETTINGS_MODE_TERMINAL,
-		.status_line = 1, .blank_after = 0, .wide80 = 0};
+		.status_line = 1, .blank_after = 0};
 }
 
 void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_RECORD_SIZE]) {

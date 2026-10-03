@@ -30,25 +30,22 @@ void video_set_palette(const uint16_t colours[PALETTE_SIZE]);
 // on waking, and the screen goes on being updated underneath.
 void video_set_blank(bool blank);
 
-// 80 columns in 10-pixel cells at the full width (the 10x20 font), or
-// centred in 8-pixel cells (8x16). The screen is rendered again; until
-// then a frame may show lines of the old layout.
-void video_set_wide80(bool wide);
-
 // Rasterise every dirty line of the screen and clear its dirty flags. Call
 // from core 0 after changing the screen; changes are not shown until then.
 void video_update(screen_t *screen);
 
-// Diagnostics, collected when built with VIDEO_DIAG (zero otherwise).
+// Diagnostics, collected in every build (the debug status line; VIDEO_DIAG
+// prints them on UART0 too).
 typedef struct {
 	uint32_t frames;           // frames composed by core 1
 	uint32_t max_line_cycles;  // longest scanline compose since the last call
 	uint32_t late;             // scanlines not composed in time for the DMA
 	uint32_t cycles_budget;    // system clock cycles per scanline
 	uint32_t core1_stage;      // 1 started, 2 starting HSTX, 3 HSTX started, 4 in frame loop
+	uint32_t max_render_us;    // longest raster_render_line (core 0) since the last call
 } video_stats_t;
 
-// Read the diagnostics and reset max_line_cycles.
+// Read the diagnostics and reset max_line_cycles and max_render_us.
 video_stats_t video_stats(void);
 
 // Rasterise the whole screen and launch core 1. The screen must outlive the

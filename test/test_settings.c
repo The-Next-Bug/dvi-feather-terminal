@@ -27,8 +27,7 @@ static void erase_all(void) {
 
 static void test_round_trip(void) {
 	settings_t in = {.columns = 132, .backspace = 0x08, .local_echo = 1, .baud = 4, .framing = 4,
-		.newline = 1, .colours = 2, .palette = 1, .mode = SETTINGS_MODE_CPM, .blank_after = 30,
-		.wide80 = 1}, out;
+		.newline = 1, .colours = 2, .palette = 1, .mode = SETTINGS_MODE_CPM, .blank_after = 30}, out;
 	uint8_t rec[SETTINGS_RECORD_SIZE];
 	uint32_t seq = 0;
 	settings_encode(&in, 0x12345678, rec);
@@ -44,7 +43,6 @@ static void test_round_trip(void) {
 	CHECK_EQ(out.mode, SETTINGS_MODE_CPM);
 	CHECK_EQ(out.status_line, 0); // hidden
 	CHECK_EQ(out.blank_after, 30);
-	CHECK_EQ(out.wide80, 1);
 	CHECK_EQ(seq, 0x12345678);
 	CHECK_EQ(rec[SETTINGS_RECORD_SIZE - 1], 0xff); // unused bytes stay erased
 }
@@ -143,8 +141,30 @@ static void test_older_record(void) {
 	CHECK_EQ(settings_baud_rate(&probe), 115200);
 	CHECK_EQ(probe.status_line, 1); // records before it: shown
 	CHECK_EQ(probe.blank_after, 0);  // never
-	CHECK_EQ(probe.wide80, 0);       // centred
 	CHECK_EQ(seq, 3);
+}
+
+// A record saved with the retired 80 columns setting (a 12th byte): it is
+// ignored, the rest stand.
+static void test_retired_wide80(void) {
+	settings_t in;
+	settings_defaults(&in);
+	in.columns = 132;
+	in.blank_after = 5;
+	uint8_t rec[SETTINGS_RECORD_SIZE];
+	settings_encode(&in, 7, rec);
+	CHECK_EQ(rec[5], SETTINGS_FIELDS);
+	rec[5] = SETTINGS_FIELDS + 1;
+	rec[16 + SETTINGS_FIELDS] = 1; // full width
+	uint32_t crc = crc_of(rec, SETTINGS_FIELDS + 1);
+	for (unsigned i = 0; i < 4; ++i)
+		rec[12 + i] = (uint8_t)(crc >> 8 * i);
+	settings_t out;
+	uint32_t seq;
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.columns, 132);
+	CHECK_EQ(out.blank_after, 5);
+	CHECK_EQ(seq, 7);
 }
 
 static void test_line_and_colours(void) {
@@ -198,6 +218,7 @@ int main(void) {
 	RUN(test_sequence_wraps);
 	RUN(test_bad_value_keeps_default);
 	RUN(test_older_record);
+	RUN(test_retired_wide80);
 	RUN(test_line_and_colours);
 	return tests_done();
 }

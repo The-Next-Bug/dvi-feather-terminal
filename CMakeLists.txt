@@ -54,7 +54,6 @@ endif()
 
 option(USB_KEYBOARD "USB keyboard on the native USB port (TinyUSB host)" ON)
 message(STATUS "USB_KEYBOARD: ${USB_KEYBOARD}")
-message(STATUS "FONT_132: ${FONT_132}")
 
 set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
 include(cmake/fonts.cmake)
@@ -130,7 +129,6 @@ target_compile_definitions(dvi_terminal PRIVATE
   USB_KEYBOARD=$<BOOL:${USB_KEYBOARD}>
   SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>
   MACHINE_BANKS=${MACHINE_BANKS}
-  ${FONT_DEFINITIONS}
   # The built-in disk images stay in flash (read by core 0 when installed).
   DISKIMG_IN_FLASH=1
   # The compose loop needs very little stack.

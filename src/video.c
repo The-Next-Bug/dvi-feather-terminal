@@ -46,12 +46,14 @@ static volatile uint8_t palette_next; // core 0: the table for the next frame
 static volatile uint8_t palette_used; // core 1: the table of the current frame
 static bool core1_launched;
 static volatile bool blank_next; // video_set_blank, latched per frame
-static volatile bool wide80;     // video_set_wide80: the layout of 80 columns
 
 // diag_frames counts frames in every build: video_splash waits on it.
 static volatile uint32_t diag_frames, diag_max_cycles;
 // Core 1 progress: 1 started, 2 starting HSTX, 3 HSTX started, 4 in frame loop.
 static volatile uint32_t diag_core1_stage;
+// Core 0: the longest single line render, the time core 1 may see that
+// slot half drawn.
+static uint32_t diag_max_render_us;
 static screen_t *video_screen;
 
 // One raster line per screen line slot (indexed like screen_t.lines).
@@ -90,7 +92,7 @@ static struct {
 static void __not_in_flash_func(start_frame)(uint32_t n) {
 	const screen_t *s = video_screen;
 	frame.s = s;
-	frame.layout = raster_layout(s->cols, wide80);
+	frame.layout = raster_layout(s->cols);
 	bool cursor_on = s->cursor_visible && !(n / CURSOR_BLINK_FRAMES & 1);
 	frame.cursor_row = s->cursor_row;
 	frame.cursor_col = cursor_on ? (int)s->cursor_col : -1;
@@ -143,12 +145,11 @@ static const uint32_t *__not_in_flash_func(next_line)(unsigned y) {
 
 static void __not_in_flash_func(core1_main)(void) {
 	diag_core1_stage = 1;
-	if (VIDEO_DIAG) {
-		// Free-running 24-bit down-counter at the core clock, for timing.
-		systick_hw->rvr = 0xffffff;
-		systick_hw->cvr = 0;
-		systick_hw->csr = 0x5; // enable, processor clock, no interrupt
-	}
+	// Free-running 24-bit down-counter at the core clock (core 1's own
+	// SysTick), timing every compose: two register reads a line.
+	systick_hw->rvr = 0xffffff;
+	systick_hw->cvr = 0;
+	systick_hw->csr = 0x5; // enable, processor clock, no interrupt
 
 	// The first lines are ready before the output starts.
 	uint32_t next = 0;
@@ -164,13 +165,12 @@ static void __not_in_flash_func(core1_main)(void) {
 		diag_core1_stage = 4;
 		while ((int32_t)(next - requested) > AHEAD)
 			tight_loop_contents();
-		uint32_t start = VIDEO_DIAG ? systick_hw->cvr : 0;
+		// Includes the DMA interrupts taken meanwhile: they share core 1.
+		uint32_t start = systick_hw->cvr;
 		compose(next);
-		if (VIDEO_DIAG) {
-			uint32_t cycles = (start - systick_hw->cvr) & 0xffffff;
-			if (cycles > diag_max_cycles)
-				diag_max_cycles = cycles;
-		}
+		uint32_t cycles = (start - systick_hw->cvr) & 0xffffff;
+		if (cycles > diag_max_cycles)
+			diag_max_cycles = cycles;
 		composed = ++next;
 		if (next % RASTER_ACTIVE_HEIGHT == 0)
 			diag_frames = next / RASTER_ACTIVE_HEIGHT;
@@ -202,14 +202,6 @@ void video_set_blank(bool blank) {
 	blank_next = blank;
 }
 
-void video_set_wide80(bool wide) {
-	if (wide == wide80)
-		return;
-	wide80 = wide;
-	if (video_screen)
-		video_screen->dirty = (1u << SCREEN_ROWS) - 1; // all in the new layout
-}
-
 void video_update(screen_t *screen) {
 	// Blink: flip the phase every BLINK_HALF_PERIOD_MS and re-render the lines
 	// that have blinking cells. (The cursor is core 1's, from the screen.)
@@ -235,13 +227,21 @@ void video_update(screen_t *screen) {
 		screen->dirty |= held;
 		dirty &= ~held;
 	}
+	// A new layout's fonts are copied in before any line is timed (a
+	// layout change re-renders every line anyway).
+	raster_layout_t layout = raster_layout(screen->cols);
+	if (dirty)
+		raster_select_font(layout);
 	for (int slot = 0; dirty; ++slot, dirty >>= 1) {
 		if (!(dirty & 1))
 			continue;
 		unsigned flags = (blink_off ? RASTER_BLINK_OFF : 0) |
 			(screen->reverse_rows >> slot_row[slot] & 1 ? RASTER_REVERSE : 0);
-		bool blinks = raster_render_line(&raster[slot], &screen->lines[slot], raster_layout(screen->cols, wide80),
-			flags);
+		uint32_t start = time_us_32();
+		bool blinks = raster_render_line(&raster[slot], &screen->lines[slot], layout, flags);
+		uint32_t us = time_us_32() - start;
+		if (us > diag_max_render_us)
+			diag_max_render_us = us;
 		if (blinks)
 			blink_slots |= 1u << slot;
 		else
@@ -258,8 +258,10 @@ video_stats_t video_stats(void) {
 		.core1_stage = diag_core1_stage,
 		// The system clock is 10 x the pixel clock.
 		.cycles_budget = 10u * (t->h_front + t->h_sync + t->h_back + t->h_active),
+		.max_render_us = diag_max_render_us,
 	};
 	diag_max_cycles = 0;
+	diag_max_render_us = 0;
 	return st;
 }
 

@@ -4,13 +4,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// Font tables generated at build time by src/font_gen.py:
-//   font_8x16  Terminus Font 8x16, for 80 columns
-//   font_8x16_bold  its bold face, for bold text in 80 columns
+// Font tables generated at build time by src/font_gen.py, all in flash
+// (FONT_FLASH_DATA): raster.c copies the active layout's pair into SRAM
+// when the layout changes, so rendering never waits on XIP.
 //   font_10x20, font_10x20_bold  Terminus 10x20 and its bold face, for 80
-//              columns at full width (the 80 columns setting)
-//   font_132   for 132 columns, by the FONT_132 build option: misc-fixed
-//              6x12 or 6x10 (shown at double height), or 6x13
+//              columns (16-bit rows)
+//   font_132   misc-fixed 6x12 for 132 columns, shown at double height
+//              (no bold face fits 6 pixels)
 //
 // Glyph codes, as stored in the screen buffer (the same in both fonts):
 //   0x00        blank
@@ -21,14 +21,13 @@
 //   0xA0-0xFF   Latin-1
 //
 // Layout is glyph-major: font[glyph * height + row], one byte per glyph
-// row (16 bits for the 10x20 fonts), least-significant bit = leftmost pixel; only the low `width` bits
-// are used. Glyph-major, so a glyph's rows share XIP cache lines: tables
-// marked FONT_FLASH_DATA stay in flash (SRAM is short) and are read through
-// XIP, by core 0 only (raster_render_line), after nvflash_retime.
+// row (16 bits for the 10x20 fonts), least-significant bit = leftmost
+// pixel; only the low `width` bits are used.
 
 #define FONT_GLYPHS 256
-#define FONT_8X16_HEIGHT 16
 #define FONT_10X20_HEIGHT 20
+#define FONT_132_HEIGHT 12
+#define FONT_132_SCALE 2 // scanlines per glyph row: 6x12 fills the 24-scanline rows
 
 #if FONT_FLASH
 #define FONT_FLASH_DATA __attribute__((section(".flashdata.font")))
@@ -50,18 +49,9 @@
 #define GLYPH_DOUBLE_UR 0x8D // ╚
 #define GLYPH_DOUBLE_UL 0x8E // ╝
 
-extern const uint8_t font_8x16[FONT_GLYPHS * FONT_8X16_HEIGHT];
-extern const uint8_t font_8x16_bold[FONT_GLYPHS * FONT_8X16_HEIGHT];
 extern const uint16_t font_10x20[FONT_GLYPHS * FONT_10X20_HEIGHT];
 extern const uint16_t font_10x20_bold[FONT_GLYPHS * FONT_10X20_HEIGHT];
-
-// cmake/fonts.cmake (FONT_132) defines FONT_132_HEIGHT, the font's glyph
-// rows, and FONT_132_SCALE, the scanlines each is shown on.
-#ifdef FONT_132_HEIGHT
 extern const uint8_t font_132[FONT_GLYPHS * FONT_132_HEIGHT];
-#define FONT_132_NAME \
-	(FONT_132_HEIGHT == 12 ? "misc-fixed 6x12" : FONT_132_HEIGHT == 10 ? "misc-fixed 6x10" : "misc-fixed 6x13")
-#endif
 
 // Glyphs that join the cells above and below (line drawing, blocks,
 // shades): the renderer extends their top and bottom rows into the blank

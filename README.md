@@ -12,13 +12,11 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
 
 ## Features
 
-- **Display**: 800x600p60 over DVI/HDMI. 80 columns use Terminus 8x16 in
-  8-pixel cells (centered, 80-pixel borders), or with SET-UP's 80 columns
-  setting Terminus 10x20 in 10-pixel cells across the full width; 132 columns use misc-fixed
-  6x12 at double height (each glyph row on two scanlines, like a VT100) in
-  6-pixel cells (792 pixels, centered; `FONT_132` picks 6x10 doubled or
-  the older 6x13 at single height instead). Rows are 24 pixels high;
-  line drawing, block and shade characters join up between rows.
+- **Display**: 800x600p60 over DVI/HDMI. 80 columns use Terminus 10x20 in
+  10-pixel cells across the full width; 132 columns use misc-fixed 6x12 at
+  double height (each glyph row on two scanlines, like a VT100) in 6-pixel
+  cells (792 pixels, centered). Rows are 24 pixels high; line drawing,
+  block and shade characters join up between rows.
 - **Emulation**: VT100/VT102. Cursor movement, scrolling regions, erase,
   insert/delete lines and characters, tab stops, G0/G1 character sets
   (ASCII, UK, DEC Special Graphics) with SI/SO, modes (DECAWM, DECOM, IRM,
@@ -184,9 +182,15 @@ shown in reverse video:
 | Colors | white, green, amber, blue | white: the 16 ANSI colors as on a VGA screen; the others: phosphor shades (below) |
 | Palette | color, mono | mono: every color is a shade of the Colors hue (below) |
 | Mode | terminal, CP/M machine | a serial terminal on UART0, or the console of the [Z80 CP/M machine](#z80-cpm-machine). Saving a new mode restarts the board |
-| Status line | shown, hidden | hidden: row 24 stays blank (the text area is still 24 rows; the boot logo's build line and CP/M's drive lights are not shown) |
-| 80 columns | 8x16 centered, 10x20 full width | full width: Terminus 10x20 in 10-pixel cells, filling the whole 800-pixel width and nearly all of each row, with no change of video mode |
+| Status line | shown, hidden, debug | hidden: row 24 stays blank (the text area is still 24 rows; the boot logo's build line and CP/M's drive lights are not shown). debug: video timing instead, refreshed four times a second (below) |
 | Blank after | never, 1, 5, 10, 30, 60 min | the screen goes black after this long without a key, against burn-in. The next key only wakes it (it is not sent). Output from the host or the Z80 does not wake it; it carries on unseen. The DVI signal stays on, so the monitor does not resync |
+
+**Debug status line**: `late T+N | line C/P% | F fps | loop M/Q ms |
+render R/S us | Z MHz`: scanlines not ready in time for the DVI output (in
+all, + since the last refresh); core 1's longest scanline as a share of
+the time a scanline lasts (now / peak since debug came on); frames a
+second; core 0's longest main-loop pass and longest single-line render
+(now / peak); in CP/M mode, the Z80's speed. `late` should stay 0.
 
 **Colors**: green, amber or blue phosphor turns the 16 ANSI colors (default
 text and bold included) into shades of that hue, by brightness (black; dark
@@ -465,7 +469,6 @@ submodule.
 | `LOGO_IN_FLASH` | ON | experimental: keep the logo data in flash, copied out only while it shows (saves about 19 KB of SRAM); OFF copies it into SRAM with the program |
 | `STARTUP_DEMO` | OFF | run the demo after the logo |
 | `MACHINE_BANKS` | 2 | Z80 machine: 48 KB banks besides bank 0 (each costs 48 KB of SRAM; a third does not fit) |
-| `FONT_132` | 6x12 | 132-column font: `6x12` at double height (fills the 24-pixel rows; accented capitals can touch descenders above), `6x10` at double height (2 blank lines above and below), or `6x13` at single height (more space between lines) |
 | `HSTX_MODE` | 0 | 0: 800x600 at 60 Hz; 1: at 56 Hz (clk_hstx 180 MHz); 2: 60 Hz reduced blanking (177 MHz). 1 and 2 are slower fallbacks |
 | `VIDEO_DIAG` | OFF | bring-up diagnostics on UART0 TX: boot markers, core 1 scanline timing, fault reports |
 | `COPY_TO_RAM` | ON | run from SRAM; must stay ON (see [How it works](#how-it-works)) |
@@ -503,11 +506,11 @@ clock.
 The screen buffer stores one-byte glyph codes (see `src/font.h`): ASCII at
 0x20-0x7E, Latin-1 at 0xA0-0xFF, DEC Special Graphics (line drawing) at
 0x01-0x1F, and shades/blocks/double-line box drawing at 0x80-0x9F. The
-tables are generated at build time: 8x16 and 10x20 from Terminus Font for
-80 columns (bold text in Terminus's bold faces; 10x20 and the bold faces
-stay in flash), misc-fixed for 132 (6x12 at double
-height; 6x10 or 6x13 with `FONT_132`; no bold face fits 6 pixels, so bold
-text there is only brighter, as on a VT100). Glyphs a font lacks (control pictures,
+tables are generated at build time: Terminus 10x20 for 80 columns (bold
+text in Terminus's bold face) and misc-fixed 6x12 at double height for 132
+(no bold face fits 6 pixels, so bold text there is only brighter, as on a
+VT100). They stay in flash; the current width's fonts are copied into
+SRAM when the width changes. Glyphs a font lacks (control pictures,
 scan lines, half blocks) are drawn by `font_gen.py`.
 
 ### Startup logo
@@ -564,7 +567,7 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | `lib/z80pack` | Vendored part of z80pack (Z80 core, z80asm, picosim disk images); `UPSTREAM.md` gives the commit and local changes |
 | `lib/fatfs` | ChaN's FatFs R0.15a, vendored (see its README) |
 | `assets/logo/` | The startup logo (PNG used by the build, JPEG original) |
-| `assets/fonts/` | Terminus Font 8x16 and 10x20 and their bold faces (SIL OFL 1.1) and misc-fixed 6x12, 6x10 and 6x13 (public domain); see its README |
+| `assets/fonts/` | Terminus Font 10x20 and its bold face (SIL OFL 1.1) and misc-fixed 6x12 (public domain); see its README |
 | `cmake/build_info.cmake` | Generates `term_build.h` (git describe, commit, date) on every build |
 | `cmake/fonts.cmake` | Font table generation, shared by the firmware and host tests |
 | `scripts/` | `setup-toolchain.sh`, `build.sh`, `test.sh`, `package.sh`, `changelog.sh` |
@@ -633,7 +636,7 @@ This project's own code and documentation are under the MIT license; see
 
 Terminus Font is © Dimitar Toshkov Zhekov under the SIL Open Font License
 1.1; see `assets/fonts/Terminus-OFL.txt`. The tables generated from it
-are derivatives and stays under that license. The misc-fixed 6x12, 6x10 and 6x13 fonts are
+are derivatives and stays under that license. The misc-fixed 6x12 font is
 public domain. pico-sdk is BSD-3-Clause, as is the pico-examples HSTX DVI
 example `src/hstx_dvi.c` follows.
 

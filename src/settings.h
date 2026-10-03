@@ -33,17 +33,22 @@ typedef struct {
 	uint8_t colours;    // hue: PALETTE_HUE_* (palette.h)
 	uint8_t palette;    // 1: mono, every colour a level of the hue (palette.h)
 	uint8_t mode;       // SETTINGS_MODE_*: what the screen and keyboard are for
-	uint8_t status_line; // 1: shown; 0: row 24 left blank (the text area stays 24 rows)
+	uint8_t status_line; // 1: shown; 0: row 24 left blank (the text area stays 24 rows);
+	                     // SETTINGS_STATUS_DEBUG: video and main-loop timing instead
 	uint8_t blank_after; // minutes without a key before the screen blanks; 0: never (blank.h)
-	uint8_t wide80;      // 1: 80 columns at the full width (10x20); 0: centred (8x16)
+	// Payload byte 11 held the retired 80 columns layout (0 centred 8x16,
+	// 1 full width): a setting appended there inherits it from older
+	// records, unless the version changes.
 } settings_t;
 
 #define SETTINGS_MODE_TERMINAL 0 // a serial terminal on UART0
 #define SETTINGS_MODE_CPM 1      // the console of the Z80 CP/M machine (machine.h)
 
+#define SETTINGS_STATUS_DEBUG 2 // status_line: core 1 timing, late lines, frame rate, main-loop time
+
 // The settings, in settings_t order, with the values each can take (the
 // first choice need not be the default) and their names for SET-UP.
-#define SETTINGS_FIELDS 12
+#define SETTINGS_FIELDS 11
 #define SETTINGS_MAX_CHOICES 9
 
 typedef struct {

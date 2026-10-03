@@ -82,11 +82,7 @@ need seconds to sync), `LOGO_IN_FLASH` (default ON, experimental dmt.25: logo da
 SRAM), `STARTUP_DEMO` (default OFF),
 `VIDEO_DIAG` (UART0 TX diagnostics, default OFF; also prints
 panic() text), `USB_KEYBOARD` (TinyUSB host keyboard; default ON),
-`COPY_TO_RAM` (default ON; must stay ON, see below), `FONT_132` (6x12 at
-double height, default, fills the 24-line rows; 6x10 doubled; 6x13 single;
-cmake/fonts.cmake's FONT_DEFINITIONS give raster.h FONT_132_HEIGHT/SCALE;
-test_raster_<variant> covers the others; a build dir keeps its cached value),
-`MACHINE_BANKS` (Z80
+`COPY_TO_RAM` (default ON; must stay ON, see below), `MACHINE_BANKS` (Z80
 machine: 48 KB banks besides bank 0, default 2; each costs 48 KB of SRAM).
 
 Always run `scripts/test.sh` and a firmware build before handing work
@@ -117,14 +113,20 @@ status line (row 24); UART0 on GP0/GP1.
   main.c show_palette() -> video_set_palette (two 256-word tables, core 1
   switches at frame start). A palette change re-renders nothing. While
   SET-UP is open the edited palette is shown (restored on cancel).
-- `src/raster.[ch]` (portable): three layouts (raster_layout_t: 80 cols
-  8x16 centred, 80 cols 10x20 at full width = the "80 columns" setting via
-  video_set_wide80, 132 cols). `raster_render_line` (core 0) turns a
-  screen line into, per stored row, a bit string of the cells' pixels
-  (cell c from bit c * width, 100 bytes per row for every layout;
+- `src/raster.[ch]` (portable): two layouts (raster_layout_t: 80 cols
+  10x20 at the full width, 132 cols 6x12 doubled; the 8x16 centred layout
+  and its setting were dropped in qur.20). `raster_render_line` (core 0)
+  turns a screen line into, per stored row, a bit string of the cells'
+  pixels (cell c from bit c * width, 100 bytes per row in both layouts;
   raster_cell_bits reads one) plus per-cell fg/bg (palette indices, reverse
-  applied). Stored rows per line = font rows + 2 padding rows; connectors
-  (line drawing, blocks, shades) extend into the padding. Handles
+  applied). It writes into the slot core 1 reads, replacing each cell's
+  bits under a mask (no clearing first: a memset there blanked lines
+  mid-render, qur.20). Its fonts: raster_select_font copies the layout's
+  normal and bold tables from flash into one SRAM pair of 16-bit rows
+  (font_copy, 20 KB) on a layout change (video_update calls it before
+  timing renders); raster_glyph_row reads the flash tables (tests).
+  Stored rows per line = font rows + 2 padding rows; connectors (line
+  drawing, blocks, shades) extend into the padding. Handles
   underline, blink phase, bold (bold face; 132 cols: colour only),
   reverse. `raster_compose` (core 1) makes a scanline of RGB565 pixel pairs
   from a stored row through the 256-entry palette table, inverting the
@@ -156,7 +158,9 @@ status line (row 24); UART0 on GP0/GP1.
   labels; append only): columns, backspace (DECBKM RIS value), local_echo,
   baud, framing, newline (LNM RIS value), colours (hue), palette (mono),
   mode (terminal / CP/M machine), status_line (hidden: main.c
-  status_shown() leaves row 24 blank), blank_after (minutes; `src/blank.[ch]`
+  status_shown() leaves row 24 blank; debug: main.c debug_status_* shows
+  video_stats() (late lines, compose cycles as % of the line, fps) and
+  core 0's longest main-loop pass and line render, qur.21), blank_after (minutes; `src/blank.[ch]`
   portable idle timer, keys only, the waking key dropped; video_set_blank
   makes core 1 send black lines); settings_colours() gives the status
   line's indices and the logo's tint. CRC-32 in
@@ -189,14 +193,13 @@ status line (row 24); UART0 on GP0/GP1.
   slots' raster memory (core 1 must not read flash) and core 1 shows it for
   scanlines 0-575 (status line from its slot); power-on/reset only, never
   on RIS.
-- `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus 8x16
-  and 10x20 (16-bit rows) with their bold faces, misc-fixed 6x12/6x10
-  doubled or 6x13 by FONT_132: raster_font_scale) generated at build time,
-  glyph-major; glyph codes in `src/font.h`. Tables built with FLASH
-  (font_8x16_bold, font_10x20, font_10x20_bold) stay in flash
-  (FONT_FLASH_DATA, `.flashdata.font`) and are read through XIP by core 0
-  only (raster_render_line); without a bold face (132 cols) bold is only
-  the brighter colour (a smear closed the gaps of m, w, #: qur.9).
+- `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus
+  10x20 (16-bit rows) and its bold face, misc-fixed 6x12 shown doubled)
+  generated at build time, glyph-major; glyph codes in `src/font.h`. All
+  in flash (FONT_FLASH_DATA, `.flashdata.font`), read through XIP by core
+  0 only, when raster_select_font copies them; without a bold face (132
+  cols) bold is only the brighter colour (a smear closed the gaps of m, w,
+  #: qur.9).
 - Z80 CP/M machine (Mode setting "CP/M machine", bd lpt): the screen and
   keyboard become the console of a z80pack picosim-compatible machine on
   core 0 (`main.c` cpm_*: 10 ms CPU slices between keyboard, disks, screen).
@@ -276,11 +279,12 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   0x200790d8, ~28 KB free; the qur QoL branch (taller SET-UP, fwpanel's
   FATFS, code) to 0x2007b570, ~18.6 KB free; qur.8's packed raster rows
   (fonts 10x20 and the bold faces in flash) back to 0x2007aa00, ~22 KB
-  free. Scratch X: core 1's stack is in .bss, so
-  nearly all 4 KB free; scratch Y: 2 KB core 0 stack, ~2 KB free. Biggest
-  .bss: Z80 banks 96 KB + bank 0 64 KB, raster 60 KB, monitor `window`
-  16 KB, screen 13 KB, setup 8 KB, line_buf 6.4 KB, drives 4.5 KB, UART
-  RX ring 4 KB, fwupdate `sector` 4 KB. A third Z80 bank (48 KB) does not
+  free; qur.20's SRAM font pair (20 KB, 8x16 and the FONT_132 variants
+  dropped) to 0x2007dac4, ~9.3 KB free. Scratch X: core 1's stack is in
+  .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0 stack, ~2 KB free. Biggest
+  .bss: Z80 banks 96 KB + bank 0 64 KB, raster 60 KB, font_copy 20 KB,
+  monitor `window` 16 KB, screen 13 KB, setup 8 KB, line_buf 6.4 KB,
+  drives 4.5 KB, UART RX ring 4 KB, fwupdate `sector` 4 KB. A third Z80 bank (48 KB) does not
   fit. bd 3of: share the monitor's window with fwupdate (~5 KB back).
 - Flash (4 MB): image 0-0x6e980 (442 KB); free to 2 MB (image growth;
   fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used
@@ -330,6 +334,6 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   `\n` and `\x1b` escaped (raw strings or a quoted shell heredoc);
   otherwise they turn into raw control bytes in the file. Check with
   `grep -lP '[\x00-\x08\x0b-\x1f]' src/* test/*`.
-- User preferences: flow control off by default; 80-column mode stays
-  centred (80 px borders); smooth scrolling, double-size lines and RP2350
-  HSTX are deferred nice-to-haves.
+- User preferences: flow control off by default; 80 columns at the full
+  width (10x20) only, the centred 8x16 layout dropped (qur.20); smooth
+  scrolling, double-size lines and RP2350 HSTX are deferred nice-to-haves.
