@@ -15,6 +15,7 @@
 #include "machine.h"
 #include "machine_host.h"
 #include "monitor.h"
+#include "scratch.h"
 #include "test.h"
 
 #define VOLUME_SECTORS (40u * 1024 * 1024 / 512) // FAT32 needs 65525+ clusters
@@ -453,6 +454,22 @@ static void test_monitor_fresh_card(void) {
 	CHECK_EQ(keys("l"), MONITOR_NONE);
 	CHECK(strstr(screen, "Z80TESTS") != NULL);
 	CHECK(menu_shown());
+
+	// The scratch buffer has one holder at a time: while another job has
+	// it, installing and blank disks say so and write nothing.
+	uint8_t *held = scratch_acquire();
+	CHECK(held != NULL);
+	CHECK(scratch_acquire() == NULL);
+	clear_screen();
+	CHECK_EQ(keys("in"), MONITOR_NONE); // not over the ones there
+	CHECK(strstr(screen, "Busy.") != NULL);
+	CHECK(strstr(screen, "written") == NULL);
+	clear_screen();
+	CHECK_EQ(keys("nbusy\r1"), MONITOR_NONE);
+	CHECK(strstr(screen, "Busy.") != NULL);
+	CHECK(menu_shown());
+	CHECK_EQ(drives_image_format("BUSY"), DRIVES_NONE);
+	scratch_release(held);
 
 	// A new 8 MB disk: progress dots, shown as they come (flush).
 	clear_screen();

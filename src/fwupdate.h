@@ -35,7 +35,8 @@ bool fwupdate_check(const char *path, char *info, size_t n);
 bool fwupdate_stage(const char *path, fwupdate_progress_t progress, void *ctx, char *info, size_t n);
 
 // Install the image fwupdate_stage last staged and restart. Does not return
-// (unless nothing is staged). Close the files on the card first.
+// (unless nothing is staged, or another job holds the scratch buffer).
+// Close the files on the card first.
 void fwupdate_commit(void);
 
 #endif

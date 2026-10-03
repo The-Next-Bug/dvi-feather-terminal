@@ -232,8 +232,8 @@ status line (row 24); UART0 on GP0/GP1.
   loop (setup_feed runs inside the USB stack). Status line: drive letters
   only, reverse while accessed. `src/diskimg.[ch]` + `src/lz.[ch]` (portable)
   + `src/diskimg_gen.py` (`cmake/diskimg.cmake`): CPM22, Z80TESTS, EMPTY
-  from z80pack as LZ4-format blocks (offsets < 16 KB, streamed through a
-  16 KB window) in `.flashdata.diskimg`, written to the card by the
+  from z80pack as LZ4-format blocks (offsets < 4 KB, streamed through a
+  4 KB window: `src/scratch.[ch]`'s buffer) in `.flashdata.diskimg`, written to the card by the
   monitor. `src/sdcard.[ch]` (RP2350): polled SPI0 SD driver = FatFs
   diskio (GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI; 400 kHz init, 25 MHz).
   `lib/fatfs`: ChaN FatFs R0.15a vendored (ffconf: FIND, MKFS, CP437,
@@ -257,8 +257,9 @@ status line (row 24); UART0 on GP0/GP1.
   programming the staging area (flash offset 2 MB; images up to
   NVFLASH_OFFSET - 2 MB), verify by CRC; fwpanel then renames the file
   to FIRMWARE.OLD and unmounts; the commit (fwupdate_commit_image,
-  interrupts off for good) copies sector by sector through a 4 KB RAM
-  buffer, skipping equal sectors, then watchdog_reboot. It must read
+  interrupts off for good) copies sector by sector through the 4 KB
+  scratch buffer (`src/scratch.[ch]`, portable: one holder at a time; also
+  the monitor's LZ window and blank-disk chunks, and fwupdate's UF2 block), skipping equal sectors, then watchdog_reboot. It must read
   nothing from the old image (.rodata is in flash):
   `scripts/check_fwupdate.py` (run by build.sh) follows its calls in the
   .dis and fails on 0x10xxxxxx literals, or if the image reaches the
@@ -275,22 +276,21 @@ status line (row 24); UART0 on GP0/GP1.
 SRAM is the tight resource; peripherals and pins are mostly free.
 
 - SRAM (520 KB): .text 170 KB, .data 20 KB (Z80 tables, video code
-  copied to RAM), .bss 302 KB (qur.23 figures); `__end__` 0x20077f4c, so ~32 KB free below
+  copied to RAM), .bss 285 KB (3of figures); `__end__` 0x20077f4c, so ~32 KB free below
   0x20080000 (no malloc user); pb2's palette (tables + code) moved it to
   0x200790d8, ~28 KB free; the qur QoL branch (taller SET-UP, fwpanel's
   FATFS, code) to 0x2007b570, ~18.6 KB free; qur.8's packed raster rows
   (fonts 10x20 and the bold faces in flash) back to 0x2007aa00, ~22 KB
   free; qur.20's SRAM font pair (20 KB, 8x16 and the FONT_132 variants
   dropped) to 0x2007dac4, ~9.3 KB free; qur.23 (no printf float, FatFs
-  tiny, 2 KB UART RX ring) to 0x2007af8c, ~20.1 KB free. Scratch X: core
+  tiny, 2 KB UART RX ring) to 0x2007af8c, ~20.1 KB free; 3of (one 4 KB
+  scratch buffer for the LZ window and fwupdate) to 0x20076e58, ~37 KB
+  free. Scratch X: core
   1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
-  60 KB, font_copy 20 KB, monitor `window` 16 KB, screen 13 KB, setup
-  10 KB, line_buf 6.4 KB, fwupdate `sector` 4 KB, UART RX ring 2 KB. A
-  third Z80 bank (48 KB) does not fit. bd 3of: share the monitor's window
-  with fwupdate; a 4 KB LZ window (+32 KB of flash) would make it ~16 KB
-  back.
-- Flash (4 MB): image 0-0x6e980 (442 KB); free to 2 MB (image growth;
+  60 KB, font_copy 20 KB, screen 13 KB, setup 10 KB, line_buf 6.4 KB,
+  scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit.
+- Flash (4 MB): image 0-0x7beb0 (496 KB; the 4 KB LZ window costs 32 KB); free to 2 MB (image growth;
   fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used
   only during an update, up to the new image's length); settings
   0x3fd000-0x3fefff; last sector left blank (E10). New persistent storage

@@ -550,8 +550,8 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 
 | Resource | Used | Free |
 |---|---|---|
-| SRAM (520 KB) | about 480 KB: code 165 KB, data 26 KB, buffers 288 KB (Z80 memory 160 KB, raster memory 64.5 KB, disk-image window 16 KB, screen 13 KB, ...) | about 32 KB, plus most of the two 4 KB scratch banks. A third Z80 bank (48 KB) does not fit |
-| Flash (4 MB) | firmware 442 KB; firmware-update staging area (upper 2 MB, used only during an update); settings (2 sectors); the last sector is left blank | about 1.5 MB below 2 MB for the firmware to grow into |
+| SRAM (520 KB) | about 475 KB: code 170 KB, data 20 KB, buffers 285 KB (Z80 memory 160 KB, raster memory 60 KB, the current fonts 20 KB, screen 13 KB, ...) | about 37 KB, plus most of the two 4 KB scratch banks. A third Z80 bank (48 KB) does not fit |
+| Flash (4 MB) | firmware 496 KB; firmware-update staging area (upper 2 MB, used only during an update); settings (2 sectors); the last sector is left blank | about 1.5 MB below 2 MB for the firmware to grow into |
 | Clocks | clk_sys 400 MHz at 1.3 V, HSTX 200 MHz, USB 48 MHz | |
 | Peripherals | HSTX (DVI), 2 DMA channels, UART0, SPI0 (SD card), USB (host), TIMER0, watchdog | 14 DMA channels, all three PIO blocks, UART1, SPI1, I2C0/1, PWM, ADC, TIMER1, TRNG, SHA-256, the QMI's second chip select (PSRAM) |
 | GPIO | GP0/1 UART0, GP2/3 RTS/CTS (flow control builds only), GP4-7 SD card, GP12-19 DVI Sock | GP8-11, GP20-22, GP26-28 (GP26-28 can be analog inputs), and GP2/3 without flow control |

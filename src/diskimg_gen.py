@@ -28,7 +28,7 @@ there already.
 import sys
 import zlib
 
-WINDOW = 16384          # LZ_WINDOW in src/lz.h
+WINDOW = 4096           # LZ_WINDOW in src/lz.h
 MAX_OFFSET = WINDOW - 1
 MIN_MATCH = 4
 CHAIN = 64              # candidates tried per position

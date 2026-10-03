@@ -1,5 +1,6 @@
 #include "monitor.h"
 
+#include <assert.h>
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -10,6 +11,7 @@
 #include "ff.h"
 #include "lz.h"
 #include "machine.h"
+#include "scratch.h"
 
 #define LIST_COLUMNS 5
 
@@ -158,12 +160,17 @@ static void list_disks(void) {
 		say("(FD 8\" floppy, 4MB/8MB hard disks, ? not a disk image)\r\n");
 }
 
-// Scratch for installing (the LZ window) and for blank disks.
-static uint8_t window[LZ_WINDOW];
+static_assert(LZ_WINDOW <= SCRATCH_SIZE, "the LZ window is the scratch buffer");
 
 static void install(bool overwrite) {
 	if (mount_result != FR_OK) {
 		say("No card.\r\n");
+		return;
+	}
+	// The LZ window.
+	uint8_t *window = scratch_acquire();
+	if (!window) {
+		say("Busy.\r\n");
 		return;
 	}
 	drives_flush();
@@ -185,6 +192,7 @@ static void install(bool overwrite) {
 		if (mounted_on >= 0)
 			drives_mount((unsigned)mounted_on, img->name);
 	}
+	scratch_release(window);
 	// Empty drives get the boot and test disks.
 	if (!drives_name(0) || !drives_name(1)) {
 		if (!drives_name(0))
@@ -318,6 +326,12 @@ static void line_done(bool cancelled) {
 static void create_disk(drives_format_t f) {
 	mode = MODE_MENU;
 	const drives_geometry_t *g = drives_geometry(f);
+	uint8_t *buf = scratch_acquire(); // what is written, a chunk at a time
+	if (!buf) {
+		say("%s\r\nBusy.\r\n", g->name);
+		show_menu();
+		return;
+	}
 	say("%s\r\nWriting %s.DSK (%lu KB)... ", g->name, line, (unsigned long)(g->size / 1024));
 	static const char *const why[] = {
 		[DRIVES_NOT_FOUND] = "bad name",
@@ -325,7 +339,8 @@ static void create_disk(drives_format_t f) {
 		[DRIVES_IO_ERROR] = "card error",
 	};
 	progress_start(PROGRESS_STEP);
-	drives_result_t r = drives_create(line, f, window, sizeof window, progress, NULL);
+	drives_result_t r = drives_create(line, f, buf, SCRATCH_SIZE, progress, NULL);
+	scratch_release(buf);
 	say("%s%s\r\n", dots ? " " : "", r == DRIVES_OK ? "done: M mounts it" : why[r] ? why[r] : "failed");
 	show_menu();
 }

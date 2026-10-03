@@ -11,17 +11,19 @@
 #include "crc32.h"
 #include "ff.h"
 #include "nvflash.h"
+#include "scratch.h"
 #include "uf2.h"
 
 #define MAX_IMAGE (NVFLASH_OFFSET - FWUPDATE_STAGING)
 static_assert(MAX_IMAGE <= FWUPDATE_STAGING, "the image stays below the staging area");
 static_assert(FWUPDATE_STAGING % FLASH_SECTOR_SIZE == 0, "");
+static_assert(FLASH_SECTOR_SIZE <= SCRATCH_SIZE && UF2_BLOCK_SIZE <= SCRATCH_SIZE, "fits the scratch buffer");
 
 extern char __flash_binary_end;
 
+// The UF2 block being read, and the commit's copy of a sector (the ROM
+// programs from RAM), are in the scratch buffer (scratch.h).
 static FIL file;
-static uint8_t block[UF2_BLOCK_SIZE];
-static uint8_t sector[FLASH_SECTOR_SIZE]; // the commit's copy (the ROM programs from RAM)
 static uint32_t staged_len;
 
 // Read path through, checking it; with stage, also write our blocks to the
@@ -32,8 +34,13 @@ static const char *scan(const char *path, bool stage, fwupdate_progress_t progre
 	// The running image must not reach the staging area (a big build).
 	if ((uintptr_t)&__flash_binary_end - XIP_BASE > FWUPDATE_STAGING)
 		return "the running firmware is too big to update this way";
-	if (f_open(&file, path, FA_READ) != FR_OK)
+	uint8_t *block = scratch_acquire();
+	if (!block)
+		return "busy: a disk is being written";
+	if (f_open(&file, path, FA_READ) != FR_OK) {
+		scratch_release(block);
 		return "cannot open the file";
+	}
 	*size = (uint32_t)f_size(&file);
 
 	uf2_check_t check;
@@ -43,11 +50,11 @@ static const char *scan(const char *path, bool stage, fwupdate_progress_t progre
 	const char *why = NULL;
 	while (true) {
 		UINT got;
-		if (f_read(&file, block, sizeof block, &got) != FR_OK) {
+		if (f_read(&file, block, UF2_BLOCK_SIZE, &got) != FR_OK) {
 			why = "card read error";
 			break;
 		}
-		if (got < sizeof block) {
+		if (got < UF2_BLOCK_SIZE) {
 			partial = got != 0;
 			break;
 		}
@@ -64,6 +71,7 @@ static const char *scan(const char *path, bool stage, fwupdate_progress_t progre
 			progress(ctx, done, *size);
 	}
 	f_close(&file);
+	scratch_release(block);
 	if (why)
 		return why;
 
@@ -106,7 +114,7 @@ bool fwupdate_stage(const char *path, fwupdate_progress_t progress, void *ctx, c
 
 // Once the first sector is erased, the old image's const data is gone (or
 // the new image's): only RAM, registers and the staging area from here on.
-static void __no_inline_not_in_flash_func(fwupdate_commit_image)(uint32_t len) {
+static void __no_inline_not_in_flash_func(fwupdate_commit_image)(uint32_t len, uint8_t *sector) {
 	for (uint32_t offset = 0; offset < len; offset += FLASH_SECTOR_SIZE) {
 		const uint32_t *from = (const uint32_t *)nvflash_read(FWUPDATE_STAGING + offset);
 		const uint32_t *now = (const uint32_t *)nvflash_read(offset);
@@ -127,8 +135,9 @@ static void __no_inline_not_in_flash_func(fwupdate_commit_image)(uint32_t len) {
 }
 
 void fwupdate_commit(void) {
-	if (!staged_len)
+	uint8_t *sector = staged_len ? scratch_acquire() : NULL;
+	if (!sector)
 		return;
 	(void)save_and_disable_interrupts(); // for good: the board restarts
-	fwupdate_commit_image(staged_len);
+	fwupdate_commit_image(staged_len, sector);
 }
