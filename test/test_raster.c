@@ -61,14 +61,26 @@ static unsigned glyph_pixel(raster_layout_t l, uint8_t g, unsigned sy, unsigned 
 	return raster_glyph_row(l, false, g, (unsigned)gy) >> i & 1;
 }
 
-// The colour the cells ask for at pixel x of scanline sy (no attributes).
+// The colour the cells ask for at pixel x of scanline sy (attributes: bold
+// only).
 static unsigned wanted(const screen_line_t *line, raster_layout_t l, unsigned sy, unsigned x) {
 	const unsigned cols = raster_cols(l);
 	unsigned w = raster_cell_width(l), x0 = raster_x_offset(l);
 	if (x < x0 || x >= x0 + cols * w)
 		return 0; // border
 	unsigned c = (x - x0) / w, i = (x - x0) % w;
-	return glyph_pixel(l, line->glyph[c], sy, i) ? line->fg[c] : line->bg[c];
+	uint8_t g = line->glyph[c];
+	unsigned lit = glyph_pixel(l, g, sy, i);
+	if ((line->attr[c] & SCREEN_ATTR_BOLD) && !glyph_is_connector(g)) {
+		if (raster_has_bold_face(l)) {
+			int gy = (int)sy - (int)raster_pad_top(l);
+			gy = gy < 0 ? -1 : gy / (int)raster_font_scale(l);
+			lit = gy >= 0 && gy < (int)raster_font_rows(l) && raster_glyph_row(l, true, g, (unsigned)gy) >> i & 1;
+		} else {
+			lit |= i > 0 && i + 1 < w && glyph_pixel(l, g, sy, i - 1);
+		}
+	}
+	return lit ? line->fg[c] : line->bg[c];
 }
 
 // Render row `row` of s in layout l and count pixels (over all scanlines

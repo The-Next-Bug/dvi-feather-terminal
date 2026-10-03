@@ -106,6 +106,15 @@ void demo_draw(screen_t *s, unsigned cols, const char *font, const char *status)
 	fill_row(s, 11, "Pack my box with five dozen liquor jugs! ", 3, 1);
 	fill_row(s, 12, "0123456789 !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ ", 0, 1);
 
+	// Normal and bold side by side; m, w, M and W have the closest stems.
+	static const char sample[] = "mwMW Hamburgefonstiv 0123456789";
+	unsigned half_col = w / 2;
+	screen_puts(s, 1, 13, "Normal", GREY, BLACK);
+	screen_puts(s, 9, 13, sample, WHITE, BLACK);
+	screen_puts(s, half_col + 1, 13, "Bold", GREY, BLACK);
+	for (unsigned i = 0; sample[i]; ++i)
+		screen_put_attr(s, half_col + 7 + i, 13, (uint8_t)sample[i], WHITE, BLACK, SCREEN_ATTR_BOLD);
+
 	// Line drawing and Latin-1 in two boxes side by side.
 	unsigned half = w / 2;
 	box(s, 0, 14, half, 6, 0, bright(6));
