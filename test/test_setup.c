@@ -256,12 +256,30 @@ static void test_mode_setting(void) {
 static void test_status_line_setting(void) {
 	open_with(80);
 	CHECK_EQ(u.values.status_line, 1);
-	send("\x1b[A", 0); // up from the first setting: the last
-	CHECK_EQ(u.item, offsetof(settings_t, status_line));
+	for (unsigned i = 0; i < offsetof(settings_t, status_line); ++i)
+		send("\x1b[B", 0);
 	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
 	CHECK_EQ(u.values.status_line, 0);
 	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
 	CHECK_EQ(u.values.status_line, 1);
+}
+
+static void test_blank_after_setting(void) {
+	open_with(80);
+	CHECK_EQ(u.values.blank_after, 0);
+	send("\x1b[A", 0); // up from the first setting: the last
+	CHECK_EQ(u.item, offsetof(settings_t, blank_after));
+	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
+	CHECK_EQ(u.values.blank_after, 1);
+	send("\x1b[D\x1b[D", 0); // wraps
+	CHECK_EQ(u.values.blank_after, 60);
+	// More choices than fit inline: just the current one, as "< 60 min >".
+	static screen_t scr;
+	screen_init(&scr, 80, FG, BG);
+	setup_draw(&u, &scr, 0, "", FG, BG);
+	unsigned r = 1 + offsetof(settings_t, blank_after) + 2; // the preview rows come before it
+	CHECK(row_contains(&scr, r, "> Blank after"));
+	CHECK(row_contains(&scr, r, "< 60 min >"));
 }
 
 int main(void) {
@@ -279,5 +297,6 @@ int main(void) {
 	RUN(test_reboot_key);
 	RUN(test_mode_setting);
 	RUN(test_status_line_setting);
+	RUN(test_blank_after_setting);
 	return tests_done();
 }

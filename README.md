@@ -182,6 +182,7 @@ A panel over the bottom text rows for the settings kept in flash:
 | Palette | color, mono | mono: every color is a shade of the Colors hue (below) |
 | Mode | terminal, CP/M machine | a serial terminal on UART0, or the console of the [Z80 CP/M machine](#z80-cpm-machine). Saving a new mode restarts the board |
 | Status line | shown, hidden | hidden: row 24 stays blank (the text area is still 24 rows; the boot logo's build line and CP/M's drive lights are not shown) |
+| Blank after | never, 1, 5, 10, 30, 60 min | the screen goes black after this long without a key, against burn-in. The next key only wakes it (it is not sent). Output from the host or the Z80 does not wake it; it carries on unseen. The DVI signal stays on, so the monitor does not resync |
 
 **Colors**: green, amber or blue phosphor turns the 16 ANSI colors (default
 text and bold included) into shades of that hue, by brightness (black; dark

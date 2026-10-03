@@ -45,6 +45,7 @@ static uint32_t palette_words[2][PALETTE_SIZE];
 static volatile uint8_t palette_next; // core 0: the table for the next frame
 static volatile uint8_t palette_used; // core 1: the table of the current frame
 static bool core1_launched;
+static volatile bool blank_next; // video_set_blank, latched per frame
 
 // diag_frames counts frames in every build: video_splash waits on it.
 static volatile uint32_t diag_frames, diag_max_cycles;
@@ -75,6 +76,7 @@ static bool splash_holds_raster;
 // and cursor cannot tear between rows.
 static struct {
 	const screen_t *s;
+	bool blank;
 	uint8_t splash;
 	uint cols, cursor_row;
 	int cursor_col; // -1: not shown this frame
@@ -90,6 +92,7 @@ static void __not_in_flash_func(start_frame)(uint32_t n) {
 	bool cursor_on = s->cursor_visible && !(n / CURSOR_BLINK_FRAMES & 1);
 	frame.cursor_row = s->cursor_row;
 	frame.cursor_col = cursor_on ? (int)s->cursor_col : -1;
+	frame.blank = blank_next;
 	frame.splash = splash_state;
 	uint8_t p = palette_next;
 	palette_used = p;
@@ -106,6 +109,11 @@ static void __not_in_flash_func(compose)(uint32_t seq) {
 	if (y == 0)
 		start_frame(seq / RASTER_ACTIVE_HEIGHT);
 	uint32_t *px = line_buf[seq % LINE_BUFS];
+	if (frame.blank) {
+		for (uint i = 0; i < RASTER_LINE_WORDS; ++i)
+			px[i] = 0;
+		return;
+	}
 	if (frame.splash != SPLASH_OFF && y < SPLASH_HEIGHT) {
 		if (frame.splash == SPLASH_SHOW)
 			splash_compose((uint16_t *)px, &frame.decoder, y, frame.colours);
@@ -186,6 +194,10 @@ void video_set_palette(const uint16_t colours[PALETTE_SIZE]) {
 		palette_words[t][c] = colours[c] | (uint32_t)colours[c] << 16;
 	__dmb(); // the table before core 1 can pick it
 	palette_next = t;
+}
+
+void video_set_blank(bool blank) {
+	blank_next = blank;
 }
 
 void video_update(screen_t *screen) {

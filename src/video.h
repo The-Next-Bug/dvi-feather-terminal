@@ -6,6 +6,7 @@
 // each scanline from them into RGB565 (raster_compose), shows the cursor and
 // the startup logo, and the HSTX's TMDS encoder does the rest.
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "palette.h"
@@ -23,6 +24,11 @@ void video_init(void);
 // 0's main loop: it may wait up to a frame for core 1 to take the previous
 // table.
 void video_set_palette(const uint16_t colours[PALETTE_SIZE]);
+
+// Show black instead of the screen (blank.h) from the next frame, or the
+// screen again. The DVI signal keeps going, so the monitor does not resync
+// on waking, and the screen goes on being updated underneath.
+void video_set_blank(bool blank);
 
 // Rasterise every dirty line of the screen and clear its dirty flags. Call
 // from core 0 after changing the screen; changes are not shown until then.

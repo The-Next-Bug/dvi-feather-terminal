@@ -33,6 +33,7 @@
 #include "hardware/clocks.h"
 #include "hardware/watchdog.h"
 
+#include "blank.h"
 #include "demo.h"
 #include "diag.h"
 #include "drivepanel.h"
@@ -102,6 +103,7 @@ static settings_t settings;          // as saved in flash
 static settings_target_t save_target;
 static settings_colours_t colours;   // in use: the status line's
 static unsigned default_columns;     // the SET-UP width in use: what F11 goes back to
+static blank_t blank;                // the Blank after setting: keys keep the screen lit
 // The palette shown (built from the Colors and Palette settings).
 static struct {
 	uint16_t table[PALETTE_SIZE];
@@ -275,6 +277,7 @@ static void apply_settings(const settings_t *s) {
 	term_set_defaults(&term, &(term_defaults_t){.backspace_bs = s->backspace == 0x08,
 		.newline_mode = s->newline && !cpm.on});
 	default_columns = s->columns;
+	blank_init(&blank, s->blank_after * 60000u, to_ms_since_boot(get_absolute_time()));
 	colours = settings_colours(s);
 	show_palette(s);
 }
@@ -426,11 +429,19 @@ static bool status_shown(void) {
 }
 
 #if USB_KEYBOARD
+// A key while the screen is blanked only wakes it (it is dropped, not
+// typed blind); any other key restarts the blanking delay.
+static bool key_wakes(void) {
+	return term_started && blank_activity(&blank, to_ms_since_boot(get_absolute_time()));
+}
+
 // Keystrokes go to the host like replies, through the TX queue (or to
 // SET-UP while it is open). With local echo they are shown too.
 static void send_key(void *ctx, const uint8_t *data, size_t len) {
 	(void)ctx;
 	key_pressed = true;
+	if (key_wakes())
+		return;
 	if (setup.active) {
 		setup_feed(data, len);
 		return;
@@ -452,7 +463,7 @@ static void send_key(void *ctx, const uint8_t *data, size_t len) {
 static void setup_key(void *ctx) {
 	(void)ctx;
 	key_pressed = true;
-	if (!term_started)
+	if (!term_started || key_wakes())
 		return;
 	if (setup.demo)
 		setup.demo_end = true; // back to SET-UP, like any key
@@ -466,7 +477,7 @@ static void setup_key(void *ctx) {
 static void reset_key(void *ctx) {
 	(void)ctx;
 	key_pressed = true;
-	if (term_started && !setup.active)
+	if (term_started && !key_wakes() && !setup.active)
 		cpm.reset_requested = true;
 }
 
@@ -890,6 +901,11 @@ int main(void) {
 		if (setup.active)
 			setup_service();
 		serial_poll();
+
+		uint32_t now = to_ms_since_boot(get_absolute_time());
+		if (setup.active)
+			blank_activity(&blank, now); // not idle while SET-UP is open
+		video_set_blank(blank_tick(&blank, now));
 
 		// DECCOLM re-initialises the whole screen, status line included,
 		// whether or not the width changes.

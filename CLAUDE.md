@@ -151,7 +151,9 @@ status line (row 24); UART0 on GP0/GP1.
   labels; append only): columns, backspace (DECBKM RIS value), local_echo,
   baud, framing, newline (LNM RIS value), colours (hue), palette (mono),
   mode (terminal / CP/M machine), status_line (hidden: main.c
-  status_shown() leaves row 24 blank); settings_colours() gives the status
+  status_shown() leaves row 24 blank), blank_after (minutes; `src/blank.[ch]`
+  portable idle timer, keys only, the waking key dropped; video_set_blank
+  makes core 1 send black lines); settings_colours() gives the status
   line's indices and the logo's tint. CRC-32 in
   `src/crc32.[ch]` (shared with the disk images). main.c apply_settings()
   -> serial_configure, term_set_defaults, show_palette.
