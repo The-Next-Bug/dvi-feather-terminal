@@ -502,9 +502,11 @@ clock.
 The screen buffer stores one-byte glyph codes (see `src/font.h`): ASCII at
 0x20-0x7E, Latin-1 at 0xA0-0xFF, DEC Special Graphics (line drawing) at
 0x01-0x1F, and shades/blocks/double-line box drawing at 0x80-0x9F. The
-tables are generated at build time: 8x16 from Terminus Font for 80 columns,
-misc-fixed for 132 (6x12 at double height; 6x10 or 6x13 with `FONT_132`). Glyphs a font lacks (control pictures, scan
-lines, half blocks) are drawn by `font_gen.py`.
+tables are generated at build time: 8x16 from Terminus Font for 80 columns
+(bold text in Terminus's bold face), misc-fixed for 132 (6x12 at double
+height; 6x10 or 6x13 with `FONT_132`; bold text is drawn a pixel wider,
+short of the gap to the next cell). Glyphs a font lacks (control pictures,
+scan lines, half blocks) are drawn by `font_gen.py`.
 
 ### Startup logo
 
@@ -560,7 +562,7 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | `lib/z80pack` | Vendored part of z80pack (Z80 core, z80asm, picosim disk images); `UPSTREAM.md` gives the commit and local changes |
 | `lib/fatfs` | ChaN's FatFs R0.15a, vendored (see its README) |
 | `assets/logo/` | The startup logo (PNG used by the build, JPEG original) |
-| `assets/fonts/` | Terminus Font 8x16 (SIL OFL 1.1) and misc-fixed 6x12, 6x10 and 6x13 (public domain); see its README |
+| `assets/fonts/` | Terminus Font 8x16 and its bold (SIL OFL 1.1) and misc-fixed 6x12, 6x10 and 6x13 (public domain); see its README |
 | `cmake/build_info.cmake` | Generates `term_build.h` (git describe, commit, date) on every build |
 | `cmake/fonts.cmake` | Font table generation, shared by the firmware and host tests |
 | `scripts/` | `setup-toolchain.sh`, `build.sh`, `test.sh`, `package.sh`, `changelog.sh` |
@@ -628,8 +630,8 @@ This project's own code and documentation are under the MIT license; see
 `src/cpm/` from z80pack's picosim, also MIT). The third-party parts:
 
 Terminus Font is © Dimitar Toshkov Zhekov under the SIL Open Font License
-1.1; see `assets/fonts/Terminus-OFL.txt`. The 8x16 table generated from it
-is a derivative and stays under that license. The misc-fixed 6x12, 6x10 and 6x13 fonts are
+1.1; see `assets/fonts/Terminus-OFL.txt`. The tables generated from it
+are derivatives and stays under that license. The misc-fixed 6x12, 6x10 and 6x13 fonts are
 public domain. pico-sdk is BSD-3-Clause, as is the pico-examples HSTX DVI
 example `src/hstx_dvi.c` follows.
 

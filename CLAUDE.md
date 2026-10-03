@@ -184,9 +184,13 @@ status line (row 24); UART0 on GP0/GP1.
   slots' raster memory (core 1 must not read flash) and core 1 shows it for
   scanlines 0-575 (status line from its slot); power-on/reset only, never
   on RIS.
-- `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus 8x16,
-  misc-fixed 6x12/6x10 doubled or 6x13 by FONT_132: raster_font_scale)
-  generated at build time; glyph codes in `src/font.h`.
+- `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus 8x16
+  and its bold face, misc-fixed 6x12/6x10 doubled or 6x13 by FONT_132:
+  raster_font_scale) generated at build time, glyph-major; glyph codes in
+  `src/font.h`. Tables built with FLASH (font_8x16_bold) stay in flash
+  (FONT_FLASH_DATA, `.flashdata.font`) and are read through XIP by core 0
+  only (raster_render_line); without a bold face (132 cols) bold is a
+  1-px smear that never fills the cell's last column.
 - Z80 CP/M machine (Mode setting "CP/M machine", bd lpt): the screen and
   keyboard become the console of a z80pack picosim-compatible machine on
   core 0 (`main.c` cpm_*: 10 ms CPU slices between keyboard, disks, screen).

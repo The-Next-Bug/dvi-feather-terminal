@@ -58,7 +58,7 @@ static unsigned glyph_pixel(unsigned cols, uint8_t g, unsigned sy, unsigned i) {
 			return 0;
 		gy = gy < 0 ? 0 : rows - 1;
 	}
-	return font[gy * FONT_GLYPHS + g] >> i & 1;
+	return font[g * rows + gy] >> i & 1;
 }
 
 // The colour the cells ask for at pixel x of scanline sy (no attributes).
@@ -128,7 +128,7 @@ static void test_glyph_bits(void) {
 	screen_put(&s, 0, 0, 'A', RGB222(3, 0, 0), RGB222(0, 0, 1));
 	render(screen_line(&s, 0), 80, 0);
 	for (unsigned gy = 0; gy < FONT_8X16_HEIGHT; ++gy)
-		CHECK_EQ(out.bits[1 + gy][0], font_8x16[gy * FONT_GLYPHS + 'A']);
+		CHECK_EQ(out.bits[1 + gy][0], font_8x16['A' * FONT_8X16_HEIGHT + gy]);
 	CHECK_EQ(out.fg[0], RGB222(3, 0, 0));
 	CHECK_EQ(out.bg[0], RGB222(0, 0, 1));
 	// Padding rows above and below the glyph are blank.
@@ -263,8 +263,10 @@ static void test_blink(void) {
 	CHECK(lit > 0);
 }
 
-// Bold: glyph rows ORed with themselves shifted one pixel right (within
-// the cell); line-drawing glyphs keep their shape so they still join.
+// Bold: in 80 columns Terminus's bold face; in 132 (no bold face) glyph
+// rows ORed with themselves shifted a pixel right, short of the cell's last
+// column so cells stay apart. Line-drawing glyphs keep their shape so they
+// still join.
 static void test_bold(void) {
 	for (unsigned cols = 80; cols <= 132; cols += 52) {
 		unsigned x0 = raster_x_offset(cols), w = raster_cell_width(cols);
@@ -276,13 +278,32 @@ static void test_bold(void) {
 		screen_put_attr(&s, 1, 0, GLYPH_DEC_GRAPHICS('x'), fg, 0, SCREEN_ATTR_BOLD);
 		render(screen_line(&s, 0), cols, 0);
 		for (unsigned gy = 0; gy < rows; ++gy) {
-			unsigned g = font[gy * FONT_GLYPHS + 'I'], bold = (g | g << 1) & ((1u << w) - 1);
-			unsigned v = font[gy * FONT_GLYPHS + GLYPH_DEC_GRAPHICS('x')];
+			unsigned g = font['I' * rows + gy];
+			unsigned bold = cols > 80 ? g | ((g << 1) & ((1u << w) - 1) >> 1) : font_8x16_bold['I' * rows + gy];
+			unsigned v = font[GLYPH_DEC_GRAPHICS('x') * rows + gy];
 			for (unsigned i = 0; i < w; ++i) {
 				CHECK_EQ(shown(cols, top + gy * k, x0 + i), (bold >> i & 1) ? fg : 0);
 				CHECK_EQ(shown(cols, top + gy * k, x0 + w + i), (v >> i & 1) ? fg : 0);
 			}
 		}
+	}
+	// Bold 'm' (qur.9): its stems stay apart and the gap column stays clear,
+	// in both widths.
+	for (unsigned cols = 80; cols <= 132; cols += 52) {
+		unsigned x0 = raster_x_offset(cols), w = raster_cell_width(cols);
+		screen_init(&s, cols, RGB222(2, 2, 2), 0);
+		screen_put_attr(&s, 0, 0, 'm', RGB222(3, 3, 3), 0, SCREEN_ATTR_BOLD);
+		render(screen_line(&s, 0), cols, 0);
+		unsigned gaps = 0;
+		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
+			CHECK_EQ(shown(cols, sy, x0 + w - 1), 0);
+			unsigned lit = 0;
+			for (unsigned i = 0; i < w; ++i)
+				lit += shown(cols, sy, x0 + i) != 0;
+			gaps += lit > 0 && lit < w - 1;
+		}
+		if (cols == 80)
+			CHECK(gaps > 0); // not a solid block
 	}
 }
 

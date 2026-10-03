@@ -1,22 +1,27 @@
 #include "raster.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "font.h"
 
-// Row sr (0 .. rows + 1) of the stored rows for glyph g: the padding rows
-// repeat a connector's edge row and are blank for everything else.
+// Row sr (0 .. rows + 1) of the stored rows for glyph g of a glyph-major
+// table: the padding rows repeat a connector's edge row and are blank for
+// everything else.
 static inline unsigned stored_glyph_row(const uint8_t *glyphs, unsigned rows, unsigned sr, uint8_t g) {
+	const uint8_t *glyph = glyphs + g * rows;
 	if (sr == 0)
-		return glyph_is_connector(g) ? glyphs[g] : 0;
+		return glyph_is_connector(g) ? glyph[0] : 0;
 	if (sr > rows)
-		return glyph_is_connector(g) ? glyphs[(rows - 1) * FONT_GLYPHS + g] : 0;
-	return glyphs[(sr - 1) * FONT_GLYPHS + g];
+		return glyph_is_connector(g) ? glyph[rows - 1] : 0;
+	return glyph[sr - 1];
 }
 
 bool raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned cols, unsigned flags) {
 	const unsigned w = raster_cell_width(cols), rows = raster_font_rows(cols);
 	const uint8_t *glyphs = cols > 80 ? font_132 : font_8x16;
+	// Bold text: the font's bold face, if it has one.
+	const uint8_t *bold_glyphs = cols > 80 ? NULL : font_8x16_bold;
 	const unsigned cell_mask = (1u << w) - 1;
 	const bool reverse = flags & RASTER_REVERSE;
 
@@ -29,11 +34,15 @@ bool raster_render_line(raster_line_t *out, const screen_line_t *line, unsigned 
 		any_blink |= blink;
 		bool hidden = blink && (flags & RASTER_BLINK_OFF);
 		bool underline = (attr & SCREEN_ATTR_UNDERLINE) && !hidden;
+		// Line drawing keeps its shape in bold, so it still joins.
 		bool bold = (attr & SCREEN_ATTR_BOLD) && !glyph_is_connector(g);
+		const uint8_t *font = bold && bold_glyphs ? bold_glyphs : glyphs;
 		for (unsigned sr = 0; sr < rows + 2; ++sr) {
-			unsigned m = hidden ? 0 : stored_glyph_row(glyphs, rows, sr, g);
-			if (bold)
-				m |= m << 1; // clipped to the cell below
+			unsigned m = hidden ? 0 : stored_glyph_row(font, rows, sr, g);
+			// No bold face: each row ORed with itself a pixel to the right,
+			// but not into the cell's last column, the gap to the next cell.
+			if (bold && !bold_glyphs)
+				m |= (m << 1) & (cell_mask >> 1);
 			if (underline && sr == rows) // the glyph's bottom row
 				m = cell_mask;
 			out->bits[sr][c] = (uint8_t)(m & cell_mask);

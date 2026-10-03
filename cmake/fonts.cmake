@@ -16,13 +16,18 @@ set(FONT_132_VARIANTS 6x12 6x10 6x13)
 set(FONT_132 "6x12" CACHE STRING "132-column font: 6x12 or 6x10 (double height), or 6x13")
 set_property(CACHE FONT_132 PROPERTY STRINGS ${FONT_132_VARIANTS})
 
-# font_table(<name> <out.c> <source> <width> <height>): generate the table
-# <name> into <out.c>.
+# font_table(<name> <out.c> <source> <width> <height> [FLASH]): generate the
+# table <name> into <out.c>; FLASH keeps it in the firmware's flash
+# (FONT_FLASH_DATA in src/font.h), read by core 0 only.
 function(font_table name out source width height)
+  set(flash "")
+  if("FLASH" IN_LIST ARGN)
+    set(flash "--flash")
+  endif()
   add_custom_command(
     OUTPUT ${out}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${GENERATED}
-    COMMAND Python3::Interpreter ${FONT_GEN}
+    COMMAND Python3::Interpreter ${FONT_GEN} ${flash}
             ${FONT_DIR}/${source} ${width} ${height} ${name} ${out}
     DEPENDS ${FONT_GEN} ${FONT_DIR}/${source}
     COMMENT "Generating ${name} (${source})"
@@ -52,5 +57,7 @@ function(font_132 variant sources_var defs_var)
 endfunction()
 
 font_table(font_8x16 "${GENERATED}/font_8x16.c" Uni2-Terminus16.psf.gz 8 16)
+# Bold text in 80 columns: Terminus's own bold face (in flash: SRAM is short).
+font_table(font_8x16_bold "${GENERATED}/font_8x16_bold.c" Uni2-TerminusBold16.psf.gz 8 16 FLASH)
 font_132(${FONT_132} FONT_132_SOURCE FONT_DEFINITIONS)
-set(FONT_SOURCES "${GENERATED}/font_8x16.c" ${FONT_132_SOURCE})
+set(FONT_SOURCES "${GENERATED}/font_8x16.c" "${GENERATED}/font_8x16_bold.c" ${FONT_132_SOURCE})

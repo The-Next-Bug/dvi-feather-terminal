@@ -40,7 +40,7 @@ foreach(variant IN LISTS FONT_132_VARIANTS)
   font_132(${variant} other_source other_definitions)
   set(t test_raster_${variant})
   add_executable(${t} test_raster.c ${SRC}/raster.c ${SRC}/screen.c ${SRC}/demo.c
-    "${GENERATED}/font_8x16.c" ${other_source})
+    "${GENERATED}/font_8x16.c" "${GENERATED}/font_8x16_bold.c" ${other_source})
   target_include_directories(${t} PRIVATE ${SRC})
   target_compile_definitions(${t} PRIVATE ${other_definitions})
   target_compile_options(${t} PRIVATE -Wall -Wextra -Werror -fsanitize=address,undefined)
