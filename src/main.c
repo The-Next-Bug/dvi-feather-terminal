@@ -416,6 +416,15 @@ static void setup_service(void) {
 	}
 }
 
+// With the Status line setting hidden, row 24 is left blank (the text area
+// stays 24 rows) and the status line drawers stop here.
+static bool status_shown(void) {
+	if (settings.status_line)
+		return true;
+	screen_clear_line(&screen, STATUS_ROW, PALETTE_TEXT, PALETTE_BACKGROUND);
+	return false;
+}
+
 #if USB_KEYBOARD
 // Keystrokes go to the host like replies, through the TX queue (or to
 // SET-UP while it is open). With local echo they are shown too.
@@ -507,8 +516,10 @@ static bool show_logo(uint8_t *buf, size_t max, size_t *n) {
 	char status[SCREEN_MAX_COLS + 1];
 	snprintf(status, sizeof status, " DVI Terminal | build %s (%s, %s)",
 		TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
-	screen_clear_line(&screen, STATUS_ROW, colours.status_fg, colours.status_bg);
-	screen_puts(&screen, 0, STATUS_ROW, status, colours.status_fg, colours.status_bg);
+	if (status_shown()) {
+		screen_clear_line(&screen, STATUS_ROW, colours.status_fg, colours.status_bg);
+		screen_puts(&screen, 0, STATUS_ROW, status, colours.status_fg, colours.status_bg);
+	}
 	video_update(&screen);
 	*n = 0;
 	// In the hue of the Colors setting (white keeps the logo's own colours,
@@ -703,7 +714,7 @@ static void draw_cpm_status(void) {
 		cpm.khz = machine_speed_khz();
 	}
 	cpm.lit = drive_lights(now);
-	if (setup.demo)
+	if (setup.demo || !status_shown())
 		return; // the demo has the status line
 	char text[SCREEN_MAX_COLS + 1] = " CP/M |";
 	unsigned letter_col[DRIVES];
@@ -747,7 +758,7 @@ static bool status_equal(const status_t *a, const status_t *b) {
 }
 
 static void draw_status(const status_t *st) {
-	if (setup.demo)
+	if (setup.demo || !status_shown())
 		return; // the demo has the status line; DECCOLM after it redraws
 	char key[32] = "";
 	if (st->keys_sent) {

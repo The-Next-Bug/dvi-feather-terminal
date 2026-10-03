@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <string.h>
 
 #include "setup.h"
@@ -246,10 +247,21 @@ static void test_reboot_key(void) {
 static void test_mode_setting(void) {
 	open_with(80);
 	CHECK_EQ(u.values.mode, SETTINGS_MODE_TERMINAL);
-	for (unsigned i = 0; i < SETUP_ITEMS - 1; ++i)
+	for (unsigned i = 0; i < offsetof(settings_t, mode); ++i)
 		send("\x1b[B", 0);
 	CHECK_EQ(send(" ", 0), SETUP_REDRAW);
 	CHECK_EQ(u.values.mode, SETTINGS_MODE_CPM);
+}
+
+static void test_status_line_setting(void) {
+	open_with(80);
+	CHECK_EQ(u.values.status_line, 1);
+	send("\x1b[A", 0); // up from the first setting: the last
+	CHECK_EQ(u.item, offsetof(settings_t, status_line));
+	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
+	CHECK_EQ(u.values.status_line, 0);
+	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
+	CHECK_EQ(u.values.status_line, 1);
 }
 
 int main(void) {
@@ -266,5 +278,6 @@ int main(void) {
 	RUN(test_demo_key);
 	RUN(test_reboot_key);
 	RUN(test_mode_setting);
+	RUN(test_status_line_setting);
 	return tests_done();
 }

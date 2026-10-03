@@ -41,6 +41,7 @@ static void test_round_trip(void) {
 	CHECK_EQ(out.colours, 2);
 	CHECK_EQ(out.palette, 1);
 	CHECK_EQ(out.mode, SETTINGS_MODE_CPM);
+	CHECK_EQ(out.status_line, 0); // hidden
 	CHECK_EQ(seq, 0x12345678);
 	CHECK_EQ(rec[SETTINGS_RECORD_SIZE - 1], 0xff); // unused bytes stay erased
 }
@@ -137,6 +138,7 @@ static void test_older_record(void) {
 	CHECK_EQ(probe.backspace, 0x7f);
 	CHECK_EQ(probe.local_echo, 0);
 	CHECK_EQ(settings_baud_rate(&probe), 115200);
+	CHECK_EQ(probe.status_line, 1); // records before it: shown
 	CHECK_EQ(seq, 3);
 }
 

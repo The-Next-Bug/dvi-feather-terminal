@@ -164,6 +164,8 @@ one; a letter lights up in reverse video while that drive is read or
 written, like a drive's busy light), the emulated clock rate in MHz (or
 `monitor` while the monitor runs), `kbd` and the build.
 
+SET-UP's Status line setting hides it: row 24 then stays blank.
+
 ### SET-UP
 
 A panel over the bottom text rows for the settings kept in flash:
@@ -179,6 +181,7 @@ A panel over the bottom text rows for the settings kept in flash:
 | Colors | white, green, amber, blue | white: the 16 ANSI colors as on a VGA screen; the others: phosphor shades (below) |
 | Palette | color, mono | mono: every color is a shade of the Colors hue (below) |
 | Mode | terminal, CP/M machine | a serial terminal on UART0, or the console of the [Z80 CP/M machine](#z80-cpm-machine). Saving a new mode restarts the board |
+| Status line | shown, hidden | hidden: row 24 stays blank (the text area is still 24 rows; the boot logo's build line and CP/M's drive lights are not shown) |
 
 **Colors**: green, amber or blue phosphor turns the 16 ANSI colors (default
 text and bold included) into shades of that hue, by brightness (black; dark

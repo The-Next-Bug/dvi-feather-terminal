@@ -150,7 +150,8 @@ status line (row 24); UART0 on GP0/GP1.
   Settings (settings_fields[] drives the record, validation and SET-UP
   labels; append only): columns, backspace (DECBKM RIS value), local_echo,
   baud, framing, newline (LNM RIS value), colours (hue), palette (mono),
-  mode (terminal / CP/M machine); settings_colours() gives the status
+  mode (terminal / CP/M machine), status_line (hidden: main.c
+  status_shown() leaves row 24 blank); settings_colours() gives the status
   line's indices and the logo's tint. CRC-32 in
   `src/crc32.[ch]` (shared with the disk images). main.c apply_settings()
   -> serial_configure, term_set_defaults, show_palette.
