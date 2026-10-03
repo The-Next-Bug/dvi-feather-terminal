@@ -170,7 +170,7 @@ A panel over the bottom text rows for the settings kept in flash:
 
 | Setting | Values | |
 |---|---|---|
-| Columns | 80, 132 | the width at power-on |
+| Columns | 80, 132 | the width at power-on and after F11 in CP/M mode |
 | Backspace sends | DEL, BS | DECBKM at power-on and after RIS (vttest and CP/M software want BS) |
 | Local echo | off, on | keys typed are shown on the terminal as well as sent |
 | Baud rate | 300 - 115200 | default 115200 |
@@ -215,6 +215,7 @@ It opens from:
 | **Return** | save to flash and apply (a new width clears the screen, as DECCOLM does) |
 | **Esc**, F12 | leave without saving |
 | **T** | show the demo screen in the edited colors until a key is pressed |
+| **R** | reboot the board, as at power-on (unsaved changes are dropped; CP/M drives are written back first). The last resort when the terminal is stuck |
 | **D** | CP/M mode: the [Drives panel](#running-cpm) |
 | **M** | CP/M mode: back to the [monitor](#the-monitor) |
 
@@ -363,8 +364,10 @@ keys:
 - **M** returns to the monitor.
 
 **F11** is the reset button: it reboots from drive A at once (keys typed
-ahead are dropped; with drive A empty it goes to the monitor). In terminal
-mode F11 sends its usual `ESC [ 2 3 ~`.
+ahead are dropped; with drive A empty it goes to the monitor). It resets the
+terminal too, as RIS does (colours, modes, scrolling region, an unfinished
+escape sequence or string), clears the screen and returns to the SET-UP
+width. In terminal mode F11 sends its usual `ESC [ 2 3 ~`.
 
 Two CP/M commands on the `CPM22` disk (`BYE.COM` and `RESET.COM`, from
 z80pack) use the machine's hardware control port: `BYE` stops

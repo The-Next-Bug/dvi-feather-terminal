@@ -223,6 +223,26 @@ static void test_demo_key(void) {
 	CHECK(row_contains(&s, SCREEN_ROWS - 2, "T demo"));
 }
 
+// R reboots, in either mode; the help line says so and still fits 80
+// columns.
+static void test_reboot_key(void) {
+	for (int machine = 0; machine <= 1; ++machine) {
+		open_with(80);
+		u.machine_menu = machine;
+		CHECK_EQ(send("r", 0), SETUP_REBOOT);
+		CHECK_EQ(send("R", 0), SETUP_REBOOT);
+		screen_t s;
+		screen_init(&s, 80, FG, BG);
+		setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG);
+		CHECK(row_contains(&s, SCREEN_ROWS - 2, "R reboot"));
+		CHECK(row_contains(&s, SCREEN_ROWS - 2, "Return save"));
+		CHECK(row_contains(&s, SCREEN_ROWS - 2, "Esc cancel"));
+	}
+	// Alt+R (ESC r) is still the Escape key, not a reboot.
+	open_with(80);
+	CHECK_EQ(send("\x1br", 0), SETUP_CANCEL);
+}
+
 static void test_mode_setting(void) {
 	open_with(80);
 	CHECK_EQ(u.values.mode, SETTINGS_MODE_TERMINAL);
@@ -244,6 +264,7 @@ int main(void) {
 	RUN(test_colours_preview);
 	RUN(test_machine_menu_key);
 	RUN(test_demo_key);
+	RUN(test_reboot_key);
 	RUN(test_mode_setting);
 	return tests_done();
 }

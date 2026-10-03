@@ -91,6 +91,12 @@ typedef struct {
 // xterm entry; reverse swaps fg and bg.
 void term_init(term_t *t, screen_t *screen, unsigned top, unsigned rows);
 
+// Reset as RIS (ESC c) does, and also abandon any escape sequence or string
+// the parser is in the middle of, so it recovers a terminal stuck in an
+// unterminated OSC or DCS string. Modes go back to their SET-UP defaults;
+// the width (80/132) is left alone.
+void term_reset(term_t *t);
+
 // Where replies to the host (device attributes, cursor position reports)
 // go. Without one they are dropped.
 void term_set_reply(term_t *t, term_reply_t reply, void *ctx);

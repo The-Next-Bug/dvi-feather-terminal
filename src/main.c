@@ -101,6 +101,7 @@ static bool key_pressed; // before the terminal started: ends the logo and demo
 static settings_t settings;          // as saved in flash
 static settings_target_t save_target;
 static settings_colours_t colours;   // in use: the status line's
+static unsigned default_columns;     // the SET-UP width in use: what F11 goes back to
 // The palette shown (built from the Colors and Palette settings).
 static struct {
 	uint16_t table[PALETTE_SIZE];
@@ -267,12 +268,13 @@ static void apply_line(const settings_t *s) {
 // Use settings s: the line, the modes RIS resets to (also set now) and the
 // palette (the status line follows at its next redraw). In CP/M mode LNM stays off: CP/M wants Return as CR alone (a
 // following LF waits as a key, which stops DIR and TYPE early) and sends
-// CR LF itself. The width is only used at power-on and by SET-UP; local echo is
-// read from `settings` as keys are sent.
+// CR LF itself. The width is used at power-on, by SET-UP and by F11 (RIS
+// keeps the current one); local echo is read from `settings` as keys are sent.
 static void apply_settings(const settings_t *s) {
 	apply_line(s);
 	term_set_defaults(&term, &(term_defaults_t){.backspace_bs = s->backspace == 0x08,
 		.newline_mode = s->newline && !cpm.on});
+	default_columns = s->columns;
 	colours = settings_colours(s);
 	show_palette(s);
 }
@@ -355,8 +357,21 @@ static void setup_demo_service(void) {
 	}
 }
 
-// Run SET-UP's pending save or cancel, the demo, or the Escape key
-// timeout, and show the edited Colors and Palette.
+// Restart the board from power-on (boot logo, settings read again): say so,
+// write back the drives' buffers, reboot.
+static void restart(void) {
+	setup.ui.message = "Restarting...";
+	setup_draw_panel();
+	video_update(&screen);
+	if (cpm.on)
+		drives_flush();
+	watchdog_reboot(0, 0, 0);
+	while (true)
+		tight_loop_contents();
+}
+
+// Run SET-UP's pending save or cancel, the demo, the reboot, or the Escape
+// key timeout, and show the edited Colors and Palette.
 static void setup_service(void) {
 	show_palette(&setup.ui.values);
 	if (setup.demo) {
@@ -375,6 +390,8 @@ static void setup_service(void) {
 		setup_leave(false);
 	} else if (a == SETUP_DEMO) {
 		setup_demo_start();
+	} else if (a == SETUP_REBOOT) {
+		restart(); // the last resort when the terminal is stuck
 	} else if (a == SETUP_DRIVES) {
 		drivepanel_open(&setup.drives);
 		setup.drives_open = true;
@@ -389,17 +406,8 @@ static void setup_service(void) {
 		setup_draw_panel();
 		video_update(&screen);
 		if (setup_save()) {
-			if (settings.mode != (cpm.on ? SETTINGS_MODE_CPM : SETTINGS_MODE_TERMINAL)) {
-				// The other mode starts from a clean power-on.
-				setup.ui.message = "Restarting...";
-				setup_draw_panel();
-				video_update(&screen);
-				if (cpm.on)
-					drives_flush();
-				watchdog_reboot(0, 0, 0);
-				while (true)
-					tight_loop_contents();
-			}
+			if (settings.mode != (cpm.on ? SETTINGS_MODE_CPM : SETTINGS_MODE_TERMINAL))
+				restart(); // the other mode starts from a clean power-on
 			setup_leave(true);
 		} else {
 			setup.ui.message = "Saving to flash failed";
@@ -636,11 +644,16 @@ static const monitor_platform_t cpm_monitor = {
 };
 
 // F11: reset the machine and boot from drive A, as the reset button of a
-// real one would; with no disk in A, the monitor instead.
+// real one would; with no disk in A, the monitor instead. The terminal is
+// reset too (colours, modes, margins, a stuck escape sequence) and goes back
+// to the SET-UP width, so a program that left it unreadable cannot keep it so.
 static void cpm_reset(void) {
 	cpm.reset_requested = false;
 	cpm.key_tail = cpm.key_head; // typed-ahead keys were for the old run
 	drives_flush();
+	term_reset(&term);
+	if (screen.cols != default_columns)
+		term_set_columns(&term, default_columns); // the status line follows
 	if (!drives_name(0)) {
 		cpm.running = false;
 		monitor_enter("Reset: no disk in drive A", false);

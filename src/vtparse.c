@@ -39,6 +39,11 @@ static void clear(vtparse_t *p) {
 	p->params_full = false;
 }
 
+void vtparse_reset(vtparse_t *p) {
+	clear(p);
+	p->state = GROUND;
+}
+
 static void collect(vtparse_t *p, uint8_t ch) {
 	if (p->n_intermediates < VTPARSE_MAX_INTERMEDIATES)
 		p->intermediates[p->n_intermediates++] = ch;

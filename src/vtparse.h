@@ -52,6 +52,11 @@ struct vtparse {
 void vtparse_init(vtparse_t *p, vtparse_callback_t callback, void *user);
 void vtparse_byte(vtparse_t *p, uint8_t ch);
 
+// Abandon any sequence or string in progress and go back to ground state.
+// The callback, user pointer and c1_controls are kept. Safe to call from the
+// callback.
+void vtparse_reset(vtparse_t *p);
+
 // Parameter i, or def if it is missing or 0 (the usual VT100 convention).
 static inline unsigned vtparse_param(const vtparse_t *p, unsigned i, unsigned def) {
 	return i < p->n_params && p->params[i] ? p->params[i] : def;
