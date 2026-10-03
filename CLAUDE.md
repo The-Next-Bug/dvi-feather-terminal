@@ -231,7 +231,10 @@ status line (row 24); UART0 on GP0/GP1.
   the screen (no 13 KB copy) and SET-UP is redrawn over it. F11
   is the machine's reset key in CP/M mode (kbd_set_reset_key; terminal
   mode keeps ESC [ 23 ~).
-  Firmware update (bd n3k): the monitor's U, offered when /FIRMWARE.UF2
+  Firmware update (bd n3k): SET-UP's U in either mode (`src/fwpanel.[ch]`,
+  portable, over SET-UP's rows; main.c fw_* platform: in terminal mode it
+  f_mounts the card only while open, in CP/M mode it uses the monitor's
+  mount), and the monitor's U, offered when /FIRMWARE.UF2
   is on the card (monitor_platform_t firmware_* hooks; stubbed in
   test_machine). `src/uf2.[ch]` (portable; test_uf2 also checks
   build/pico2-dvi-sock/dvi_terminal.uf2 when built): skips other families
@@ -261,7 +264,8 @@ SRAM is the tight resource; peripherals and pins are mostly free.
 - SRAM (520 KB): .text 165 KB, .data 26 KB (fonts, Z80 tables, video code
   copied to RAM), .bss 288 KB; `__end__` 0x20077f4c, so ~32 KB free below
   0x20080000 (no malloc user); pb2's palette (tables + code) moved it to
-  0x200790d8, ~28 KB free. Scratch X: core 1's stack is in .bss, so
+  0x200790d8, ~28 KB free; the qur QoL branch (taller SET-UP, fwpanel's
+  FATFS, code) to 0x2007b570, ~18.6 KB free. Scratch X: core 1's stack is in .bss, so
   nearly all 4 KB free; scratch Y: 2 KB core 0 stack, ~2 KB free. Biggest
   .bss: Z80 banks 96 KB + bank 0 64 KB, raster 64.5 KB, monitor `window`
   16 KB, screen 13 KB, setup 8 KB, line_buf 6.4 KB, drives 4.5 KB, UART

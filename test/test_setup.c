@@ -120,7 +120,7 @@ static void test_draw_marks_current_choice(void) {
 	CHECK(row_contains(&s, top + 5, "< 8N1 >"));
 	CHECK(row_contains(&s, top + 7, "  Colors"));
 	CHECK(row_contains(&s, top + 7, "white   green   amber   blue")); // short lists: all
-	CHECK(row_contains(&s, top + SETUP_ROWS - 2, "Return save"));
+	CHECK(row_contains(&s, top + SETUP_ROWS - 3, "Return save"));
 	// " 132 " is drawn reversed, " 80 " normal.
 	char line[81];
 	for (unsigned c = 0; c < 80; ++c)
@@ -151,7 +151,7 @@ static void test_colours_preview(void) {
 	CHECK(row_contains(&s, preview, " Text Bold  Status "));
 	CHECK(row_contains(&s, preview, "0 1 2 3 4 5 6 7 8 9 A B C D E F"));
 	CHECK(row_contains(&s, preview + 1, "0 1 2 3 4 5 6 7 8 9 A B C D E F"));
-	CHECK(row_contains(&s, top + SETUP_ROWS - 2, "Return save"));
+	CHECK(row_contains(&s, top + SETUP_ROWS - 3, "Return save"));
 
 	unsigned text_col = 0, digits = 0;
 	for (unsigned c = 0; c < 80; ++c) {
@@ -212,7 +212,7 @@ static void test_machine_menu_key(void) {
 	char help[81] = "";
 	for (unsigned c = 0; c < 80; ++c)
 		help[c] = (char)screen_glyph(&s, c, SCREEN_ROWS - 3);
-	CHECK(strstr(help, "T demo  D drives  M monitor") != NULL);
+	CHECK(strstr(help, "R reboot  D drives  M monitor") != NULL);
 }
 
 // T shows the demo screen, in either mode.
@@ -238,14 +238,28 @@ static void test_reboot_key(void) {
 		screen_init(&s, 80, FG, BG);
 		setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG, BORDER);
 		CHECK(row_contains(&s, SCREEN_ROWS - 3, "R reboot"));
-		CHECK(row_contains(&s, SCREEN_ROWS - 3, "Return save"));
-		CHECK(row_contains(&s, SCREEN_ROWS - 3, "Esc cancel"));
+		CHECK(row_contains(&s, SCREEN_ROWS - 4, "Return save"));
+		CHECK(row_contains(&s, SCREEN_ROWS - 4, "Esc cancel"));
 		// Inside the box: the right-hand line is still there.
 		CHECK_EQ(screen_glyph(&s, 79, SCREEN_ROWS - 3), GLYPH_DEC_GRAPHICS('x'));
 	}
 	// Alt+R (ESC r) is still the Escape key, not a reboot.
 	open_with(80);
 	CHECK_EQ(send("\x1br", 0), SETUP_CANCEL);
+}
+
+// U opens the firmware update, in either mode; the help line says so.
+static void test_firmware_key(void) {
+	for (int machine = 0; machine <= 1; ++machine) {
+		open_with(80);
+		u.machine_menu = machine;
+		CHECK_EQ(send("u", 0), SETUP_FIRMWARE);
+		CHECK_EQ(send("U", 0), SETUP_FIRMWARE);
+		static screen_t s;
+		screen_init(&s, 80, FG, BG);
+		setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG, BORDER);
+		CHECK(row_contains(&s, SCREEN_ROWS - 3, "U firmware update"));
+	}
 }
 
 static void test_mode_setting(void) {
@@ -337,6 +351,7 @@ int main(void) {
 	RUN(test_machine_menu_key);
 	RUN(test_demo_key);
 	RUN(test_reboot_key);
+	RUN(test_firmware_key);
 	RUN(test_mode_setting);
 	RUN(test_status_line_setting);
 	RUN(test_blank_after_setting);

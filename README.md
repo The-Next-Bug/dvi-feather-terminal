@@ -222,6 +222,7 @@ It opens from:
 | **Esc**, F12 | leave without saving |
 | **T** | show the demo screen in the edited colors until a key is pressed |
 | **R** | reboot the board, as at power-on (unsaved changes are dropped; CP/M drives are written back first). The last resort when the terminal is stuck |
+| **U** | [update the firmware](#updating-the-firmware-from-the-sd-card) from `FIRMWARE.UF2` on the SD card, in either mode |
 | **D** | CP/M mode: the [Drives panel](#running-cpm) |
 | **M** | CP/M mode: back to the [monitor](#the-monitor) |
 
@@ -406,12 +407,13 @@ instructions cost more per T-state).
 Copy the new `dvi_terminal.uf2` to the card's root as `FIRMWARE.UF2` (8.3
 names only; the release ZIP has it as `sdcard-<target>/FIRMWARE.UF2`, and
 `SDCARD=/media/<you>/<card> scripts/build.sh` copies it there), put the card
-in, set Mode to "CP/M machine" and press **U** in the monitor. It reads the
+in, and press **U** in SET-UP (either mode; in terminal mode the card is
+mounted only for the update) or in the CP/M monitor. It reads the
 file through and checks it (a UF2 for the RP2350 with a bootable image that
 fits), shows its size and asks; **Y** then:
 
 1. writes the image to the upper half of the flash, beside the running
-   firmware, and reads it back (the progress dots). Any problem up to here
+   firmware, and reads it back (the progress bar, or the monitor's dots). Any problem up to here
    leaves the board as it was;
 2. renames the file to `FIRMWARE.OLD`, so it is not installed twice, and
    closes the disks;
@@ -576,13 +578,15 @@ In `src/`:
   `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100
   codes), `keyname.[ch]` (key names for the status line), `splash.[ch]`
   (startup logo decoding), `settings.[ch]` (settings records),
-  `setup.[ch]` (SET-UP panel), `demo.[ch]`, `crc32.[ch]`, `uf2.[ch]` (UF2
-  file checks for the firmware update).
+  `setup.[ch]` (SET-UP panel), `blank.[ch]` (screen blanking timer),
+  `demo.[ch]`, `crc32.[ch]`, `uf2.[ch]` (UF2 file checks for the firmware
+  update).
 - **Z80 machine, portable**: `machine.[ch]` (z80pack glue; `z80pack/`
   holds its configuration headers), `monitor.[ch]`, `drives.[ch]` (disk
-  images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel), `cpm/` (the
-  CP/M 2.2 BIOS, boot loader and WORMS; see its README), `diskimg.[ch]`
-  and `lz.[ch]` (the built-in images).
+  images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel),
+  `fwpanel.[ch]` (SET-UP's firmware update), `cpm/` (the CP/M 2.2 BIOS,
+  boot loader and WORMS; see its README), `diskimg.[ch]` and `lz.[ch]`
+  (the built-in images).
 - **RP2350**: `main.c`, `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]`
   (scanlines on core 1), `hstx_test.c` (test pattern), `serial.[ch]` (UART
   with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors,

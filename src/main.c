@@ -38,6 +38,8 @@
 #include "diag.h"
 #include "drivepanel.h"
 #include "drives.h"
+#include "ff.h"
+#include "fwpanel.h"
 #include "fwupdate.h"
 #include "keyname.h"
 #include "machine.h"
@@ -130,6 +132,10 @@ static struct {
 	// CP/M mode: the Drives panel (D), over the same rows.
 	bool drives_open, drives_apply;
 	drivepanel_t drives;
+	// The firmware update panel (U), over the same rows; its work and its
+	// cancel wait for the main loop.
+	bool fw_open, fw_work, fw_cancel;
+	fwpanel_t fw;
 	// The demo screen (T), over the whole screen until a key.
 	bool demo, demo_end;
 	unsigned demo_cols, term_cols;
@@ -137,6 +143,7 @@ static struct {
 } setup;
 
 static_assert(DRIVEPANEL_ROWS <= SETUP_ROWS, "the Drives panel fits SET-UP's rows");
+static_assert(FWPANEL_ROWS <= SETUP_ROWS, "the firmware panel fits SET-UP's rows");
 
 // The Z80 machine (CP/M mode). Keys are queued here and handed to the CPU
 // or the monitor from the main loop, never from inside the USB stack.
@@ -199,6 +206,76 @@ static void drives_draw_panel(void) {
 		PALETTE_BACKGROUND, c.status_bg);
 }
 
+// The firmware panel, at the bottom of SET-UP's rows like the Drives panel.
+static void fw_draw_panel(void) {
+	settings_colours_t c = settings_colours(&setup.ui.values);
+	for (unsigned r = 0; r < SETUP_ROWS - FWPANEL_ROWS; ++r)
+		screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	fwpanel_draw(&setup.fw, &screen, SETUP_TOP + SETUP_ROWS - FWPANEL_ROWS, PALETTE_TEXT, PALETTE_BACKGROUND,
+		c.status_bg);
+}
+
+// The firmware panel's platform. In CP/M mode the monitor keeps the card
+// mounted (with the drives' images open); in terminal mode the card is
+// mounted only while the panel is open.
+static FATFS fw_fs;
+
+static bool fw_mount(char *info, size_t n) {
+	if (cpm.on)
+		return true;
+	FRESULT r = f_mount(&fw_fs, "", 1);
+	if (r == FR_OK)
+		return true;
+	if (sdcard_type() == SDCARD_NONE)
+		snprintf(info, n, "none found (SPI0: GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI)");
+	else
+		snprintf(info, n, "no FAT file system on it (error %d)", (int)r);
+	return false;
+}
+
+static void fw_unmount(bool commit) {
+	if (cpm.on && !commit)
+		return; // the monitor's
+	if (cpm.on) {
+		drives_flush();
+		drives_unmount_all();
+	}
+	f_unmount("");
+}
+
+// Show the panel now: the long steps hold up the main loop.
+static void fw_show(const fwpanel_t *p) {
+	(void)p;
+	fw_draw_panel();
+	video_update(&screen);
+}
+
+// The commit leaves the screen as fw_show last drew it: core 1 keeps
+// showing it from RAM while the flash is rewritten.
+static const fwpanel_platform_t fw_platform = {
+	.mount = fw_mount,
+	.check = fwupdate_check,
+	.stage = fwupdate_stage,
+	.unmount = fw_unmount,
+	.commit = fwupdate_commit,
+	.show = fw_show,
+};
+
+static void fw_close(void) {
+	if (setup.fw_open)
+		fwpanel_close(&setup.fw, &fw_platform);
+	setup.fw_open = setup.fw_work = setup.fw_cancel = false;
+}
+
+// A key for the firmware panel. The work is left for the main loop.
+static void fw_feed(uint8_t c) {
+	fwpanel_action_t a = fwpanel_input(&setup.fw, c);
+	if (a == FWPANEL_WORK)
+		setup.fw_work = true;
+	else if (a == FWPANEL_CANCEL)
+		setup.fw_cancel = true;
+}
+
 // A key for the Drives panel. Mounting is left for the main loop.
 static void drives_feed(uint8_t c, uint32_t now) {
 	drivepanel_action_t a = drivepanel_input(&setup.drives, c, now);
@@ -221,7 +298,12 @@ static void setup_feed(const uint8_t *data, size_t len) {
 		setup.demo_end |= len > 0; // any key; the rest of it is dropped
 		return;
 	}
-	for (size_t i = 0; i < len && setup.action == SETUP_NONE && !setup.drives_apply; ++i) {
+	for (size_t i = 0; i < len && setup.action == SETUP_NONE && !setup.drives_apply && !setup.fw_work &&
+		!setup.fw_cancel; ++i) {
+		if (setup.fw_open) {
+			fw_feed(data[i]);
+			continue;
+		}
 		if (setup.drives_open) {
 			drives_feed(data[i], now);
 			continue;
@@ -255,6 +337,7 @@ static void setup_enter(bool from_host) {
 	setup.ui.machine_menu = cpm.on;
 	setup.active = true;
 	setup.drives_open = setup.drives_apply = false;
+	setup.fw_open = setup.fw_work = setup.fw_cancel = false;
 	setup.from_host = from_host;
 	setup.action = SETUP_NONE;
 	setup.demo = false;
@@ -294,6 +377,7 @@ static void setup_leave(bool apply) {
 	screen.cursor_visible = setup.saved_cursor;
 	setup.active = false;
 	setup.drives_open = setup.drives_apply = false;
+	fw_close();
 	if (!apply) {
 		show_palette(&settings); // back from SET-UP's preview
 		return;
@@ -388,6 +472,17 @@ static void setup_service(void) {
 		drives_service();
 		return;
 	}
+	if (setup.fw_open && setup.action == SETUP_NONE) {
+		if (setup.fw_cancel) {
+			fw_close();
+			setup_draw_panel();
+		} else if (setup.fw_work) {
+			setup.fw_work = false;
+			fwpanel_run(&setup.fw, &fw_platform); // staging ends in the restart
+			fw_draw_panel();
+		}
+		return;
+	}
 	if (setup.action == SETUP_NONE)
 		setup.action = setup_tick(&setup.ui, to_ms_since_boot(get_absolute_time()));
 	setup_action_t a = setup.action;
@@ -398,6 +493,10 @@ static void setup_service(void) {
 		setup_demo_start();
 	} else if (a == SETUP_REBOOT) {
 		restart(); // the last resort when the terminal is stuck
+	} else if (a == SETUP_FIRMWARE) {
+		fwpanel_open(&setup.fw);
+		setup.fw_open = setup.fw_work = true; // the check
+		fw_draw_panel();
 	} else if (a == SETUP_DRIVES) {
 		drivepanel_open(&setup.drives);
 		setup.drives_open = true;

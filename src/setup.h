@@ -8,7 +8,8 @@
 // Keys arrive as the bytes a VT100 keyboard sends (from the USB keyboard or
 // from the host): Up/Down (ESC [ A/B or ESC O A/B) select a setting,
 // Left/Right and Space change it, Return saves, Escape cancels, T shows the
-// demo screen, R reboots the board, and with machine_menu D opens the Drives
+// demo screen, R reboots the board, U opens the firmware update (fwpanel.h),
+// and with machine_menu D opens the Drives
 // panel and M leaves for the Z80 machine's menu. A lone ESC
 // is only known to be the Escape key once SETUP_ESC_TIMEOUT_MS pass without
 // the rest of a sequence (setup_tick).
@@ -21,8 +22,9 @@
 
 #define SETUP_ITEMS SETTINGS_FIELDS
 // In a box (screen_frame): the top line with the title, the settings with
-// two preview rows under the colour ones, message, help, the bottom line.
-#define SETUP_ROWS (SETUP_ITEMS + 6)
+// two preview rows under the colour ones, message, two help rows, the
+// bottom line.
+#define SETUP_ROWS (SETUP_ITEMS + 7)
 #define SETUP_ESC_TIMEOUT_MS 100
 
 typedef enum {
@@ -34,6 +36,7 @@ typedef enum {
 	SETUP_DRIVES,  // D (with machine_menu): the Drives panel (drivepanel.h)
 	SETUP_DEMO,    // T: show the demo screen (demo.h) until a key
 	SETUP_REBOOT,  // R: restart the board (unsaved changes are dropped)
+	SETUP_FIRMWARE, // U: the firmware update panel (fwpanel.h)
 } setup_action_t;
 
 typedef struct {

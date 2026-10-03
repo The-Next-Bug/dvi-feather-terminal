@@ -8,6 +8,7 @@
 #include "diskimg.h"
 #include "drives.h"
 #include "ff.h"
+#include "fwpanel.h"
 #include "lz.h"
 #include "machine.h"
 
@@ -258,8 +259,7 @@ static void firmware_install(void) {
 		show_menu();
 		return;
 	}
-	f_unlink(MONITOR_FIRMWARE_OLD);
-	if (f_rename(MONITOR_FIRMWARE, MONITOR_FIRMWARE_OLD) != FR_OK)
+	if (!fwpanel_retire_file())
 		put(" (could not rename it to FIRMWARE.OLD)");
 	// Leave the card's file system clean: the board restarts from here.
 	drives_flush();

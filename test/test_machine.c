@@ -10,6 +10,7 @@
 #include "drives.h"
 #include "ff.h"
 #include "font.h"
+#include "fwpanel.h"
 #include "lz.h"
 #include "machine.h"
 #include "machine_host.h"
@@ -575,6 +576,126 @@ static void test_monitor_firmware(void) {
 	f_unlink(MONITOR_FIRMWARE_OLD);
 }
 
+// SET-UP's firmware update panel, with the same stubs.
+static bool panel_card;
+static unsigned panel_shows, panel_unmounts, panel_commit_unmounts;
+
+static bool panel_mount(char *info, size_t n) {
+	if (!panel_card)
+		snprintf(info, n, "no SD card found");
+	return panel_card;
+}
+
+static void panel_unmount(bool commit) {
+	++*(commit ? &panel_commit_unmounts : &panel_unmounts);
+}
+
+static screen_t panel_shown; // as panel_show last drew it
+
+static void panel_show(const fwpanel_t *p) {
+	++panel_shows;
+	screen_init(&panel_shown, 80, 7, 0);
+	fwpanel_draw(p, &panel_shown, 0, 7, 0, 4);
+}
+
+static bool shown_row(unsigned row, const char *text) {
+	char line[81];
+	for (unsigned c = 0; c < 80; ++c)
+		line[c] = (char)screen_glyph(&panel_shown, c, row);
+	line[80] = 0;
+	return strstr(line, text) != NULL;
+}
+
+static const fwpanel_platform_t panel_platform = {.mount = panel_mount, .check = firmware_check,
+	.stage = firmware_stage, .unmount = panel_unmount, .commit = firmware_commit, .show = panel_show};
+
+static bool panel_row(const fwpanel_t *p, unsigned row, const char *text) {
+	static screen_t s;
+	screen_init(&s, 80, 7, 0);
+	fwpanel_draw(p, &s, 0, 7, 0, 4);
+	char line[81];
+	for (unsigned c = 0; c < 80; ++c)
+		line[c] = (char)screen_glyph(&s, c, row);
+	line[80] = 0;
+	return strstr(line, text) != NULL;
+}
+
+static void test_firmware_panel(void) {
+	static fwpanel_t p;
+	FILINFO info;
+	stages = commits = panel_unmounts = panel_commit_unmounts = 0;
+
+	// No card: says so, any key goes back, nothing to let go.
+	panel_card = false;
+	fwpanel_open(&p);
+	CHECK(panel_row(&p, 0, "SET-UP  Firmware update"));
+	CHECK(panel_row(&p, 2, "Checking FIRMWARE.UF2"));
+	CHECK_EQ(fwpanel_input(&p, 'y'), FWPANEL_NONE); // busy
+	CHECK_EQ(fwpanel_run(&p, &panel_platform), FWPANEL_REDRAW);
+	CHECK_EQ(p.state, FWPANEL_FAILED);
+	CHECK(panel_row(&p, 3, "no SD card found"));
+	CHECK_EQ(fwpanel_input(&p, 'x'), FWPANEL_CANCEL);
+	fwpanel_close(&p, &panel_platform);
+	CHECK_EQ(panel_unmounts, 0);
+
+	// No file: the check refuses it; leaving lets the card go.
+	panel_card = true;
+	f_unlink(MONITOR_FIRMWARE);
+	fwpanel_open(&p);
+	fwpanel_run(&p, &panel_platform);
+	CHECK_EQ(p.state, FWPANEL_FAILED);
+	CHECK(panel_row(&p, 2, "cannot be installed"));
+	fwpanel_close(&p, &panel_platform);
+	CHECK_EQ(panel_unmounts, 1);
+
+	// Declined with N, or Escape.
+	write_file(MONITOR_FIRMWARE, "GOOD");
+	for (const char *k = "N\x1b"; *k; ++k) {
+		fwpanel_open(&p);
+		fwpanel_run(&p, &panel_platform);
+		CHECK_EQ(p.state, FWPANEL_ASK);
+		CHECK(panel_row(&p, 2, "Install it and restart (Y/N)?"));
+		CHECK(panel_row(&p, 3, "test firmware"));
+		CHECK(panel_row(&p, 6, "Y install and restart"));
+		CHECK_EQ(fwpanel_input(&p, 'x'), FWPANEL_NONE);
+		CHECK_EQ(fwpanel_input(&p, (uint8_t)*k), FWPANEL_CANCEL);
+		fwpanel_close(&p, &panel_platform);
+	}
+	CHECK_EQ(stages, 0);
+
+	// Staging fails: the file stays, nothing committed.
+	fwpanel_open(&p);
+	fwpanel_run(&p, &panel_platform);
+	CHECK_EQ(fwpanel_input(&p, 'y'), FWPANEL_WORK);
+	CHECK_EQ(fwpanel_run(&p, &panel_platform), FWPANEL_REDRAW);
+	CHECK_EQ(p.state, FWPANEL_FAILED);
+	CHECK(panel_row(&p, 3, "flash verify failed"));
+	CHECK_EQ(stages, 1);
+	CHECK_EQ(commits, 0);
+	CHECK_EQ(f_stat(MONITOR_FIRMWARE, &info), FR_OK);
+	fwpanel_close(&p, &panel_platform);
+
+	// Installed: a progress bar (redrawn as it grows, not per block),
+	// renamed, the card closed for the commit, committed.
+	write_file(MONITOR_FIRMWARE_OLD, "older");
+	write_file(MONITOR_FIRMWARE, "STAGES");
+	fwpanel_open(&p);
+	fwpanel_run(&p, &panel_platform);
+	fwpanel_input(&p, 'Y');
+	panel_shows = 0;
+	fwpanel_run(&p, &panel_platform);
+	CHECK(panel_shows > 10 && panel_shows < 60); // 257 progress calls
+	// Last shown before the commit:
+	CHECK(shown_row(2, "Installing the new firmware: do not power off."));
+	CHECK(shown_row(4, "[##################################################] 100%"));
+	CHECK_EQ(commits, 1);
+	CHECK_EQ(panel_commit_unmounts, 1);
+	CHECK_EQ(f_stat(MONITOR_FIRMWARE, &info), FR_NO_FILE);
+	CHECK_EQ(f_stat(MONITOR_FIRMWARE_OLD, &info), FR_OK);
+	CHECK_EQ(info.fsize, 6);
+	f_unlink(MONITOR_FIRMWARE_OLD);
+}
+
 // On a card's usual 32 KB clusters a blank disk reaches the card many
 // sectors at a time (multi-block writes), not one by one (lpt.9).
 static void test_blank_disk_chunks(void) {
@@ -607,6 +728,7 @@ int main(void) {
 	RUN(test_monitor_fresh_card);
 	RUN(test_monitor_autoboot);
 	RUN(test_monitor_firmware);
+	RUN(test_firmware_panel);
 	RUN(test_blank_disk_chunks);
 	drives_unmount_all();
 	f_unmount("");
