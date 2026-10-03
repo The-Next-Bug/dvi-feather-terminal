@@ -4,7 +4,9 @@
 #include <string.h>
 
 
-#define NAME_COL 6
+// The text starts inside the box (screen_frame).
+#define LEFT 1
+#define NAME_COL (LEFT + 6)
 
 static int index_of(const drivepanel_t *p, const char *name) {
 	if (name)
@@ -117,15 +119,15 @@ unsigned drivepanel_apply(drivepanel_t *p, bool *failed) {
 	return changed;
 }
 
-void drivepanel_draw(const drivepanel_t *p, screen_t *s, unsigned top, uint8_t fg, uint8_t bg) {
-	for (unsigned r = 0; r < DRIVEPANEL_ROWS; ++r)
-		screen_clear_line(s, top + r, fg, bg);
-	screen_puts(s, 0, top, " SET-UP  Drives (CP/M sees a changed drive after ^C)", fg, bg);
+void drivepanel_draw(const drivepanel_t *p, screen_t *s, unsigned top, uint8_t fg, uint8_t bg, uint8_t border) {
+	screen_frame(s, top, DRIVEPANEL_ROWS, "SET-UP  Drives (CP/M sees a changed drive after ^C)", fg, bg, border);
 	for (unsigned d = 0; d < DRIVES; ++d) {
 		unsigned row = top + 1 + d;
 		char text[SCREEN_MAX_COLS + 1];
-		snprintf(text, sizeof text, " %c %c:", d == p->drive ? '>' : ' ', 'A' + d);
-		screen_puts(s, 0, row, text, fg, bg);
+		bool selected = d == p->drive;
+		snprintf(text, sizeof text, " %c %c:", selected ? '>' : ' ', 'A' + d);
+		for (unsigned c = 0; text[c]; ++c)
+			screen_put_attr(s, LEFT + c, row, (uint8_t)text[c], fg, bg, selected ? SCREEN_ATTR_BOLD : 0);
 		int c = p->choice[d];
 		snprintf(text, sizeof text, "< %-8s >", c >= 0 ? p->images[c] : "none");
 		screen_puts(s, NAME_COL, row, text, bg, fg);
@@ -138,7 +140,7 @@ void drivepanel_draw(const drivepanel_t *p, screen_t *s, unsigned top, uint8_t f
 		screen_puts(s, NAME_COL + 12, row, text, fg, bg);
 	}
 	if (p->message)
-		screen_puts(s, 3, top + DRIVEPANEL_ROWS - 2, p->message, fg, bg);
-	screen_puts(s, 0, top + DRIVEPANEL_ROWS - 1,
+		screen_puts(s, LEFT + 3, top + DRIVEPANEL_ROWS - 3, p->message, fg, bg);
+	screen_puts(s, LEFT, top + DRIVEPANEL_ROWS - 2,
 		" Up/Down drive   Left/Right/Space disk   Return mount   Esc back", fg, bg);
 }

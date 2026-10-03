@@ -180,20 +180,23 @@ static void show_palette(const settings_t *s) {
 	palette.mono = s->palette;
 }
 
-// The panels are drawn in the edited settings' colours, like the preview
-// (setup_service shows their palette).
+// The panels are boxes on the default background, the box in the status
+// line's colour of the edited settings, like the preview (setup_service
+// shows their palette).
 static void setup_draw_panel(void) {
 	char title[SCREEN_MAX_COLS + 1];
-	snprintf(title, sizeof title, "  DVI Terminal build %s", TERM_BUILD_ID);
+	snprintf(title, sizeof title, "DVI Terminal build %s", TERM_BUILD_ID);
 	settings_colours_t c = settings_colours(&setup.ui.values);
-	setup_draw(&setup.ui, &screen, SETUP_TOP, title, c.status_fg, c.status_bg);
+	setup_draw(&setup.ui, &screen, SETUP_TOP, title, PALETTE_TEXT, PALETTE_BACKGROUND, c.status_bg);
 }
 
+// At the bottom of SET-UP's rows, the rows above it blank.
 static void drives_draw_panel(void) {
 	settings_colours_t c = settings_colours(&setup.ui.values);
-	for (unsigned r = DRIVEPANEL_ROWS; r < SETUP_ROWS; ++r)
-		screen_clear_line(&screen, SETUP_TOP + r, c.status_fg, c.status_bg);
-	drivepanel_draw(&setup.drives, &screen, SETUP_TOP, c.status_fg, c.status_bg);
+	for (unsigned r = 0; r < SETUP_ROWS - DRIVEPANEL_ROWS; ++r)
+		screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	drivepanel_draw(&setup.drives, &screen, SETUP_TOP + SETUP_ROWS - DRIVEPANEL_ROWS, PALETTE_TEXT,
+		PALETTE_BACKGROUND, c.status_bg);
 }
 
 // A key for the Drives panel. Mounting is left for the main loop.

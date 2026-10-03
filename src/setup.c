@@ -7,6 +7,8 @@
 #include "palette.h"
 
 #define NAME_WIDTH 18
+// The panel's text starts inside its box (screen_frame).
+#define LEFT 1
 // Settings with more choices than this show only the current one, as
 // "< value >", so the row fits in 80 columns.
 #define INLINE_CHOICES 4
@@ -126,7 +128,7 @@ setup_action_t setup_tick(setup_t *u, uint32_t now_ms) {
 static void draw_colours_preview(screen_t *s, unsigned row, const settings_t *values) {
 	settings_colours_t c = settings_colours(values);
 	const uint8_t fg = PALETTE_TEXT, bg = PALETTE_BACKGROUND;
-	unsigned col = 3 + NAME_WIDTH;
+	unsigned col = LEFT + 3 + NAME_WIDTH;
 	screen_puts(s, col, row, " Text ", fg, bg);
 	screen_puts(s, col, row + 1, "      ", fg, bg);
 	col += 6;
@@ -151,13 +153,11 @@ static void draw_colours_preview(screen_t *s, unsigned row, const settings_t *va
 	screen_put(s, col, row + 1, ' ', fg, bg);
 }
 
-void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, uint8_t fg, uint8_t bg) {
+void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, uint8_t fg, uint8_t bg,
+	uint8_t border) {
 	char text[SCREEN_MAX_COLS + 1];
-	for (unsigned r = 0; r < SETUP_ROWS; ++r)
-		screen_clear_line(s, top + r, fg, bg);
-
-	snprintf(text, sizeof text, " SET-UP  %s", title);
-	screen_puts(s, 0, top, text, fg, bg);
+	snprintf(text, sizeof text, "SET-UP  %s", title);
+	screen_frame(s, top, SETUP_ROWS, text, fg, bg, border);
 
 	settings_t values = u->values;
 	// The preview goes under the last colour setting.
@@ -168,15 +168,19 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 		++row;
 		if (i == preview_after + 1)
 			row += 2; // below the preview
-		snprintf(text, sizeof text, " %c %s", i == u->item ? '>' : ' ', it->name);
-		screen_puts(s, 0, row, text, fg, bg);
-		unsigned col = 3 + NAME_WIDTH;
+		// The selected setting: marked, and its name in bold.
+		bool selected = i == u->item;
+		snprintf(text, sizeof text, " %c %s", selected ? '>' : ' ', it->name);
+		for (unsigned c = 0; text[c]; ++c)
+			screen_put_attr(s, LEFT + c, row, (uint8_t)text[c], fg, bg, selected ? SCREEN_ATTR_BOLD : 0);
+		unsigned col = LEFT + 3 + NAME_WIDTH;
 		unsigned current = choice_index(&values, i);
 		if (it->n_choices > INLINE_CHOICES) {
 			snprintf(text, sizeof text, "< %s >", it->labels[current]);
 			screen_puts(s, col + 1, row, text, bg, fg);
 			continue;
 		}
+		// Every choice, the current one reversed.
 		for (unsigned c = 0; c < it->n_choices; ++c) {
 			snprintf(text, sizeof text, " %s ", it->labels[c]);
 			bool on = c == current;
@@ -187,8 +191,8 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 	draw_colours_preview(s, top + 2 + preview_after, &values);
 
 	if (u->message)
-		screen_puts(s, 3, top + SETUP_ROWS - 2, u->message, fg, bg);
-	screen_puts(s, 0, top + SETUP_ROWS - 1, u->machine_menu
+		screen_puts(s, LEFT + 3, top + SETUP_ROWS - 3, u->message, fg, bg);
+	screen_puts(s, LEFT, top + SETUP_ROWS - 2, u->machine_menu
 		? " Arrows change  Return save  Esc cancel  T demo  D drives  M monitor  R reboot"
 		: " Up/Down select  Left/Right change  Return save  Esc cancel  T demo  R reboot", fg, bg);
 }

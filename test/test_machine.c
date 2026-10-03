@@ -9,6 +9,7 @@
 #include "drivepanel.h"
 #include "drives.h"
 #include "ff.h"
+#include "font.h"
 #include "lz.h"
 #include "machine.h"
 #include "machine_host.h"
@@ -216,7 +217,8 @@ static void test_drive_panel(void) {
 
 	screen_t s;
 	screen_init(&s, 80, 0x3f, 0);
-	drivepanel_draw(&p, &s, 0, 0x3f, 0);
+	drivepanel_draw(&p, &s, 0, 0x3f, 0, 0x0c);
+	CHECK_EQ(screen_glyph(&s, 0, 0), GLYPH_DEC_GRAPHICS('l')); // in a box
 	char row[81] = "";
 	for (unsigned c = 0; c < 80; ++c)
 		row[c] = (char)screen_glyph(&s, c, 5);

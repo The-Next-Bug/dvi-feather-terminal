@@ -157,8 +157,9 @@ status line (row 24); UART0 on GP0/GP1.
   line's indices and the logo's tint. CRC-32 in
   `src/crc32.[ch]` (shared with the disk images). main.c apply_settings()
   -> serial_configure, term_set_defaults, show_palette.
-  `src/setup.[ch]` (portable): SET-UP panel over the bottom text rows
-  (one row per setting, plus two preview rows under Palette: ANSI colours
+  `src/setup.[ch]` (portable): SET-UP panel over the bottom text rows,
+  in a box (screen_frame: DEC line glyphs in the status bg colour, text
+  in the default colours; also the Drives panel) (one row per setting, plus two preview rows under Palette: ANSI colours
   as fg and as bg, spaced so no 8-px group held two samples in 132 cols
   under the old PicoDVI encoder)
   (key bytes in, save/cancel out); main.c saves/restores those rows. Opened

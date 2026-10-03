@@ -16,7 +16,7 @@
 #include "drives.h"
 #include "screen.h"
 
-#define DRIVEPANEL_ROWS (DRIVES + 4) // title, the drives, message, help
+#define DRIVEPANEL_ROWS (DRIVES + 5) // in a box: the top line with the title, the drives, message, help, the bottom line
 #define DRIVEPANEL_ESC_TIMEOUT_MS 100
 
 typedef enum {
@@ -47,6 +47,7 @@ drivepanel_action_t drivepanel_tick(drivepanel_t *p, uint32_t now_ms);
 // drives changed; *failed is set if one could not be mounted.
 unsigned drivepanel_apply(drivepanel_t *p, bool *failed);
 
-void drivepanel_draw(const drivepanel_t *p, screen_t *s, unsigned top, uint8_t fg, uint8_t bg);
+// Draw it like SET-UP (setup_draw): a box in border, text in fg on bg.
+void drivepanel_draw(const drivepanel_t *p, screen_t *s, unsigned top, uint8_t fg, uint8_t bg, uint8_t border);
 
 #endif

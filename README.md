@@ -168,7 +168,9 @@ SET-UP's Status line setting hides it: row 24 then stays blank.
 
 ### SET-UP
 
-A panel over the bottom text rows for the settings kept in flash:
+A box over the bottom text rows for the settings kept in flash. The
+selected setting is marked `>` and its name is bold; each current choice is
+shown in reverse video:
 
 | Setting | Values | |
 |---|---|---|
@@ -187,13 +189,13 @@ A panel over the bottom text rows for the settings kept in flash:
 **Colors**: green, amber or blue phosphor turns the 16 ANSI colors (default
 text and bold included) into shades of that hue, by brightness (black; dark
 gray; the normal colors; default text; the bright colors; bold); 256-color
-and 24-bit colors stay in color. The status line, SET-UP panel and startup
+and 24-bit colors stay in color. The status line, SET-UP's box and startup
 logo match (white keeps the logo's own colors).
 
 **Palette**: mono makes every color, 256-color and 24-bit too, a shade of
 the Colors hue (white: gray) by its brightness, so colors of similar
-brightness look alike. The status line and SET-UP panel become the text
-colors reversed, and with white the startup logo shows in gray.
+brightness look alike. The status line becomes the text colors reversed
+(and SET-UP's box the text color), and with white the startup logo shows in gray.
 
 Under Palette, two rows preview both color settings: default text, bold and
 the status line, then each of the 16 ANSI colors (0-F) as text on the

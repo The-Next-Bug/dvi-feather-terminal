@@ -20,9 +20,9 @@
 #include "settings.h"
 
 #define SETUP_ITEMS SETTINGS_FIELDS
-// Title, the settings with two preview rows under the colour ones, message,
-// help.
-#define SETUP_ROWS (SETUP_ITEMS + 5)
+// In a box (screen_frame): the top line with the title, the settings with
+// two preview rows under the colour ones, message, help, the bottom line.
+#define SETUP_ROWS (SETUP_ITEMS + 6)
 #define SETUP_ESC_TIMEOUT_MS 100
 
 typedef enum {
@@ -53,10 +53,13 @@ setup_action_t setup_input(setup_t *u, uint8_t c, uint32_t now_ms);
 // Call regularly: a lone ESC becomes SETUP_CANCEL after the timeout.
 setup_action_t setup_tick(setup_t *u, uint32_t now_ms);
 
-// Draw the panel on rows top .. top + SETUP_ROWS - 1 in fg/bg (the current
-// choices reversed); title is shown after "SET-UP". Under Colors and
+// Draw the panel on rows top .. top + SETUP_ROWS - 1: a box in border, the
+// text in fg on bg, the selected setting's name in bold and every current
+// choice reversed (told apart by more than colour, for the mono palette);
+// title is shown after "SET-UP" in the top line. Under Colors and
 // Palette, a preview of the chosen colours: default text, bold and status
 // line, and the 16 ANSI colours as text and as backgrounds.
-void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, uint8_t fg, uint8_t bg);
+void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, uint8_t fg, uint8_t bg,
+	uint8_t border);
 
 #endif
