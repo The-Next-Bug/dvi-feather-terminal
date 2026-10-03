@@ -44,6 +44,19 @@ MINI = {
 }
 CONTROL_PICTURES = {"␉": "HT", "␌": "FF", "␍": "CR", "␊": "LF", "␤": "NL", "␋": "VT"}
 
+# The double and mixed box-drawing glyphs: line weights (0 none, 1 single,
+# 2 double) of their up, down, left and right arms. Some fonts (the
+# console-setup Terminus PSFs) map these to the single-line glyphs; then
+# they are drawn here.
+BOX_ARMS = {
+    "═": (0, 0, 2, 2), "║": (2, 2, 0, 0), "╔": (0, 2, 0, 2), "╗": (0, 2, 2, 0),
+    "╚": (2, 0, 0, 2), "╝": (2, 0, 2, 0), "╠": (2, 2, 0, 2), "╣": (2, 2, 2, 0),
+    "╦": (0, 2, 2, 2), "╩": (2, 0, 2, 2), "╬": (2, 2, 2, 2), "╒": (0, 1, 0, 2),
+    "╓": (0, 2, 0, 1), "╕": (0, 1, 2, 0), "╖": (0, 2, 1, 0), "╘": (1, 0, 0, 2),
+    "╙": (2, 0, 0, 1), "╛": (1, 0, 2, 0), "╜": (2, 0, 1, 0), "╞": (1, 1, 0, 2),
+    "╟": (2, 2, 0, 1), "╡": (1, 1, 2, 0), "╢": (2, 2, 1, 0),
+}
+
 
 def load_psf(path, width, height):
     """Return {char: rows}, each row an int with the MSB of `width` bits leftmost."""
@@ -145,6 +158,69 @@ def control_picture(pair, width, height):
     return rows
 
 
+def draw_box(arms, cx, cy, width, height):
+    """A box-drawing glyph from its arms (BOX_ARMS) around the single lines'
+    column cx and row cy (counted from the left and the top): a double line
+    is two strokes, at cx +- 1 or cy +- 1, meeting the other arms' strokes
+    as in the fonts that have these glyphs."""
+    up, down, left, right = arms
+    rows = [0] * height
+
+    def dot(x, y):
+        if 0 <= x < width and 0 <= y < height:
+            rows[y] |= 1 << (width - 1 - x)
+
+    def hline(y, x0, x1):
+        for x in range(min(x0, x1), max(x0, x1) + 1):
+            dot(x, y)
+
+    def vline(x, y0, y1):
+        for y in range(min(y0, y1), max(y0, y1) + 1):
+            dot(x, y)
+
+    # Where a horizontal stroke from the side `sign` (-1 left, +1 right)
+    # stops, at cx moved towards that side (near) or away from it (far).
+    def h_end(sign, own, other):
+        # own: the vertical arm on this stroke's side of the row (up for the
+        # upper stroke), other: the opposite one.
+        if own == 2:
+            return cx + sign  # near stroke of the double vertical
+        if own == 0 and other == 2:
+            return cx - sign  # a corner: round the far stroke
+        return cx
+
+    def v_end(sign, own, other):
+        if own == 2:
+            return cy + sign
+        if own == 0 and other == 2:
+            return cy - sign
+        return cy
+
+    vertical = max(up, down)
+    horizontal = max(left, right)
+    for sign, weight, edge in ((-1, left, 0), (1, right, width - 1)):
+        if weight == 1:
+            if vertical == 2:
+                stop = cx + sign if up == 2 and down == 2 else cx - sign
+            else:
+                stop = cx
+            hline(cy, edge, stop)
+        elif weight == 2:
+            hline(cy - 1, edge, h_end(sign, up, down))
+            hline(cy + 1, edge, h_end(sign, down, up))
+    for sign, weight, edge in ((-1, up, 0), (1, down, height - 1)):
+        if weight == 1:
+            if horizontal == 2:
+                stop = cy + sign if left == 2 and right == 2 else cy - sign
+            else:
+                stop = cy
+            vline(cx, edge, stop)
+        elif weight == 2:
+            vline(cx - 1, edge, v_end(sign, left, right))
+            vline(cx + 1, edge, v_end(sign, right, left))
+    return rows
+
+
 def build(chars, width, height):
     full = (1 << width) - 1
     blank = [0] * height
@@ -165,6 +241,14 @@ def build(chars, width, height):
         "▐": [(1 << (width - left)) - 1] * height,
         "▓": shade and [b ^ full for b in shade],
     }
+
+    # No double lines (the font maps them to the single ones): draw them.
+    if glyph("═") is None or glyph("═") == glyph("─"):
+        cx = width - 1 - max(b for b in range(width) if glyph("│")[height // 2] >> b & 1)
+        cy = mid
+        for ch, arms in BOX_ARMS.items():
+            drawn[ch] = draw_box(arms, cx, cy, width, height)
+        chars = {ch: rows for ch, rows in chars.items() if ch not in BOX_ARMS}
 
     table = [blank] * N_GLYPHS
     missing = []

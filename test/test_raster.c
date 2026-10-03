@@ -213,6 +213,22 @@ static void test_connectors_join(void) {
 	}
 }
 
+// Double-line box drawing is double in every font (qur.11: the Terminus
+// console fonts map it to the single lines, so font_gen.py draws it).
+static void test_double_lines(void) {
+	for (raster_layout_t l = 0; l < RASTER_LAYOUTS; ++l) {
+		unsigned rows = raster_font_rows(l), h_lines = 0, v_lines = 0;
+		for (unsigned r = 0; r < rows; ++r) {
+			h_lines += raster_glyph_row(l, false, GLYPH_DOUBLE_H, r) != 0;
+			unsigned v = raster_glyph_row(l, false, GLYPH_DOUBLE_V, r);
+			v_lines += (unsigned)__builtin_popcount(v);
+			CHECK_EQ(__builtin_popcount(v), 2); // two strokes all the way down
+		}
+		CHECK_EQ(h_lines, 2);
+		CHECK_EQ(v_lines, 2 * rows);
+	}
+}
+
 // The cursor cell is shown inverted on every scanline of the row: a blank
 // cell becomes a block of the fg, a glyph's pixels swap fg and bg. Other
 // cells are untouched.
@@ -369,6 +385,7 @@ int main(void) {
 	RUN(test_glyph_bits);
 	RUN(test_border_is_black);
 	RUN(test_connectors_join);
+	RUN(test_double_lines);
 	RUN(test_cursor_inverts_cell);
 	RUN(test_underline);
 	RUN(test_blink);
