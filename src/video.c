@@ -265,8 +265,20 @@ video_stats_t video_stats(void) {
 	return st;
 }
 
+// A scroll reuses slot as display row `row` (screen recycle hook): blank its
+// pixels now, in the colour the row shows (its fg in reverse video), so the
+// line that left does not show in its new place until video_update renders
+// the slot. Not while the splash keeps its data in the text slots.
+static void recycle_slot(void *ctx, unsigned slot, unsigned row, uint8_t fg, uint8_t bg) {
+	const screen_t *s = ctx;
+	if (splash_holds_raster && slot < SPLASH_SLOTS)
+		return;
+	raster_blank_line(&raster[slot], s->reverse_rows >> row & 1 ? fg : bg);
+}
+
 void video_start(screen_t *screen) {
 	video_screen = screen;
+	screen_set_recycle(screen, recycle_slot, screen);
 	video_update(screen);
 	diag_mark("screen rasterised; launching core 1");
 	core1_launched = true;

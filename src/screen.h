@@ -48,12 +48,23 @@ typedef struct {
 	bool cursor_visible;
 	uint32_t reverse_rows; // bit n: display row n is shown reversed
 	uint32_t dirty; // bit n: lines[n] changed since the renderer last saw it
+	// A scroll is about to reuse slot as display row `row`, cleared to
+	// fg/bg: called after the cells are cleared, before row_map changes, so
+	// the renderer can blank what it shows for the slot at once (it would
+	// otherwise show the line that left until it next renders the slot).
+	// NULL: nothing. screen_init leaves it as it is (screen_set_recycle).
+	void (*recycle)(void *ctx, unsigned slot, unsigned row, uint8_t fg, uint8_t bg);
+	void *recycle_ctx;
 } screen_t;
 
 // Set the width (80 or 132; anything else is taken as 80), map every row to
 // its own slot, fill the screen with blanks in fg/bg and hide the cursor.
 // Every slot is marked dirty.
 void screen_init(screen_t *s, unsigned cols, uint8_t fg, uint8_t bg);
+
+// The recycle hook (screen_t.recycle).
+void screen_set_recycle(screen_t *s, void (*recycle)(void *ctx, unsigned slot, unsigned row, uint8_t fg, uint8_t bg),
+	void *ctx);
 
 // Out-of-range cells are ignored. screen_put clears the cell's attributes.
 void screen_put(screen_t *s, unsigned col, unsigned row, uint8_t glyph, uint8_t fg, uint8_t bg);

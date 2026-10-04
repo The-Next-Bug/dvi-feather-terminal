@@ -1,3 +1,5 @@
+#include <stdbool.h>
+
 #include "screen.h"
 #include "test.h"
 
@@ -105,6 +107,61 @@ static void test_scroll_region(void) {
 	CHECK_EQ(seen, ALL_SLOTS);
 }
 
+// The recycle hook: called for the slot a scroll reuses, with the row it
+// becomes and the fill colours, after its cells are cleared and before
+// row_map moves it (so the renderer can blank it before it shows there).
+static struct {
+	unsigned calls, slot, row;
+	uint8_t fg, bg;
+	bool cleared, still_at_old_row;
+	unsigned old_row;
+} hook;
+
+static void recycle(void *ctx, unsigned slot, unsigned row, uint8_t fg, uint8_t bg) {
+	CHECK(ctx == &hook);
+	++hook.calls;
+	hook.slot = slot;
+	hook.row = row;
+	hook.fg = fg;
+	hook.bg = bg;
+	hook.cleared = s.lines[slot].glyph[0] == ' ' && s.lines[slot].bg[0] == bg;
+	hook.still_at_old_row = s.row_map[hook.old_row] == slot;
+}
+
+static void test_scroll_recycle_hook(void) {
+	screen_set_recycle(&s, recycle, &hook);
+	screen_init(&s, 80, FG, BG); // keeps the hook
+	for (unsigned row = 0; row < SCREEN_ROWS; ++row)
+		screen_put(&s, 0, row, (uint8_t)('A' + row), FG, BG);
+	// Up: the top row's slot becomes the bottom row.
+	unsigned slot = s.row_map[3];
+	hook.calls = 0;
+	hook.old_row = 3;
+	screen_scroll_up(&s, 3, 12, RGB222(1, 1, 1), RGB222(0, 1, 0));
+	CHECK_EQ(hook.calls, 1);
+	CHECK_EQ(hook.slot, slot);
+	CHECK_EQ(hook.row, 12);
+	CHECK_EQ(hook.fg, RGB222(1, 1, 1));
+	CHECK_EQ(hook.bg, RGB222(0, 1, 0));
+	CHECK(hook.cleared);
+	CHECK(hook.still_at_old_row);
+	CHECK_EQ(s.row_map[12], slot);
+	// Down: the bottom row's slot becomes the top row.
+	slot = s.row_map[20];
+	hook.old_row = 20;
+	screen_scroll_down(&s, 0, 20, FG, BG);
+	CHECK_EQ(hook.calls, 2);
+	CHECK_EQ(hook.slot, slot);
+	CHECK_EQ(hook.row, 0);
+	CHECK(hook.cleared);
+	CHECK(hook.still_at_old_row);
+	CHECK_EQ(s.row_map[0], slot);
+	// A rejected region recycles nothing.
+	screen_scroll_up(&s, 5, 5, FG, BG);
+	CHECK_EQ(hook.calls, 2);
+	screen_set_recycle(&s, NULL, NULL);
+}
+
 static void test_scroll_many_times(void) {
 	screen_init(&s, 132, FG, BG);
 	const unsigned bottom = SCREEN_ROWS - 2;
@@ -186,6 +243,7 @@ int main(void) {
 	RUN(test_dirty_tracks_slots);
 	RUN(test_scroll_region);
 	RUN(test_scroll_many_times);
+	RUN(test_scroll_recycle_hook);
 	RUN(test_scroll_rejects_bad_regions);
 	RUN(test_attributes);
 	RUN(test_reverse_rows_mark_dirty);

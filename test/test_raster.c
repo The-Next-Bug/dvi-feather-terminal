@@ -423,6 +423,25 @@ static void test_reverse(void) {
 	CHECK(dark > 0);
 }
 
+// A blanked line (a slot a scroll reuses) shows one colour over every cell,
+// whatever it held, with the border black.
+static void test_blank_line(void) {
+	for (raster_layout_t l = 0; l < RASTER_LAYOUTS; ++l) {
+		fill_busy(raster_cols(l), 3);
+		render(screen_line(&s, 0), l, 0);
+		raster_blank_line(&out, RGB222(0, 1, 1));
+		composed.valid = false;
+		const unsigned x0 = raster_x_offset(l), x_end = x0 + raster_cols(l) * raster_cell_width(l);
+		unsigned bad = 0;
+		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
+			for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x)
+				bad += shown(l, sy, x) != (x >= x0 && x < x_end ? RGB222(0, 1, 1) : 0);
+		CHECK_EQ(bad, 0);
+		// The cursor on it: a block of the colour inverted is the colour too.
+		CHECK_EQ(shown_at(l, 10, x0 + 1, 0), RGB222(0, 1, 1));
+	}
+}
+
 // The demo screen, the xterm colours as adjacent backgrounds included, is
 // pixel-exact in both widths.
 static void test_demo(void) {
@@ -441,6 +460,7 @@ int main(void) {
 	RUN(test_any_colours_exact);
 	RUN(test_glyph_bits);
 	RUN(test_render_over);
+	RUN(test_blank_line);
 	RUN(test_border_is_black);
 	RUN(test_connectors_join);
 	RUN(test_double_lines);

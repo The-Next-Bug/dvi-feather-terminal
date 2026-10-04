@@ -135,6 +135,11 @@ const char *raster_font_name(raster_layout_t l);
 // whether the line needs re-rendering when the phase changes.
 bool raster_render_line(raster_line_t *out, const screen_line_t *line, raster_layout_t l, unsigned flags);
 
+// Make line a blank line all in palette index colour, at once: every stored
+// row's bits clear, every cell's fg and bg colour. For a slot a scroll
+// reuses, until raster_render_line draws it properly.
+void raster_blank_line(raster_line_t *line, uint8_t colour);
+
 // Compose stored row sr of line into RASTER_LINE_WORDS words of pixels:
 // colours[c] is palette index c as a pixel in both halves of a word (the
 // renderer's pixel format). The border is 0 (black). The cell at

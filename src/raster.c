@@ -98,6 +98,14 @@ bool raster_render_line(raster_line_t *out, const screen_line_t *line, raster_la
 	return any_blink;
 }
 
+void raster_blank_line(raster_line_t *line, uint8_t colour) {
+	// Colours first: until the bits are clear, set pixels show the colour
+	// too, so the line is blank from the first store on.
+	memset(line->fg, colour, sizeof line->fg);
+	memset(line->bg, colour, sizeof line->bg);
+	memset(line->bits, 0, sizeof line->bits);
+}
+
 void raster_compose(uint32_t *px, const raster_line_t *line, raster_layout_t l, unsigned sr, int cursor_col,
 		const uint32_t colours[256]) {
 	const unsigned w = raster_cell_width(l), cols = raster_cols(l);

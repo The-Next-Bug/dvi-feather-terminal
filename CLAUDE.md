@@ -100,6 +100,10 @@ status line (row 24); UART0 on GP0/GP1.
 - `src/screen.[ch]` (portable): cell buffer: glyph code, fg/bg palette
   indices and attribute bits per cell; `row_map` (display row -> line slot) so
   scrolling rotates indices; `dirty` bit per slot; `reverse_rows` mask.
+  A scroll clears the recycled slot's cells, then calls the screen's
+  recycle hook, then remaps it (bd ful): video.c's hook blanks that slot's
+  raster at once (raster_blank_line, the row's colour, reverse included),
+  since core 1 draws raster[], which only catches up at video_update.
 - `src/vtparse.[ch]` (portable): Paul Williams' DEC parser. C1 (0x80-0x9F)
   ignored unless `c1_controls` (keeps UTF-8 safe); OSC/DCS/APC discarded.
 - `src/term.[ch]` (portable): VT100/VT102 emulation on the screen; replies
