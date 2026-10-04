@@ -24,6 +24,20 @@ void screen_init(screen_t *s, unsigned cols, uint8_t fg, uint8_t bg) {
 	s->reverse_rows = 0;
 }
 
+void screen_set_recycle(screen_t *s, void (*recycle)(void *ctx, unsigned slot, unsigned row, uint8_t fg, uint8_t bg),
+		void *ctx) {
+	s->recycle = recycle;
+	s->recycle_ctx = ctx;
+}
+
+// Clear the slot leaving one end of a scroll and tell the renderer, before
+// it is attached at the other end as row.
+static void recycle_slot(screen_t *s, unsigned slot, unsigned row, uint8_t fg, uint8_t bg) {
+	fill_slot(s, slot, fg, bg);
+	if (s->recycle)
+		s->recycle(s->recycle_ctx, slot, row, fg, bg);
+}
+
 void screen_put_attr(screen_t *s, unsigned col, unsigned row, uint8_t glyph, uint8_t fg, uint8_t bg,
 		uint8_t attr) {
 	if (col >= s->cols || row >= SCREEN_ROWS)
@@ -120,12 +134,13 @@ void screen_restore_row(screen_t *s, unsigned row, const screen_line_t *in) {
 void screen_scroll_down(screen_t *s, unsigned top, unsigned bottom, uint8_t fg, uint8_t bg) {
 	if (top >= bottom || bottom >= SCREEN_ROWS)
 		return;
-	// The slot leaving the bottom is recycled as the new top row.
+	// The slot leaving the bottom is recycled as the new top row: cleared
+	// first, so it never shows its old line there.
 	uint8_t recycled = s->row_map[bottom];
+	recycle_slot(s, recycled, top, fg, bg);
 	for (unsigned row = bottom; row > top; --row)
 		s->row_map[row] = s->row_map[row - 1];
 	s->row_map[top] = recycled;
-	fill_slot(s, recycled, fg, bg);
 }
 
 void screen_erase(screen_t *s, unsigned row, unsigned from, unsigned to, uint8_t fg, uint8_t bg) {
@@ -173,10 +188,11 @@ void screen_delete_cells(screen_t *s, unsigned row, unsigned col, unsigned n, ui
 void screen_scroll_up(screen_t *s, unsigned top, unsigned bottom, uint8_t fg, uint8_t bg) {
 	if (top >= bottom || bottom >= SCREEN_ROWS)
 		return;
-	// The slot leaving the top is recycled as the new bottom row.
+	// The slot leaving the top is recycled as the new bottom row: cleared
+	// first, so it never shows its old line there.
 	uint8_t recycled = s->row_map[top];
+	recycle_slot(s, recycled, bottom, fg, bg);
 	for (unsigned row = top; row < bottom; ++row)
 		s->row_map[row] = s->row_map[row + 1];
 	s->row_map[bottom] = recycled;
-	fill_slot(s, recycled, fg, bg);
 }

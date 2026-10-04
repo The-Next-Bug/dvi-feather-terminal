@@ -100,6 +100,10 @@ status line (row 24); UART0 on GP0/GP1.
 - `src/screen.[ch]` (portable): cell buffer: glyph code, fg/bg palette
   indices and attribute bits per cell; `row_map` (display row -> line slot) so
   scrolling rotates indices; `dirty` bit per slot; `reverse_rows` mask.
+  A scroll clears the recycled slot's cells, then calls the screen's
+  recycle hook, then remaps it (bd ful): video.c's hook blanks that slot's
+  raster at once (raster_blank_line, the row's colour, reverse included),
+  since core 1 draws raster[], which only catches up at video_update.
 - `src/vtparse.[ch]` (portable): Paul Williams' DEC parser. C1 (0x80-0x9F)
   ignored unless `c1_controls` (keeps UTF-8 safe); OSC/DCS/APC discarded.
 - `src/term.[ch]` (portable): VT100/VT102 emulation on the screen; replies
@@ -164,7 +168,10 @@ status line (row 24); UART0 on GP0/GP1.
   core 0's longest main-loop pass and line render, qur.21; debug usb:
   uptime and the last four USB host events from usbkbd_log, qur.3), blank_after (minutes; `src/blank.[ch]`
   portable idle timer, keys only, the waking key dropped; video_set_blank
-  makes core 1 send black lines); settings_colours() gives the status
+  makes core 1 stop the DVI signal: hstx_dvi_stop (DMA aborted, FIFO
+  drained, HSTX off), frame time kept on the timer (diag_frames,
+  palette_used) for core 0's waits, hstx_dvi_resume at a frame start on
+  wake; bd 3rk); settings_colours() gives the status
   line's indices and the logo's tint. CRC-32 in
   `src/crc32.[ch]` (shared with the disk images). main.c apply_settings()
   -> serial_configure, term_set_defaults, show_palette.
