@@ -12,6 +12,7 @@
 #include "lz.h"
 #include "machine.h"
 #include "scratch.h"
+#include "xfer.h"
 
 #define LIST_COLUMNS 5
 
@@ -96,6 +97,7 @@ static const char *fs_name(void) {
 }
 
 static void mount_card(void) {
+	xfer_reset();
 	drives_unmount_all();
 	f_unmount("");
 	mount_result = f_mount(&fs, "", 1);

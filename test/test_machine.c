@@ -1,6 +1,7 @@
 // The Z80 machine end to end: a FAT32 volume (in RAM), the embedded disk
 // images installed on it, CP/M 2.2 booted from them.
 
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -15,6 +16,7 @@
 #include "machine.h"
 #include "machine_host.h"
 #include "monitor.h"
+#include "xfer.h"
 #include "scratch.h"
 #include "test.h"
 
@@ -684,6 +686,107 @@ static void test_blank_disk_chunks(void) {
 	CHECK_EQ(drives_image_format("HD8"), DRIVES_HD8);
 }
 
+// ---- the file transfer device (port 10; xfer.c's own tests are test_xfer) ----
+
+static uint8_t xbuf[XFER_RECORD];
+
+// Run an xfer command on volume 0, with name (11 bytes, FCB form) as its
+// input if given.
+static uint8_t xcmd(uint8_t cmd, const char *name) {
+	if (name)
+		memcpy(xbuf, name, XFER_NAME);
+	return xfer_command(cmd, 0, xbuf);
+}
+
+static uint32_t fat_size(const char *path) {
+	FILINFO info;
+	return f_stat(path, &info) == FR_OK ? (uint32_t)info.fsize : UINT32_MAX;
+}
+
+// Z80 code for the port test, assembled into the boot ROM's page.
+static struct {
+	uint8_t code[256];
+	unsigned n;
+} z80;
+
+static void emit(unsigned n, ...) {
+	va_list ap;
+	va_start(ap, n);
+	for (unsigned i = 0; i < n; ++i)
+		z80.code[z80.n++] = (uint8_t)va_arg(ap, int);
+	va_end(ap);
+}
+
+static void out10(uint8_t v) {
+	emit(4, 0x3e, v, 0xd3, 10); // LD A,v; OUT (10),A
+}
+
+static void setdma(uint16_t addr) {
+	out10(XFER_SETDMA);
+	out10((uint8_t)addr);
+	out10((uint8_t)(addr >> 8));
+}
+
+// The command, then its status stored at status_at.
+static void command(uint8_t cmd, uint16_t status_at) {
+	out10(cmd);
+	emit(5, 0xdb, 10, 0x32, status_at & 0xff, status_at >> 8); // IN A,(10); LD (nn),A
+}
+
+static void test_xfer_port(void) {
+	extern uint8_t bnk0[65536], bnks[][48 * 1024];
+	const uint16_t name = 0x8000, rec = 0x8100, back = 0x8200, banked = 0x8300, st = 0xf000;
+	machine_init(&host_platform);
+	z80.n = 0;
+	emit(1, 0xf3); // DI
+	setdma(name);
+	command(XFER_CREATE, st + 0);
+	setdma(rec);
+	command(XFER_WRITE, st + 1);
+	command(XFER_CLOSE, st + 2);
+	setdma(name);
+	command(XFER_OPEN, st + 3);
+	setdma(back);
+	command(XFER_READ, st + 4);
+	command(XFER_READ, st + 5);
+	// Again into bank 1: the DMA goes where the CPU sees memory.
+	setdma(name);
+	command(XFER_OPEN, st + 6);
+	setdma(banked);
+	emit(4, 0x3e, 1, 0xd3, 64); // LD A,1; OUT (64),A
+	command(XFER_READ, st + 7);
+	emit(4, 0x3e, 0, 0xd3, 64);
+	command(XFER_CLOSE, st + 8);
+	setdma(name);
+	command(XFER_FIND_FIRST, st + 9);
+	emit(1, 0x76); // HALT
+	CHECK(z80.n <= sizeof z80.code);
+	memcpy(bnk0 + 0xff00, z80.code, z80.n);
+	memcpy(bnk0 + name, "PORT    BIN", XFER_NAME);
+	for (unsigned i = 0; i < XFER_RECORD; ++i)
+		bnk0[rec + i] = (uint8_t)(i ^ 0x5a);
+	memset(bnk0 + st, 0xff, 16);
+	machine_reset(); // from the code above
+	unsigned slices = 0;
+	while (machine_run(10000) == MACHINE_RUNNING && ++slices < 100)
+		;
+	CHECK(strstr(machine_stop_reason(), "HALT with interrupts off") != NULL);
+	static const uint8_t want[] = {XFER_ST_OK, XFER_ST_OK, XFER_ST_OK, XFER_ST_OK, XFER_ST_OK, XFER_ST_EOF,
+		XFER_ST_OK, XFER_ST_OK, XFER_ST_OK, XFER_ST_OK};
+	for (unsigned i = 0; i < sizeof want; ++i)
+		CHECK_EQ(bnk0[st + i], want[i]);
+	CHECK(memcmp(bnk0 + back, bnk0 + rec, XFER_RECORD) == 0);
+	CHECK(memcmp(bnks[0] + banked, bnk0 + rec, XFER_RECORD) == 0);
+	// The listing entry: the name and the size (128).
+	CHECK(memcmp(bnk0 + name, "PORT    BIN", XFER_NAME) == 0);
+	CHECK(bnk0[name + 11] == 128 && bnk0[name + 12] == 0 && bnk0[name + 13] == 0 && bnk0[name + 14] == 0);
+	CHECK_EQ(fat_size("/XFER/PORT.BIN"), XFER_RECORD);
+	// A reset closes what the program left open.
+	CHECK_EQ(xcmd(XFER_OPEN, "PORT    BIN"), XFER_ST_OK);
+	machine_reset();
+	CHECK_EQ(xcmd(XFER_READ, NULL), XFER_ST_BAD);
+}
+
 int main(void) {
 	srand(1);
 	RUN(test_fat32_volume);
@@ -702,6 +805,7 @@ int main(void) {
 	RUN(test_monitor_no_firmware_update);
 	RUN(test_firmware_panel);
 	RUN(test_blank_disk_chunks);
+	RUN(test_xfer_port);
 	drives_unmount_all();
 	f_unmount("");
 	diskio_ram_free();

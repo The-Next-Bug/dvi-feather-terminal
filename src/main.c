@@ -55,6 +55,7 @@
 #include "term_build.h"
 #include "serial.h"
 #include "video.h"
+#include "xfer.h"
 
 #ifndef STARTUP_LOGO
 #define STARTUP_LOGO 1
@@ -238,6 +239,7 @@ static void fw_unmount(bool commit) {
 	if (cpm.on && !commit)
 		return; // the monitor's
 	if (cpm.on) {
+		xfer_reset();
 		drives_flush();
 		drives_unmount_all();
 	}
@@ -735,6 +737,7 @@ static const machine_platform_t cpm_platform = {
 	.disk_read = cpm_disk_read,
 	.disk_write = cpm_disk_write,
 	.disk_format = cpm_disk_format,
+	.xfer = xfer_command,
 };
 
 static void cpm_write(const char *text) {

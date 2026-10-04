@@ -99,6 +99,7 @@ add_executable(dvi_terminal
   src/uf2.c
   src/video.c
   src/vtparse.c
+  src/xfer.c
   ${FONT_SOURCES}
   ${DISKIMG_SOURCES}
   ${Z80PACK_SOURCES}
@@ -116,8 +117,11 @@ target_include_directories(dvi_terminal PRIVATE
 # Warnings for our sources only, not the SDK's.
 set_source_files_properties(src/blank.c src/crc32.c src/demo.c src/diag.c src/diskimg.c src/drivepanel.c src/drives.c src/fwpanel.c src/fwupdate.c src/hstx_dvi.c src/keyboard.c
   src/keyname.c src/lz.c src/machine.c src/main.c src/monitor.c src/nvflash.c src/palette.c src/raster.c src/scratch.c src/screen.c src/sdcard.c
-  src/settings.c src/setup.c src/splash.c src/term.c src/serial.c src/uf2.c src/usbkbd.c src/video.c src/vtparse.c
+  src/settings.c src/setup.c src/splash.c src/term.c src/serial.c src/uf2.c src/usbkbd.c src/video.c src/vtparse.c src/xfer.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
+# Cold code (it runs only while a CP/M program moves files): small rather
+# than fast, as all code takes SRAM.
+set_property(SOURCE src/xfer.c APPEND PROPERTY COMPILE_OPTIONS "-Os")
 
 target_compile_definitions(dvi_terminal PRIVATE
   HSTX_MODE=${HSTX_MODE}

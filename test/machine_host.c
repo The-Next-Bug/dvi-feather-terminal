@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "drives.h"
+#include "xfer.h"
 
 char screen[HOST_SCREEN_SIZE];
 size_t screen_len;
@@ -74,6 +75,7 @@ const machine_platform_t host_platform = {
 	.disk_read = disk_read,
 	.disk_write = disk_write,
 	.disk_format = disk_format,
+	.xfer = xfer_command,
 };
 
 void clear_screen(void) {

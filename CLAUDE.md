@@ -67,7 +67,7 @@ CMake or Arm GCC on the dev host. Use the scripts:
 git submodule update --init          # lib/pico-sdk (2.3.1), not its submodules (lib/z80pack is vendored)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, uf2, lz, machine (boots CP/M 2.2 from a FAT32 RAM volume)
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimised, no sanitisers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default, the only one) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
@@ -218,6 +218,13 @@ status line (row 24); UART0 on GP0/GP1.
   size (8" FD 77x26, z80pack 4 MB HD 255x128, 8 MB HD 256x255; 128-byte
   sectors), kept open, flushed 250 ms after writes, DRIVES.CFG, blank image
   creation. Port 8 (machine.c, ours) tells the BIOS a drive's format.
+  Port 10 (ours, bd qur.2; protocol in machine.h): the file transfer
+  device, FDC-style (SETDMA + commands moving 11-byte FCB names, 15-byte
+  listing entries or 128-byte records by DMA), through the platform's
+  xfer hook to `src/xfer.[ch]` (portable, FatFs): /XFER per volume (0 SD,
+  1 USB later), one FIL + one DIR, names CP/M can take only; RESET on
+  machine_reset, the monitor's card re-check and the firmware commit.
+  xfer.c is built -Os and xfer_out is cold (all code is SRAM: ~2.3 KB).
   `src/cpm/`: our 62K CP/M 2.2 (bios.asm 8-drive BIOS picking the DPB per
   drive at SELDSK, boot.asm), assembled at build time by build.sh with
   z80pack's z80asm built by the host cc; CCP+BDOS = picosim's 64K cpm.bin

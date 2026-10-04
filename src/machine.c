@@ -52,6 +52,10 @@ static struct {
 	char reason[48];
 	BYTE clk_cmd, clk_fmt; // clock: register selected, 1 = decimal (else BCD)
 	BYTE dinfo_drive;      // port 8: the drive asked about
+	// Port 10: 0 waiting for a command, 1/2 for the DMA address's low/high
+	// byte; the address and the last command's status.
+	BYTE xfer_state, xfer_status;
+	WORD xfer_dma;
 } m;
 
 // picosim's boot ROM (picosim/roms/bootrom.asm): read drive A track 0
@@ -306,6 +310,44 @@ static BYTE dinfo_in(void) {
 	return plat->disk_format ? plat->disk_format(m.dinfo_drive) : 0;
 }
 
+// Port 10: the file transfer device (machine.h). Input and output move
+// between memory at the DMA address and the platform's buffer. Cold: built
+// for size, as all code takes SRAM.
+static void __attribute__((cold)) xfer_out(BYTE data) {
+	if (m.xfer_state == 1) {
+		m.xfer_dma = data;
+		m.xfer_state = 2;
+		return;
+	}
+	if (m.xfer_state == 2) {
+		m.xfer_dma |= (WORD)(data << 8);
+		m.xfer_state = 0;
+		return;
+	}
+	uint8_t cmd = data & 0xf0, volume = data & 0x0f;
+	if (cmd == XFER_SETDMA) {
+		m.xfer_state = 1;
+		m.xfer_status = XFER_ST_OK;
+		return;
+	}
+	unsigned in = cmd == XFER_WRITE ? XFER_RECORD
+		: cmd == XFER_FIND_FIRST || cmd == XFER_OPEN || cmd == XFER_CREATE || cmd == XFER_DELETE ? XFER_NAME
+		: 0;
+	unsigned out = cmd == XFER_READ ? XFER_RECORD : cmd == XFER_FIND_FIRST || cmd == XFER_FIND_NEXT ? XFER_ENTRY : 0;
+	uint8_t buf[XFER_RECORD];
+	memset(buf, 0, sizeof buf);
+	for (unsigned i = 0; i < in; ++i)
+		buf[i] = dma_read((WORD)(m.xfer_dma + i));
+	m.xfer_status = plat->xfer ? plat->xfer(cmd, volume, buf) : XFER_ST_NO_VOLUME;
+	if (m.xfer_status == XFER_ST_OK)
+		for (unsigned i = 0; i < out; ++i)
+			dma_write((WORD)(m.xfer_dma + i), buf[i]);
+}
+
+static BYTE xfer_in(void) {
+	return m.xfer_status;
+}
+
 static BYTE fpsw_in(void) {
 	return 0;
 }
@@ -323,6 +365,7 @@ in_func_t *const port_in[256] = {
 	[5] = prts_in,
 	[6] = prtd_in,
 	[8] = dinfo_in,
+	[10] = xfer_in,
 	[64] = mmu_in,
 	[65] = clkc_in,
 	[66] = clkd_in,
@@ -341,6 +384,7 @@ out_func_t *const port_out[256] = {
 	[5] = prts_out,
 	[6] = prtd_out,
 	[8] = dinfo_out,
+	[10] = xfer_out,
 	[64] = mmu_out,
 	[65] = clkc_out,
 	[66] = clkd_out,
@@ -389,6 +433,13 @@ void get_fdccmd(BYTE *cmd, WORD addr) {
 void machine_reset(void) {
 	m.timer = false;
 	m.hwctl_lock = 0xff;
+	// No file stays open for a program that is gone.
+	m.xfer_state = 0;
+	m.xfer_status = XFER_ST_OK;
+	if (plat->xfer) {
+		uint8_t buf[XFER_RECORD];
+		plat->xfer(XFER_RESET, 0, buf);
+	}
 	reset_cpu();
 	selbnk = 0;
 	PC = ROM_PAGE;
