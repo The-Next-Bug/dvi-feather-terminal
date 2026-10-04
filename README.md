@@ -352,9 +352,10 @@ For example `WORMS -N 10 -L 30 -F` or `WORMS -C -N 6 -L 40`.
 
 ### Moving files
 
-`CPM22` carries two tools (`src/cpm/xls.asm`, `xpip.asm`) that copy files
-between CP/M disks and the folder `/XFER` on the SD card (`SD:`) or on a
-USB stick (`USB:`), so files go in and out without image tools on a PC. A
+`CPM22` carries three tools (`src/cpm/xls.asm`, `xpip.asm`, `xera.asm`)
+that move files between CP/M disks and the folder `/XFER` on the SD card
+(`SD:`) or on a USB stick (`USB:`): `XLS` lists the folder, `XPIP` copies,
+`XERA` erases. Files go in and out without image tools on a PC. A
 USB stick can be plugged in and pulled while CP/M runs, so nothing needs
 switching off. They use the machine's file transfer device, port 10.
 
@@ -387,6 +388,10 @@ drive (`B:`, or none for the current drive), the other `SD:` or `USB:`:
   (`LONGFI~1.TXT`), and names CP/M cannot take (such as ones with `_`)
   are not listed.
 - Any key stops a copy between files.
+
+`XERA [SD:|USB:]afn` erases files in `/XFER` (`SD:` is the default),
+naming each. With wildcards it says how many match and asks first: `Y`
+erases them, anything else leaves them. `ERA` erases CP/M files.
 
 **USB sticks** go into the USB port through a hub, next to the keyboard
 (see [USB keyboard](#usb-keyboard) for powering the port). The stick must
@@ -471,7 +476,7 @@ The machine is picosim's:
 | 4 | disk controller |
 | 5/6 | printer (none) |
 | 8 | the format of the disk in a drive, for the BIOS (ours, not picosim's) |
-| 10 | file transfer: files in the `/XFER` folder of the SD card or a USB stick, a 128-byte record at a time by DMA, for `XLS` and `XPIP` (ours; `src/machine.h` has the commands) |
+| 10 | file transfer: files in the `/XFER` folder of the SD card or a USB stick, a 128-byte record at a time by DMA, for `XLS`, `XPIP` and `XERA` (ours; `src/machine.h` has the commands) |
 | 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II uses as many as it was generated for, see [Other operating systems](#other-operating-systems)) |
 | 65/66 | clock (no RTC: it starts at 1 Jan 2026 at power-on) |
 | 67 | 60 Hz timer interrupt |
@@ -669,7 +674,7 @@ In `src/`:
   images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel),
   `fwpanel.[ch]` (SET-UP's firmware update), `xfer.[ch]` (port 10's
   files: `/XFER`), `usbvol.[ch]` (which USB stick is `USB:`), `cpm/` (the
-  CP/M 2.2 BIOS, boot loader, WORMS, XLS and XPIP; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
+  CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP and XERA; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
   images).
 - **RP2350**: `main.c`, `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]`
   (scanlines on core 1), `hstx_test.c` (test pattern), `serial.[ch]` (UART

@@ -928,6 +928,30 @@ static void test_xfer_tools(void) {
 	CHECK(type("q"));
 	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
 
+	// XERA: one file; wildcards ask first (N leaves them, Y erases).
+	CHECK(cpm("DIR XERA.COM", "XERA     COM"));
+	CHECK(cpm("XERA SD:P05.LST", "P05.LST\r\n1 erased"));
+	CHECK(!fat_file_exists("/XFER/P05.LST"));
+	clear_screen();
+	CHECK(type("XERA P0?.LST\r"));
+	CHECK_EQ(run_until("(Y/N)? ", 30), MACHINE_RUNNING);
+	CHECK(strstr(screen, "9 match") != NULL); // P00-P09 but P05
+	CHECK(type("n"));
+	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
+	CHECK(fat_file_exists("/XFER/P01.LST"));
+	clear_screen();
+	CHECK(type("XERA P0?.LST\r"));
+	CHECK_EQ(run_until("(Y/N)? ", 30), MACHINE_RUNNING);
+	CHECK(type("y"));
+	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
+	CHECK(strstr(screen, "P09.LST\r\n9 erased") != NULL);
+	CHECK(!fat_file_exists("/XFER/P01.LST") && !fat_file_exists("/XFER/P09.LST"));
+	CHECK(fat_file_exists("/XFER/P10.LST"));
+	CHECK(cpm("XERA NOSUCH.TXT", "No file"));
+	CHECK(cpm("XERA", "Usage: XERA"));            // no name: no erasing everything
+	CHECK(cpm("XERA B:HELLO.TXT", "Usage: XERA")); // CP/M files: ERA
+	CHECK(cpm("XERA USB:*.*", "no USB stick"));
+
 	// USB: a stick as volume 1 (here the RAM disk's second drive).
 	static FATFS usb_fs;
 	static uint8_t work[4096];
@@ -943,6 +967,10 @@ static void test_xfer_tools(void) {
 	CHECK(cpm("XPIP B:FROMUSB.TXT=USB:HELLO.TXT", "1 copied"));
 	CHECK(cpm("TYPE B:FROMUSB.TXT", "abcdefghijklmnopqrstuvwxyzab\r\n"));
 	CHECK(cpm("XPIP USB:=SD:*.*", "Usage: XPIP")); // card to stick: not a CP/M copy
+	CHECK(cpm("XERA USB:HELLO.TXT", "1 erased"));
+	CHECK(!fat_file_exists("1:/XFER/HELLO.TXT"));
+	CHECK(fat_file_exists("/XFER/HELLO.TXT")); // not the card's
+	CHECK(cpm("XLS USB:", "No files"));
 	// The stick goes.
 	CHECK_EQ(f_unmount("1:"), FR_OK);
 	diskio_ram_free_drive(1);

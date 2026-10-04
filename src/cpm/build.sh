@@ -28,6 +28,7 @@ asm "$here/bios.asm" "$out/bios.bin" "$out/bios.lis"
 asm "$here/worms.asm" "$out/worms.com" "$out/worms.lis" ""
 asm "$here/xls.asm" "$out/xls.com" "$out/xls.lis" ""
 asm "$here/xpip.asm" "$out/xpip.com" "$out/xpip.lis" ""
+asm "$here/xera.asm" "$out/xera.com" "$out/xera.lis" ""
 
 size() { stat -c %s "$1"; }
 (( $(size "$out/boot.bin") <= 128 )) || { echo "boot.bin is over one sector" >&2; exit 1; }

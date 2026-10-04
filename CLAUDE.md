@@ -227,7 +227,8 @@ status line (row 24); UART0 on GP0/GP1.
   1 USB later), one FIL + one DIR, names CP/M can take only; RESET on
   machine_reset, the monitor's card re-check and the firmware commit.
   xfer.c is built -Os and xfer_out is cold (all code is SRAM: ~2.3 KB).
-  CP/M side (bd qur.26): src/cpm/xls.asm, xpip.asm + xfer.inc (shared
+  CP/M side (bd qur.26, qur.28): src/cpm/xls.asm, xpip.asm, xera.asm
+  (erase; collects names, asks Y/N on wildcards) + xfer.inc (shared
   parser for d:/SD:/USB: specs, port helpers, 32-bit decimal), assembled
   by build.sh from src/cpm (INCLUDE is cwd-relative) and put on CPM22 by
   diskimg_gen.py --file; --delete CPM22 XDIR.COM removes z80pack's XDIR.
