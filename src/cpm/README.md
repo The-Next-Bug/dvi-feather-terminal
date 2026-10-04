@@ -15,10 +15,14 @@ hold an 8" floppy, a 4 MB or an 8 MB hard disk image (`src/drives.h`).
    `picosim/srccpm2/cpm.bin`, moves them down to 62K with the relocation
    bitmap `ccpbdos.rel`, and writes loader, CCP, BDOS and BIOS to the system
    tracks before compressing the image.
-3. `build.sh` also assembles `worms.asm` (Z80 mnemonics) into `worms.com`,
-   and `diskimg_gen.py --file CPM22 WORMS.COM` writes it into the image's
-   CP/M directory (user 0; the build fails if the name is taken or the disk
-   is full). Programs of our own go on the disk the same way.
+3. `build.sh` also assembles `worms.asm`, `xls.asm` and `xpip.asm` (Z80
+   mnemonics; the last two include `xfer.inc`, the port 10 constants and a
+   command-tail parser for `SD:`/`USB:` specs, so z80asm runs from this
+   folder) into `.com` files, and `diskimg_gen.py --file CPM22 WORMS.COM`
+   (and XLS, XPIP) writes them into the image's CP/M directory (user 0; the
+   build fails if the name is taken or the disk is full). Programs of our
+   own go on the disk the same way. `--delete CPM22 XDIR.COM` takes
+   z80pack's XDIR off first (it only works on drives A and B).
 
 `ccpbdos.rel` has one bit per byte of the 5632-byte CCP+BDOS, set where the
 byte is the high byte of an address inside them. It was made once by running

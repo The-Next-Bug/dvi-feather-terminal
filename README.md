@@ -333,6 +333,46 @@ terminal for the screen size, so it fills 132 columns too. Any key ends it.
 
 For example `WORMS -N 10 -L 30 -F` or `WORMS -C -N 6 -L 40`.
 
+### Moving files
+
+`CPM22` carries two tools (`src/cpm/xls.asm`, `xpip.asm`) that copy files
+between CP/M disks and the folder `/XFER` on the SD card, so files go in
+and out without image tools on a PC (the card still has to come out to
+reach one; a USB stick is planned). They use the machine's file transfer
+device, port 10.
+
+`XLS [SD:][afn]` lists `/XFER` with sizes in bytes:
+
+```
+A>XLS
+README.TXT         4210
+GAME.COM          18432
+2 files
+```
+
+`XPIP dest=source [T]` copies, in the manner of `PIP`. One side is a CP/M
+drive (`B:`, or none for the current drive), the other `SD:`:
+
+| Command | Effect |
+|---|---|
+| `XPIP A:=SD:*.COM` | every `.COM` in `/XFER` to drive A, names kept |
+| `XPIP SD:=B:*.TXT` | every `.TXT` on drive B to `/XFER` |
+| `XPIP SD:NEW.TXT=OLD.TXT` | one file, renamed |
+| `XPIP SD:LOG.TXT=B:LOG.TXT[T]` | a text file: cut at its end-of-file mark |
+
+- A file of the same name at the destination is replaced, as with `PIP`.
+- CP/M files are whole 128-byte records. Copied to CP/M, a file's last
+  record is padded with `^Z`; copied to `SD:`, every record is kept, and
+  `[T]` cuts the file at the first `^Z` of its last record, as text
+  editors on a PC expect.
+- Names are 8.3: a PC's long names show as their short forms
+  (`LONGFI~1.TXT`), and names CP/M cannot take (such as ones with `_`)
+  are not listed.
+- Any key stops a copy between files.
+
+`DIR` and `STAT` list the CP/M drives (z80pack's `XDIR`, which only took A
+and B, is no longer on the disk).
+
 ### The monitor
 
 At power-on in CP/M mode the monitor mounts the card and boots from drive
@@ -396,7 +436,7 @@ The machine is picosim's:
 | 4 | disk controller |
 | 5/6 | printer (none) |
 | 8 | the format of the disk in a drive, for the BIOS (ours, not picosim's) |
-| 10 | file transfer: files in the `/XFER` folder of the SD card, a 128-byte record at a time by DMA (ours; `src/machine.h` has the commands) |
+| 10 | file transfer: files in the `/XFER` folder of the SD card, a 128-byte record at a time by DMA, for `XLS` and `XPIP` (ours; `src/machine.h` has the commands) |
 | 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II uses as many as it was generated for, see [Other operating systems](#other-operating-systems)) |
 | 65/66 | clock (no RTC: it starts at 1 Jan 2026 at power-on) |
 | 67 | 60 Hz timer interrupt |
@@ -592,9 +632,10 @@ In `src/`:
 - **Z80 machine, portable**: `machine.[ch]` (z80pack glue; `z80pack/`
   holds its configuration headers), `monitor.[ch]`, `drives.[ch]` (disk
   images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel),
-  `fwpanel.[ch]` (SET-UP's firmware update), `cpm/` (the CP/M 2.2 BIOS,
-  boot loader and WORMS; see its README), `diskimg.[ch]` and `lz.[ch]`
-  (the built-in images).
+  `fwpanel.[ch]` (SET-UP's firmware update), `xfer.[ch]` (port 10's
+  files: `/XFER`), `cpm/` (the CP/M 2.2 BIOS, boot loader, WORMS, XLS and
+  XPIP; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
+  images).
 - **RP2350**: `main.c`, `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]`
   (scanlines on core 1), `hstx_test.c` (test pattern), `serial.[ch]` (UART
   with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors,

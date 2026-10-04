@@ -787,6 +787,149 @@ static void test_xfer_port(void) {
 	CHECK_EQ(xcmd(XFER_READ, NULL), XFER_ST_BAD);
 }
 
+// A FAT file of the given bytes.
+static void put_fat_file(const char *path, const void *data, unsigned size) {
+	FIL f;
+	UINT put;
+	CHECK_EQ(f_open(&f, path, FA_CREATE_ALWAYS | FA_WRITE), FR_OK);
+	CHECK_EQ(f_write(&f, data, size, &put), FR_OK);
+	CHECK_EQ(put, size);
+	f_close(&f);
+}
+
+// The FAT file at path, if it holds exactly size bytes equal to data
+// (then 0x1A padding up to pad_to, if larger).
+static bool fat_file_is(const char *path, const void *data, unsigned size, unsigned pad_to) {
+	static uint8_t got[4096];
+	FIL f;
+	UINT n;
+	if (f_open(&f, path, FA_READ) != FR_OK)
+		return false;
+	bool ok = f_read(&f, got, sizeof got, &n) == FR_OK && n == (pad_to > size ? pad_to : size) &&
+		memcmp(got, data, size) == 0;
+	for (unsigned i = size; ok && i < n; ++i)
+		ok = got[i] == 0x1a;
+	f_close(&f);
+	return ok;
+}
+
+// Run a CP/M command line to the next prompt; true if its output has want.
+static bool cpm(const char *line, const char *want) {
+	clear_screen();
+	CHECK(type(line));
+	CHECK(type("\r"));
+	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
+	bool found = strstr(screen, want) != NULL;
+	if (!found)
+		fprintf(stderr, "%s: no \"%s\" in:\n%s\n", line, want, screen);
+	return found;
+}
+
+// XLS and XPIP (src/cpm) under CP/M, against /XFER on the volume.
+static void test_xfer_tools(void) {
+	static char text[300];
+	static uint8_t binary[1000];
+	for (unsigned i = 0; i < sizeof text; ++i)
+		text[i] = i % 30 == 29 ? '\n' : i % 30 == 28 ? '\r' : (char)('a' + i % 26);
+	for (unsigned i = 0; i < sizeof binary; ++i)
+		binary[i] = (uint8_t)(i * 13 + i / 256); // 0x1A included
+	drives_unmount_all();
+	xfer_reset();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("EMPTY"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "EMPTY"), DRIVES_OK);
+	// /XFER with just these (test_xfer_port left a file there).
+	f_unlink("/XFER/PORT.BIN");
+	f_mkdir("/XFER");
+	put_fat_file("/XFER/HELLO.TXT", text, sizeof text);
+	put_fat_file("/XFER/DATA.BIN", binary, sizeof binary);
+	put_fat_file("/XFER/A_B.TXT", "x", 1); // not a CP/M name
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+
+	// On the disk; z80pack's XDIR is not.
+	CHECK(cpm("DIR X*.COM", "XLS      COM : XPIP     COM"));
+	CHECK(cpm("DIR XDIR.COM", "NO FILE"));
+
+	// Listing.
+	CHECK(cpm("XLS", "DATA.BIN           1000"));
+	CHECK(strstr(screen, "HELLO.TXT           300") != NULL);
+	CHECK(strstr(screen, "2 files") != NULL);
+	CHECK(strstr(screen, "A_B") == NULL);
+	CHECK(cpm("XLS SD:*.TXT", "1 file\r\n"));
+	CHECK(cpm("XLS NONE.*", "No files"));
+	CHECK(cpm("XLS B:", "Usage: XLS"));
+	CHECK(cpm("XLS USB:", "no USB stick"));
+
+	// Into CP/M: names kept, the last record padded.
+	CHECK(cpm("XPIP B:=SD:*.*", "2 copied"));
+	CHECK(strstr(screen, "HELLO.TXT\r\n") != NULL && strstr(screen, "DATA.BIN\r\n") != NULL);
+	CHECK(cpm("DIR B:", "HELLO    TXT"));
+	CHECK(cpm("TYPE B:HELLO.TXT", "abcdefghijklmnopqrstuvwxyzab\r\n"));
+	// Back out: whole records, or cut at the ^Z with [T]; renamed.
+	CHECK(cpm("XPIP SD:BACK.BIN=B:DATA.BIN", "1 copied"));
+	CHECK(fat_file_is("/XFER/BACK.BIN", binary, sizeof binary, 1024));
+	CHECK(cpm("XPIP SD:HELLO2.TXT=B:HELLO.TXT[T]", "1 copied"));
+	CHECK(fat_file_is("/XFER/HELLO2.TXT", text, sizeof text, 0));
+	CHECK(cpm("xpip sd:hello3.txt=b:hello.txt [ t ]", "1 copied")); // lower case, blanks
+	CHECK(fat_file_is("/XFER/HELLO3.TXT", text, sizeof text, 0));
+	// A wildcard export replaces what is there, as PIP does.
+	CHECK(cpm("XPIP SD:=B:*.TXT", "1 copied"));
+	CHECK(fat_file_is("/XFER/HELLO.TXT", text, sizeof text, 384));
+	// One file in under a new name, on the current drive.
+	CHECK(cpm("XPIP COPY.TXT=SD:HELLO2.TXT", "1 copied"));
+	CHECK(cpm("TYPE COPY.TXT", "abcdefghijklmnopqrstuvwxyzab\r\n"));
+	// And again: replaced, not duplicated.
+	CHECK(cpm("XPIP COPY.TXT=SD:HELLO2.TXT", "1 copied"));
+	CHECK(cpm("DIR COPY.TXT", "COPY     TXT"));
+	CHECK(strstr(strstr(screen, "COPY     TXT") + 1, "COPY     TXT") == NULL);
+
+	// Mistakes.
+	CHECK(cpm("XPIP B:=SD:NOSUCH.TXT", "No file"));
+	CHECK(cpm("XPIP SD:=B:NOSUCH.TXT", "No file"));
+	CHECK(cpm("XPIP B:X.TXT=SD:*.TXT", "Usage: XPIP")); // many files to one name
+	CHECK(cpm("XPIP A:=B:*.*", "Usage: XPIP"));         // no SD: or USB: side
+	CHECK(cpm("XPIP SD:=SD:*.*", "Usage: XPIP"));
+	CHECK(cpm("XPIP B:=SD:*.TXT[Q]", "Usage: XPIP"));
+	CHECK(cpm("XPIP", "Usage: XPIP"));
+	CHECK(cpm("XPIP B:=USB:*.*", "no USB stick"));
+	CHECK(cpm("XPIP SD:BAD_NAME.TXT=B:HELLO.TXT", "bad name"));
+
+	// XLS pauses after every 22 lines: any key goes on, Q stops.
+	for (unsigned i = 0; i < 30; ++i) {
+		char path[32];
+		snprintf(path, sizeof path, "/XFER/P%02u.LST", i);
+		put_fat_file(path, "x", 1);
+	}
+	clear_screen();
+	CHECK(type("XLS *.LST\r"));
+	CHECK_EQ(run_until("-- more", 30), MACHINE_RUNNING);
+	CHECK(strstr(screen, "P21.LST") != NULL);
+	CHECK(strstr(screen, "P22.LST") == NULL);
+	clear_screen();
+	CHECK(type(" "));
+	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
+	CHECK(strstr(screen, "P22.LST") != NULL && strstr(screen, "P29.LST") != NULL);
+	CHECK(strstr(screen, "30 files") != NULL);
+	CHECK(strstr(screen, "-- more") == NULL); // 8 lines: no second pause
+	clear_screen();
+	CHECK(type("XLS *.LST\r"));
+	CHECK_EQ(run_until("-- more", 30), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("q"));
+	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
+	CHECK(strstr(screen, "P22.LST") == NULL && strstr(screen, "files") == NULL);
+	clear_screen(); // the listing it left was closed: a new one works
+	CHECK(type("XLS *.LST\r"));
+	CHECK_EQ(run_until("-- more", 30), MACHINE_RUNNING);
+	CHECK(strstr(screen, "P00.LST") != NULL);
+	CHECK(type("q"));
+	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
+	drives_unmount_all();
+}
+
 int main(void) {
 	srand(1);
 	RUN(test_fat32_volume);
@@ -806,6 +949,7 @@ int main(void) {
 	RUN(test_firmware_panel);
 	RUN(test_blank_disk_chunks);
 	RUN(test_xfer_port);
+	RUN(test_xfer_tools);
 	drives_unmount_all();
 	f_unmount("");
 	diskio_ram_free();

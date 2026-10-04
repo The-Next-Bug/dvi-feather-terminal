@@ -22,16 +22,21 @@ set(CPM_OUT "${GENERATED}/cpm")
 find_program(HOST_CC NAMES cc gcc clang REQUIRED)
 file(GLOB _z80asm_sources "${Z80PACK_DIR}/z80asm/*.[ch]")
 add_custom_command(
-  OUTPUT ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin ${CPM_OUT}/worms.com
+  OUTPUT ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin ${CPM_OUT}/worms.com ${CPM_OUT}/xls.com ${CPM_OUT}/xpip.com
   COMMAND ${CMAKE_COMMAND} -E env CC=${HOST_CC} ${CPM_DIR}/build.sh ${CPM_OUT}
   DEPENDS ${CPM_DIR}/build.sh ${CPM_DIR}/boot.asm ${CPM_DIR}/bios.asm ${CPM_DIR}/worms.asm
+    ${CPM_DIR}/xls.asm ${CPM_DIR}/xpip.asm ${CPM_DIR}/xfer.inc
     ${_z80asm_sources}
   COMMENT "Assembling the CP/M 2.2 boot loader, BIOS and WORMS"
   VERBATIM)
 set(DISKIMG_SYSTEM --system CPM22 ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin
   ${Z80PACK_DIR}/picosim/srccpm2/cpm.bin ${CPM_DIR}/ccpbdos.rel 62)
-# Our programs on the CPM22 disk.
-set(DISKIMG_FILES --file CPM22 WORMS.COM ${CPM_OUT}/worms.com)
+# Our programs on the CPM22 disk; z80pack's XDIR.COM comes off it (it
+# refuses drives other than A and B; DIR and STAT cover all eight).
+set(DISKIMG_FILES --delete CPM22 XDIR.COM
+  --file CPM22 WORMS.COM ${CPM_OUT}/worms.com
+  --file CPM22 XLS.COM ${CPM_OUT}/xls.com
+  --file CPM22 XPIP.COM ${CPM_OUT}/xpip.com)
 
 set(_diskimg_files)
 foreach(_image IN LISTS DISKIMG_IMAGES)
@@ -45,6 +50,7 @@ add_custom_command(
   COMMAND Python3::Interpreter ${DISKIMG_GEN} ${DISKIMG_SOURCES} ${DISKIMG_SYSTEM} ${DISKIMG_FILES}
     ${DISKIMG_IMAGES}
   DEPENDS ${DISKIMG_GEN} ${_diskimg_files} ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin ${CPM_OUT}/worms.com
+    ${CPM_OUT}/xls.com ${CPM_OUT}/xpip.com
     ${Z80PACK_DIR}/picosim/srccpm2/cpm.bin ${CPM_DIR}/ccpbdos.rel
   COMMENT "Compressing the built-in CP/M disk images"
   VERBATIM)

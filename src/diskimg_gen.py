@@ -2,6 +2,7 @@
 """Compress CP/M disk images into a C source for the firmware (diskimg.h).
 
 Usage: diskimg_gen.py OUTPUT.c [--system NAME BOOT BIOS CPMBIN RELOC MSIZE]
+                        [--delete NAME CPMNAME ...]
                         [--file NAME CPMNAME HOSTFILE ...]
                         NAME=IMAGE [NAME=IMAGE ...]
 
@@ -19,6 +20,10 @@ offset 0x880) moved to MSIZE K with the relocation bitmap RELOC (one bit
 per byte, set where the byte is the high byte of an address in CCP/BDOS;
 made by comparing with MOVCPM's 62K output, see src/cpm/README.md), then
 the BIOS BIOS (src/cpm/build.sh).
+
+--delete (any number) removes CPMNAME from the CP/M file system of image
+NAME (an 8" floppy, user 0): its directory entries and blocks are blanked
+(E5). The file must be there. Deletions come before --file additions.
 
 --file (any number) adds HOSTFILE to the CP/M file system of image NAME (an
 8" floppy, user 0) as CPMNAME (8.3, e.g. WORMS.COM); the name must not be
@@ -193,12 +198,38 @@ def fd_block(image, block, data=None):
     return out
 
 
-def add_file(image, cpm_name, host_file):
-    """host_file into the CP/M directory of image (a bytearray), user 0."""
+def fcb_name(cpm_name):
+    """An 8.3 name in the directory's form (11 bytes, blank-padded)."""
     base, _, ext = cpm_name.upper().partition(".")
     if not (1 <= len(base) <= 8 and len(ext) <= 3):
         sys.exit(f"{cpm_name}: not an 8.3 name")
-    name = base.ljust(8).encode() + ext.ljust(3).encode()
+    return base.ljust(8).encode() + ext.ljust(3).encode()
+
+
+def delete_file(image, cpm_name):
+    """cpm_name out of the CP/M directory of image (a bytearray), user 0:
+    its entries and blocks blanked, as on a fresh disk."""
+    name = fcb_name(cpm_name)
+    directory = bytearray(b"".join(fd_block(image, b) for b in range(FD_DIR_BLOCKS)))
+    blocks = []
+    found = False
+    for i in range(FD_DIR_ENTRIES):
+        entry = directory[i * 32:(i + 1) * 32]
+        if entry[0] == 0 and bytes(c & 0x7F for c in entry[1:12]) == name:
+            found = True
+            blocks += [b for b in entry[16:32] if b]
+            directory[i * 32:(i + 1) * 32] = b"\xe5" * 32
+    if not found:
+        sys.exit(f"{cpm_name}: not on the disk")
+    for b in blocks:
+        fd_block(image, b, b"\xe5" * FD_BLOCK)
+    for b in range(FD_DIR_BLOCKS):
+        fd_block(image, b, directory[b * FD_BLOCK:(b + 1) * FD_BLOCK])
+
+
+def add_file(image, cpm_name, host_file):
+    """host_file into the CP/M directory of image (a bytearray), user 0."""
+    name = fcb_name(cpm_name)
     with open(host_file, "rb") as f:
         data = f.read()
     records = -(-len(data) // SECTOR)
@@ -245,6 +276,10 @@ def main():
     if args and args[0] == "--system":
         system = args[1:7]
         args = args[7:]
+    deletions = []
+    while args and args[0] == "--delete":
+        deletions.append(args[1:3])
+        args = args[3:]
     files = []
     while args and args[0] == "--file":
         files.append(args[1:4])
@@ -259,6 +294,9 @@ def main():
         data = bytearray(data)
         if system and system[0] == name:
             put_system(data, *system[1:5], int(system[5]))
+        for image_name, cpm_name in deletions:
+            if image_name == name:
+                delete_file(data, cpm_name)
         for image_name, cpm_name, host_file in files:
             if image_name == name:
                 add_file(data, cpm_name, host_file)
