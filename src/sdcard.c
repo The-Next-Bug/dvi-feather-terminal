@@ -209,22 +209,20 @@ static uint32_t address(LBA_t sector) {
 	return type == SDCARD_SDHC ? (uint32_t)sector : (uint32_t)sector * BLOCK;
 }
 
-// ---- FatFs disk I/O (diskio.h), drive 0 only ----
+// ---- FatFs disk I/O for drive 0 (diskio.c) ----
 
-DSTATUS disk_status(BYTE pdrv) {
-	return pdrv == 0 && type != SDCARD_NONE ? 0 : STA_NOINIT;
+DSTATUS sdcard_disk_status(void) {
+	return type != SDCARD_NONE ? 0 : STA_NOINIT;
 }
 
-DSTATUS disk_initialize(BYTE pdrv) {
-	if (pdrv != 0)
-		return STA_NOINIT;
+DSTATUS sdcard_disk_initialize(void) {
 	type = card_init();
 	blocks = type != SDCARD_NONE ? read_capacity() : 0;
-	return disk_status(pdrv);
+	return sdcard_disk_status();
 }
 
-DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
-	if (pdrv != 0 || type == SDCARD_NONE)
+DRESULT sdcard_disk_read(BYTE *buff, LBA_t sector, UINT count) {
+	if (type == SDCARD_NONE)
 		return RES_NOTRDY;
 	for (; count; --count, ++sector, buff += BLOCK) {
 		bool ok = command(CMD17, address(sector)) == 0 && read_data(buff, BLOCK, 200);
@@ -246,8 +244,8 @@ static bool write_block(uint8_t token, const uint8_t *buf) {
 	return (xfer(0xff) & 0x1f) == 0x05 && wait_ready(500);
 }
 
-DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
-	if (pdrv != 0 || type == SDCARD_NONE)
+DRESULT sdcard_disk_write(const BYTE *buff, LBA_t sector, UINT count) {
+	if (type == SDCARD_NONE)
 		return RES_NOTRDY;
 	bool ok = false;
 	if (count == 1) {
@@ -266,8 +264,8 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
 	return ok ? RES_OK : RES_ERROR;
 }
 
-DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
-	if (pdrv != 0 || type == SDCARD_NONE)
+DRESULT sdcard_disk_ioctl(BYTE cmd, void *buff) {
+	if (type == SDCARD_NONE)
 		return RES_NOTRDY;
 	switch (cmd) {
 	case CTRL_SYNC: {

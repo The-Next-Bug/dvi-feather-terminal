@@ -46,7 +46,8 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 	{"Colors", 4, {0, 1, 2, 3}, {"white", "green", "amber", "blue"}},
 	{"Palette", 2, {0, 1}, {"color", "mono"}},
 	{"Mode", 2, {SETTINGS_MODE_TERMINAL, SETTINGS_MODE_CPM}, {"terminal", "CP/M machine"}},
-	{"Status line", 3, {1, 0, SETTINGS_STATUS_DEBUG}, {"shown", "hidden", "debug"}},
+	{"Status line", 4, {1, 0, SETTINGS_STATUS_DEBUG, SETTINGS_STATUS_DEBUG_USB},
+		{"shown", "hidden", "debug", "debug usb"}},
 	{"Blank after", 6, {0, 1, 5, 10, 30, 60}, {"never", "1 min", "5 min", "10 min", "30 min", "60 min"}},
 };
 

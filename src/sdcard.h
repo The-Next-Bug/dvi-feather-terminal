@@ -1,8 +1,7 @@
 #ifndef SDCARD_H
 #define SDCARD_H
 
-// microSD card on SPI0 for FatFs (it implements FatFs's disk_* functions
-// for drive 0): SD v1 (SDSC) and v2 (SDSC/SDHC/SDXC) cards in SPI mode,
+// microSD card on SPI0 for FatFs (drive 0's disk I/O, through diskio.c): SD v1 (SDSC) and v2 (SDSC/SDHC/SDXC) cards in SPI mode,
 // polled, 512-byte blocks (written several at a time).
 //
 // Pins (SPI0): GP4 MISO (card DO), GP5 CS, GP6 SCK, GP7 MOSI (card DI);
@@ -12,6 +11,9 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+
+#include "ff.h"
+#include "diskio.h"
 
 #define SDCARD_MISO_PIN 4
 #define SDCARD_CS_PIN 5
@@ -27,5 +29,12 @@ typedef enum {
 // What the last initialisation found, and its size in 512-byte blocks.
 sdcard_type_t sdcard_type(void);
 uint32_t sdcard_blocks(void);
+
+// FatFs's disk_* for drive 0.
+DSTATUS sdcard_disk_status(void);
+DSTATUS sdcard_disk_initialize(void);
+DRESULT sdcard_disk_read(BYTE *buff, LBA_t sector, UINT count);
+DRESULT sdcard_disk_write(const BYTE *buff, LBA_t sector, UINT count);
+DRESULT sdcard_disk_ioctl(BYTE cmd, void *buff);
 
 #endif

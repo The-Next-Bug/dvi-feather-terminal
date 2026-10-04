@@ -1,28 +1,47 @@
-// FatFs disk I/O for the host tests: one volume in a RAM buffer
-// (diskio_ram.h), standing in for the SD card.
+// FatFs disk I/O for the host tests: volumes in RAM buffers
+// (diskio_ram.h), standing in for the SD card (drive 0) and a USB stick
+// (drive 1).
 
 #include "diskio_ram.h"
 
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "ff.h"
 #include "diskio.h"
 
-static uint8_t *ram;
-static size_t ram_sectors;
+#define DRIVES 2
+
+static struct {
+	uint8_t *ram;
+	size_t sectors;
+} drive[DRIVES];
 static unsigned max_write;
 
+void diskio_ram_init_drive(unsigned pdrv, size_t sectors) {
+	if (pdrv >= DRIVES)
+		return;
+	free(drive[pdrv].ram);
+	drive[pdrv].ram = calloc(sectors, 512);
+	drive[pdrv].sectors = drive[pdrv].ram ? sectors : 0;
+}
+
+void diskio_ram_free_drive(unsigned pdrv) {
+	if (pdrv >= DRIVES)
+		return;
+	free(drive[pdrv].ram);
+	drive[pdrv].ram = NULL;
+	drive[pdrv].sectors = 0;
+}
+
 void diskio_ram_init(size_t sectors) {
-	free(ram);
-	ram = calloc(sectors, 512);
-	ram_sectors = ram ? sectors : 0;
+	diskio_ram_init_drive(0, sectors);
 }
 
 void diskio_ram_free(void) {
-	free(ram);
-	ram = NULL;
-	ram_sectors = 0;
+	diskio_ram_free_drive(0);
+	diskio_ram_free_drive(1);
 }
 
 unsigned diskio_ram_max_write(void) {
@@ -31,8 +50,12 @@ unsigned diskio_ram_max_write(void) {
 	return n;
 }
 
+static bool present(BYTE pdrv) {
+	return pdrv < DRIVES && drive[pdrv].ram;
+}
+
 DSTATUS disk_status(BYTE pdrv) {
-	return pdrv == 0 && ram ? 0 : STA_NOINIT;
+	return present(pdrv) ? 0 : STA_NOINIT;
 }
 
 DSTATUS disk_initialize(BYTE pdrv) {
@@ -40,33 +63,33 @@ DSTATUS disk_initialize(BYTE pdrv) {
 }
 
 DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
-	if (pdrv != 0 || !ram)
+	if (!present(pdrv))
 		return RES_NOTRDY;
-	if (sector + count > ram_sectors)
+	if (sector + count > drive[pdrv].sectors)
 		return RES_PARERR;
-	memcpy(buff, ram + sector * 512, count * 512u);
+	memcpy(buff, drive[pdrv].ram + sector * 512, count * 512u);
 	return RES_OK;
 }
 
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
-	if (pdrv != 0 || !ram)
+	if (!present(pdrv))
 		return RES_NOTRDY;
-	if (sector + count > ram_sectors)
+	if (sector + count > drive[pdrv].sectors)
 		return RES_PARERR;
-	memcpy(ram + sector * 512, buff, count * 512u);
+	memcpy(drive[pdrv].ram + sector * 512, buff, count * 512u);
 	if (count > max_write)
 		max_write = count;
 	return RES_OK;
 }
 
 DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
-	if (pdrv != 0 || !ram)
+	if (!present(pdrv))
 		return RES_NOTRDY;
 	switch (cmd) {
 	case CTRL_SYNC:
 		return RES_OK;
 	case GET_SECTOR_COUNT:
-		*(LBA_t *)buff = (LBA_t)ram_sectors;
+		*(LBA_t *)buff = (LBA_t)drive[pdrv].sectors;
 		return RES_OK;
 	case GET_SECTOR_SIZE:
 		*(WORD *)buff = 512;

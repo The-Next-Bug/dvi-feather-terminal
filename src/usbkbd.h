@@ -22,4 +22,17 @@ void usbkbd_poll(const kbd_modes_t *modes);
 // Keyboards (HID boot keyboard interfaces) currently attached.
 unsigned usbkbd_count(void);
 
+// Whether TinyUSB has finished setting up the device at dev_addr (for
+// usbmsc_info).
+bool usbkbd_device_ready(uint8_t dev_addr);
+
+// A short log of USB host events for the debug status line (the keyboard
+// may be what stopped working): what (a short static name) for device
+// dev. A repeat of the last event only bumps its count and time.
+void usbkbd_log(const char *what, uint8_t dev);
+
+// The last few events, oldest first, as " 123s name2 ..." (seconds since
+// boot, the name, the device address, xN for repeats).
+void usbkbd_log_text(char *out, size_t size);
+
 #endif

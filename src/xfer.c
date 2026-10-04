@@ -13,7 +13,7 @@
 static struct {
 	DIR dir;
 	bool dir_open;
-	uint8_t pattern[XFER_NAME];
+	uint8_t dir_volume, pattern[XFER_NAME];
 	FIL file;
 	bool file_open, writing;
 	uint8_t file_volume, file_name[XFER_NAME];
@@ -131,6 +131,13 @@ void xfer_reset(void) {
 	close_file();
 }
 
+void xfer_volume_gone(uint8_t volume) {
+	if (x.dir_open && x.dir_volume == volume)
+		close_dir();
+	if (x.file_open && x.file_volume == volume)
+		close_file();
+}
+
 static uint8_t find_next(uint8_t *buf) {
 	if (!x.dir_open)
 		return XFER_ST_NOT_FOUND;
@@ -191,6 +198,7 @@ uint8_t xfer_command(uint8_t cmd, uint8_t volume, uint8_t *buf) {
 		if (r != FR_OK)
 			return status_of(r);
 		x.dir_open = true;
+		x.dir_volume = volume;
 		return find_next(buf);
 	case XFER_FIND_NEXT:
 		return find_next(buf);

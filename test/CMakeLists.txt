@@ -60,6 +60,7 @@ target_sources(test_machine PRIVATE machine_host.c ${DISKIMG_SOURCES})
 add_dependencies(test_machine diskimg_data)
 target_link_libraries(test_machine z80pack_host fatfs_host)
 unit_test(xfer xfer.c)
+unit_test(usbvol usbvol.c)
 target_link_libraries(test_xfer fatfs_host)
 # The CPU exercisers (minutes): test_cpu is always built, optimised and
 # without the sanitisers (they make it ten times slower), and run only with

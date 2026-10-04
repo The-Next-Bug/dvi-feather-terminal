@@ -69,6 +69,7 @@
 #define USB_KEYBOARD 0
 #endif
 
+#include "usbmsc.h"
 #if USB_KEYBOARD
 #include "usbkbd.h"
 #endif
@@ -157,7 +158,8 @@ static struct {
 	unsigned key_head, key_tail;
 	uint32_t khz; // last measured emulated clock
 	uint32_t light_until[DRIVES]; // ms: the drive's letter is lit until then
-	uint8_t lit;  // drive letters shown lit on the status line
+	uint32_t usb_light_until; // ms: USB is lit until then
+	uint16_t lit; // drive letters (bits 0-7) and USB (bit 8) shown lit on the status line
 } cpm;
 
 // With VIDEO_DIAG, report core 1's timing on UART0 TX twice a second.
@@ -601,6 +603,18 @@ static void keyboard_poll(void) {
 static unsigned keyboards_attached(void) {
 	return usbkbd_count();
 }
+
+static usbmsc_status_t usb_status(void) {
+	return usbmsc_status();
+}
+
+static void usb_log_text(char *out, size_t size) {
+	usbkbd_log_text(out, size);
+}
+
+static bool usb_activity(void) {
+	return usbmsc_activity();
+}
 #else
 static void keyboard_poll(void) {
 }
@@ -608,7 +622,37 @@ static void keyboard_poll(void) {
 static unsigned keyboards_attached(void) {
 	return 0;
 }
+
+static void usbmsc_poll(void) {
+}
+
+static usbmsc_status_t usb_status(void) {
+	return (usbmsc_status_t){0};
+}
+
+static void usb_log_text(char *out, size_t size) {
+	snprintf(out, size, " none (no USB host)");
+}
+
+static bool usb_activity(void) {
+	return false;
+}
 #endif
+
+// The USB stick on the status line: "USB" while one is volume 1 (USB: to
+// XLS and XPIP), "+n" for others waiting to take over, "?" if one could
+// not be used; empty if none is in.
+static void usb_label(char *out, size_t size) {
+	usbmsc_status_t u = usb_status();
+	out[0] = '\0';
+	if (!u.mounted && !u.waiting && !u.unusable)
+		return;
+	int n = snprintf(out, size, "%s", u.mounted ? "USB" : "usb");
+	if (u.waiting && n > 0 && (size_t)n < size)
+		n += snprintf(out + n, size - (size_t)n, "+%u", u.waiting);
+	if (u.unusable && n > 0 && (size_t)n < size)
+		snprintf(out + n, size - (size_t)n, "?");
+}
 
 // Wait until `until`, UART0 receiving something (copied into buf) or a key
 // press. Returns whether either happened; *n is what arrived.
@@ -763,6 +807,9 @@ static const monitor_platform_t cpm_monitor = {
 	.write = cpm_write,
 	.card_info = cpm_card_info,
 	.flush = cpm_flush,
+#if USB_KEYBOARD
+	.usb_info = usbmsc_info,
+#endif
 };
 
 // F11: reset the machine and boot from drive A, as the reset button of a
@@ -816,7 +863,7 @@ static struct {
 } debug_status;
 
 static bool debug_status_on(void) {
-	return settings.status_line == SETTINGS_STATUS_DEBUG;
+	return settings.status_line == SETTINGS_STATUS_DEBUG || settings.status_line == SETTINGS_STATUS_DEBUG_USB;
 }
 
 // One main-loop pass ends and the next starts.
@@ -868,6 +915,13 @@ static void debug_status_refresh(void) {
 	debug_status.last_ms = now;
 	debug_status.frames = st.frames;
 	debug_status.late = st.late;
+	// debug usb: the USB host's last events instead, after the time, which
+	// stops if the main loop (keyboard, USB, CP/M) does.
+	if (settings.status_line == SETTINGS_STATUS_DEBUG_USB) {
+		n = snprintf(t, size, " %lus | usb:", (unsigned long)(now / 1000));
+		if (n > 0 && (size_t)n < size)
+			usb_log_text(t + n, size - (size_t)n);
+	}
 }
 
 static void draw_debug_status(void) {
@@ -875,15 +929,21 @@ static void draw_debug_status(void) {
 	screen_puts(&screen, 0, STATUS_ROW, debug_status.text, colours.status_fg, colours.status_bg);
 }
 
-// Drives accessed light up on the status line, like a drive's busy light.
-static uint8_t drive_lights(uint32_t now) {
-	uint8_t accessed = drives_activity(), lit = 0;
+// Drives accessed light up on the status line, like a drive's busy light;
+// so does USB (bit 8) while the stick is read or written.
+static uint16_t drive_lights(uint32_t now) {
+	uint8_t accessed = drives_activity();
+	uint16_t lit = 0;
 	for (unsigned d = 0; d < DRIVES; ++d) {
 		if (accessed & 1u << d)
 			cpm.light_until[d] = now + DRIVE_LIGHT_MS;
 		if ((int32_t)(cpm.light_until[d] - now) > 0)
-			lit |= (uint8_t)(1u << d);
+			lit |= (uint16_t)(1u << d);
 	}
+	if (usb_activity())
+		cpm.usb_light_until = now + DRIVE_LIGHT_MS;
+	if ((int32_t)(cpm.usb_light_until - now) > 0)
+		lit |= 1u << DRIVES;
 	return lit;
 }
 
@@ -912,6 +972,14 @@ static void draw_cpm_status(void) {
 		text[n++] = drives_name(d) ? (char)('A' + d) : '-';
 		text[n] = '\0';
 	}
+	char usb[12];
+	usb_label(usb, sizeof usb);
+	unsigned usb_col = 0;
+	if (usb[0] && n + 4 + strlen(usb) < sizeof text) {
+		usb_col = (unsigned)n + 3;
+		snprintf(text + n, sizeof text - n, " | %s", usb);
+		n = strlen(text);
+	}
 	if (cpm.running)
 		snprintf(text + n, sizeof text - n, " | %lu.%02lu MHz", (unsigned long)(cpm.khz / 1000),
 			(unsigned long)(cpm.khz % 1000 / 10));
@@ -925,21 +993,27 @@ static void draw_cpm_status(void) {
 		if (cpm.lit & 1u << d && drives_name(d))
 			screen_put(&screen, letter_col[d], STATUS_ROW, (uint8_t)('A' + d), colours.status_bg,
 				colours.status_fg);
+	if (usb_col && cpm.lit & 1u << DRIVES)
+		for (unsigned i = 0; i < 3; ++i)
+			screen_put(&screen, usb_col + i, STATUS_ROW, (uint8_t)usb[i], colours.status_bg, colours.status_fg);
 }
 
 typedef struct {
 	unsigned keyboards;
 	uint32_t keys_sent; // last_key.count
 	settings_t settings;
+	char usb[12];       // usb_label
 } status_t;
 
 static status_t status_now(void) {
-	return (status_t){keyboards_attached(), last_key.count, settings};
+	status_t st = {keyboards_attached(), last_key.count, settings, ""};
+	usb_label(st.usb, sizeof st.usb);
+	return st;
 }
 
 static bool status_equal(const status_t *a, const status_t *b) {
 	return a->keyboards == b->keyboards && a->keys_sent == b->keys_sent &&
-		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0;
+		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0 && strcmp(a->usb, b->usb) == 0;
 }
 
 static void draw_status(const status_t *st) {
@@ -959,9 +1033,9 @@ static void draw_status(const status_t *st) {
 	char parity;
 	settings_framing(&st->settings, &data_bits, &parity, &stop_bits);
 	char text[SCREEN_MAX_COLS + 1];
-	snprintf(text, sizeof text, " VT100 %ux24 | %s | %u %u%c%u%s%s%s%s",
+	snprintf(text, sizeof text, " VT100 %ux24 | %s | %u %u%c%u%s%s%s%s%s%s",
 		screen.cols, TERM_BUILD_ID, settings_baud_rate(&st->settings), data_bits, parity, stop_bits,
-		SERIAL_FLOW_CONTROL ? " RTS/CTS" : "", st->keyboards ? " | kbd" : "",
+		SERIAL_FLOW_CONTROL ? " RTS/CTS" : "", st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "", st->usb,
 		st->settings.local_echo ? " | echo" : "", key);
 	screen_clear_line(&screen, STATUS_ROW, colours.status_fg, colours.status_bg);
 	screen_puts(&screen, 0, STATUS_ROW, text, colours.status_fg, colours.status_bg);
@@ -1072,6 +1146,7 @@ int main(void) {
 			}
 		}
 		keyboard_poll();
+		usbmsc_poll(); // a USB stick plugged in or pulled: mount or unmount it
 		if (setup.open_requested) {
 			setup.open_requested = false;
 			if (!setup.active)

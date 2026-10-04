@@ -21,4 +21,8 @@ uint8_t xfer_command(uint8_t cmd, uint8_t volume, uint8_t *buf);
 // machine reset, through XFER_RESET).
 void xfer_reset(void);
 
+// Drop the file and listing open on volume (the USB stick went): before it
+// is unmounted. What is open on the other volume stays.
+void xfer_volume_gone(uint8_t volume);
+
 #endif

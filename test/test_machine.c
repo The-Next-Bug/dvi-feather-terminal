@@ -927,6 +927,27 @@ static void test_xfer_tools(void) {
 	CHECK(strstr(screen, "P00.LST") != NULL);
 	CHECK(type("q"));
 	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
+
+	// USB: a stick as volume 1 (here the RAM disk's second drive).
+	static FATFS usb_fs;
+	static uint8_t work[4096];
+	diskio_ram_init_drive(1, 2048);
+	const MKFS_PARM opt = {.fmt = FM_FAT | FM_SFD};
+	CHECK_EQ(f_mkfs("1:", &opt, work, sizeof work), FR_OK);
+	CHECK_EQ(f_mount(&usb_fs, "1:", 1), FR_OK);
+	CHECK(cpm("XLS USB:", "No files"));
+	CHECK(cpm("XPIP USB:=B:*.TXT[T]", "1 copied"));
+	CHECK(fat_file_is("1:/XFER/HELLO.TXT", text, sizeof text, 0));
+	CHECK(cpm("XLS USB:", "HELLO.TXT           300"));
+	CHECK(strstr(screen, "1 file\r\n") != NULL);
+	CHECK(cpm("XPIP B:FROMUSB.TXT=USB:HELLO.TXT", "1 copied"));
+	CHECK(cpm("TYPE B:FROMUSB.TXT", "abcdefghijklmnopqrstuvwxyzab\r\n"));
+	CHECK(cpm("XPIP USB:=SD:*.*", "Usage: XPIP")); // card to stick: not a CP/M copy
+	// The stick goes.
+	CHECK_EQ(f_unmount("1:"), FR_OK);
+	diskio_ram_free_drive(1);
+	CHECK(cpm("XLS USB:", "no USB stick"));
+	CHECK(cpm("XLS HELLO.TXT", "HELLO.TXT")); // the card is as it was
 	drives_unmount_all();
 }
 

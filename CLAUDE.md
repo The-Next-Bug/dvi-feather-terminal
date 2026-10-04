@@ -149,7 +149,8 @@ status line (row 24); UART0 on GP0/GP1.
 - `src/keyboard.[ch]` (portable): HID boot keyboard reports -> VT100 key
   codes (DECCKM, DECKPAM, LNM, Num/Caps Lock, autorepeat via kbd_tick).
 - `src/usbkbd.[ch]` + `src/tusb_config.h` (USB_KEYBOARD builds, the
-  default): TinyUSB host on the native USB port, boot keyboards only; keys
+  default): TinyUSB host on the native USB port, boot keyboards (and USB
+  sticks, usbmsc.c); keys
   go to the serial TX queue. The board does not power VBUS in host mode
   (5 V fed into the VBUS pin).
 - `src/settings.[ch]` (portable): settings record (magic, seq, CRC-32,
@@ -160,7 +161,8 @@ status line (row 24); UART0 on GP0/GP1.
   mode (terminal / CP/M machine), status_line (hidden: main.c
   status_shown() leaves row 24 blank; debug: main.c debug_status_* shows
   video_stats() (late lines, compose cycles as % of the line, fps) and
-  core 0's longest main-loop pass and line render, qur.21), blank_after (minutes; `src/blank.[ch]`
+  core 0's longest main-loop pass and line render, qur.21; debug usb:
+  uptime and the last four USB host events from usbkbd_log, qur.3), blank_after (minutes; `src/blank.[ch]`
   portable idle timer, keys only, the waking key dropped; video_set_blank
   makes core 1 send black lines); settings_colours() gives the status
   line's indices and the logo's tint. CRC-32 in
@@ -230,6 +232,20 @@ status line (row 24); UART0 on GP0/GP1.
   by build.sh from src/cpm (INCLUDE is cwd-relative) and put on CPM22 by
   diskimg_gen.py --file; --delete CPM22 XDIR.COM removes z80pack's XDIR.
   test_machine's test_xfer_tools runs them under CP/M.
+  USB sticks (bd qur.3): FatFs volume 1 ("1:", USB: to the tools; ffconf
+  FF_VOLUMES 2). `src/diskio.c` (RP2350) dispatches FatFs drives: 0
+  sdcard_disk_*, 1 usbmsc_disk_*. `src/usbmsc.[ch]` (USB_KEYBOARD builds):
+  TinyUSB MSC host (CFG_TUH_MSC, LUN 0 only, 512-byte sectors; no exFAT),
+  blocking I/O by running tuh_task until the transfer's callback (3 s
+  timeout; gives up at once if the stick is detached). TinyUSB callbacks
+  only note attach/detach; usbmsc_poll (main loop) mounts/unmounts.
+  `src/usbvol.[ch]` (portable, test_usbvol): which stick is volume 1:
+  the first mounted; others wait in order; when it goes, the volume is
+  unmounted (xfer_volume_gone(1)) before the next takes over, so nothing
+  open reaches another stick; unmountable sticks are skipped until
+  replugged. Status line: USB / +n / ? (lit like the drive letters).
+  test/diskio_ram.c has drives 0 and 1. ~4.4 KB of SRAM (msc_host.c,
+  usbmsc.c, usbvol.c built -Os).
   `src/cpm/`: our 62K CP/M 2.2 (bios.asm 8-drive BIOS picking the DPB per
   drive at SELDSK, boot.asm), assembled at build time by build.sh with
   z80pack's z80asm built by the host cc; CCP+BDOS = picosim's 64K cpm.bin
@@ -297,8 +313,8 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   dropped) to 0x2007dac4, ~9.3 KB free; qur.23 (no printf float, FatFs
   tiny, 2 KB UART RX ring) to 0x2007af8c, ~20.1 KB free; 3of (one 4 KB
   scratch buffer for the LZ window and fwupdate) to 0x20076e58, ~37 KB
-  free. Scratch X: core
-  1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  free; file transfer (qur.2, ~2.3 KB) and USB sticks (qur.3, ~4.4 KB) to
+  0x20078934, ~30.4 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, setup 10 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit.
@@ -339,6 +355,14 @@ SRAM is the tight resource; peripherals and pins are mostly free.
     budget".
   - Pin functions for CTS/RTS use `GPIO_FUNC_UART` (UART_FUNCSEL_NUM is
     wrong for GPIO 2/3 on RP2350).
+  - TinyUSB 0.18 has one control transfer for the whole host. Never start
+    one (e.g. the keyboard LEDs' SET_REPORT) from a TinyUSB callback: a
+    device still being set up loses its next request, stays half set up,
+    and TinyUSB "enumerates" it for good, so nothing plugged in later (a
+    stick, the keyboard moved to another hub port) is ever set up (qur.3).
+    usbkbd.c queues the LEDs and sends them from usbkbd_poll once every
+    device has had tuh_mount_cb (hubs: tuh_mounted). The monitor's USB:
+    line (usbmsc_info) shows each device, "setting up" and HID n/m.
 - Git: work on a branch, merge to `main` with `git merge --no-ff`, push only
   when the user asks (they usually say "commit and push" / "merge").
   Commit messages end with the Co-Authored-By line. Tags `vX.Y.Z` trigger a

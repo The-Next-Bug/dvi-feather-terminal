@@ -281,6 +281,8 @@ static void test_status_line_setting(void) {
 	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
 	CHECK_EQ(u.values.status_line, SETTINGS_STATUS_DEBUG);
 	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
+	CHECK_EQ(u.values.status_line, SETTINGS_STATUS_DEBUG_USB);
+	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
 	CHECK_EQ(u.values.status_line, 1);
 }
 

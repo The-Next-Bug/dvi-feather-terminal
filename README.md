@@ -151,17 +151,24 @@ xterm/VT220 codes (`ESC [ H`/`F`, `ESC [ 2 ~`, ...). Keys repeat after
 0.5 s at about 30 per second. Caps Lock and Num Lock light the keyboard's
 LEDs. F12 (and Pause) open [SET-UP](#set-up) instead of sending anything.
 
+A USB stick can share the port (through a hub) for
+[moving files](#moving-files): up to three sticks next to the keyboard.
+
 ### Status line
 
 Row 24 shows, in terminal mode: `VT100` and the width (`80x24`), the build,
 the baud rate and framing (`115200 8N1`, plus `RTS/CTS` in flow control
-builds), `kbd` while a keyboard is attached, `echo` when local echo is on,
-and the last key sent to the host (`key ESC [A`, `key ^C`, `key DEL`, ...).
+builds), `kbd` while a keyboard is attached, the USB stick (as in CP/M
+mode, below), `echo` when local echo is on, and the last key sent to the
+host (`key ESC [A`, `key ^C`, `key DEL`, ...).
 
 In CP/M mode it shows `CP/M`, the drives A-H as letters (`-` for an empty
 one; a letter lights up in reverse video while that drive is read or
-written, like a drive's busy light), the emulated clock rate in MHz (or
-`monitor` while the monitor runs), `kbd` and the build.
+written, like a drive's busy light), `USB` while a USB stick is in use as
+`USB:` (lit while it is read or written; `+1` when another stick waits to
+take over, `?` when one could not be used, `usb` when none is usable), the
+emulated clock rate in MHz (or `monitor` while the monitor runs), `kbd` and
+the build.
 
 SET-UP's Status line setting hides it: row 24 then stays blank.
 
@@ -182,7 +189,7 @@ shown in reverse video:
 | Colors | white, green, amber, blue | white: the 16 ANSI colors as on a VGA screen; the others: phosphor shades (below) |
 | Palette | color, mono | mono: every color is a shade of the Colors hue (below) |
 | Mode | terminal, CP/M machine | a serial terminal on UART0, or the console of the [Z80 CP/M machine](#z80-cpm-machine). Saving a new mode restarts the board |
-| Status line | shown, hidden, debug | hidden: row 24 stays blank (the text area is still 24 rows; the boot logo's build line and CP/M's drive lights are not shown). debug: video timing instead, refreshed four times a second (below) |
+| Status line | shown, hidden, debug, debug usb | hidden: row 24 stays blank (the text area is still 24 rows; the boot logo's build line and CP/M's drive lights are not shown). debug: video timing instead; debug usb: the USB host's last events (both below, refreshed four times a second) |
 | Blank after | never, 1, 5, 10, 30, 60 min | the screen goes black after this long without a key, against burn-in. The next key only wakes it (it is not sent). Output from the host or the Z80 does not wake it; it carries on unseen. The DVI signal stays on, so the monitor does not resync |
 
 **Debug status line**: `late T+N | line C/P% | F fps | loop M/Q ms |
@@ -191,6 +198,16 @@ all, + since the last refresh); core 1's longest scanline as a share of
 the time a scanline lasts (now / peak since debug came on); frames a
 second; core 0's longest main-loop pass and longest single-line render
 (now / peak); in CP/M mode, the Z80's speed. `late` should stay 0.
+
+**Debug usb status line**: `1234s | usb: 1s led1 1s msc2 1s up2 10s vol2`:
+the seconds since power-on (if they stop, the main loop has stopped:
+keyboard, USB and CP/M), then the USB host's last four events, oldest
+first, each as its time, the event and the device's USB address (`xN` for
+repeats): `up`/`down` a device set up or gone, `kbd`/`kbd-` a keyboard,
+`msc`/`msc-` a USB stick, `vol`/`vol?`/`unvol` the stick mounted as `USB:`,
+not mountable, unmounted, `timeout`/`gone`/`ioerr`/`busy` a stick transfer
+over 3 s, its stick pulled, failed, or refused, `led`/`led?` the keyboard
+LEDs sent or refused (busy). The monitor's `USB:` line lists the devices.
 
 **Colors**: green, amber or blue phosphor turns the 16 ANSI colors (default
 text and bold included) into shades of that hue, by brightness (black; dark
@@ -336,12 +353,12 @@ For example `WORMS -N 10 -L 30 -F` or `WORMS -C -N 6 -L 40`.
 ### Moving files
 
 `CPM22` carries two tools (`src/cpm/xls.asm`, `xpip.asm`) that copy files
-between CP/M disks and the folder `/XFER` on the SD card, so files go in
-and out without image tools on a PC (the card still has to come out to
-reach one; a USB stick is planned). They use the machine's file transfer
-device, port 10.
+between CP/M disks and the folder `/XFER` on the SD card (`SD:`) or on a
+USB stick (`USB:`), so files go in and out without image tools on a PC. A
+USB stick can be plugged in and pulled while CP/M runs, so nothing needs
+switching off. They use the machine's file transfer device, port 10.
 
-`XLS [SD:][afn]` lists `/XFER` with sizes in bytes:
+`XLS [SD:|USB:][afn]` lists `/XFER` with sizes in bytes:
 
 ```
 A>XLS
@@ -351,7 +368,7 @@ GAME.COM          18432
 ```
 
 `XPIP dest=source [T]` copies, in the manner of `PIP`. One side is a CP/M
-drive (`B:`, or none for the current drive), the other `SD:`:
+drive (`B:`, or none for the current drive), the other `SD:` or `USB:`:
 
 | Command | Effect |
 |---|---|
@@ -359,6 +376,7 @@ drive (`B:`, or none for the current drive), the other `SD:`:
 | `XPIP SD:=B:*.TXT` | every `.TXT` on drive B to `/XFER` |
 | `XPIP SD:NEW.TXT=OLD.TXT` | one file, renamed |
 | `XPIP SD:LOG.TXT=B:LOG.TXT[T]` | a text file: cut at its end-of-file mark |
+| `XPIP USB:=B:*.*` | everything on drive B to the USB stick |
 
 - A file of the same name at the destination is replaced, as with `PIP`.
 - CP/M files are whole 128-byte records. Copied to CP/M, a file's last
@@ -369,6 +387,23 @@ drive (`B:`, or none for the current drive), the other `SD:`:
   (`LONGFI~1.TXT`), and names CP/M cannot take (such as ones with `_`)
   are not listed.
 - Any key stops a copy between files.
+
+**USB sticks** go into the USB port through a hub, next to the keyboard
+(see [USB keyboard](#usb-keyboard) for powering the port). The stick must
+be FAT12, FAT16 or FAT32 with 512-byte sectors: most sticks up to 32 GB
+come that way; larger ones are usually exFAT and need formatting as FAT32
+first. A card reader shows its first slot only. The status line shows
+`USB` while a stick is `USB:`.
+
+- **One stick at a time is `USB:`**: the first one plugged in. Another
+  plugged in meanwhile waits (`USB+1` on the status line) and takes over
+  when the first is pulled. A stick that cannot be used (not FAT, or
+  exFAT) is passed over (`USB?`) until it is plugged in again.
+- **Pull a stick between copies**, when `USB` is not lit: every file is
+  closed when `XPIP` finishes with it. Pulled in the middle of a copy, the
+  copy stops with an error and the file on the stick may be incomplete or
+  missing (check the stick on a PC); the copy never carries on onto
+  another stick.
 
 `DIR` and `STAT` list the CP/M drives (z80pack's `XDIR`, which only took A
 and B, is no longer on the disk).
@@ -436,7 +471,7 @@ The machine is picosim's:
 | 4 | disk controller |
 | 5/6 | printer (none) |
 | 8 | the format of the disk in a drive, for the BIOS (ours, not picosim's) |
-| 10 | file transfer: files in the `/XFER` folder of the SD card, a 128-byte record at a time by DMA, for `XLS` and `XPIP` (ours; `src/machine.h` has the commands) |
+| 10 | file transfer: files in the `/XFER` folder of the SD card or a USB stick, a 128-byte record at a time by DMA, for `XLS` and `XPIP` (ours; `src/machine.h` has the commands) |
 | 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II uses as many as it was generated for, see [Other operating systems](#other-operating-systems)) |
 | 65/66 | clock (no RTC: it starts at 1 Jan 2026 at power-on) |
 | 67 | 60 Hz timer interrupt |
@@ -633,15 +668,17 @@ In `src/`:
   holds its configuration headers), `monitor.[ch]`, `drives.[ch]` (disk
   images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel),
   `fwpanel.[ch]` (SET-UP's firmware update), `xfer.[ch]` (port 10's
-  files: `/XFER`), `cpm/` (the CP/M 2.2 BIOS, boot loader, WORMS, XLS and
-  XPIP; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
+  files: `/XFER`), `usbvol.[ch]` (which USB stick is `USB:`), `cpm/` (the
+  CP/M 2.2 BIOS, boot loader, WORMS, XLS and XPIP; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
   images).
 - **RP2350**: `main.c`, `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]`
   (scanlines on core 1), `hstx_test.c` (test pattern), `serial.[ch]` (UART
   with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors,
   written at the DVI clock), `sdcard.[ch]` (SPI SD card for FatFs),
-  `fwupdate.[ch]` (firmware update from the SD card), `usbkbd.[ch]` and
-  `tusb_config.h` (TinyUSB host, `USB_KEYBOARD` builds), `diag.[ch]`
+  `diskio.c` (FatFs drives: 0 the SD card, 1 a USB stick),
+  `fwupdate.[ch]` (firmware update from the SD card), `usbkbd.[ch]`,
+  `usbmsc.[ch]` (USB sticks) and `tusb_config.h` (TinyUSB host,
+  `USB_KEYBOARD` builds), `diag.[ch]`
   (`VIDEO_DIAG`).
 - **Build-time generators**: `font_gen.py` (font tables), `logo_gen.py`
   (the logo), `diskimg_gen.py` (the compressed disk images).

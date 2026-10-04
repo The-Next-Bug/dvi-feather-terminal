@@ -338,6 +338,52 @@ static void test_no_volume(void) {
 	CHECK_EQ(f_mount(&fs, "", 1), FR_OK);
 }
 
+// Volume 1 (a USB stick): its own /XFER; going away drops only what is
+// open on it.
+static void test_usb_volume(void) {
+	fresh_volume();
+	static FATFS usb_fs;
+	static uint8_t work[4096];
+	diskio_ram_init_drive(1, VOLUME_SECTORS);
+	const MKFS_PARM opt = {.fmt = FM_FAT | FM_SFD};
+	CHECK_EQ(f_mkfs("1:", &opt, work, sizeof work), FR_OK);
+	CHECK_EQ(f_mount(&usb_fs, "1:", 1), FR_OK);
+	put_file("/XFER/CARD.TXT", 10, 'c');
+
+	memcpy(buf, "STICK   TXT", XFER_NAME);
+	CHECK_EQ(xfer_command(XFER_CREATE, 1, buf), XFER_ST_OK);
+	memset(buf, 's', XFER_RECORD);
+	CHECK_EQ(xfer_command(XFER_WRITE, 1, buf), XFER_ST_OK);
+	CHECK_EQ(xfer_command(XFER_CLOSE, 1, buf), XFER_ST_OK);
+	CHECK_EQ(fat_size("1:/XFER/STICK.TXT"), XFER_RECORD);
+	CHECK_EQ(fat_size("/XFER/STICK.TXT"), UINT32_MAX);
+	memcpy(buf, "???????????", XFER_NAME);
+	CHECK_EQ(xfer_command(XFER_FIND_FIRST, 1, buf), XFER_ST_OK);
+	CHECK(memcmp(buf, "STICK   TXT", XFER_NAME) == 0);
+	CHECK_EQ(xfer_command(XFER_FIND_NEXT, 1, buf), XFER_ST_NOT_FOUND);
+	CHECK(strcmp(listing("???????????"), "CARD    TXT") == 0); // volume 0
+
+	// The stick goes with a listing open on it and a file open on the card:
+	// the listing is dropped, the file stays.
+	memcpy(buf, "???????????", XFER_NAME);
+	CHECK_EQ(xfer_command(XFER_FIND_FIRST, 1, buf), XFER_ST_OK);
+	CHECK_EQ(cmd(XFER_OPEN, "CARD    TXT"), XFER_ST_OK);
+	xfer_volume_gone(1);
+	CHECK_EQ(xfer_command(XFER_FIND_NEXT, 1, buf), XFER_ST_NOT_FOUND);
+	CHECK_EQ(cmd(XFER_READ, NULL), XFER_ST_OK);
+	CHECK_EQ(buf[0], 'c');
+	// A file open on the stick is dropped.
+	memcpy(buf, "STICK   TXT", XFER_NAME);
+	CHECK_EQ(xfer_command(XFER_OPEN, 1, buf), XFER_ST_OK);
+	xfer_volume_gone(1);
+	CHECK_EQ(xfer_command(XFER_READ, 1, buf), XFER_ST_BAD);
+	xfer_volume_gone(0); // nothing open there now: fine
+	CHECK_EQ(f_unmount("1:"), FR_OK);
+	memcpy(buf, "???????????", XFER_NAME);
+	CHECK_EQ(xfer_command(XFER_FIND_FIRST, 1, buf), XFER_ST_NO_VOLUME);
+	diskio_ram_free_drive(1);
+}
+
 int main(void) {
 	RUN(test_round_trip);
 	RUN(test_record_padding);
@@ -348,6 +394,7 @@ int main(void) {
 	RUN(test_one_file_at_a_time);
 	RUN(test_volume_full);
 	RUN(test_no_volume);
+	RUN(test_usb_volume);
 	xfer_reset();
 	f_unmount("");
 	diskio_ram_free();

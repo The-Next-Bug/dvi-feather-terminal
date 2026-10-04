@@ -22,6 +22,8 @@ typedef struct {
 	// Show the console's text so far (NULL: nothing to do). Called during
 	// long operations, which hold up the caller's main loop.
 	void (*flush)(void);
+	// What the USB host sees, shown under the card (NULL: no USB host).
+	const char *(*usb_info)(void);
 } monitor_platform_t;
 
 typedef enum {

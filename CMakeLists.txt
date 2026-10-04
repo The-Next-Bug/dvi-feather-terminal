@@ -89,6 +89,7 @@ add_executable(dvi_terminal
   src/palette.c
   src/raster.c
   src/screen.c
+  src/diskio.c
   src/sdcard.c
   src/scratch.c
   src/settings.c
@@ -98,6 +99,7 @@ add_executable(dvi_terminal
   src/splash.c
   src/uf2.c
   src/video.c
+  src/usbvol.c
   src/vtparse.c
   src/xfer.c
   ${FONT_SOURCES}
@@ -115,13 +117,14 @@ target_include_directories(dvi_terminal PRIVATE
 )
 
 # Warnings for our sources only, not the SDK's.
-set_source_files_properties(src/blank.c src/crc32.c src/demo.c src/diag.c src/diskimg.c src/drivepanel.c src/drives.c src/fwpanel.c src/fwupdate.c src/hstx_dvi.c src/keyboard.c
+set_source_files_properties(src/blank.c src/crc32.c src/demo.c src/diag.c src/diskimg.c src/drivepanel.c src/diskio.c src/drives.c src/fwpanel.c src/fwupdate.c src/hstx_dvi.c src/keyboard.c
   src/keyname.c src/lz.c src/machine.c src/main.c src/monitor.c src/nvflash.c src/palette.c src/raster.c src/scratch.c src/screen.c src/sdcard.c
-  src/settings.c src/setup.c src/splash.c src/term.c src/serial.c src/uf2.c src/usbkbd.c src/video.c src/vtparse.c src/xfer.c
+  src/settings.c src/setup.c src/splash.c src/term.c src/serial.c src/uf2.c src/usbkbd.c src/usbmsc.c src/usbvol.c src/video.c src/vtparse.c src/xfer.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
-# Cold code (it runs only while a CP/M program moves files): small rather
-# than fast, as all code takes SRAM.
-set_property(SOURCE src/xfer.c APPEND PROPERTY COMPILE_OPTIONS "-Os")
+# Cold code (it runs only while files move, or a USB stick comes or goes):
+# small rather than fast, as all code takes SRAM.
+set_property(SOURCE src/xfer.c src/usbvol.c src/usbmsc.c
+  ${PICO_TINYUSB_PATH}/src/class/msc/msc_host.c APPEND PROPERTY COMPILE_OPTIONS "-Os")
 
 target_compile_definitions(dvi_terminal PRIVATE
   HSTX_MODE=${HSTX_MODE}
@@ -160,7 +163,7 @@ if(STARTUP_LOGO)
 endif()
 
 if(USB_KEYBOARD)
-  target_sources(dvi_terminal PRIVATE src/keyboard.c src/usbkbd.c)
+  target_sources(dvi_terminal PRIVATE src/keyboard.c src/usbkbd.c src/usbmsc.c)
   # tusb_config.h is in src/.
   target_link_libraries(dvi_terminal tinyusb_host)
 endif()

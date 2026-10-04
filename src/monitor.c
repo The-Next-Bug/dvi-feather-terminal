@@ -115,6 +115,8 @@ static void show_card(void) {
 		say("SD card:  %s, no FAT file system (error %d)\r\n", info, (int)mount_result);
 	else
 		say("SD card:  %s, %s\r\n", info, fs_name());
+	if (plat->usb_info)
+		say("%s", plat->usb_info());
 }
 
 static void show_drives(void) {
