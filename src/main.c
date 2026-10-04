@@ -33,16 +33,20 @@
 #include "hardware/clocks.h"
 #include "hardware/watchdog.h"
 
+#include "blank.h"
 #include "demo.h"
 #include "diag.h"
 #include "drivepanel.h"
 #include "drives.h"
+#include "ff.h"
+#include "fwpanel.h"
 #include "fwupdate.h"
 #include "keyname.h"
 #include "machine.h"
 #include "monitor.h"
 #include "nvflash.h"
 #include "palette.h"
+#include "raster.h"
 #include "sdcard.h"
 #include "screen.h"
 #include "settings.h"
@@ -51,6 +55,7 @@
 #include "term_build.h"
 #include "serial.h"
 #include "video.h"
+#include "xfer.h"
 
 #ifndef STARTUP_LOGO
 #define STARTUP_LOGO 1
@@ -64,6 +69,7 @@
 #define USB_KEYBOARD 0
 #endif
 
+#include "usbmsc.h"
 #if USB_KEYBOARD
 #include "usbkbd.h"
 #endif
@@ -102,6 +108,7 @@ static settings_t settings;          // as saved in flash
 static settings_target_t save_target;
 static settings_colours_t colours;   // in use: the status line's
 static unsigned default_columns;     // the SET-UP width in use: what F11 goes back to
+static blank_t blank;                // the Blank after setting: keys keep the screen lit
 // The palette shown (built from the Colors and Palette settings).
 static struct {
 	uint16_t table[PALETTE_SIZE];
@@ -128,6 +135,10 @@ static struct {
 	// CP/M mode: the Drives panel (D), over the same rows.
 	bool drives_open, drives_apply;
 	drivepanel_t drives;
+	// The firmware update panel (U), over the same rows; its work and its
+	// cancel wait for the main loop.
+	bool fw_open, fw_work, fw_cancel;
+	fwpanel_t fw;
 	// The demo screen (T), over the whole screen until a key.
 	bool demo, demo_end;
 	unsigned demo_cols, term_cols;
@@ -135,6 +146,7 @@ static struct {
 } setup;
 
 static_assert(DRIVEPANEL_ROWS <= SETUP_ROWS, "the Drives panel fits SET-UP's rows");
+static_assert(FWPANEL_ROWS <= SETUP_ROWS, "the firmware panel fits SET-UP's rows");
 
 // The Z80 machine (CP/M mode). Keys are queued here and handed to the CPU
 // or the monitor from the main loop, never from inside the USB stack.
@@ -146,7 +158,8 @@ static struct {
 	unsigned key_head, key_tail;
 	uint32_t khz; // last measured emulated clock
 	uint32_t light_until[DRIVES]; // ms: the drive's letter is lit until then
-	uint8_t lit;  // drive letters shown lit on the status line
+	uint32_t usb_light_until; // ms: USB is lit until then
+	uint16_t lit; // drive letters (bits 0-7) and USB (bit 8) shown lit on the status line
 } cpm;
 
 // With VIDEO_DIAG, report core 1's timing on UART0 TX twice a second.
@@ -178,20 +191,94 @@ static void show_palette(const settings_t *s) {
 	palette.mono = s->palette;
 }
 
-// The panels are drawn in the edited settings' colours, like the preview
-// (setup_service shows their palette).
+// The panels are boxes on the default background, the box in the status
+// line's colour of the edited settings, like the preview (setup_service
+// shows their palette).
 static void setup_draw_panel(void) {
 	char title[SCREEN_MAX_COLS + 1];
-	snprintf(title, sizeof title, "  DVI Terminal build %s", TERM_BUILD_ID);
+	snprintf(title, sizeof title, "DVI Terminal build %s", TERM_BUILD_ID);
 	settings_colours_t c = settings_colours(&setup.ui.values);
-	setup_draw(&setup.ui, &screen, SETUP_TOP, title, c.status_fg, c.status_bg);
+	setup_draw(&setup.ui, &screen, SETUP_TOP, title, PALETTE_TEXT, PALETTE_BACKGROUND, c.status_bg);
 }
 
+// At the bottom of SET-UP's rows, the rows above it blank.
 static void drives_draw_panel(void) {
 	settings_colours_t c = settings_colours(&setup.ui.values);
-	for (unsigned r = DRIVEPANEL_ROWS; r < SETUP_ROWS; ++r)
-		screen_clear_line(&screen, SETUP_TOP + r, c.status_fg, c.status_bg);
-	drivepanel_draw(&setup.drives, &screen, SETUP_TOP, c.status_fg, c.status_bg);
+	for (unsigned r = 0; r < SETUP_ROWS - DRIVEPANEL_ROWS; ++r)
+		screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	drivepanel_draw(&setup.drives, &screen, SETUP_TOP + SETUP_ROWS - DRIVEPANEL_ROWS, PALETTE_TEXT,
+		PALETTE_BACKGROUND, c.status_bg);
+}
+
+// The firmware panel, at the bottom of SET-UP's rows like the Drives panel.
+static void fw_draw_panel(void) {
+	settings_colours_t c = settings_colours(&setup.ui.values);
+	for (unsigned r = 0; r < SETUP_ROWS - FWPANEL_ROWS; ++r)
+		screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	fwpanel_draw(&setup.fw, &screen, SETUP_TOP + SETUP_ROWS - FWPANEL_ROWS, PALETTE_TEXT, PALETTE_BACKGROUND,
+		c.status_bg);
+}
+
+// The firmware panel's platform. In CP/M mode the monitor keeps the card
+// mounted (with the drives' images open); in terminal mode the card is
+// mounted only while the panel is open.
+static FATFS fw_fs;
+
+static bool fw_mount(char *info, size_t n) {
+	if (cpm.on)
+		return true;
+	FRESULT r = f_mount(&fw_fs, "", 1);
+	if (r == FR_OK)
+		return true;
+	if (sdcard_type() == SDCARD_NONE)
+		snprintf(info, n, "none found (SPI0: GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI)");
+	else
+		snprintf(info, n, "no FAT file system on it (error %d)", (int)r);
+	return false;
+}
+
+static void fw_unmount(bool commit) {
+	if (cpm.on && !commit)
+		return; // the monitor's
+	if (cpm.on) {
+		xfer_reset();
+		drives_flush();
+		drives_unmount_all();
+	}
+	f_unmount("");
+}
+
+// Show the panel now: the long steps hold up the main loop.
+static void fw_show(const fwpanel_t *p) {
+	(void)p;
+	fw_draw_panel();
+	video_update(&screen);
+}
+
+// The commit leaves the screen as fw_show last drew it: core 1 keeps
+// showing it from RAM while the flash is rewritten.
+static const fwpanel_platform_t fw_platform = {
+	.mount = fw_mount,
+	.check = fwupdate_check,
+	.stage = fwupdate_stage,
+	.unmount = fw_unmount,
+	.commit = fwupdate_commit,
+	.show = fw_show,
+};
+
+static void fw_close(void) {
+	if (setup.fw_open)
+		fwpanel_close(&setup.fw, &fw_platform);
+	setup.fw_open = setup.fw_work = setup.fw_cancel = false;
+}
+
+// A key for the firmware panel. The work is left for the main loop.
+static void fw_feed(uint8_t c) {
+	fwpanel_action_t a = fwpanel_input(&setup.fw, c);
+	if (a == FWPANEL_WORK)
+		setup.fw_work = true;
+	else if (a == FWPANEL_CANCEL)
+		setup.fw_cancel = true;
 }
 
 // A key for the Drives panel. Mounting is left for the main loop.
@@ -216,7 +303,12 @@ static void setup_feed(const uint8_t *data, size_t len) {
 		setup.demo_end |= len > 0; // any key; the rest of it is dropped
 		return;
 	}
-	for (size_t i = 0; i < len && setup.action == SETUP_NONE && !setup.drives_apply; ++i) {
+	for (size_t i = 0; i < len && setup.action == SETUP_NONE && !setup.drives_apply && !setup.fw_work &&
+		!setup.fw_cancel; ++i) {
+		if (setup.fw_open) {
+			fw_feed(data[i]);
+			continue;
+		}
 		if (setup.drives_open) {
 			drives_feed(data[i], now);
 			continue;
@@ -250,6 +342,7 @@ static void setup_enter(bool from_host) {
 	setup.ui.machine_menu = cpm.on;
 	setup.active = true;
 	setup.drives_open = setup.drives_apply = false;
+	setup.fw_open = setup.fw_work = setup.fw_cancel = false;
 	setup.from_host = from_host;
 	setup.action = SETUP_NONE;
 	setup.demo = false;
@@ -275,6 +368,7 @@ static void apply_settings(const settings_t *s) {
 	term_set_defaults(&term, &(term_defaults_t){.backspace_bs = s->backspace == 0x08,
 		.newline_mode = s->newline && !cpm.on});
 	default_columns = s->columns;
+	blank_init(&blank, s->blank_after * 60000u, to_ms_since_boot(get_absolute_time()));
 	colours = settings_colours(s);
 	show_palette(s);
 }
@@ -288,6 +382,7 @@ static void setup_leave(bool apply) {
 	screen.cursor_visible = setup.saved_cursor;
 	setup.active = false;
 	setup.drives_open = setup.drives_apply = false;
+	fw_close();
 	if (!apply) {
 		show_palette(&settings); // back from SET-UP's preview
 		return;
@@ -330,7 +425,7 @@ static void draw_demo(unsigned cols, const char *what) {
 	char status[SCREEN_MAX_COLS + 1];
 	snprintf(status, sizeof status, " demo | %u x 24 | build %s (%s, %s) | %s",
 		cols, TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE, what);
-	demo_draw(&screen, cols, status);
+	demo_draw(&screen, cols, raster_font_name(raster_layout(cols)), status);
 }
 
 // SET-UP's demo (T): in the edited palette, alternating widths until a key.
@@ -382,6 +477,17 @@ static void setup_service(void) {
 		drives_service();
 		return;
 	}
+	if (setup.fw_open && setup.action == SETUP_NONE) {
+		if (setup.fw_cancel) {
+			fw_close();
+			setup_draw_panel();
+		} else if (setup.fw_work) {
+			setup.fw_work = false;
+			fwpanel_run(&setup.fw, &fw_platform); // staging ends in the restart
+			fw_draw_panel();
+		}
+		return;
+	}
 	if (setup.action == SETUP_NONE)
 		setup.action = setup_tick(&setup.ui, to_ms_since_boot(get_absolute_time()));
 	setup_action_t a = setup.action;
@@ -392,6 +498,10 @@ static void setup_service(void) {
 		setup_demo_start();
 	} else if (a == SETUP_REBOOT) {
 		restart(); // the last resort when the terminal is stuck
+	} else if (a == SETUP_FIRMWARE) {
+		fwpanel_open(&setup.fw);
+		setup.fw_open = setup.fw_work = true; // the check
+		fw_draw_panel();
 	} else if (a == SETUP_DRIVES) {
 		drivepanel_open(&setup.drives);
 		setup.drives_open = true;
@@ -416,12 +526,29 @@ static void setup_service(void) {
 	}
 }
 
+// With the Status line setting hidden, row 24 is left blank (the text area
+// stays 24 rows) and the status line drawers stop here.
+static bool status_shown(void) {
+	if (settings.status_line)
+		return true;
+	screen_clear_line(&screen, STATUS_ROW, PALETTE_TEXT, PALETTE_BACKGROUND);
+	return false;
+}
+
 #if USB_KEYBOARD
+// A key while the screen is blanked only wakes it (it is dropped, not
+// typed blind); any other key restarts the blanking delay.
+static bool key_wakes(void) {
+	return term_started && blank_activity(&blank, to_ms_since_boot(get_absolute_time()));
+}
+
 // Keystrokes go to the host like replies, through the TX queue (or to
 // SET-UP while it is open). With local echo they are shown too.
 static void send_key(void *ctx, const uint8_t *data, size_t len) {
 	(void)ctx;
 	key_pressed = true;
+	if (key_wakes())
+		return;
 	if (setup.active) {
 		setup_feed(data, len);
 		return;
@@ -443,7 +570,7 @@ static void send_key(void *ctx, const uint8_t *data, size_t len) {
 static void setup_key(void *ctx) {
 	(void)ctx;
 	key_pressed = true;
-	if (!term_started)
+	if (!term_started || key_wakes())
 		return;
 	if (setup.demo)
 		setup.demo_end = true; // back to SET-UP, like any key
@@ -457,7 +584,7 @@ static void setup_key(void *ctx) {
 static void reset_key(void *ctx) {
 	(void)ctx;
 	key_pressed = true;
-	if (term_started && !setup.active)
+	if (term_started && !key_wakes() && !setup.active)
 		cpm.reset_requested = true;
 }
 
@@ -476,6 +603,18 @@ static void keyboard_poll(void) {
 static unsigned keyboards_attached(void) {
 	return usbkbd_count();
 }
+
+static usbmsc_status_t usb_status(void) {
+	return usbmsc_status();
+}
+
+static void usb_log_text(char *out, size_t size) {
+	usbkbd_log_text(out, size);
+}
+
+static bool usb_activity(void) {
+	return usbmsc_activity();
+}
 #else
 static void keyboard_poll(void) {
 }
@@ -483,7 +622,37 @@ static void keyboard_poll(void) {
 static unsigned keyboards_attached(void) {
 	return 0;
 }
+
+static void usbmsc_poll(void) {
+}
+
+static usbmsc_status_t usb_status(void) {
+	return (usbmsc_status_t){0};
+}
+
+static void usb_log_text(char *out, size_t size) {
+	snprintf(out, size, " none (no USB host)");
+}
+
+static bool usb_activity(void) {
+	return false;
+}
 #endif
+
+// The USB stick on the status line: "USB" while one is volume 1 (USB: to
+// XLS and XPIP), "+n" for others waiting to take over, "?" if one could
+// not be used; empty if none is in.
+static void usb_label(char *out, size_t size) {
+	usbmsc_status_t u = usb_status();
+	out[0] = '\0';
+	if (!u.mounted && !u.waiting && !u.unusable)
+		return;
+	int n = snprintf(out, size, "%s", u.mounted ? "USB" : "usb");
+	if (u.waiting && n > 0 && (size_t)n < size)
+		n += snprintf(out + n, size - (size_t)n, "+%u", u.waiting);
+	if (u.unusable && n > 0 && (size_t)n < size)
+		snprintf(out + n, size - (size_t)n, "?");
+}
 
 // Wait until `until`, UART0 receiving something (copied into buf) or a key
 // press. Returns whether either happened; *n is what arrived.
@@ -507,8 +676,10 @@ static bool show_logo(uint8_t *buf, size_t max, size_t *n) {
 	char status[SCREEN_MAX_COLS + 1];
 	snprintf(status, sizeof status, " DVI Terminal | build %s (%s, %s)",
 		TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
-	screen_clear_line(&screen, STATUS_ROW, colours.status_fg, colours.status_bg);
-	screen_puts(&screen, 0, STATUS_ROW, status, colours.status_fg, colours.status_bg);
+	if (status_shown()) {
+		screen_clear_line(&screen, STATUS_ROW, colours.status_fg, colours.status_bg);
+		screen_puts(&screen, 0, STATUS_ROW, status, colours.status_fg, colours.status_bg);
+	}
 	video_update(&screen);
 	*n = 0;
 	// In the hue of the Colors setting (white keeps the logo's own colours,
@@ -610,6 +781,7 @@ static const machine_platform_t cpm_platform = {
 	.disk_read = cpm_disk_read,
 	.disk_write = cpm_disk_write,
 	.disk_format = cpm_disk_format,
+	.xfer = xfer_command,
 };
 
 static void cpm_write(const char *text) {
@@ -631,16 +803,13 @@ static void cpm_flush(void) {
 	video_update(&screen);
 }
 
-// The monitor's U (fwupdate.h). The commit leaves the screen as the
-// monitor's last flush drew it: core 1 keeps showing it from RAM while the
-// flash is rewritten.
 static const monitor_platform_t cpm_monitor = {
 	.write = cpm_write,
 	.card_info = cpm_card_info,
 	.flush = cpm_flush,
-	.firmware_check = fwupdate_check,
-	.firmware_stage = fwupdate_stage,
-	.firmware_commit = fwupdate_commit,
+#if USB_KEYBOARD
+	.usb_info = usbmsc_info,
+#endif
 };
 
 // F11: reset the machine and boot from drive A, as the reset button of a
@@ -683,15 +852,98 @@ static void cpm_step(void) {
 	drives_poll(now);
 }
 
-// Drives accessed light up on the status line, like a drive's busy light.
-static uint8_t drive_lights(uint32_t now) {
-	uint8_t accessed = drives_activity(), lit = 0;
+// The Status line setting's debug choice: core 1's timing and core 0's
+// main-loop time, refreshed every STATUS_INTERVAL_MS in both modes.
+static struct {
+	char text[SCREEN_MAX_COLS + 1]; // as last drawn: redrawn as is between refreshes
+	uint32_t last_ms, frames, late;  // at the last refresh
+	uint32_t line_peak;              // compose cycles, since the debug line came on
+	uint32_t render_peak_us;         // likewise
+	uint32_t pass_start_us, pass_max_us, pass_peak_us; // main-loop passes
+} debug_status;
+
+static bool debug_status_on(void) {
+	return settings.status_line == SETTINGS_STATUS_DEBUG || settings.status_line == SETTINGS_STATUS_DEBUG_USB;
+}
+
+// One main-loop pass ends and the next starts.
+static void debug_status_pass(void) {
+	uint32_t now = time_us_32(), us = now - debug_status.pass_start_us;
+	debug_status.pass_start_us = now;
+	if (us > debug_status.pass_max_us)
+		debug_status.pass_max_us = us;
+}
+
+static unsigned percent(uint32_t part, uint32_t whole) {
+	return whole ? (unsigned)((part * 100 + whole / 2) / whole) : 0;
+}
+
+// " late T+N | line C/P% | F fps | loop M/Q ms | render R/S us | Z MHz":
+// late lines in all (+ since the last refresh); the longest scanline
+// compose as a share of a line's time, this refresh / the peak; frames a
+// second; the longest main-loop pass and the longest line render on core 0
+// (core 1 can show that line half drawn meanwhile), now / peak; in CP/M
+// mode the Z80's speed.
+static void debug_status_refresh(void) {
+	uint32_t now = to_ms_since_boot(get_absolute_time());
+	video_stats_t st = video_stats();
+	uint32_t ms = now - debug_status.last_ms;
+	if (ms > 4 * STATUS_INTERVAL_MS) {
+		// Just turned on (or the first time): the peaks start again.
+		debug_status.line_peak = debug_status.pass_peak_us = debug_status.render_peak_us = 0;
+		ms = 0;
+	}
+	if (st.max_line_cycles > debug_status.line_peak)
+		debug_status.line_peak = st.max_line_cycles;
+	uint32_t pass_us = debug_status.pass_max_us;
+	debug_status.pass_max_us = 0;
+	if (pass_us > debug_status.pass_peak_us)
+		debug_status.pass_peak_us = pass_us;
+	if (st.max_render_us > debug_status.render_peak_us)
+		debug_status.render_peak_us = st.max_render_us;
+	unsigned fps = ms ? (unsigned)(((st.frames - debug_status.frames) * 1000 + ms / 2) / ms) : 0;
+	char *t = debug_status.text;
+	size_t size = sizeof debug_status.text;
+	int n = snprintf(t, size, " late %lu+%lu | line %u/%u%% | %u fps | loop %lu/%lu ms | render %lu/%lu us",
+		(unsigned long)st.late, (unsigned long)(ms ? st.late - debug_status.late : 0),
+		percent(st.max_line_cycles, st.cycles_budget), percent(debug_status.line_peak, st.cycles_budget), fps,
+		(unsigned long)((pass_us + 500) / 1000), (unsigned long)((debug_status.pass_peak_us + 500) / 1000),
+		(unsigned long)st.max_render_us, (unsigned long)debug_status.render_peak_us);
+	if (cpm.on && cpm.running && n > 0 && (size_t)n < size)
+		snprintf(t + n, size - (size_t)n, " | %lu.%02lu MHz", (unsigned long)(cpm.khz / 1000),
+			(unsigned long)(cpm.khz % 1000 / 10));
+	debug_status.last_ms = now;
+	debug_status.frames = st.frames;
+	debug_status.late = st.late;
+	// debug usb: the USB host's last events instead, after the time, which
+	// stops if the main loop (keyboard, USB, CP/M) does.
+	if (settings.status_line == SETTINGS_STATUS_DEBUG_USB) {
+		n = snprintf(t, size, " %lus | usb:", (unsigned long)(now / 1000));
+		if (n > 0 && (size_t)n < size)
+			usb_log_text(t + n, size - (size_t)n);
+	}
+}
+
+static void draw_debug_status(void) {
+	screen_clear_line(&screen, STATUS_ROW, colours.status_fg, colours.status_bg);
+	screen_puts(&screen, 0, STATUS_ROW, debug_status.text, colours.status_fg, colours.status_bg);
+}
+
+// Drives accessed light up on the status line, like a drive's busy light;
+// so does USB (bit 8) while the stick is read or written.
+static uint16_t drive_lights(uint32_t now) {
+	uint8_t accessed = drives_activity();
+	uint16_t lit = 0;
 	for (unsigned d = 0; d < DRIVES; ++d) {
 		if (accessed & 1u << d)
 			cpm.light_until[d] = now + DRIVE_LIGHT_MS;
 		if ((int32_t)(cpm.light_until[d] - now) > 0)
-			lit |= (uint8_t)(1u << d);
+			lit |= (uint16_t)(1u << d);
 	}
+	if (usb_activity())
+		cpm.usb_light_until = now + DRIVE_LIGHT_MS;
+	if ((int32_t)(cpm.usb_light_until - now) > 0)
+		lit |= 1u << DRIVES;
 	return lit;
 }
 
@@ -703,8 +955,12 @@ static void draw_cpm_status(void) {
 		cpm.khz = machine_speed_khz();
 	}
 	cpm.lit = drive_lights(now);
-	if (setup.demo)
+	if (setup.demo || !status_shown())
 		return; // the demo has the status line
+	if (debug_status_on()) {
+		draw_debug_status();
+		return;
+	}
 	char text[SCREEN_MAX_COLS + 1] = " CP/M |";
 	unsigned letter_col[DRIVES];
 	// The drives' letters, "-" for an empty one; SET-UP's Drives panel
@@ -715,6 +971,14 @@ static void draw_cpm_status(void) {
 		text[n++] = ' ';
 		text[n++] = drives_name(d) ? (char)('A' + d) : '-';
 		text[n] = '\0';
+	}
+	char usb[12];
+	usb_label(usb, sizeof usb);
+	unsigned usb_col = 0;
+	if (usb[0] && n + 4 + strlen(usb) < sizeof text) {
+		usb_col = (unsigned)n + 3;
+		snprintf(text + n, sizeof text - n, " | %s", usb);
+		n = strlen(text);
 	}
 	if (cpm.running)
 		snprintf(text + n, sizeof text - n, " | %lu.%02lu MHz", (unsigned long)(cpm.khz / 1000),
@@ -729,26 +993,36 @@ static void draw_cpm_status(void) {
 		if (cpm.lit & 1u << d && drives_name(d))
 			screen_put(&screen, letter_col[d], STATUS_ROW, (uint8_t)('A' + d), colours.status_bg,
 				colours.status_fg);
+	if (usb_col && cpm.lit & 1u << DRIVES)
+		for (unsigned i = 0; i < 3; ++i)
+			screen_put(&screen, usb_col + i, STATUS_ROW, (uint8_t)usb[i], colours.status_bg, colours.status_fg);
 }
 
 typedef struct {
 	unsigned keyboards;
 	uint32_t keys_sent; // last_key.count
 	settings_t settings;
+	char usb[12];       // usb_label
 } status_t;
 
 static status_t status_now(void) {
-	return (status_t){keyboards_attached(), last_key.count, settings};
+	status_t st = {keyboards_attached(), last_key.count, settings, ""};
+	usb_label(st.usb, sizeof st.usb);
+	return st;
 }
 
 static bool status_equal(const status_t *a, const status_t *b) {
 	return a->keyboards == b->keyboards && a->keys_sent == b->keys_sent &&
-		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0;
+		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0 && strcmp(a->usb, b->usb) == 0;
 }
 
 static void draw_status(const status_t *st) {
-	if (setup.demo)
+	if (setup.demo || !status_shown())
 		return; // the demo has the status line; DECCOLM after it redraws
+	if (debug_status_on()) {
+		draw_debug_status();
+		return;
+	}
 	char key[32] = "";
 	if (st->keys_sent) {
 		char name[24];
@@ -759,9 +1033,9 @@ static void draw_status(const status_t *st) {
 	char parity;
 	settings_framing(&st->settings, &data_bits, &parity, &stop_bits);
 	char text[SCREEN_MAX_COLS + 1];
-	snprintf(text, sizeof text, " VT100 %ux24 | %s | %u %u%c%u%s%s%s%s",
+	snprintf(text, sizeof text, " VT100 %ux24 | %s | %u %u%c%u%s%s%s%s%s%s",
 		screen.cols, TERM_BUILD_ID, settings_baud_rate(&st->settings), data_bits, parity, stop_bits,
-		SERIAL_FLOW_CONTROL ? " RTS/CTS" : "", st->keyboards ? " | kbd" : "",
+		SERIAL_FLOW_CONTROL ? " RTS/CTS" : "", st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "", st->usb,
 		st->settings.local_echo ? " | echo" : "", key);
 	screen_clear_line(&screen, STATUS_ROW, colours.status_fg, colours.status_bg);
 	screen_puts(&screen, 0, STATUS_ROW, text, colours.status_fg, colours.status_bg);
@@ -843,6 +1117,7 @@ int main(void) {
 	video_update(&screen);
 
 	absolute_time_t next_status = make_timeout_time_ms(STATUS_INTERVAL_MS);
+	debug_status.pass_start_us = time_us_32();
 	while (true) {
 		if (cpm.on) {
 			cpm_step();
@@ -871,6 +1146,7 @@ int main(void) {
 			}
 		}
 		keyboard_poll();
+		usbmsc_poll(); // a USB stick plugged in or pulled: mount or unmount it
 		if (setup.open_requested) {
 			setup.open_requested = false;
 			if (!setup.active)
@@ -879,6 +1155,11 @@ int main(void) {
 		if (setup.active)
 			setup_service();
 		serial_poll();
+
+		uint32_t now = to_ms_since_boot(get_absolute_time());
+		if (setup.active)
+			blank_activity(&blank, now); // not idle while SET-UP is open
+		video_set_blank(blank_tick(&blank, now));
 
 		// DECCOLM re-initialises the whole screen, status line included,
 		// whether or not the width changes.
@@ -891,11 +1172,13 @@ int main(void) {
 		}
 		if (time_reached(next_status)) {
 			next_status = make_timeout_time_ms(STATUS_INTERVAL_MS);
+			if (debug_status_on())
+				debug_status_refresh();
 			if (cpm.on) {
 				draw_cpm_status();
 			} else {
 				status_t st = status_now();
-				if (!status_equal(&st, &shown)) {
+				if (debug_status_on() || !status_equal(&st, &shown)) {
 					shown = st;
 					draw_status(&shown);
 				}
@@ -903,5 +1186,6 @@ int main(void) {
 		}
 		video_update(&screen);
 		diag_poll();
+		debug_status_pass();
 	}
 }

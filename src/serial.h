@@ -19,7 +19,7 @@
 
 #include "hardware/uart.h"
 
-#define SERIAL_RX_BUFFER_SIZE 4096 // power of two
+#define SERIAL_RX_BUFFER_SIZE 2048 // power of two: ~180 ms at 115200 baud
 #define SERIAL_TX_BUFFER_SIZE 256  // power of two
 #define SERIAL_NO_PIN (-1)
 

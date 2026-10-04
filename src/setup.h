@@ -8,7 +8,8 @@
 // Keys arrive as the bytes a VT100 keyboard sends (from the USB keyboard or
 // from the host): Up/Down (ESC [ A/B or ESC O A/B) select a setting,
 // Left/Right and Space change it, Return saves, Escape cancels, T shows the
-// demo screen, R reboots the board, and with machine_menu D opens the Drives
+// demo screen, R reboots the board, U opens the firmware update (fwpanel.h),
+// and with machine_menu D opens the Drives
 // panel and M leaves for the Z80 machine's menu. A lone ESC
 // is only known to be the Escape key once SETUP_ESC_TIMEOUT_MS pass without
 // the rest of a sequence (setup_tick).
@@ -20,9 +21,10 @@
 #include "settings.h"
 
 #define SETUP_ITEMS SETTINGS_FIELDS
-// Title, the settings with two preview rows under the colour ones, message,
-// help.
-#define SETUP_ROWS (SETUP_ITEMS + 5)
+// In a box (screen_frame): the top line with the title, the settings with
+// two preview rows under the colour ones, message, two help rows, the
+// bottom line.
+#define SETUP_ROWS (SETUP_ITEMS + 7)
 #define SETUP_ESC_TIMEOUT_MS 100
 
 typedef enum {
@@ -34,6 +36,7 @@ typedef enum {
 	SETUP_DRIVES,  // D (with machine_menu): the Drives panel (drivepanel.h)
 	SETUP_DEMO,    // T: show the demo screen (demo.h) until a key
 	SETUP_REBOOT,  // R: restart the board (unsaved changes are dropped)
+	SETUP_FIRMWARE, // U: the firmware update panel (fwpanel.h)
 } setup_action_t;
 
 typedef struct {
@@ -53,10 +56,13 @@ setup_action_t setup_input(setup_t *u, uint8_t c, uint32_t now_ms);
 // Call regularly: a lone ESC becomes SETUP_CANCEL after the timeout.
 setup_action_t setup_tick(setup_t *u, uint32_t now_ms);
 
-// Draw the panel on rows top .. top + SETUP_ROWS - 1 in fg/bg (the current
-// choices reversed); title is shown after "SET-UP". Under Colors and
+// Draw the panel on rows top .. top + SETUP_ROWS - 1: a box in border, the
+// text in fg on bg, the selected setting's name in bold and every current
+// choice reversed (told apart by more than colour, for the mono palette);
+// title is shown after "SET-UP" in the top line. Under Colors and
 // Palette, a preview of the chosen colours: default text, bold and status
 // line, and the 16 ANSI colours as text and as backgrounds.
-void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, uint8_t fg, uint8_t bg);
+void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, uint8_t fg, uint8_t bg,
+	uint8_t border);
 
 #endif

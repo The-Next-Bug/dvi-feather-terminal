@@ -12,12 +12,11 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
 
 ## Features
 
-- **Display**: 800x600p60 over DVI/HDMI. 80 columns use Terminus 8x16 in
-  8-pixel cells (centered, 80-pixel borders); 132 columns use misc-fixed
-  6x12 at double height (each glyph row on two scanlines, like a VT100) in
-  6-pixel cells (792 pixels, centered; `FONT_132` picks 6x10 doubled or
-  the older 6x13 at single height instead). Rows are 24 pixels high;
-  line drawing, block and shade characters join up between rows.
+- **Display**: 800x600p60 over DVI/HDMI. 80 columns use Terminus 10x20 in
+  10-pixel cells across the full width; 132 columns use misc-fixed 6x12 at
+  double height (each glyph row on two scanlines, like a VT100) in 6-pixel
+  cells (792 pixels, centered). Rows are 24 pixels high; line drawing,
+  block and shade characters join up between rows.
 - **Emulation**: VT100/VT102. Cursor movement, scrolling regions, erase,
   insert/delete lines and characters, tab stops, G0/G1 character sets
   (ASCII, UK, DEC Special Graphics) with SI/SO, modes (DECAWM, DECOM, IRM,
@@ -25,7 +24,7 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
   save/restore cursor, DECALN, RIS, REP. Replies to DA, DSR/CPR and
   DECREQTPARM go back on UART0 TX. Checked with `vttest` (menus 1-3, 6 and
   8) through `tools/hostbridge.py`.
-- **Attributes**: SGR bold (bright and emboldened), underline, blink,
+- **Attributes**: SGR bold (bright, and in 80 columns the bold face), underline, blink,
   reverse; colors 8/16, 256 (the xterm palette, exact) and 24-bit (the
   nearest of those 256).
 - **Keyboard**: a USB keyboard on the Pico 2's USB port; see
@@ -152,21 +151,32 @@ xterm/VT220 codes (`ESC [ H`/`F`, `ESC [ 2 ~`, ...). Keys repeat after
 0.5 s at about 30 per second. Caps Lock and Num Lock light the keyboard's
 LEDs. F12 (and Pause) open [SET-UP](#set-up) instead of sending anything.
 
+A USB stick can share the port (through a hub) for
+[moving files](#moving-files): up to three sticks next to the keyboard.
+
 ### Status line
 
 Row 24 shows, in terminal mode: `VT100` and the width (`80x24`), the build,
 the baud rate and framing (`115200 8N1`, plus `RTS/CTS` in flow control
-builds), `kbd` while a keyboard is attached, `echo` when local echo is on,
-and the last key sent to the host (`key ESC [A`, `key ^C`, `key DEL`, ...).
+builds), `kbd` while a keyboard is attached, the USB stick (as in CP/M
+mode, below), `echo` when local echo is on, and the last key sent to the
+host (`key ESC [A`, `key ^C`, `key DEL`, ...).
 
 In CP/M mode it shows `CP/M`, the drives A-H as letters (`-` for an empty
 one; a letter lights up in reverse video while that drive is read or
-written, like a drive's busy light), the emulated clock rate in MHz (or
-`monitor` while the monitor runs), `kbd` and the build.
+written, like a drive's busy light), `USB` while a USB stick is in use as
+`USB:` (lit while it is read or written; `+1` when another stick waits to
+take over, `?` when one could not be used, `usb` when none is usable), the
+emulated clock rate in MHz (or `monitor` while the monitor runs), `kbd` and
+the build.
+
+SET-UP's Status line setting hides it: row 24 then stays blank.
 
 ### SET-UP
 
-A panel over the bottom text rows for the settings kept in flash:
+A box over the bottom text rows for the settings kept in flash. The
+selected setting is marked `>` and its name is bold; each current choice is
+shown in reverse video:
 
 | Setting | Values | |
 |---|---|---|
@@ -179,17 +189,36 @@ A panel over the bottom text rows for the settings kept in flash:
 | Colors | white, green, amber, blue | white: the 16 ANSI colors as on a VGA screen; the others: phosphor shades (below) |
 | Palette | color, mono | mono: every color is a shade of the Colors hue (below) |
 | Mode | terminal, CP/M machine | a serial terminal on UART0, or the console of the [Z80 CP/M machine](#z80-cpm-machine). Saving a new mode restarts the board |
+| Status line | shown, hidden, debug, debug usb | hidden: row 24 stays blank (the text area is still 24 rows; the boot logo's build line and CP/M's drive lights are not shown). debug: video timing instead; debug usb: the USB host's last events (both below, refreshed four times a second) |
+| Blank after | never, 1, 5, 10, 30, 60 min | the screen goes black after this long without a key, against burn-in. The next key only wakes it (it is not sent). Output from the host or the Z80 does not wake it; it carries on unseen. The DVI signal stays on, so the monitor does not resync |
+
+**Debug status line**: `late T+N | line C/P% | F fps | loop M/Q ms |
+render R/S us | Z MHz`: scanlines not ready in time for the DVI output (in
+all, + since the last refresh); core 1's longest scanline as a share of
+the time a scanline lasts (now / peak since debug came on); frames a
+second; core 0's longest main-loop pass and longest single-line render
+(now / peak); in CP/M mode, the Z80's speed. `late` should stay 0.
+
+**Debug usb status line**: `1234s | usb: 1s led1 1s msc2 1s up2 10s vol2`:
+the seconds since power-on (if they stop, the main loop has stopped:
+keyboard, USB and CP/M), then the USB host's last four events, oldest
+first, each as its time, the event and the device's USB address (`xN` for
+repeats): `up`/`down` a device set up or gone, `kbd`/`kbd-` a keyboard,
+`msc`/`msc-` a USB stick, `vol`/`vol?`/`unvol` the stick mounted as `USB:`,
+not mountable, unmounted, `timeout`/`gone`/`ioerr`/`busy` a stick transfer
+over 3 s, its stick pulled, failed, or refused, `led`/`led?` the keyboard
+LEDs sent or refused (busy). The monitor's `USB:` line lists the devices.
 
 **Colors**: green, amber or blue phosphor turns the 16 ANSI colors (default
 text and bold included) into shades of that hue, by brightness (black; dark
 gray; the normal colors; default text; the bright colors; bold); 256-color
-and 24-bit colors stay in color. The status line, SET-UP panel and startup
+and 24-bit colors stay in color. The status line, SET-UP's box and startup
 logo match (white keeps the logo's own colors).
 
 **Palette**: mono makes every color, 256-color and 24-bit too, a shade of
 the Colors hue (white: gray) by its brightness, so colors of similar
-brightness look alike. The status line and SET-UP panel become the text
-colors reversed, and with white the startup logo shows in gray.
+brightness look alike. The status line becomes the text colors reversed
+(and SET-UP's box the text color), and with white the startup logo shows in gray.
 
 Under Palette, two rows preview both color settings: default text, bold and
 the status line, then each of the 16 ANSI colors (0-F) as text on the
@@ -216,6 +245,7 @@ It opens from:
 | **Esc**, F12 | leave without saving |
 | **T** | show the demo screen in the edited colors until a key is pressed |
 | **R** | reboot the board, as at power-on (unsaved changes are dropped; CP/M drives are written back first). The last resort when the terminal is stuck |
+| **U** | [update the firmware](#updating-the-firmware-from-the-sd-card) from `FIRMWARE.UF2` on the SD card, in either mode |
 | **D** | CP/M mode: the [Drives panel](#running-cpm) |
 | **M** | CP/M mode: back to the [monitor](#the-monitor) |
 
@@ -320,6 +350,69 @@ terminal for the screen size, so it fills 132 columns too. Any key ends it.
 
 For example `WORMS -N 10 -L 30 -F` or `WORMS -C -N 6 -L 40`.
 
+### Moving files
+
+`CPM22` carries three tools (`src/cpm/xls.asm`, `xpip.asm`, `xera.asm`)
+that move files between CP/M disks and the folder `/XFER` on the SD card
+(`SD:`) or on a USB stick (`USB:`): `XLS` lists the folder, `XPIP` copies,
+`XERA` erases. Files go in and out without image tools on a PC. A
+USB stick can be plugged in and pulled while CP/M runs, so nothing needs
+switching off. They use the machine's file transfer device, port 10.
+
+`XLS [SD:|USB:][afn]` lists `/XFER` with sizes in bytes:
+
+```
+A>XLS
+README.TXT         4210
+GAME.COM          18432
+2 files
+```
+
+`XPIP dest=source [T]` copies, in the manner of `PIP`. One side is a CP/M
+drive (`B:`, or none for the current drive), the other `SD:` or `USB:`:
+
+| Command | Effect |
+|---|---|
+| `XPIP A:=SD:*.COM` | every `.COM` in `/XFER` to drive A, names kept |
+| `XPIP SD:=B:*.TXT` | every `.TXT` on drive B to `/XFER` |
+| `XPIP SD:NEW.TXT=OLD.TXT` | one file, renamed |
+| `XPIP SD:LOG.TXT=B:LOG.TXT[T]` | a text file: cut at its end-of-file mark |
+| `XPIP USB:=B:*.*` | everything on drive B to the USB stick |
+
+- A file of the same name at the destination is replaced, as with `PIP`.
+- CP/M files are whole 128-byte records. Copied to CP/M, a file's last
+  record is padded with `^Z`; copied to `SD:`, every record is kept, and
+  `[T]` cuts the file at the first `^Z` of its last record, as text
+  editors on a PC expect.
+- Names are 8.3: a PC's long names show as their short forms
+  (`LONGFI~1.TXT`), and names CP/M cannot take (such as ones with `_`)
+  are not listed.
+- Any key stops a copy between files.
+
+`XERA [SD:|USB:]afn` erases files in `/XFER` (`SD:` is the default),
+naming each. With wildcards it says how many match and asks first: `Y`
+erases them, anything else leaves them. `ERA` erases CP/M files.
+
+**USB sticks** go into the USB port through a hub, next to the keyboard
+(see [USB keyboard](#usb-keyboard) for powering the port). The stick must
+be FAT12, FAT16 or FAT32 with 512-byte sectors: most sticks up to 32 GB
+come that way; larger ones are usually exFAT and need formatting as FAT32
+first. A card reader shows its first slot only. The status line shows
+`USB` while a stick is `USB:`.
+
+- **One stick at a time is `USB:`**: the first one plugged in. Another
+  plugged in meanwhile waits (`USB+1` on the status line) and takes over
+  when the first is pulled. A stick that cannot be used (not FAT, or
+  exFAT) is passed over (`USB?`) until it is plugged in again.
+- **Pull a stick between copies**, when `USB` is not lit: every file is
+  closed when `XPIP` finishes with it. Pulled in the middle of a copy, the
+  copy stops with an error and the file on the stick may be incomplete or
+  missing (check the stick on a PC); the copy never carries on onto
+  another stick.
+
+`DIR` and `STAT` list the CP/M drives (z80pack's `XDIR`, which only took A
+and B, is no longer on the disk).
+
 ### The monitor
 
 At power-on in CP/M mode the monitor mounts the card and boots from drive
@@ -343,9 +436,8 @@ A after 3 seconds (any key stops that), or shows its menu:
 - **S**: CPU speed test (a JP loop for a second, in Z80 MHz).
 - **C**: check the card again (after changing it).
 - **R**: resume the CPU, after leaving it from SET-UP.
-- **U**: update the firmware from `FIRMWARE.UF2` in the card's root (shown
-  only when the file is there; see
-  [Updating the firmware from the SD card](#updating-the-firmware-from-the-sd-card)).
+- **F12**: SET-UP, also for the
+  [firmware update](#updating-the-firmware-from-the-sd-card) (**U**).
 
 ### Running CP/M
 
@@ -384,6 +476,7 @@ The machine is picosim's:
 | 4 | disk controller |
 | 5/6 | printer (none) |
 | 8 | the format of the disk in a drive, for the BIOS (ours, not picosim's) |
+| 10 | file transfer: files in the `/XFER` folder of the SD card or a USB stick, a 128-byte record at a time by DMA, for `XLS`, `XPIP` and `XERA` (ours; `src/machine.h` has the commands) |
 | 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II uses as many as it was generated for, see [Other operating systems](#other-operating-systems)) |
 | 65/66 | clock (no RTC: it starts at 1 Jan 2026 at power-on) |
 | 67 | 60 Hz timer interrupt |
@@ -400,12 +493,13 @@ instructions cost more per T-state).
 Copy the new `dvi_terminal.uf2` to the card's root as `FIRMWARE.UF2` (8.3
 names only; the release ZIP has it as `sdcard-<target>/FIRMWARE.UF2`, and
 `SDCARD=/media/<you>/<card> scripts/build.sh` copies it there), put the card
-in, set Mode to "CP/M machine" and press **U** in the monitor. It reads the
+in, and press **U** in SET-UP (either mode; in terminal mode the card is
+mounted only for the update). It reads the
 file through and checks it (a UF2 for the RP2350 with a bootable image that
 fits), shows its size and asks; **Y** then:
 
 1. writes the image to the upper half of the flash, beside the running
-   firmware, and reads it back (the progress dots). Any problem up to here
+   firmware, and reads it back (the progress bar). Any problem up to here
    leaves the board as it was;
 2. renames the file to `FIRMWARE.OLD`, so it is not installed twice, and
    closes the disks;
@@ -456,7 +550,6 @@ submodule.
 | `LOGO_IN_FLASH` | ON | experimental: keep the logo data in flash, copied out only while it shows (saves about 19 KB of SRAM); OFF copies it into SRAM with the program |
 | `STARTUP_DEMO` | OFF | run the demo after the logo |
 | `MACHINE_BANKS` | 2 | Z80 machine: 48 KB banks besides bank 0 (each costs 48 KB of SRAM; a third does not fit) |
-| `FONT_132` | 6x12 | 132-column font: `6x12` at double height (fills the 24-pixel rows; accented capitals can touch descenders above), `6x10` at double height (2 blank lines above and below), or `6x13` at single height (more space between lines) |
 | `HSTX_MODE` | 0 | 0: 800x600 at 60 Hz; 1: at 56 Hz (clk_hstx 180 MHz); 2: 60 Hz reduced blanking (177 MHz). 1 and 2 are slower fallbacks |
 | `VIDEO_DIAG` | OFF | bring-up diagnostics on UART0 TX: boot markers, core 1 scanline timing, fault reports |
 | `COPY_TO_RAM` | ON | run from SRAM; must stay ON (see [How it works](#how-it-works)) |
@@ -494,9 +587,12 @@ clock.
 The screen buffer stores one-byte glyph codes (see `src/font.h`): ASCII at
 0x20-0x7E, Latin-1 at 0xA0-0xFF, DEC Special Graphics (line drawing) at
 0x01-0x1F, and shades/blocks/double-line box drawing at 0x80-0x9F. The
-tables are generated at build time: 8x16 from Terminus Font for 80 columns,
-misc-fixed for 132 (6x12 at double height; 6x10 or 6x13 with `FONT_132`). Glyphs a font lacks (control pictures, scan
-lines, half blocks) are drawn by `font_gen.py`.
+tables are generated at build time: Terminus 10x20 for 80 columns (bold
+text in Terminus's bold face) and misc-fixed 6x12 at double height for 132
+(no bold face fits 6 pixels, so bold text there is only brighter, as on a
+VT100). They stay in flash; the current width's fonts are copied into
+SRAM when the width changes. Glyphs a font lacks (control pictures,
+scan lines, half blocks) are drawn by `font_gen.py`.
 
 ### Startup logo
 
@@ -535,8 +631,8 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 
 | Resource | Used | Free |
 |---|---|---|
-| SRAM (520 KB) | about 480 KB: code 165 KB, data 26 KB, buffers 288 KB (Z80 memory 160 KB, raster memory 64.5 KB, disk-image window 16 KB, screen 13 KB, ...) | about 32 KB, plus most of the two 4 KB scratch banks. A third Z80 bank (48 KB) does not fit |
-| Flash (4 MB) | firmware 442 KB; firmware-update staging area (upper 2 MB, used only during an update); settings (2 sectors); the last sector is left blank | about 1.5 MB below 2 MB for the firmware to grow into |
+| SRAM (520 KB) | about 475 KB: code 170 KB, data 20 KB, buffers 285 KB (Z80 memory 160 KB, raster memory 60 KB, the current fonts 20 KB, screen 13 KB, ...) | about 37 KB, plus most of the two 4 KB scratch banks. A third Z80 bank (48 KB) does not fit |
+| Flash (4 MB) | firmware 496 KB; firmware-update staging area (upper 2 MB, used only during an update); settings (2 sectors); the last sector is left blank | about 1.5 MB below 2 MB for the firmware to grow into |
 | Clocks | clk_sys 400 MHz at 1.3 V, HSTX 200 MHz, USB 48 MHz | |
 | Peripherals | HSTX (DVI), 2 DMA channels, UART0, SPI0 (SD card), USB (host), TIMER0, watchdog | 14 DMA channels, all three PIO blocks, UART1, SPI1, I2C0/1, PWM, ADC, TIMER1, TRNG, SHA-256, the QMI's second chip select (PSRAM) |
 | GPIO | GP0/1 UART0, GP2/3 RTS/CTS (flow control builds only), GP4-7 SD card, GP12-19 DVI Sock | GP8-11, GP20-22, GP26-28 (GP26-28 can be analog inputs), and GP2/3 without flow control |
@@ -552,7 +648,7 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | `lib/z80pack` | Vendored part of z80pack (Z80 core, z80asm, picosim disk images); `UPSTREAM.md` gives the commit and local changes |
 | `lib/fatfs` | ChaN's FatFs R0.15a, vendored (see its README) |
 | `assets/logo/` | The startup logo (PNG used by the build, JPEG original) |
-| `assets/fonts/` | Terminus Font 8x16 (SIL OFL 1.1) and misc-fixed 6x12, 6x10 and 6x13 (public domain); see its README |
+| `assets/fonts/` | Terminus Font 10x20 and its bold face (SIL OFL 1.1) and misc-fixed 6x12 (public domain); see its README |
 | `cmake/build_info.cmake` | Generates `term_build.h` (git describe, commit, date) on every build |
 | `cmake/fonts.cmake` | Font table generation, shared by the firmware and host tests |
 | `scripts/` | `setup-toolchain.sh`, `build.sh`, `test.sh`, `package.sh`, `changelog.sh` |
@@ -570,19 +666,24 @@ In `src/`:
   `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100
   codes), `keyname.[ch]` (key names for the status line), `splash.[ch]`
   (startup logo decoding), `settings.[ch]` (settings records),
-  `setup.[ch]` (SET-UP panel), `demo.[ch]`, `crc32.[ch]`, `uf2.[ch]` (UF2
-  file checks for the firmware update).
+  `setup.[ch]` (SET-UP panel), `blank.[ch]` (screen blanking timer),
+  `demo.[ch]`, `crc32.[ch]`, `uf2.[ch]` (UF2 file checks for the firmware
+  update).
 - **Z80 machine, portable**: `machine.[ch]` (z80pack glue; `z80pack/`
   holds its configuration headers), `monitor.[ch]`, `drives.[ch]` (disk
-  images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel), `cpm/` (the
-  CP/M 2.2 BIOS, boot loader and WORMS; see its README), `diskimg.[ch]`
-  and `lz.[ch]` (the built-in images).
+  images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel),
+  `fwpanel.[ch]` (SET-UP's firmware update), `xfer.[ch]` (port 10's
+  files: `/XFER`), `usbvol.[ch]` (which USB stick is `USB:`), `cpm/` (the
+  CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP and XERA; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
+  images).
 - **RP2350**: `main.c`, `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]`
   (scanlines on core 1), `hstx_test.c` (test pattern), `serial.[ch]` (UART
   with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors,
   written at the DVI clock), `sdcard.[ch]` (SPI SD card for FatFs),
-  `fwupdate.[ch]` (firmware update from the SD card), `usbkbd.[ch]` and
-  `tusb_config.h` (TinyUSB host, `USB_KEYBOARD` builds), `diag.[ch]`
+  `diskio.c` (FatFs drives: 0 the SD card, 1 a USB stick),
+  `fwupdate.[ch]` (firmware update from the SD card), `usbkbd.[ch]`,
+  `usbmsc.[ch]` (USB sticks) and `tusb_config.h` (TinyUSB host,
+  `USB_KEYBOARD` builds), `diag.[ch]`
   (`VIDEO_DIAG`).
 - **Build-time generators**: `font_gen.py` (font tables), `logo_gen.py`
   (the logo), `diskimg_gen.py` (the compressed disk images).
@@ -618,8 +719,8 @@ This project's own code and documentation are under the MIT license; see
 `src/cpm/` from z80pack's picosim, also MIT). The third-party parts:
 
 Terminus Font is © Dimitar Toshkov Zhekov under the SIL Open Font License
-1.1; see `assets/fonts/Terminus-OFL.txt`. The 8x16 table generated from it
-is a derivative and stays under that license. The misc-fixed 6x12, 6x10 and 6x13 fonts are
+1.1; see `assets/fonts/Terminus-OFL.txt`. The tables generated from it
+are derivatives and stays under that license. The misc-fixed 6x12 font is
 public domain. pico-sdk is BSD-3-Clause, as is the pico-examples HSTX DVI
 example `src/hstx_dvi.c` follows.
 

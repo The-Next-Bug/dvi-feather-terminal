@@ -12,7 +12,7 @@
 // bank), 65/66 clock, 67 60 Hz timer (RST 38H), 160 hardware control
 // (after 0xAA: bit 7 halt, bit 6 reset), 254/255 front panel switches;
 // and our own 8: the format of a drive (OUT the drive, IN its format), for
-// the 8-drive BIOS in src/cpm.
+// the 8-drive BIOS in src/cpm; and 10: the file transfer device (below).
 //
 // The CPU runs in slices (machine_run) from the platform's main loop;
 // while it waits (HALT, the speed limit) it calls the platform's idle hook,
@@ -37,7 +37,45 @@ typedef struct {
 	// The format of the disk in a drive (port 8): 0 none, 1 8" floppy,
 	// 2 4 MB, 3 8 MB hard disk (drives.h). May be NULL: always 0.
 	uint8_t (*disk_format)(unsigned drive);
+	// The file transfer device (port 10, xfer.h): run command cmd
+	// (XFER_*) on volume, with buf holding its input and taking its output
+	// (XFER_RECORD bytes). Returns an XFER_ST_* status. May be NULL: every
+	// command answers XFER_ST_NO_VOLUME.
+	uint8_t (*xfer)(uint8_t cmd, uint8_t volume, uint8_t *buf);
 } machine_platform_t;
+
+// Port 10, the file transfer device: files in a folder of a FAT volume,
+// read and written a 128-byte record at a time by DMA, in the style of the
+// disk controller (port 4). OUT 10 a command: the high nibble the command,
+// the low nibble the volume (0 the SD card, 1 a USB stick); IN 10 the status
+// of the last command. XFER_SETDMA takes the DMA address from the next two
+// OUTs (low, high); the other commands move their input from, and their
+// output to, memory at the DMA address (banking applies, as for the disk
+// controller). Names are 11 bytes in CP/M's FCB form ("NAME    EXT",
+// blank-padded; ? matches any character in a pattern).
+#define XFER_RESET 0x00      // close the open file and the listing
+#define XFER_SETDMA 0x10     // the next two OUTs: the DMA address, low then high
+#define XFER_FIND_FIRST 0x20 // in: a pattern; out: XFER_ENTRY (name, size)
+#define XFER_FIND_NEXT 0x30  // out: the next XFER_ENTRY of the listing
+#define XFER_OPEN 0x40       // in: a name; open it to read
+#define XFER_CREATE 0x50     // in: a name; a new file to write (not over one)
+#define XFER_READ 0x60       // out: the next record, the last padded with ^Z
+#define XFER_WRITE 0x70      // in: a record, appended
+#define XFER_CLOSE 0x80      // close the open file
+#define XFER_CLOSE_TEXT 0x90 // close it, cut at the first ^Z of its last record
+#define XFER_DELETE 0xa0     // in: a name
+
+#define XFER_NAME 11     // a name in FCB form
+#define XFER_ENTRY 15    // a listing entry: the name, then the size in bytes (32-bit little-endian)
+#define XFER_RECORD 128  // a record
+
+#define XFER_ST_OK 0
+#define XFER_ST_NOT_FOUND 1 // no such file, or the end of the listing
+#define XFER_ST_EXISTS 2    // XFER_CREATE: the file is there
+#define XFER_ST_EOF 3       // XFER_READ: no more records
+#define XFER_ST_IO_ERROR 4  // a card error, or the volume is full
+#define XFER_ST_NO_VOLUME 5 // no card or stick, or no FAT file system on it
+#define XFER_ST_BAD 6       // a bad name, an unknown command, or no file open
 
 typedef enum {
 	MACHINE_RUNNING, // the slice ended; call machine_run again

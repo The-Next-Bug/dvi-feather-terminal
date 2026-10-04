@@ -1,11 +1,14 @@
+#include <stddef.h>
 #include <string.h>
 
 #include "setup.h"
+#include "font.h"
 #include "palette.h"
 #include "test.h"
 
 #define FG RGB222(3, 3, 3)
 #define BG RGB222(0, 0, 2)
+#define BORDER RGB222(0, 3, 0)
 
 static setup_t u;
 
@@ -107,7 +110,7 @@ static void test_draw_marks_current_choice(void) {
 	screen_init(&s, 80, RGB222(2, 2, 2), 0);
 	open_with(132);
 	const unsigned top = SCREEN_ROWS - 1 - SETUP_ROWS; // above the status line
-	setup_draw(&u, &s, top, "build x", FG, BG);
+	setup_draw(&u, &s, top, "build x", FG, BG, BORDER);
 	CHECK(row_contains(&s, top, "SET-UP"));
 	CHECK(row_contains(&s, top, "build x"));
 	CHECK(row_contains(&s, top + 1, "> Columns"));
@@ -117,7 +120,7 @@ static void test_draw_marks_current_choice(void) {
 	CHECK(row_contains(&s, top + 5, "< 8N1 >"));
 	CHECK(row_contains(&s, top + 7, "  Colors"));
 	CHECK(row_contains(&s, top + 7, "white   green   amber   blue")); // short lists: all
-	CHECK(row_contains(&s, top + SETUP_ROWS - 1, "Return save"));
+	CHECK(row_contains(&s, top + SETUP_ROWS - 3, "Return save"));
 	// " 132 " is drawn reversed, " 80 " normal.
 	char line[81];
 	for (unsigned c = 0; c < 80; ++c)
@@ -142,13 +145,13 @@ static void test_colours_preview(void) {
 	open_with(80);
 	const unsigned top = SCREEN_ROWS - 1 - SETUP_ROWS;
 	const unsigned preview = top + 9; // under Palette (item 7, row top + 8)
-	setup_draw(&u, &s, top, "", FG, BG);
+	setup_draw(&u, &s, top, "", FG, BG, BORDER);
 	CHECK(row_contains(&s, top + 7, "Colors"));
 	CHECK(row_contains(&s, top + 8, "Palette"));
 	CHECK(row_contains(&s, preview, " Text Bold  Status "));
 	CHECK(row_contains(&s, preview, "0 1 2 3 4 5 6 7 8 9 A B C D E F"));
 	CHECK(row_contains(&s, preview + 1, "0 1 2 3 4 5 6 7 8 9 A B C D E F"));
-	CHECK(row_contains(&s, top + SETUP_ROWS - 1, "Return save"));
+	CHECK(row_contains(&s, top + SETUP_ROWS - 3, "Return save"));
 
 	unsigned text_col = 0, digits = 0;
 	for (unsigned c = 0; c < 80; ++c) {
@@ -188,7 +191,7 @@ static void test_colours_preview(void) {
 	send("\x1b[B ", 0); // Palette: mono
 	CHECK_EQ(u.values.colours, 3);
 	CHECK_EQ(u.values.palette, 1);
-	setup_draw(&u, &s, top, "", FG, BG);
+	setup_draw(&u, &s, top, "", FG, BG, BORDER);
 	screen_colours(&s, digits + 2, preview, &fg, &bg); // red as text
 	CHECK(fg == 1 && bg == PALETTE_BACKGROUND);
 	screen_colours(&s, status_col, preview, &fg, &bg);
@@ -205,11 +208,11 @@ static void test_machine_menu_key(void) {
 
 	screen_t s;
 	screen_init(&s, 80, FG, BG);
-	setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG);
+	setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG, BORDER);
 	char help[81] = "";
 	for (unsigned c = 0; c < 80; ++c)
-		help[c] = (char)screen_glyph(&s, c, SCREEN_ROWS - 2);
-	CHECK(strstr(help, "T demo  D drives  M monitor") != NULL);
+		help[c] = (char)screen_glyph(&s, c, SCREEN_ROWS - 3);
+	CHECK(strstr(help, "R reboot  D drives  M monitor") != NULL);
 }
 
 // T shows the demo screen, in either mode.
@@ -219,8 +222,8 @@ static void test_demo_key(void) {
 	CHECK_EQ(send("T", 0), SETUP_DEMO);
 	screen_t s;
 	screen_init(&s, 80, FG, BG);
-	setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG);
-	CHECK(row_contains(&s, SCREEN_ROWS - 2, "T demo"));
+	setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG, BORDER);
+	CHECK(row_contains(&s, SCREEN_ROWS - 3, "T demo"));
 }
 
 // R reboots, in either mode; the help line says so and still fits 80
@@ -233,23 +236,109 @@ static void test_reboot_key(void) {
 		CHECK_EQ(send("R", 0), SETUP_REBOOT);
 		screen_t s;
 		screen_init(&s, 80, FG, BG);
-		setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG);
-		CHECK(row_contains(&s, SCREEN_ROWS - 2, "R reboot"));
-		CHECK(row_contains(&s, SCREEN_ROWS - 2, "Return save"));
-		CHECK(row_contains(&s, SCREEN_ROWS - 2, "Esc cancel"));
+		setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG, BORDER);
+		CHECK(row_contains(&s, SCREEN_ROWS - 3, "R reboot"));
+		CHECK(row_contains(&s, SCREEN_ROWS - 4, "Return save"));
+		CHECK(row_contains(&s, SCREEN_ROWS - 4, "Esc cancel"));
+		// Inside the box: the right-hand line is still there.
+		CHECK_EQ(screen_glyph(&s, 79, SCREEN_ROWS - 3), GLYPH_DEC_GRAPHICS('x'));
 	}
 	// Alt+R (ESC r) is still the Escape key, not a reboot.
 	open_with(80);
 	CHECK_EQ(send("\x1br", 0), SETUP_CANCEL);
 }
 
+// U opens the firmware update, in either mode; the help line says so.
+static void test_firmware_key(void) {
+	for (int machine = 0; machine <= 1; ++machine) {
+		open_with(80);
+		u.machine_menu = machine;
+		CHECK_EQ(send("u", 0), SETUP_FIRMWARE);
+		CHECK_EQ(send("U", 0), SETUP_FIRMWARE);
+		static screen_t s;
+		screen_init(&s, 80, FG, BG);
+		setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG, BORDER);
+		CHECK(row_contains(&s, SCREEN_ROWS - 3, "U firmware update"));
+	}
+}
+
 static void test_mode_setting(void) {
 	open_with(80);
 	CHECK_EQ(u.values.mode, SETTINGS_MODE_TERMINAL);
-	for (unsigned i = 0; i < SETUP_ITEMS - 1; ++i)
+	for (unsigned i = 0; i < offsetof(settings_t, mode); ++i)
 		send("\x1b[B", 0);
 	CHECK_EQ(send(" ", 0), SETUP_REDRAW);
 	CHECK_EQ(u.values.mode, SETTINGS_MODE_CPM);
+}
+
+static void test_status_line_setting(void) {
+	open_with(80);
+	CHECK_EQ(u.values.status_line, 1);
+	for (unsigned i = 0; i < offsetof(settings_t, status_line); ++i)
+		send("\x1b[B", 0);
+	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
+	CHECK_EQ(u.values.status_line, 0);
+	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
+	CHECK_EQ(u.values.status_line, SETTINGS_STATUS_DEBUG);
+	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
+	CHECK_EQ(u.values.status_line, SETTINGS_STATUS_DEBUG_USB);
+	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
+	CHECK_EQ(u.values.status_line, 1);
+}
+
+static void test_blank_after_setting(void) {
+	open_with(80);
+	CHECK_EQ(u.values.blank_after, 0);
+	for (unsigned i = 0; i < offsetof(settings_t, blank_after); ++i)
+		send("\x1b[B", 0);
+	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
+	CHECK_EQ(u.values.blank_after, 1);
+	send("\x1b[D\x1b[D", 0); // wraps
+	CHECK_EQ(u.values.blank_after, 60);
+	// More choices than fit inline: just the current one, as "< 60 min >".
+	static screen_t scr;
+	screen_init(&scr, 80, FG, BG);
+	setup_draw(&u, &scr, 0, "", FG, BG, BORDER);
+	unsigned r = 1 + offsetof(settings_t, blank_after) + 2; // the preview rows come before it
+	CHECK(row_contains(&scr, r, "> Blank after"));
+	CHECK(row_contains(&scr, r, "< 60 min >"));
+}
+
+// The panel is a box in the border colour; the selected setting's name is
+// bold and its current choice reversed, so mono shows them too.
+static void test_box_and_selection(void) {
+	static screen_t s;
+	screen_init(&s, 80, FG, BG);
+	open_with(80);
+	send("\x1b[B", 0); // Backspace sends
+	const unsigned top = SCREEN_ROWS - 1 - SETUP_ROWS, bottom = top + SETUP_ROWS - 1;
+	setup_draw(&u, &s, top, "build x", FG, BG, BORDER);
+	CHECK_EQ(screen_glyph(&s, 0, top), GLYPH_DEC_GRAPHICS('l'));
+	CHECK_EQ(screen_glyph(&s, 79, top), GLYPH_DEC_GRAPHICS('k'));
+	CHECK_EQ(screen_glyph(&s, 0, bottom), GLYPH_DEC_GRAPHICS('m'));
+	CHECK_EQ(screen_glyph(&s, 79, bottom), GLYPH_DEC_GRAPHICS('j'));
+	CHECK_EQ(screen_glyph(&s, 40, bottom), GLYPH_DEC_GRAPHICS('q'));
+	for (unsigned r = top + 1; r < bottom; ++r) {
+		CHECK_EQ(screen_glyph(&s, 0, r), GLYPH_DEC_GRAPHICS('x'));
+		CHECK_EQ(screen_glyph(&s, 79, r), GLYPH_DEC_GRAPHICS('x'));
+	}
+	uint8_t fg, bg;
+	screen_colours(&s, 0, top + 3, &fg, &bg);
+	CHECK(fg == BORDER && bg == BG);
+	CHECK(row_contains(&s, top, " SET-UP  build x "));
+	screen_colours(&s, 3, top, &fg, &bg); // the title: text colours
+	CHECK(fg == FG && bg == BG);
+	// "> Backspace sends" in bold; "Columns" not.
+	CHECK(row_contains(&s, top + 2, "> Backspace sends"));
+	CHECK(screen_attr(&s, 4, top + 2) & SCREEN_ATTR_BOLD);
+	CHECK(!(screen_attr(&s, 4, top + 1) & SCREEN_ATTR_BOLD));
+	// A long title stops short of the corner.
+	char title[200];
+	memset(title, 'x', sizeof title - 1);
+	title[sizeof title - 1] = 0;
+	setup_draw(&u, &s, top, title, FG, BG, BORDER);
+	CHECK_EQ(screen_glyph(&s, 79, top), GLYPH_DEC_GRAPHICS('k'));
+	CHECK_EQ(screen_glyph(&s, 78, top), ' ');
 }
 
 int main(void) {
@@ -261,10 +350,14 @@ int main(void) {
 	RUN(test_other_sequences_are_ignored);
 	RUN(test_message_cleared_by_next_key);
 	RUN(test_draw_marks_current_choice);
+	RUN(test_box_and_selection);
 	RUN(test_colours_preview);
 	RUN(test_machine_menu_key);
 	RUN(test_demo_key);
 	RUN(test_reboot_key);
+	RUN(test_firmware_key);
 	RUN(test_mode_setting);
+	RUN(test_status_line_setting);
+	RUN(test_blank_after_setting);
 	return tests_done();
 }

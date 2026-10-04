@@ -70,6 +70,13 @@ void screen_set_reverse_rows(screen_t *s, uint32_t mask);
 
 void screen_clear_line(screen_t *s, unsigned row, uint8_t fg, uint8_t bg);
 
+// A panel over rows top .. top + rows - 1 (rows >= 2), the full width: a
+// single-line box in border on bg, the inside cleared to fg on bg, and
+// title (NULL: none) in the top line from column 2, in fg. The inside is
+// columns 1 .. cols - 2 of rows top + 1 .. top + rows - 2.
+void screen_frame(screen_t *s, unsigned top, unsigned rows, const char *title, uint8_t fg, uint8_t bg,
+	uint8_t border);
+
 // Copy a row's cells out, or put saved cells back (e.g. under an overlay).
 // Out-of-range rows are ignored.
 void screen_save_row(const screen_t *s, unsigned row, screen_line_t *out);

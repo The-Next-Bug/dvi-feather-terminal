@@ -67,7 +67,7 @@ CMake or Arm GCC on the dev host. Use the scripts:
 git submodule update --init          # lib/pico-sdk (2.3.1), not its submodules (lib/z80pack is vendored)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, uf2, lz, machine (boots CP/M 2.2 from a FAT32 RAM volume)
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimised, no sanitisers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default, the only one) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
@@ -82,11 +82,7 @@ need seconds to sync), `LOGO_IN_FLASH` (default ON, experimental dmt.25: logo da
 SRAM), `STARTUP_DEMO` (default OFF),
 `VIDEO_DIAG` (UART0 TX diagnostics, default OFF; also prints
 panic() text), `USB_KEYBOARD` (TinyUSB host keyboard; default ON),
-`COPY_TO_RAM` (default ON; must stay ON, see below), `FONT_132` (6x12 at
-double height, default, fills the 24-line rows; 6x10 doubled; 6x13 single;
-cmake/fonts.cmake's FONT_DEFINITIONS give raster.h FONT_132_HEIGHT/SCALE;
-test_raster_<variant> covers the others; a build dir keeps its cached value),
-`MACHINE_BANKS` (Z80
+`COPY_TO_RAM` (default ON; must stay ON, see below), `MACHINE_BANKS` (Z80
 machine: 48 KB banks besides bank 0, default 2; each costs 48 KB of SRAM).
 
 Always run `scripts/test.sh` and a firmware build before handing work
@@ -117,15 +113,26 @@ status line (row 24); UART0 on GP0/GP1.
   main.c show_palette() -> video_set_palette (two 256-word tables, core 1
   switches at frame start). A palette change re-renders nothing. While
   SET-UP is open the edited palette is shown (restored on cancel).
-- `src/raster.[ch]` (portable): `raster_render_line` (core 0) turns a
-  screen line into, per stored row and cell, a byte of the cell's pixels
-  (bit i = pixel i, set = fg) plus per-cell fg/bg (palette indices, reverse
-  applied). Stored rows per line = font rows + 2 padding rows; connectors
-  (line drawing, blocks, shades) extend into the padding. Handles
-  underline, blink phase, bold (emboldened, within the cell), reverse.
-  `raster_compose` (core 1) makes a scanline of RGB565 pixel pairs from a
-  stored row through the 256-entry palette table, inverting the cursor cell;
-  every cell is exact in both widths. 132 cols centred at x = 4.
+- `src/raster.[ch]` (portable): two layouts (raster_layout_t: 80 cols
+  10x20 at the full width, 132 cols 6x12 doubled; the 8x16 centred layout
+  and its setting were dropped in qur.20). `raster_render_line` (core 0)
+  turns a screen line into, per stored row, a bit string of the cells'
+  pixels (cell c from bit c * width, 100 bytes per row in both layouts;
+  raster_cell_bits reads one) plus per-cell fg/bg (palette indices, reverse
+  applied). It writes into the slot core 1 reads, replacing each cell's
+  bits under a mask (no clearing first: a memset there blanked lines
+  mid-render, qur.20). Its fonts: raster_select_font copies the layout's
+  normal and bold tables from flash into one SRAM pair of 16-bit rows
+  (font_copy, 20 KB) on a layout change (video_update calls it before
+  timing renders); raster_glyph_row reads the flash tables (tests).
+  Stored rows per line = font rows + 2 padding rows; connectors (line
+  drawing, blocks, shades) extend into the padding. Handles
+  underline, blink phase, bold (bold face; 132 cols: colour only),
+  reverse. `raster_compose` (core 1) makes a scanline of RGB565 pixel pairs
+  from a stored row through the 256-entry palette table, inverting the
+  cursor cell; every cell is exact in every layout. 132 cols centred at
+  x = 4. Core 1's helpers are ternaries, no tables (GCC's CSWTCH tables
+  land in RAM, but check the .dis when changing them).
 - `src/hstx_dvi.[ch]` (RP2350): DVI from the HSTX on the DVI Sock pins
   (GP12-19 = HSTX bits 0-7: D0 0/1, CK 2/3, D2 4/5, D1 6/7). clk_sys = 10 x
   pixel clock, clk_hstx = clk_sys / 2 (set explicitly: the SDK leaves it
@@ -142,7 +149,8 @@ status line (row 24); UART0 on GP0/GP1.
 - `src/keyboard.[ch]` (portable): HID boot keyboard reports -> VT100 key
   codes (DECCKM, DECKPAM, LNM, Num/Caps Lock, autorepeat via kbd_tick).
 - `src/usbkbd.[ch]` + `src/tusb_config.h` (USB_KEYBOARD builds, the
-  default): TinyUSB host on the native USB port, boot keyboards only; keys
+  default): TinyUSB host on the native USB port, boot keyboards (and USB
+  sticks, usbmsc.c); keys
   go to the serial TX queue. The board does not power VBUS in host mode
   (5 V fed into the VBUS pin).
 - `src/settings.[ch]` (portable): settings record (magic, seq, CRC-32,
@@ -150,12 +158,19 @@ status line (row 24); UART0 on GP0/GP1.
   Settings (settings_fields[] drives the record, validation and SET-UP
   labels; append only): columns, backspace (DECBKM RIS value), local_echo,
   baud, framing, newline (LNM RIS value), colours (hue), palette (mono),
-  mode (terminal / CP/M machine); settings_colours() gives the status
+  mode (terminal / CP/M machine), status_line (hidden: main.c
+  status_shown() leaves row 24 blank; debug: main.c debug_status_* shows
+  video_stats() (late lines, compose cycles as % of the line, fps) and
+  core 0's longest main-loop pass and line render, qur.21; debug usb:
+  uptime and the last four USB host events from usbkbd_log, qur.3), blank_after (minutes; `src/blank.[ch]`
+  portable idle timer, keys only, the waking key dropped; video_set_blank
+  makes core 1 send black lines); settings_colours() gives the status
   line's indices and the logo's tint. CRC-32 in
   `src/crc32.[ch]` (shared with the disk images). main.c apply_settings()
   -> serial_configure, term_set_defaults, show_palette.
-  `src/setup.[ch]` (portable): SET-UP panel over the bottom text rows
-  (one row per setting, plus two preview rows under Palette: ANSI colours
+  `src/setup.[ch]` (portable): SET-UP panel over the bottom text rows,
+  in a box (screen_frame: DEC line glyphs in the status bg colour, text
+  in the default colours; also the Drives panel) (one row per setting, plus two preview rows under Palette: ANSI colours
   as fg and as bg, spaced so no 8-px group held two samples in 132 cols
   under the old PicoDVI encoder)
   (key bytes in, save/cancel out); main.c saves/restores those rows. Opened
@@ -180,9 +195,13 @@ status line (row 24); UART0 on GP0/GP1.
   slots' raster memory (core 1 must not read flash) and core 1 shows it for
   scanlines 0-575 (status line from its slot); power-on/reset only, never
   on RIS.
-- `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus 8x16,
-  misc-fixed 6x12/6x10 doubled or 6x13 by FONT_132: raster_font_scale)
-  generated at build time; glyph codes in `src/font.h`.
+- `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus
+  10x20 (16-bit rows) and its bold face, misc-fixed 6x12 shown doubled)
+  generated at build time, glyph-major; glyph codes in `src/font.h`. All
+  in flash (FONT_FLASH_DATA, `.flashdata.font`), read through XIP by core
+  0 only, when raster_select_font copies them; without a bold face (132
+  cols) bold is only the brighter colour (a smear closed the gaps of m, w,
+  #: qur.9).
 - Z80 CP/M machine (Mode setting "CP/M machine", bd lpt): the screen and
   keyboard become the console of a z80pack picosim-compatible machine on
   core 0 (`main.c` cpm_*: 10 ms CPU slices between keyboard, disks, screen).
@@ -201,6 +220,33 @@ status line (row 24); UART0 on GP0/GP1.
   size (8" FD 77x26, z80pack 4 MB HD 255x128, 8 MB HD 256x255; 128-byte
   sectors), kept open, flushed 250 ms after writes, DRIVES.CFG, blank image
   creation. Port 8 (machine.c, ours) tells the BIOS a drive's format.
+  Port 10 (ours, bd qur.2; protocol in machine.h): the file transfer
+  device, FDC-style (SETDMA + commands moving 11-byte FCB names, 15-byte
+  listing entries or 128-byte records by DMA), through the platform's
+  xfer hook to `src/xfer.[ch]` (portable, FatFs): /XFER per volume (0 SD,
+  1 USB later), one FIL + one DIR, names CP/M can take only; RESET on
+  machine_reset, the monitor's card re-check and the firmware commit.
+  xfer.c is built -Os and xfer_out is cold (all code is SRAM: ~2.3 KB).
+  CP/M side (bd qur.26, qur.28): src/cpm/xls.asm, xpip.asm, xera.asm
+  (erase; collects names, asks Y/N on wildcards) + xfer.inc (shared
+  parser for d:/SD:/USB: specs, port helpers, 32-bit decimal), assembled
+  by build.sh from src/cpm (INCLUDE is cwd-relative) and put on CPM22 by
+  diskimg_gen.py --file; --delete CPM22 XDIR.COM removes z80pack's XDIR.
+  test_machine's test_xfer_tools runs them under CP/M.
+  USB sticks (bd qur.3): FatFs volume 1 ("1:", USB: to the tools; ffconf
+  FF_VOLUMES 2). `src/diskio.c` (RP2350) dispatches FatFs drives: 0
+  sdcard_disk_*, 1 usbmsc_disk_*. `src/usbmsc.[ch]` (USB_KEYBOARD builds):
+  TinyUSB MSC host (CFG_TUH_MSC, LUN 0 only, 512-byte sectors; no exFAT),
+  blocking I/O by running tuh_task until the transfer's callback (3 s
+  timeout; gives up at once if the stick is detached). TinyUSB callbacks
+  only note attach/detach; usbmsc_poll (main loop) mounts/unmounts.
+  `src/usbvol.[ch]` (portable, test_usbvol): which stick is volume 1:
+  the first mounted; others wait in order; when it goes, the volume is
+  unmounted (xfer_volume_gone(1)) before the next takes over, so nothing
+  open reaches another stick; unmountable sticks are skipped until
+  replugged. Status line: USB / +n / ? (lit like the drive letters).
+  test/diskio_ram.c has drives 0 and 1. ~4.4 KB of SRAM (msc_host.c,
+  usbmsc.c, usbvol.c built -Os).
   `src/cpm/`: our 62K CP/M 2.2 (bios.asm 8-drive BIOS picking the DPB per
   drive at SELDSK, boot.asm), assembled at build time by build.sh with
   z80pack's z80asm built by the host cc; CCP+BDOS = picosim's 64K cpm.bin
@@ -210,35 +256,39 @@ status line (row 24); UART0 on GP0/GP1.
   into the 8" CP/M directory); host tests in test_machine (machine_host
   answers ESC [ 6 n through host_cpr_reply). `src/monitor.[ch]`
   (portable): menu (boot, mount, list, new blank disk, install, speed
-  test, rescan, firmware update), 3 s autoboot. `src/drivepanel.[ch]` (portable): SET-UP's
+  test, rescan), 3 s autoboot. `src/drivepanel.[ch]` (portable): SET-UP's
   Drives panel (D in CP/M mode); main.c defers its FatFs work to the main
   loop (setup_feed runs inside the USB stack). Status line: drive letters
   only, reverse while accessed. `src/diskimg.[ch]` + `src/lz.[ch]` (portable)
   + `src/diskimg_gen.py` (`cmake/diskimg.cmake`): CPM22, Z80TESTS, EMPTY
-  from z80pack as LZ4-format blocks (offsets < 16 KB, streamed through a
-  16 KB window) in `.flashdata.diskimg`, written to the card by the
+  from z80pack as LZ4-format blocks (offsets < 4 KB, streamed through a
+  4 KB window: `src/scratch.[ch]`'s buffer) in `.flashdata.diskimg`, written to the card by the
   monitor. `src/sdcard.[ch]` (RP2350): polled SPI0 SD driver = FatFs
   diskio (GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI; 400 kHz init, 25 MHz).
   `lib/fatfs`: ChaN FatFs R0.15a vendored (ffconf: FIND, MKFS, CP437,
-  NORTC, no LFN). Host tests use `test/diskio_ram.c`. Changing Mode
+  NORTC, TINY (files share the volume's sector buffer), no LFN; ffconf.h
+  has CRLF line endings, edit it byte-wise). Host tests use `test/diskio_ram.c`. Changing Mode
   saves and reboots (watchdog). In SET-UP, M leaves for the monitor.
   SET-UP's T (both modes) shows the demo until a key (main.c
   setup_demo_*; status line draws skip it), then term_set_columns clears
   the screen (no 13 KB copy) and SET-UP is redrawn over it. F11
   is the machine's reset key in CP/M mode (kbd_set_reset_key; terminal
   mode keeps ESC [ 23 ~).
-  Firmware update (bd n3k): the monitor's U, offered when /FIRMWARE.UF2
-  is on the card (monitor_platform_t firmware_* hooks; stubbed in
-  test_machine). `src/uf2.[ch]` (portable; test_uf2 also checks
+  Firmware update (bd n3k): SET-UP's U in either mode (`src/fwpanel.[ch]`,
+  portable, over SET-UP's rows; main.c fw_* platform: in terminal mode it
+  f_mounts the card only while open, in CP/M mode it uses the monitor's
+  mount; stubbed in test_machine). The monitor's U was removed (qur.10):
+  SET-UP's is the only way. `src/uf2.[ch]` (portable; test_uf2 also checks
   build/pico2-dvi-sock/dvi_terminal.uf2 when built): skips other families
   (the E10 block numbers its own sequence); ours in order, ascending
   addresses, PICOBIN marker in the first 4 KB; CRC of the image as flashed
   (gaps 0xff). `src/fwupdate.[ch]` (RP2350): stage = check again while
   programming the staging area (flash offset 2 MB; images up to
-  NVFLASH_OFFSET - 2 MB), verify by CRC; the monitor then renames the file
+  NVFLASH_OFFSET - 2 MB), verify by CRC; fwpanel then renames the file
   to FIRMWARE.OLD and unmounts; the commit (fwupdate_commit_image,
-  interrupts off for good) copies sector by sector through a 4 KB RAM
-  buffer, skipping equal sectors, then watchdog_reboot. It must read
+  interrupts off for good) copies sector by sector through the 4 KB
+  scratch buffer (`src/scratch.[ch]`, portable: one holder at a time; also
+  the monitor's LZ window and blank-disk chunks, and fwupdate's UF2 block), skipping equal sectors, then watchdog_reboot. It must read
   nothing from the old image (.rodata is in flash):
   `scripts/check_fwupdate.py` (run by build.sh) follows its calls in the
   .dis and fails on 0x10xxxxxx literals, or if the image reaches the
@@ -254,16 +304,22 @@ status line (row 24); UART0 on GP0/GP1.
 
 SRAM is the tight resource; peripherals and pins are mostly free.
 
-- SRAM (520 KB): .text 165 KB, .data 26 KB (fonts, Z80 tables, video code
-  copied to RAM), .bss 288 KB; `__end__` 0x20077f4c, so ~32 KB free below
+- SRAM (520 KB): .text 170 KB, .data 20 KB (Z80 tables, video code
+  copied to RAM), .bss 285 KB (3of figures); `__end__` 0x20077f4c, so ~32 KB free below
   0x20080000 (no malloc user); pb2's palette (tables + code) moved it to
-  0x200790d8, ~28 KB free. Scratch X: core 1's stack is in .bss, so
-  nearly all 4 KB free; scratch Y: 2 KB core 0 stack, ~2 KB free. Biggest
-  .bss: Z80 banks 96 KB + bank 0 64 KB, raster 64.5 KB, monitor `window`
-  16 KB, screen 13 KB, setup 8 KB, line_buf 6.4 KB, drives 4.5 KB, UART
-  RX ring 4 KB, fwupdate `sector` 4 KB. A third Z80 bank (48 KB) does not
-  fit. bd 3of: share the monitor's window with fwupdate (~5 KB back).
-- Flash (4 MB): image 0-0x6e980 (442 KB); free to 2 MB (image growth;
+  0x200790d8, ~28 KB free; the qur QoL branch (taller SET-UP, fwpanel's
+  FATFS, code) to 0x2007b570, ~18.6 KB free; qur.8's packed raster rows
+  (fonts 10x20 and the bold faces in flash) back to 0x2007aa00, ~22 KB
+  free; qur.20's SRAM font pair (20 KB, 8x16 and the FONT_132 variants
+  dropped) to 0x2007dac4, ~9.3 KB free; qur.23 (no printf float, FatFs
+  tiny, 2 KB UART RX ring) to 0x2007af8c, ~20.1 KB free; 3of (one 4 KB
+  scratch buffer for the LZ window and fwupdate) to 0x20076e58, ~37 KB
+  free; file transfer (qur.2, ~2.3 KB) and USB sticks (qur.3, ~4.4 KB) to
+  0x20078934, ~30.4 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
+  60 KB, font_copy 20 KB, screen 13 KB, setup 10 KB, line_buf 6.4 KB,
+  scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit.
+- Flash (4 MB): image 0-0x7beb0 (496 KB; the 4 KB LZ window costs 32 KB); free to 2 MB (image growth;
   fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used
   only during an update, up to the new image's length); settings
   0x3fd000-0x3fefff; last sector left blank (E10). New persistent storage
@@ -300,6 +356,14 @@ SRAM is the tight resource; peripherals and pins are mostly free.
     budget".
   - Pin functions for CTS/RTS use `GPIO_FUNC_UART` (UART_FUNCSEL_NUM is
     wrong for GPIO 2/3 on RP2350).
+  - TinyUSB 0.18 has one control transfer for the whole host. Never start
+    one (e.g. the keyboard LEDs' SET_REPORT) from a TinyUSB callback: a
+    device still being set up loses its next request, stays half set up,
+    and TinyUSB "enumerates" it for good, so nothing plugged in later (a
+    stick, the keyboard moved to another hub port) is ever set up (qur.3).
+    usbkbd.c queues the LEDs and sends them from usbkbd_poll once every
+    device has had tuh_mount_cb (hubs: tuh_mounted). The monitor's USB:
+    line (usbmsc_info) shows each device, "setting up" and HID n/m.
 - Git: work on a branch, merge to `main` with `git merge --no-ff`, push only
   when the user asks (they usually say "commit and push" / "merge").
   Commit messages end with the Co-Authored-By line. Tags `vX.Y.Z` trigger a
@@ -311,6 +375,6 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   `\n` and `\x1b` escaped (raw strings or a quoted shell heredoc);
   otherwise they turn into raw control bytes in the file. Check with
   `grep -lP '[\x00-\x08\x0b-\x1f]' src/* test/*`.
-- User preferences: flow control off by default; 80-column mode stays
-  centred (80 px borders); smooth scrolling, double-size lines and RP2350
-  HSTX are deferred nice-to-haves.
+- User preferences: flow control off by default; 80 columns at the full
+  width (10x20) only, the centred 8x16 layout dropped (qur.20); smooth
+  scrolling, double-size lines and RP2350 HSTX are deferred nice-to-haves.

@@ -1,5 +1,6 @@
 #include "monitor.h"
 
+#include <assert.h>
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -10,6 +11,8 @@
 #include "ff.h"
 #include "lz.h"
 #include "machine.h"
+#include "scratch.h"
+#include "xfer.h"
 
 #define LIST_COLUMNS 5
 
@@ -20,7 +23,6 @@ typedef enum {
 	MODE_NEW_NAME,  // N: the new disk's name
 	MODE_NEW_FORMAT, // N: its format
 	MODE_OVERWRITE, // "Replace the existing images (Y/N)?"
-	MODE_FIRMWARE,  // "Install it (Y/N)?"
 } monitor_mode_t;
 
 static const monitor_platform_t *plat;
@@ -60,7 +62,6 @@ static void flush(void) {
 
 // Progress of a long write: a dot per progress_step bytes.
 #define PROGRESS_STEP (256u * 1024)
-#define FIRMWARE_PROGRESS_STEP (32u * 1024) // of the file: about 30 dots
 static unsigned dots;
 static uint32_t progress_step;
 
@@ -96,6 +97,7 @@ static const char *fs_name(void) {
 }
 
 static void mount_card(void) {
+	xfer_reset();
 	drives_unmount_all();
 	f_unmount("");
 	mount_result = f_mount(&fs, "", 1);
@@ -113,6 +115,8 @@ static void show_card(void) {
 		say("SD card:  %s, no FAT file system (error %d)\r\n", info, (int)mount_result);
 	else
 		say("SD card:  %s, %s\r\n", info, fs_name());
+	if (plat->usb_info)
+		say("%s", plat->usb_info());
 }
 
 static void show_drives(void) {
@@ -128,12 +132,6 @@ static void show_drives(void) {
 	say("\r\n");
 }
 
-// The firmware update is offered: the platform can, and the file is there.
-static bool firmware_offered(void) {
-	FILINFO info;
-	return plat->firmware_check && mount_result == FR_OK && f_stat(MONITOR_FIRMWARE, &info) == FR_OK;
-}
-
 static void show_menu(void) {
 	say("\r\nZ80 CP/M machine (z80pack Z80 core)\r\n");
 	show_card();
@@ -144,9 +142,7 @@ static void show_menu(void) {
 	put("  L       list the disks            N  new blank disk (8\", 4 MB, 8 MB)\r\n");
 	put("  I       install the built-in disks\r\n");
 	put("  S       CPU speed test            C  check the card again\r\n");
-	if (firmware_offered())
-		put("  U       update the firmware from FIRMWARE.UF2\r\n");
-	put("  F11 resets the machine; F12 SET-UP (Drives, Mode)\r\n> ");
+	put("  F11 resets the machine; F12 SET-UP (Drives, Mode, firmware update)\r\n> ");
 }
 
 static void list_disks(void) {
@@ -168,12 +164,17 @@ static void list_disks(void) {
 		say("(FD 8\" floppy, 4MB/8MB hard disks, ? not a disk image)\r\n");
 }
 
-// Scratch for installing (the LZ window) and for blank disks.
-static uint8_t window[LZ_WINDOW];
+static_assert(LZ_WINDOW <= SCRATCH_SIZE, "the LZ window is the scratch buffer");
 
 static void install(bool overwrite) {
 	if (mount_result != FR_OK) {
 		say("No card.\r\n");
+		return;
+	}
+	// The LZ window.
+	uint8_t *window = scratch_acquire();
+	if (!window) {
+		say("Busy.\r\n");
 		return;
 	}
 	drives_flush();
@@ -195,6 +196,7 @@ static void install(bool overwrite) {
 		if (mounted_on >= 0)
 			drives_mount((unsigned)mounted_on, img->name);
 	}
+	scratch_release(window);
 	// Empty drives get the boot and test disks.
 	if (!drives_name(0) || !drives_name(1)) {
 		if (!drives_name(0))
@@ -232,48 +234,6 @@ static void speed_test(void) {
 	say("Running JP loops for a second... ");
 	uint32_t khz = machine_benchmark_khz(1000);
 	say("%u.%02u MHz\r\n", (unsigned)(khz / 1000), (unsigned)(khz % 1000 / 10));
-}
-
-// ---- the firmware update ----
-
-static void firmware_ask(void) {
-	char info[96];
-	say("U\r\nChecking FIRMWARE.UF2... ");
-	flush();
-	if (!plat->firmware_check(MONITOR_FIRMWARE, info, sizeof info)) {
-		say("cannot install it: %s\r\n", info);
-		show_menu();
-		return;
-	}
-	say("%s\r\nInstall it and restart (Y/N)? ", info);
-	mode = MODE_FIRMWARE;
-}
-
-static void firmware_install(void) {
-	char info[96];
-	put("Writing it to flash beside the running firmware");
-	progress_start(FIRMWARE_PROGRESS_STEP);
-	if (!plat->firmware_stage(MONITOR_FIRMWARE, progress, NULL, info, sizeof info)) {
-		say(" failed: %s\r\nNothing was changed.\r\n", info);
-		show_menu();
-		return;
-	}
-	f_unlink(MONITOR_FIRMWARE_OLD);
-	if (f_rename(MONITOR_FIRMWARE, MONITOR_FIRMWARE_OLD) != FR_OK)
-		put(" (could not rename it to FIRMWARE.OLD)");
-	// Leave the card's file system clean: the board restarts from here.
-	drives_flush();
-	drives_unmount_all();
-	f_unmount("");
-	mount_result = FR_NOT_READY;
-	put("\r\n\r\nInstalling the new firmware: do not power off.\r\n"
-		"The board restarts with it in a few seconds.\r\n");
-	flush();
-	plat->firmware_commit();
-	// Only on the host: the monitor carries on.
-	mount_card();
-	can_resume = false;
-	show_menu();
 }
 
 static monitor_action_t menu_key(uint8_t c) {
@@ -320,11 +280,6 @@ static monitor_action_t menu_key(uint8_t c) {
 		mount_card();
 		can_resume = false;
 		break;
-	case 'U':
-		if (!firmware_offered())
-			break;
-		firmware_ask();
-		return MONITOR_NONE;
 	default:
 		return MONITOR_NONE;
 	}
@@ -375,6 +330,12 @@ static void line_done(bool cancelled) {
 static void create_disk(drives_format_t f) {
 	mode = MODE_MENU;
 	const drives_geometry_t *g = drives_geometry(f);
+	uint8_t *buf = scratch_acquire(); // what is written, a chunk at a time
+	if (!buf) {
+		say("%s\r\nBusy.\r\n", g->name);
+		show_menu();
+		return;
+	}
 	say("%s\r\nWriting %s.DSK (%lu KB)... ", g->name, line, (unsigned long)(g->size / 1024));
 	static const char *const why[] = {
 		[DRIVES_NOT_FOUND] = "bad name",
@@ -382,7 +343,8 @@ static void create_disk(drives_format_t f) {
 		[DRIVES_IO_ERROR] = "card error",
 	};
 	progress_start(PROGRESS_STEP);
-	drives_result_t r = drives_create(line, f, window, sizeof window, progress, NULL);
+	drives_result_t r = drives_create(line, f, buf, SCRATCH_SIZE, progress, NULL);
+	scratch_release(buf);
 	say("%s%s\r\n", dots ? " " : "", r == DRIVES_OK ? "done: M mounts it" : why[r] ? why[r] : "failed");
 	show_menu();
 }
@@ -458,16 +420,6 @@ monitor_action_t monitor_key(uint8_t c, uint32_t now_ms) {
 			mode = MODE_MENU;
 			install(toupper(c) == 'Y');
 			show_menu();
-		}
-		return MONITOR_NONE;
-	case MODE_FIRMWARE:
-		if (toupper(c) == 'Y' || toupper(c) == 'N') {
-			say("%c\r\n", toupper(c));
-			mode = MODE_MENU;
-			if (toupper(c) == 'Y')
-				firmware_install();
-			else
-				show_menu();
 		}
 		return MONITOR_NONE;
 	}

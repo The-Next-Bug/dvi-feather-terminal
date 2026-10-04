@@ -15,7 +15,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define LZ_WINDOW 16384 // a power of two
+#define LZ_WINDOW 4096 // a power of two (scratch.h holds it)
 #define LZ_MAX_OFFSET (LZ_WINDOW - 1)
 
 // Receives the output in order, in chunks of up to LZ_WINDOW / 2 bytes.

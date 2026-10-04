@@ -1,5 +1,7 @@
 #include "screen.h"
 
+#include "font.h"
+
 #include <string.h>
 
 static void fill_slot(screen_t *s, unsigned slot, uint8_t fg, uint8_t bg) {
@@ -76,6 +78,31 @@ void screen_set_reverse_rows(screen_t *s, uint32_t mask) {
 void screen_clear_line(screen_t *s, unsigned row, uint8_t fg, uint8_t bg) {
 	if (row < SCREEN_ROWS)
 		fill_slot(s, s->row_map[row], fg, bg);
+}
+
+void screen_frame(screen_t *s, unsigned top, unsigned rows, const char *title, uint8_t fg, uint8_t bg,
+	uint8_t border) {
+	const unsigned right = s->cols - 1u, bottom = top + rows - 1;
+	for (unsigned r = top; r <= bottom; ++r) {
+		screen_clear_line(s, r, fg, bg);
+		bool edge = r == top || r == bottom;
+		for (unsigned c = 1; edge && c < right; ++c)
+			screen_put(s, c, r, GLYPH_DEC_GRAPHICS('q'), border, bg); // ─
+		uint8_t left_glyph = r == top ? GLYPH_DEC_GRAPHICS('l') : r == bottom ? GLYPH_DEC_GRAPHICS('m') // ┌ └
+			: GLYPH_DEC_GRAPHICS('x');                                                              // │
+		uint8_t right_glyph = r == top ? GLYPH_DEC_GRAPHICS('k') : r == bottom ? GLYPH_DEC_GRAPHICS('j') // ┐ ┘
+			: GLYPH_DEC_GRAPHICS('x');
+		screen_put(s, 0, r, left_glyph, border, bg);
+		screen_put(s, right, r, right_glyph, border, bg);
+	}
+	if (title) {
+		// Spaced from the line, and cut short of the corner.
+		unsigned c = 2;
+		screen_put(s, c++, top, ' ', fg, bg);
+		for (; *title && c + 1 < right; ++title)
+			screen_put(s, c++, top, (uint8_t)*title, fg, bg);
+		screen_put(s, c, top, ' ', fg, bg);
+	}
 }
 
 void screen_save_row(const screen_t *s, unsigned row, screen_line_t *out) {

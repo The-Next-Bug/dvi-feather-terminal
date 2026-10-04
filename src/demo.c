@@ -78,7 +78,7 @@ static void colour_row(screen_t *s, unsigned row, const char *label, int style) 
 	}
 }
 
-void demo_draw(screen_t *s, unsigned cols, const char *status) {
+void demo_draw(screen_t *s, unsigned cols, const char *font, const char *status) {
 	screen_init(s, cols, GREY, BLACK);
 	const unsigned w = s->cols;
 	char text[SCREEN_MAX_COLS + 1];
@@ -106,6 +106,15 @@ void demo_draw(screen_t *s, unsigned cols, const char *status) {
 	fill_row(s, 11, "Pack my box with five dozen liquor jugs! ", 3, 1);
 	fill_row(s, 12, "0123456789 !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ ", 0, 1);
 
+	// Normal and bold side by side; m, w, M and W have the closest stems.
+	static const char sample[] = "mwMW Hamburgefonstiv 0123456789";
+	unsigned half_col = w / 2;
+	screen_puts(s, 1, 13, "Normal", GREY, BLACK);
+	screen_puts(s, 9, 13, sample, WHITE, BLACK);
+	screen_puts(s, half_col + 1, 13, "Bold", GREY, BLACK);
+	for (unsigned i = 0; sample[i]; ++i)
+		screen_put_attr(s, half_col + 7 + i, 13, (uint8_t)sample[i], WHITE, BLACK, SCREEN_ATTR_BOLD);
+
 	// Line drawing and Latin-1 in two boxes side by side.
 	unsigned half = w / 2;
 	box(s, 0, 14, half, 6, 0, bright(6));
@@ -122,7 +131,7 @@ void demo_draw(screen_t *s, unsigned cols, const char *status) {
 	for (unsigned i = 0; i < 9; ++i)
 		screen_put(s, half + 2 + 2 * i, 16, (uint8_t)(GLYPH_SHADE_LIGHT + i), bright(5), BLACK);
 	screen_puts(s, half + 2, 17, "Font: ", GREY, BLACK);
-	screen_puts(s, half + 8, 17, w > 80 ? FONT_132_NAME : "Terminus 8x16", bright(3), BLACK);
+	screen_puts(s, half + 8, 17, font, bright(3), BLACK);
 
 	// The 240 colours above the ANSI ones (cube and grey ramp) as
 	// background swatches, as many as fit, evenly spaced.

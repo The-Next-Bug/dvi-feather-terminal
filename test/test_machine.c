@@ -1,6 +1,7 @@
 // The Z80 machine end to end: a FAT32 volume (in RAM), the embedded disk
 // images installed on it, CP/M 2.2 booted from them.
 
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -9,10 +10,14 @@
 #include "drivepanel.h"
 #include "drives.h"
 #include "ff.h"
+#include "font.h"
+#include "fwpanel.h"
 #include "lz.h"
 #include "machine.h"
 #include "machine_host.h"
 #include "monitor.h"
+#include "xfer.h"
+#include "scratch.h"
 #include "test.h"
 
 #define VOLUME_SECTORS (40u * 1024 * 1024 / 512) // FAT32 needs 65525+ clusters
@@ -216,7 +221,8 @@ static void test_drive_panel(void) {
 
 	screen_t s;
 	screen_init(&s, 80, 0x3f, 0);
-	drivepanel_draw(&p, &s, 0, 0x3f, 0);
+	drivepanel_draw(&p, &s, 0, 0x3f, 0, 0x0c);
+	CHECK_EQ(screen_glyph(&s, 0, 0), GLYPH_DEC_GRAPHICS('l')); // in a box
 	char row[81] = "";
 	for (unsigned c = 0; c < 80; ++c)
 		row[c] = (char)screen_glyph(&s, c, 5);
@@ -405,12 +411,11 @@ static void firmware_commit(void) {
 	++commits;
 }
 
-static const monitor_platform_t monitor_platform = {.write = console_text, .card_info = card_info, .flush = flush,
-	.firmware_check = firmware_check, .firmware_stage = firmware_stage, .firmware_commit = firmware_commit};
+static const monitor_platform_t monitor_platform = {.write = console_text, .card_info = card_info, .flush = flush};
 
 // The whole menu was shown, up to its prompt (lpt.8: it was cut short).
 static bool menu_shown(void) {
-	return strstr(screen, "C  check the card again\r\n") && strstr(screen, "F12 SET-UP (Drives, Mode)\r\n> ") &&
+	return strstr(screen, "C  check the card again\r\n") && strstr(screen, "F12 SET-UP (Drives, Mode, firmware update)\r\n> ") &&
 		screen_len >= 2 && strcmp(screen + screen_len - 2, "> ") == 0;
 }
 
@@ -451,6 +456,22 @@ static void test_monitor_fresh_card(void) {
 	CHECK_EQ(keys("l"), MONITOR_NONE);
 	CHECK(strstr(screen, "Z80TESTS") != NULL);
 	CHECK(menu_shown());
+
+	// The scratch buffer has one holder at a time: while another job has
+	// it, installing and blank disks say so and write nothing.
+	uint8_t *held = scratch_acquire();
+	CHECK(held != NULL);
+	CHECK(scratch_acquire() == NULL);
+	clear_screen();
+	CHECK_EQ(keys("in"), MONITOR_NONE); // not over the ones there
+	CHECK(strstr(screen, "Busy.") != NULL);
+	CHECK(strstr(screen, "written") == NULL);
+	clear_screen();
+	CHECK_EQ(keys("nbusy\r1"), MONITOR_NONE);
+	CHECK(strstr(screen, "Busy.") != NULL);
+	CHECK(menu_shown());
+	CHECK_EQ(drives_image_format("BUSY"), DRIVES_NONE);
+	scratch_release(held);
 
 	// A new 8 MB disk: progress dots, shown as they come (flush).
 	clear_screen();
@@ -515,62 +536,138 @@ static void write_file(const char *path, const char *text) {
 	CHECK_EQ(f_close(&f), FR_OK);
 }
 
-// U: offered only with FIRMWARE.UF2 on the card; checks, asks, stages,
-// renames the file, closes the card and commits.
-static void test_monitor_firmware(void) {
+// The firmware update is SET-UP's (U) only: the monitor neither offers nor
+// takes U, even with FIRMWARE.UF2 on the card, and points at SET-UP.
+static void test_monitor_no_firmware_update(void) {
+	write_file(FWPANEL_FILE, "STAGES");
+	clear_screen();
+	monitor_enter(NULL, false);
+	CHECK(strstr(screen, "U  ") == NULL);
+	CHECK(strstr(screen, "F12 SET-UP (Drives, Mode, firmware update)") != NULL);
+	clear_screen();
+	CHECK_EQ(keys("u"), MONITOR_NONE);
+	CHECK_EQ(screen_len, 0);
+	f_unlink(FWPANEL_FILE);
+}
+
+// SET-UP's firmware update panel, with the same stubs.
+static bool panel_card;
+static unsigned panel_shows, panel_unmounts, panel_commit_unmounts;
+
+static bool panel_mount(char *info, size_t n) {
+	if (!panel_card)
+		snprintf(info, n, "no SD card found");
+	return panel_card;
+}
+
+static void panel_unmount(bool commit) {
+	++*(commit ? &panel_commit_unmounts : &panel_unmounts);
+}
+
+static screen_t panel_shown; // as panel_show last drew it
+
+static void panel_show(const fwpanel_t *p) {
+	++panel_shows;
+	screen_init(&panel_shown, 80, 7, 0);
+	fwpanel_draw(p, &panel_shown, 0, 7, 0, 4);
+}
+
+static bool shown_row(unsigned row, const char *text) {
+	char line[81];
+	for (unsigned c = 0; c < 80; ++c)
+		line[c] = (char)screen_glyph(&panel_shown, c, row);
+	line[80] = 0;
+	return strstr(line, text) != NULL;
+}
+
+static const fwpanel_platform_t panel_platform = {.mount = panel_mount, .check = firmware_check,
+	.stage = firmware_stage, .unmount = panel_unmount, .commit = firmware_commit, .show = panel_show};
+
+static bool panel_row(const fwpanel_t *p, unsigned row, const char *text) {
+	static screen_t s;
+	screen_init(&s, 80, 7, 0);
+	fwpanel_draw(p, &s, 0, 7, 0, 4);
+	char line[81];
+	for (unsigned c = 0; c < 80; ++c)
+		line[c] = (char)screen_glyph(&s, c, row);
+	line[80] = 0;
+	return strstr(line, text) != NULL;
+}
+
+static void test_firmware_panel(void) {
+	static fwpanel_t p;
 	FILINFO info;
-	clear_screen();
-	monitor_enter(NULL, false);
-	CHECK(strstr(screen, "U       update") == NULL);
-	CHECK_EQ(keys("u"), MONITOR_NONE);
-	CHECK(strstr(screen, "Checking") == NULL);
+	stages = commits = panel_unmounts = panel_commit_unmounts = 0;
 
-	// Refused by the check: nothing staged.
-	write_file(MONITOR_FIRMWARE, "BAD");
-	clear_screen();
-	monitor_enter(NULL, false);
-	CHECK(strstr(screen, "U       update the firmware from FIRMWARE.UF2") != NULL);
-	stages = commits = 0;
-	CHECK_EQ(keys("u"), MONITOR_NONE);
-	CHECK(strstr(screen, "cannot install it: not a UF2 file") != NULL);
-	CHECK(menu_shown());
-	CHECK_EQ(stages, 0);
+	// No card: says so, any key goes back, nothing to let go.
+	panel_card = false;
+	fwpanel_open(&p);
+	CHECK(panel_row(&p, 0, "SET-UP  Firmware update"));
+	CHECK(panel_row(&p, 2, "Checking FIRMWARE.UF2"));
+	CHECK_EQ(fwpanel_input(&p, 'y'), FWPANEL_NONE); // busy
+	CHECK_EQ(fwpanel_run(&p, &panel_platform), FWPANEL_REDRAW);
+	CHECK_EQ(p.state, FWPANEL_FAILED);
+	CHECK(panel_row(&p, 3, "no SD card found"));
+	CHECK_EQ(fwpanel_input(&p, 'x'), FWPANEL_CANCEL);
+	fwpanel_close(&p, &panel_platform);
+	CHECK_EQ(panel_unmounts, 0);
 
-	// Declined.
-	write_file(MONITOR_FIRMWARE, "GOOD");
-	clear_screen();
-	CHECK_EQ(keys("u"), MONITOR_NONE);
-	CHECK(strstr(screen, "test firmware\r\nInstall it and restart (Y/N)? ") != NULL);
-	CHECK_EQ(keys("xn"), MONITOR_NONE);
-	CHECK(menu_shown());
+	// No file: the check refuses it; leaving lets the card go.
+	panel_card = true;
+	f_unlink(FWPANEL_FILE);
+	fwpanel_open(&p);
+	fwpanel_run(&p, &panel_platform);
+	CHECK_EQ(p.state, FWPANEL_FAILED);
+	CHECK(panel_row(&p, 2, "cannot be installed"));
+	fwpanel_close(&p, &panel_platform);
+	CHECK_EQ(panel_unmounts, 1);
+
+	// Declined with N, or Escape.
+	write_file(FWPANEL_FILE, "GOOD");
+	for (const char *k = "N\x1b"; *k; ++k) {
+		fwpanel_open(&p);
+		fwpanel_run(&p, &panel_platform);
+		CHECK_EQ(p.state, FWPANEL_ASK);
+		CHECK(panel_row(&p, 2, "Install it and restart (Y/N)?"));
+		CHECK(panel_row(&p, 3, "test firmware"));
+		CHECK(panel_row(&p, 6, "Y install and restart"));
+		CHECK_EQ(fwpanel_input(&p, 'x'), FWPANEL_NONE);
+		CHECK_EQ(fwpanel_input(&p, (uint8_t)*k), FWPANEL_CANCEL);
+		fwpanel_close(&p, &panel_platform);
+	}
 	CHECK_EQ(stages, 0);
 
 	// Staging fails: the file stays, nothing committed.
-	clear_screen();
-	CHECK_EQ(keys("uy"), MONITOR_NONE);
-	CHECK(strstr(screen, ".... failed: flash verify failed\r\nNothing was changed.") != NULL);
+	fwpanel_open(&p);
+	fwpanel_run(&p, &panel_platform);
+	CHECK_EQ(fwpanel_input(&p, 'y'), FWPANEL_WORK);
+	CHECK_EQ(fwpanel_run(&p, &panel_platform), FWPANEL_REDRAW);
+	CHECK_EQ(p.state, FWPANEL_FAILED);
+	CHECK(panel_row(&p, 3, "flash verify failed"));
 	CHECK_EQ(stages, 1);
 	CHECK_EQ(commits, 0);
-	CHECK_EQ(f_stat(MONITOR_FIRMWARE, &info), FR_OK);
-	CHECK(menu_shown());
+	CHECK_EQ(f_stat(FWPANEL_FILE, &info), FR_OK);
+	fwpanel_close(&p, &panel_platform);
 
-	// Installed: renamed (replacing an older FIRMWARE.OLD), committed; on the
-	// host the monitor then carries on with the card mounted again.
-	write_file(MONITOR_FIRMWARE_OLD, "older");
-	write_file(MONITOR_FIRMWARE, "STAGES");
-	clear_screen();
-	flushes = 0;
-	CHECK_EQ(keys("uy"), MONITOR_NONE);
-	CHECK(strstr(screen, "firmware....\r\n") != NULL); // 128 KB, a dot per 32 KB
-	CHECK(strstr(screen, "do not power off") != NULL);
+	// Installed: a progress bar (redrawn as it grows, not per block),
+	// renamed, the card closed for the commit, committed.
+	write_file(FWPANEL_FILE_OLD, "older");
+	write_file(FWPANEL_FILE, "STAGES");
+	fwpanel_open(&p);
+	fwpanel_run(&p, &panel_platform);
+	fwpanel_input(&p, 'Y');
+	panel_shows = 0;
+	fwpanel_run(&p, &panel_platform);
+	CHECK(panel_shows > 10 && panel_shows < 60); // 257 progress calls
+	// Last shown before the commit:
+	CHECK(shown_row(2, "Installing the new firmware: do not power off."));
+	CHECK(shown_row(4, "[##################################################] 100%"));
 	CHECK_EQ(commits, 1);
-	CHECK_EQ(f_stat(MONITOR_FIRMWARE, &info), FR_NO_FILE);
-	CHECK_EQ(f_stat(MONITOR_FIRMWARE_OLD, &info), FR_OK);
+	CHECK_EQ(panel_commit_unmounts, 1);
+	CHECK_EQ(f_stat(FWPANEL_FILE, &info), FR_NO_FILE);
+	CHECK_EQ(f_stat(FWPANEL_FILE_OLD, &info), FR_OK);
 	CHECK_EQ(info.fsize, 6);
-	CHECK(strstr(screen, "A: CPM22") != NULL);
-	CHECK(strstr(screen, "U       update") == NULL);
-	CHECK(menu_shown());
-	f_unlink(MONITOR_FIRMWARE_OLD);
+	f_unlink(FWPANEL_FILE_OLD);
 }
 
 // On a card's usual 32 KB clusters a blank disk reaches the card many
@@ -589,6 +686,299 @@ static void test_blank_disk_chunks(void) {
 	CHECK_EQ(drives_image_format("HD8"), DRIVES_HD8);
 }
 
+// ---- the file transfer device (port 10; xfer.c's own tests are test_xfer) ----
+
+static uint8_t xbuf[XFER_RECORD];
+
+// Run an xfer command on volume 0, with name (11 bytes, FCB form) as its
+// input if given.
+static uint8_t xcmd(uint8_t cmd, const char *name) {
+	if (name)
+		memcpy(xbuf, name, XFER_NAME);
+	return xfer_command(cmd, 0, xbuf);
+}
+
+static uint32_t fat_size(const char *path) {
+	FILINFO info;
+	return f_stat(path, &info) == FR_OK ? (uint32_t)info.fsize : UINT32_MAX;
+}
+
+// Z80 code for the port test, assembled into the boot ROM's page.
+static struct {
+	uint8_t code[256];
+	unsigned n;
+} z80;
+
+static void emit(unsigned n, ...) {
+	va_list ap;
+	va_start(ap, n);
+	for (unsigned i = 0; i < n; ++i)
+		z80.code[z80.n++] = (uint8_t)va_arg(ap, int);
+	va_end(ap);
+}
+
+static void out10(uint8_t v) {
+	emit(4, 0x3e, v, 0xd3, 10); // LD A,v; OUT (10),A
+}
+
+static void setdma(uint16_t addr) {
+	out10(XFER_SETDMA);
+	out10((uint8_t)addr);
+	out10((uint8_t)(addr >> 8));
+}
+
+// The command, then its status stored at status_at.
+static void command(uint8_t cmd, uint16_t status_at) {
+	out10(cmd);
+	emit(5, 0xdb, 10, 0x32, status_at & 0xff, status_at >> 8); // IN A,(10); LD (nn),A
+}
+
+static void test_xfer_port(void) {
+	extern uint8_t bnk0[65536], bnks[][48 * 1024];
+	const uint16_t name = 0x8000, rec = 0x8100, back = 0x8200, banked = 0x8300, st = 0xf000;
+	machine_init(&host_platform);
+	z80.n = 0;
+	emit(1, 0xf3); // DI
+	setdma(name);
+	command(XFER_CREATE, st + 0);
+	setdma(rec);
+	command(XFER_WRITE, st + 1);
+	command(XFER_CLOSE, st + 2);
+	setdma(name);
+	command(XFER_OPEN, st + 3);
+	setdma(back);
+	command(XFER_READ, st + 4);
+	command(XFER_READ, st + 5);
+	// Again into bank 1: the DMA goes where the CPU sees memory.
+	setdma(name);
+	command(XFER_OPEN, st + 6);
+	setdma(banked);
+	emit(4, 0x3e, 1, 0xd3, 64); // LD A,1; OUT (64),A
+	command(XFER_READ, st + 7);
+	emit(4, 0x3e, 0, 0xd3, 64);
+	command(XFER_CLOSE, st + 8);
+	setdma(name);
+	command(XFER_FIND_FIRST, st + 9);
+	emit(1, 0x76); // HALT
+	CHECK(z80.n <= sizeof z80.code);
+	memcpy(bnk0 + 0xff00, z80.code, z80.n);
+	memcpy(bnk0 + name, "PORT    BIN", XFER_NAME);
+	for (unsigned i = 0; i < XFER_RECORD; ++i)
+		bnk0[rec + i] = (uint8_t)(i ^ 0x5a);
+	memset(bnk0 + st, 0xff, 16);
+	machine_reset(); // from the code above
+	unsigned slices = 0;
+	while (machine_run(10000) == MACHINE_RUNNING && ++slices < 100)
+		;
+	CHECK(strstr(machine_stop_reason(), "HALT with interrupts off") != NULL);
+	static const uint8_t want[] = {XFER_ST_OK, XFER_ST_OK, XFER_ST_OK, XFER_ST_OK, XFER_ST_OK, XFER_ST_EOF,
+		XFER_ST_OK, XFER_ST_OK, XFER_ST_OK, XFER_ST_OK};
+	for (unsigned i = 0; i < sizeof want; ++i)
+		CHECK_EQ(bnk0[st + i], want[i]);
+	CHECK(memcmp(bnk0 + back, bnk0 + rec, XFER_RECORD) == 0);
+	CHECK(memcmp(bnks[0] + banked, bnk0 + rec, XFER_RECORD) == 0);
+	// The listing entry: the name and the size (128).
+	CHECK(memcmp(bnk0 + name, "PORT    BIN", XFER_NAME) == 0);
+	CHECK(bnk0[name + 11] == 128 && bnk0[name + 12] == 0 && bnk0[name + 13] == 0 && bnk0[name + 14] == 0);
+	CHECK_EQ(fat_size("/XFER/PORT.BIN"), XFER_RECORD);
+	// A reset closes what the program left open.
+	CHECK_EQ(xcmd(XFER_OPEN, "PORT    BIN"), XFER_ST_OK);
+	machine_reset();
+	CHECK_EQ(xcmd(XFER_READ, NULL), XFER_ST_BAD);
+}
+
+// A FAT file of the given bytes.
+static void put_fat_file(const char *path, const void *data, unsigned size) {
+	FIL f;
+	UINT put;
+	CHECK_EQ(f_open(&f, path, FA_CREATE_ALWAYS | FA_WRITE), FR_OK);
+	CHECK_EQ(f_write(&f, data, size, &put), FR_OK);
+	CHECK_EQ(put, size);
+	f_close(&f);
+}
+
+// The FAT file at path, if it holds exactly size bytes equal to data
+// (then 0x1A padding up to pad_to, if larger).
+static bool fat_file_is(const char *path, const void *data, unsigned size, unsigned pad_to) {
+	static uint8_t got[4096];
+	FIL f;
+	UINT n;
+	if (f_open(&f, path, FA_READ) != FR_OK)
+		return false;
+	bool ok = f_read(&f, got, sizeof got, &n) == FR_OK && n == (pad_to > size ? pad_to : size) &&
+		memcmp(got, data, size) == 0;
+	for (unsigned i = size; ok && i < n; ++i)
+		ok = got[i] == 0x1a;
+	f_close(&f);
+	return ok;
+}
+
+// Run a CP/M command line to the next prompt; true if its output has want.
+static bool cpm(const char *line, const char *want) {
+	clear_screen();
+	CHECK(type(line));
+	CHECK(type("\r"));
+	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
+	bool found = strstr(screen, want) != NULL;
+	if (!found)
+		fprintf(stderr, "%s: no \"%s\" in:\n%s\n", line, want, screen);
+	return found;
+}
+
+// XLS and XPIP (src/cpm) under CP/M, against /XFER on the volume.
+static void test_xfer_tools(void) {
+	static char text[300];
+	static uint8_t binary[1000];
+	for (unsigned i = 0; i < sizeof text; ++i)
+		text[i] = i % 30 == 29 ? '\n' : i % 30 == 28 ? '\r' : (char)('a' + i % 26);
+	for (unsigned i = 0; i < sizeof binary; ++i)
+		binary[i] = (uint8_t)(i * 13 + i / 256); // 0x1A included
+	drives_unmount_all();
+	xfer_reset();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("EMPTY"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "EMPTY"), DRIVES_OK);
+	// /XFER with just these (test_xfer_port left a file there).
+	f_unlink("/XFER/PORT.BIN");
+	f_mkdir("/XFER");
+	put_fat_file("/XFER/HELLO.TXT", text, sizeof text);
+	put_fat_file("/XFER/DATA.BIN", binary, sizeof binary);
+	put_fat_file("/XFER/A_B.TXT", "x", 1); // not a CP/M name
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+
+	// On the disk; z80pack's XDIR is not.
+	CHECK(cpm("DIR X*.COM", "XLS      COM : XPIP     COM"));
+	CHECK(cpm("DIR XDIR.COM", "NO FILE"));
+
+	// Listing.
+	CHECK(cpm("XLS", "DATA.BIN           1000"));
+	CHECK(strstr(screen, "HELLO.TXT           300") != NULL);
+	CHECK(strstr(screen, "2 files") != NULL);
+	CHECK(strstr(screen, "A_B") == NULL);
+	CHECK(cpm("XLS SD:*.TXT", "1 file\r\n"));
+	CHECK(cpm("XLS NONE.*", "No files"));
+	CHECK(cpm("XLS B:", "Usage: XLS"));
+	CHECK(cpm("XLS USB:", "no USB stick"));
+
+	// Into CP/M: names kept, the last record padded.
+	CHECK(cpm("XPIP B:=SD:*.*", "2 copied"));
+	CHECK(strstr(screen, "HELLO.TXT\r\n") != NULL && strstr(screen, "DATA.BIN\r\n") != NULL);
+	CHECK(cpm("DIR B:", "HELLO    TXT"));
+	CHECK(cpm("TYPE B:HELLO.TXT", "abcdefghijklmnopqrstuvwxyzab\r\n"));
+	// Back out: whole records, or cut at the ^Z with [T]; renamed.
+	CHECK(cpm("XPIP SD:BACK.BIN=B:DATA.BIN", "1 copied"));
+	CHECK(fat_file_is("/XFER/BACK.BIN", binary, sizeof binary, 1024));
+	CHECK(cpm("XPIP SD:HELLO2.TXT=B:HELLO.TXT[T]", "1 copied"));
+	CHECK(fat_file_is("/XFER/HELLO2.TXT", text, sizeof text, 0));
+	CHECK(cpm("xpip sd:hello3.txt=b:hello.txt [ t ]", "1 copied")); // lower case, blanks
+	CHECK(fat_file_is("/XFER/HELLO3.TXT", text, sizeof text, 0));
+	// A wildcard export replaces what is there, as PIP does.
+	CHECK(cpm("XPIP SD:=B:*.TXT", "1 copied"));
+	CHECK(fat_file_is("/XFER/HELLO.TXT", text, sizeof text, 384));
+	// One file in under a new name, on the current drive.
+	CHECK(cpm("XPIP COPY.TXT=SD:HELLO2.TXT", "1 copied"));
+	CHECK(cpm("TYPE COPY.TXT", "abcdefghijklmnopqrstuvwxyzab\r\n"));
+	// And again: replaced, not duplicated.
+	CHECK(cpm("XPIP COPY.TXT=SD:HELLO2.TXT", "1 copied"));
+	CHECK(cpm("DIR COPY.TXT", "COPY     TXT"));
+	CHECK(strstr(strstr(screen, "COPY     TXT") + 1, "COPY     TXT") == NULL);
+
+	// Mistakes.
+	CHECK(cpm("XPIP B:=SD:NOSUCH.TXT", "No file"));
+	CHECK(cpm("XPIP SD:=B:NOSUCH.TXT", "No file"));
+	CHECK(cpm("XPIP B:X.TXT=SD:*.TXT", "Usage: XPIP")); // many files to one name
+	CHECK(cpm("XPIP A:=B:*.*", "Usage: XPIP"));         // no SD: or USB: side
+	CHECK(cpm("XPIP SD:=SD:*.*", "Usage: XPIP"));
+	CHECK(cpm("XPIP B:=SD:*.TXT[Q]", "Usage: XPIP"));
+	CHECK(cpm("XPIP", "Usage: XPIP"));
+	CHECK(cpm("XPIP B:=USB:*.*", "no USB stick"));
+	CHECK(cpm("XPIP SD:BAD_NAME.TXT=B:HELLO.TXT", "bad name"));
+
+	// XLS pauses after every 22 lines: any key goes on, Q stops.
+	for (unsigned i = 0; i < 30; ++i) {
+		char path[32];
+		snprintf(path, sizeof path, "/XFER/P%02u.LST", i);
+		put_fat_file(path, "x", 1);
+	}
+	clear_screen();
+	CHECK(type("XLS *.LST\r"));
+	CHECK_EQ(run_until("-- more", 30), MACHINE_RUNNING);
+	CHECK(strstr(screen, "P21.LST") != NULL);
+	CHECK(strstr(screen, "P22.LST") == NULL);
+	clear_screen();
+	CHECK(type(" "));
+	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
+	CHECK(strstr(screen, "P22.LST") != NULL && strstr(screen, "P29.LST") != NULL);
+	CHECK(strstr(screen, "30 files") != NULL);
+	CHECK(strstr(screen, "-- more") == NULL); // 8 lines: no second pause
+	clear_screen();
+	CHECK(type("XLS *.LST\r"));
+	CHECK_EQ(run_until("-- more", 30), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("q"));
+	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
+	CHECK(strstr(screen, "P22.LST") == NULL && strstr(screen, "files") == NULL);
+	clear_screen(); // the listing it left was closed: a new one works
+	CHECK(type("XLS *.LST\r"));
+	CHECK_EQ(run_until("-- more", 30), MACHINE_RUNNING);
+	CHECK(strstr(screen, "P00.LST") != NULL);
+	CHECK(type("q"));
+	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
+
+	// XERA: one file; wildcards ask first (N leaves them, Y erases).
+	CHECK(cpm("DIR XERA.COM", "XERA     COM"));
+	CHECK(cpm("XERA SD:P05.LST", "P05.LST\r\n1 erased"));
+	CHECK(!fat_file_exists("/XFER/P05.LST"));
+	clear_screen();
+	CHECK(type("XERA P0?.LST\r"));
+	CHECK_EQ(run_until("(Y/N)? ", 30), MACHINE_RUNNING);
+	CHECK(strstr(screen, "9 match") != NULL); // P00-P09 but P05
+	CHECK(type("n"));
+	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
+	CHECK(fat_file_exists("/XFER/P01.LST"));
+	clear_screen();
+	CHECK(type("XERA P0?.LST\r"));
+	CHECK_EQ(run_until("(Y/N)? ", 30), MACHINE_RUNNING);
+	CHECK(type("y"));
+	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
+	CHECK(strstr(screen, "P09.LST\r\n9 erased") != NULL);
+	CHECK(!fat_file_exists("/XFER/P01.LST") && !fat_file_exists("/XFER/P09.LST"));
+	CHECK(fat_file_exists("/XFER/P10.LST"));
+	CHECK(cpm("XERA NOSUCH.TXT", "No file"));
+	CHECK(cpm("XERA", "Usage: XERA"));            // no name: no erasing everything
+	CHECK(cpm("XERA B:HELLO.TXT", "Usage: XERA")); // CP/M files: ERA
+	CHECK(cpm("XERA USB:*.*", "no USB stick"));
+
+	// USB: a stick as volume 1 (here the RAM disk's second drive).
+	static FATFS usb_fs;
+	static uint8_t work[4096];
+	diskio_ram_init_drive(1, 2048);
+	const MKFS_PARM opt = {.fmt = FM_FAT | FM_SFD};
+	CHECK_EQ(f_mkfs("1:", &opt, work, sizeof work), FR_OK);
+	CHECK_EQ(f_mount(&usb_fs, "1:", 1), FR_OK);
+	CHECK(cpm("XLS USB:", "No files"));
+	CHECK(cpm("XPIP USB:=B:*.TXT[T]", "1 copied"));
+	CHECK(fat_file_is("1:/XFER/HELLO.TXT", text, sizeof text, 0));
+	CHECK(cpm("XLS USB:", "HELLO.TXT           300"));
+	CHECK(strstr(screen, "1 file\r\n") != NULL);
+	CHECK(cpm("XPIP B:FROMUSB.TXT=USB:HELLO.TXT", "1 copied"));
+	CHECK(cpm("TYPE B:FROMUSB.TXT", "abcdefghijklmnopqrstuvwxyzab\r\n"));
+	CHECK(cpm("XPIP USB:=SD:*.*", "Usage: XPIP")); // card to stick: not a CP/M copy
+	CHECK(cpm("XERA USB:HELLO.TXT", "1 erased"));
+	CHECK(!fat_file_exists("1:/XFER/HELLO.TXT"));
+	CHECK(fat_file_exists("/XFER/HELLO.TXT")); // not the card's
+	CHECK(cpm("XLS USB:", "No files"));
+	// The stick goes.
+	CHECK_EQ(f_unmount("1:"), FR_OK);
+	diskio_ram_free_drive(1);
+	CHECK(cpm("XLS USB:", "no USB stick"));
+	CHECK(cpm("XLS HELLO.TXT", "HELLO.TXT")); // the card is as it was
+	drives_unmount_all();
+}
+
 int main(void) {
 	srand(1);
 	RUN(test_fat32_volume);
@@ -604,8 +994,11 @@ int main(void) {
 	RUN(test_no_disk_boot_rom);
 	RUN(test_monitor_fresh_card);
 	RUN(test_monitor_autoboot);
-	RUN(test_monitor_firmware);
+	RUN(test_monitor_no_firmware_update);
+	RUN(test_firmware_panel);
 	RUN(test_blank_disk_chunks);
+	RUN(test_xfer_port);
+	RUN(test_xfer_tools);
 	drives_unmount_all();
 	f_unmount("");
 	diskio_ram_free();

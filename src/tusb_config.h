@@ -2,7 +2,8 @@
 #define TUSB_CONFIG_H
 
 // TinyUSB: host only, on the RP2350 native USB port (root hub port
-// 0), for HID keyboards. CFG_TUSB_MCU and CFG_TUSB_OS come from pico-sdk.
+// 0), for HID keyboards and USB sticks (usbmsc.c). CFG_TUSB_MCU and
+// CFG_TUSB_OS come from pico-sdk.
 
 #define CFG_TUH_ENABLED 1
 #define CFG_TUH_RPI_PIO_USB 0
@@ -15,12 +16,17 @@
 // boot protocol).
 #define CFG_TUH_ENUMERATION_BUFSIZE 256
 
-// One hub, as many keyboards have one built in (or sit behind one).
+// One hub, as many keyboards have one built in (or sit behind one); behind
+// it a keyboard and up to three sticks (usbvol.c uses one at a time).
 #define CFG_TUH_HUB 1
-#define CFG_TUH_DEVICE_MAX (CFG_TUH_HUB + 3)
+#define CFG_TUH_DEVICE_MAX (CFG_TUH_HUB + 4)
 // A keyboard often has 2-3 HID interfaces (keys, media keys, mouse).
 #define CFG_TUH_HID 6
 #define CFG_TUH_HID_EPIN_BUFSIZE 64
 #define CFG_TUH_HID_EPOUT_BUFSIZE 64
+// Mass storage: TinyUSB keeps one per device and only ever uses LUN 0 (a
+// multi-slot card reader shows its first slot).
+#define CFG_TUH_MSC 1
+#define CFG_TUH_MSC_MAXLUN 1
 
 #endif
