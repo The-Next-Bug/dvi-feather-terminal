@@ -168,7 +168,10 @@ status line (row 24); UART0 on GP0/GP1.
   core 0's longest main-loop pass and line render, qur.21; debug usb:
   uptime and the last four USB host events from usbkbd_log, qur.3), blank_after (minutes; `src/blank.[ch]`
   portable idle timer, keys only, the waking key dropped; video_set_blank
-  makes core 1 send black lines); settings_colours() gives the status
+  makes core 1 stop the DVI signal: hstx_dvi_stop (DMA aborted, FIFO
+  drained, HSTX off), frame time kept on the timer (diag_frames,
+  palette_used) for core 0's waits, hstx_dvi_resume at a frame start on
+  wake; bd 3rk); settings_colours() gives the status
   line's indices and the logo's tint. CRC-32 in
   `src/crc32.[ch]` (shared with the disk images). main.c apply_settings()
   -> serial_configure, term_set_defaults, show_palette.

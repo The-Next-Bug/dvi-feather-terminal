@@ -190,7 +190,7 @@ shown in reverse video:
 | Palette | color, mono | mono: every color is a shade of the Colors hue (below) |
 | Mode | terminal, CP/M machine | a serial terminal on UART0, or the console of the [Z80 CP/M machine](#z80-cpm-machine). Saving a new mode restarts the board |
 | Status line | shown, hidden, debug, debug usb | hidden: row 24 stays blank (the text area is still 24 rows; the boot logo's build line and CP/M's drive lights are not shown). debug: video timing instead; debug usb: the USB host's last events (both below, refreshed four times a second) |
-| Blank after | never, 1, 5, 10, 30, 60 min | the screen goes black after this long without a key, against burn-in. The next key only wakes it (it is not sent). Output from the host or the Z80 does not wake it; it carries on unseen. The DVI signal stays on, so the monitor does not resync |
+| Blank after | never, 1, 5, 10, 30, 60 min | the screen goes black after this long without a key, against burn-in. The next key only wakes it (it is not sent). Output from the host or the Z80 does not wake it; it carries on unseen. The DVI signal is turned off, so the monitor can go into power saving (backlight off); on waking it has to resync, which takes it a few seconds |
 
 **Debug status line**: `late T+N | line C/P% | F fps | loop M/Q ms |
 render R/S us | Z MHz`: scanlines not ready in time for the DVI output (in

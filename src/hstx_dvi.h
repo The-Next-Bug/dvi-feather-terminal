@@ -53,6 +53,17 @@ typedef const uint32_t *(*hstx_line_fn)(unsigned y);
 // Start the output, with the interrupt on this core.
 void hstx_dvi_start(hstx_line_fn line);
 
+// Stop the output (the DMA, then the HSTX once its FIFO has drained): no
+// clock on the clock lane, so the monitor sees no signal and may power
+// down. Then hstx_dvi_resume starts it again from a frame start, asking the
+// line callback for line 0 first; the monitor has to resync. Both on the
+// core that called hstx_dvi_start, from outside its interrupt.
+void hstx_dvi_stop(void);
+void hstx_dvi_resume(void);
+
+// How long a frame lasts, in microseconds.
+uint32_t hstx_dvi_frame_us(void);
+
 // Frames started since hstx_dvi_start.
 extern volatile uint32_t hstx_dvi_frames;
 

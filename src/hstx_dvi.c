@@ -57,6 +57,7 @@ static uint line;        // line of the frame the next reload is for
 static bool pixels_next; // within an active line: its pixels are next
 static uint v_sync_start, v_sync_end, v_active_start, v_total, pixel_words;
 static hstx_line_fn line_fn;
+static uint32_t csr_on; // the HSTX's CSR while it runs (hstx_dvi_init)
 
 static uint32_t sync_symbols(bool vsync, bool hsync) {
 	return tmds_ctrl[vsync << 1 | hsync] | (uint32_t)tmds_ctrl[0] << 10 | (uint32_t)tmds_ctrl[0] << 20;
@@ -116,6 +117,21 @@ static void __not_in_flash_func(dma_irq)(void) {
 		line = 0;
 }
 
+// Channel i starts on blanking line i (0 or 1) and chains to the other; the
+// interrupt continues with line 2: the start of a frame.
+static void __not_in_flash_func(setup_dma)(void) {
+	for (uint i = 0; i < 2; ++i) {
+		dma_channel_config c = dma_channel_get_default_config(dma_ch[i]);
+		channel_config_set_chain_to(&c, dma_ch[i ^ 1]);
+		channel_config_set_dreq(&c, DREQ_HSTX);
+		dma_channel_configure(dma_ch[i], &c, &hstx_fifo_hw->fifo,
+			blank_list[i >= v_sync_start && i < v_sync_end], BLANK_WORDS, false);
+	}
+	next_ch = 0;
+	line = 2;
+	pixels_next = false;
+}
+
 void hstx_dvi_init(void) {
 	const hstx_timing_t *t = &hstx_timing;
 	// 10 x the pixel clock needs more than the default core voltage. The
@@ -147,9 +163,10 @@ void hstx_dvi_init(void) {
 		1u << HSTX_CTRL_EXPAND_SHIFT_RAW_N_SHIFTS_LSB | 0u << HSTX_CTRL_EXPAND_SHIFT_RAW_SHIFT_LSB;
 	// A 10-bit symbol per 5 clk_hstx cycles, 2 bits a cycle (DDR); the clock
 	// lane's period is the same 5 cycles.
+	csr_on = HSTX_CTRL_CSR_EXPAND_EN_BITS | 5u << HSTX_CTRL_CSR_CLKDIV_LSB | 5u << HSTX_CTRL_CSR_N_SHIFTS_LSB |
+		2u << HSTX_CTRL_CSR_SHIFT_LSB | HSTX_CTRL_CSR_EN_BITS;
 	hstx_ctrl_hw->csr = 0;
-	hstx_ctrl_hw->csr = HSTX_CTRL_CSR_EXPAND_EN_BITS | 5u << HSTX_CTRL_CSR_CLKDIV_LSB |
-		5u << HSTX_CTRL_CSR_N_SHIFTS_LSB | 2u << HSTX_CTRL_CSR_SHIFT_LSB | HSTX_CTRL_CSR_EN_BITS;
+	hstx_ctrl_hw->csr = csr_on;
 
 	// HSTX bit n is GPIO 12 + n. Clock on bits 2/3; lanes 0, 1, 2 (D0-D2)
 	// on bits 0/1, 6/7, 4/5. Each lane's even shift-register bit goes out in
@@ -171,20 +188,9 @@ void hstx_dvi_init(void) {
 			PADS_BANK0_GPIO0_DRIVE_BITS | PADS_BANK0_GPIO0_SLEWFAST_BITS | PADS_BANK0_GPIO0_IE_BITS);
 	}
 
-	// Channel i starts on blanking line i (0 or 1) and chains to the other;
-	// the interrupt continues with line 2.
 	for (int i = 0; i < 2; ++i)
 		dma_ch[i] = (uint)dma_claim_unused_channel(true);
-	for (uint i = 0; i < 2; ++i) {
-		dma_channel_config c = dma_channel_get_default_config(dma_ch[i]);
-		channel_config_set_chain_to(&c, dma_ch[i ^ 1]);
-		channel_config_set_dreq(&c, DREQ_HSTX);
-		dma_channel_configure(dma_ch[i], &c, &hstx_fifo_hw->fifo,
-			blank_list[i >= v_sync_start && i < v_sync_end], BLANK_WORDS, false);
-	}
-	next_ch = 0;
-	line = 2;
-	pixels_next = false;
+	setup_dma();
 }
 
 void hstx_dvi_start(hstx_line_fn fn) {
@@ -197,4 +203,39 @@ void hstx_dvi_start(hstx_line_fn fn) {
 		dma_channel_set_irq0_enabled(dma_ch[i], true);
 	irq_set_enabled(DMA_IRQ_0, true);
 	dma_channel_start(dma_ch[0]);
+}
+
+void __not_in_flash_func(hstx_dvi_stop)(void) {
+	uint32_t mask = 1u << dma_ch[0] | 1u << dma_ch[1];
+	irq_set_enabled(DMA_IRQ_0, false);
+	// Disabled first, so aborting one does not start the other (chain).
+	for (int i = 0; i < 2; ++i)
+		hw_clear_bits(&dma_hw->ch[dma_ch[i]].al1_ctrl, DMA_CH0_CTRL_TRIG_EN_BITS);
+	dma_hw->abort = mask;
+	while (dma_hw->abort & mask)
+		tight_loop_contents();
+	dma_hw->intr = mask;
+	// What is in the FIFO goes out (the HSTX does not pop it while off):
+	// a few lines' time at most, as one word can repeat a symbol a line long.
+	uint64_t until = time_us_64() + 200;
+	while (!(hstx_fifo_hw->stat & HSTX_FIFO_STAT_EMPTY_BITS) && time_us_64() < until)
+		tight_loop_contents();
+	// No clock on the clock lane: the monitor sees no signal.
+	hstx_ctrl_hw->csr = 0;
+}
+
+void __not_in_flash_func(hstx_dvi_resume)(void) {
+	setup_dma();
+	hstx_ctrl_hw->csr = csr_on;
+	dma_hw->intr = 1u << dma_ch[0] | 1u << dma_ch[1];
+	irq_clear(DMA_IRQ_0);
+	irq_set_enabled(DMA_IRQ_0, true);
+	dma_channel_start(dma_ch[0]);
+}
+
+uint32_t hstx_dvi_frame_us(void) {
+	const hstx_timing_t *t = &hstx_timing;
+	uint32_t pixels = (uint32_t)(t->h_front + t->h_sync + t->h_back + t->h_active) *
+		(t->v_front + t->v_sync + t->v_back + t->v_active);
+	return (uint32_t)(pixels * 10000ull / t->sys_khz); // clk_sys is 10 x the pixel clock
 }

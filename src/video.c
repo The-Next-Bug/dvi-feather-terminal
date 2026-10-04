@@ -143,6 +143,36 @@ static const uint32_t *__not_in_flash_func(next_line)(unsigned y) {
 	return line_buf[seq % LINE_BUFS];
 }
 
+// Blanked (video_set_blank): no DVI signal at all, so the monitor can
+// power down (its backlight too). Frame time goes on meanwhile (frames
+// counted, the palette switched), as core 0 waits on both; then the output
+// starts again at a frame start. Returns the next line to compose.
+static uint32_t __not_in_flash_func(signal_off)(uint32_t next) {
+	hstx_dvi_stop();
+	next = (next / RASTER_ACTIVE_HEIGHT + 1) * RASTER_ACTIVE_HEIGHT; // a frame start
+	diag_frames = next / RASTER_ACTIVE_HEIGHT;
+	const uint32_t frame_us = hstx_dvi_frame_us();
+	uint64_t frame_end = time_us_64() + frame_us;
+	while (blank_next) {
+		if (time_us_64() >= frame_end) {
+			frame_end += frame_us;
+			next += RASTER_ACTIVE_HEIGHT;
+			diag_frames = next / RASTER_ACTIVE_HEIGHT;
+			palette_used = palette_next;
+		}
+		tight_loop_contents();
+	}
+	// As at power-on: the first lines ready before the output starts.
+	requested = next - 1;
+	composed = next;
+	while ((int32_t)(next - requested) <= AHEAD) {
+		compose(next);
+		composed = ++next;
+	}
+	hstx_dvi_resume();
+	return next;
+}
+
 static void __not_in_flash_func(core1_main)(void) {
 	diag_core1_stage = 1;
 	// Free-running 24-bit down-counter at the core clock (core 1's own
@@ -163,6 +193,8 @@ static void __not_in_flash_func(core1_main)(void) {
 
 	for (;;) {
 		diag_core1_stage = 4;
+		if (blank_next)
+			next = signal_off(next);
 		while ((int32_t)(next - requested) > AHEAD)
 			tight_loop_contents();
 		// Includes the DMA interrupts taken meanwhile: they share core 1.

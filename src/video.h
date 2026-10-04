@@ -25,9 +25,11 @@ void video_init(void);
 // table.
 void video_set_palette(const uint16_t colours[PALETTE_SIZE]);
 
-// Show black instead of the screen (blank.h) from the next frame, or the
-// screen again. The DVI signal keeps going, so the monitor does not resync
-// on waking, and the screen goes on being updated underneath.
+// Turn the DVI signal off (blank.h), or on again. Off, there is no signal
+// at all, so the monitor can power down (backlight included); back on, it
+// has to resync, which takes it a few seconds. The screen goes on being
+// updated underneath, and core 1 keeps frame time, so video_set_palette and
+// video_splash do not wait for good.
 void video_set_blank(bool blank);
 
 // Rasterise every dirty line of the screen and clear its dirty flags. Call
