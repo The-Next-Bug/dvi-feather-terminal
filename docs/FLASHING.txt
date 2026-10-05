@@ -35,13 +35,14 @@ Adafruit Feather RP2040 DVI) are no longer supported.
    See the README, "Z80 CP/M machine".
 
 6. Later updates without a PC connection: copy the UF2 to the root of the
-   CP/M machine's SD card as FIRMWARE.UF2 (sdcard-<target>/FIRMWARE.UF2 in
-   this ZIP), and press U in the CP/M monitor. It checks the file, asks,
+   SD card or a USB stick as FIRMWARE.UF2 (sdcard-<target>/FIRMWARE.UF2 in
+   this ZIP), and press U in SET-UP (F12, either mode; with the file on
+   both, S or U picks one). It checks the file, asks,
    writes it beside the running firmware, then installs it and restarts;
    do not power off while it says so. If the power fails then, the board
    does not start: flash it again as in steps 1-2 (the boot ROM's BOOTSEL
    mode always works). See the README, "Updating the firmware from the SD
-   card".
+   card or a USB stick".
 
 The BIN files are the same images as raw flash contents, for SWD programmers
 (load at 0x10000000). SHA256SUMS covers the UF2 and BIN files.

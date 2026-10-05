@@ -284,7 +284,11 @@ status line (row 24); UART0 on GP0/GP1.
   Firmware update (bd n3k): SET-UP's U in either mode (`src/fwpanel.[ch]`,
   portable, over SET-UP's rows; main.c fw_* platform: in terminal mode it
   f_mounts the card only while open, in CP/M mode it uses the monitor's
-  mount; stubbed in test_machine). The monitor's U was removed (qur.10):
+  mount; stubbed in test_machine). It looks for FIRMWARE.UF2 on the card
+  and on the USB stick (volume 1, usbmsc's mount, platform stick hook;
+  qur.27): one is checked, both ask S or U; renamed on its own volume. The
+  stick needs nothing at the commit (the rename synced it, xfer_reset
+  closes its files). The monitor's U was removed (qur.10):
   SET-UP's is the only way. `src/uf2.[ch]` (portable; test_uf2 also checks
   build/pico2-dvi-sock/dvi_terminal.uf2 when built): skips other families
   (the E10 block numbers its own sequence); ours in order, ascending
@@ -307,7 +311,7 @@ status line (row 24); UART0 on GP0/GP1.
 - CI (`.gitlab-ci.yml`): test -> build (matrix of targets) -> package ->
   release (tags `vX.Y.Z`). Pipeline status is not visible from here.
 
-## Resource budget (v0.5.0, MACHINE_BANKS=2)
+## Resource budget (v0.6.1, MACHINE_BANKS=2)
 
 SRAM is the tight resource; peripherals and pins are mostly free.
 
@@ -322,11 +326,14 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   tiny, 2 KB UART RX ring) to 0x2007af8c, ~20.1 KB free; 3of (one 4 KB
   scratch buffer for the LZ window and fwupdate) to 0x20076e58, ~37 KB
   free; file transfer (qur.2, ~2.3 KB) and USB sticks (qur.3, ~4.4 KB) to
-  0x20078934, ~30.4 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  0x20078934, ~30.4 KB free; the USB debug log and video-fixes (ful,
+  3rk) to 0x200796a0, ~26.3 KB free (v0.6.1: .text 177 KB, .data 21 KB,
+  .bss 287 KB); firmware update from a stick (qur.27, ~1 KB) to
+  0x20079a88, ~25.3 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, setup 10 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit.
-- Flash (4 MB): image 0-0x7beb0 (496 KB; the 4 KB LZ window costs 32 KB); free to 2 MB (image growth;
+- Flash (4 MB): image 0-0x7e108 (504 KB at v0.6.1; the 4 KB LZ window costs 32 KB); free to 2 MB (image growth;
   fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used
   only during an update, up to the new image's length); settings
   0x3fd000-0x3fefff; last sector left blank (E10). New persistent storage
@@ -337,7 +344,7 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   (polled); USB host + USBCTRL_IRQ; TIMER0 (time base, SDK alarm pool);
   watchdog (reboots only). Free: 14 DMA channels, DMA_IRQ_1-3, all of PIO0-2
   (12 SMs), UART1, SPI1, I2C0/1, PWM, ADC, TIMER1, TRNG, SHA-256, QMI CS1
-  (PSRAM; GP8 can carry its select).
+  (PSRAM; GP8 can carry its select; spike bd g31).
 - GPIO: GP0/1 UART0, GP2/3 CTS/RTS (only with SERIAL_FLOW_CONTROL), GP4-7
   SD, GP12-19 DVI Sock, GP25 LED (VIDEO_DIAG only), GP23/24/29 board
   internal. Free: GP8-11, GP20-22, GP26-28 (ADC capable), and GP2/3 when
