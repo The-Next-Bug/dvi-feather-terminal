@@ -551,13 +551,17 @@ static void test_monitor_no_firmware_update(void) {
 }
 
 // SET-UP's firmware update panel, with the same stubs.
-static bool panel_card;
+static bool panel_card, panel_stick;
 static unsigned panel_shows, panel_unmounts, panel_commit_unmounts;
 
 static bool panel_mount(char *info, size_t n) {
 	if (!panel_card)
 		snprintf(info, n, "no SD card found");
 	return panel_card;
+}
+
+static bool panel_stick_mounted(void) {
+	return panel_stick;
 }
 
 static void panel_unmount(bool commit) {
@@ -580,7 +584,8 @@ static bool shown_row(unsigned row, const char *text) {
 	return strstr(line, text) != NULL;
 }
 
-static const fwpanel_platform_t panel_platform = {.mount = panel_mount, .check = firmware_check,
+static const fwpanel_platform_t panel_platform = {.mount = panel_mount, .stick = panel_stick_mounted,
+	.check = firmware_check,
 	.stage = firmware_stage, .unmount = panel_unmount, .commit = firmware_commit, .show = panel_show};
 
 static bool panel_row(const fwpanel_t *p, unsigned row, const char *text) {
@@ -599,28 +604,39 @@ static void test_firmware_panel(void) {
 	FILINFO info;
 	stages = commits = panel_unmounts = panel_commit_unmounts = 0;
 
-	// No card: says so, any key goes back, nothing to let go.
-	panel_card = false;
+	// No card (and no stick): says so, any key goes back, nothing to let go.
+	panel_card = panel_stick = false;
 	fwpanel_open(&p);
 	CHECK(panel_row(&p, 0, "SET-UP  Firmware update"));
-	CHECK(panel_row(&p, 2, "Checking FIRMWARE.UF2"));
+	CHECK(panel_row(&p, 2, "Looking for FIRMWARE.UF2"));
 	CHECK_EQ(fwpanel_input(&p, 'y'), FWPANEL_NONE); // busy
 	CHECK_EQ(fwpanel_run(&p, &panel_platform), FWPANEL_REDRAW);
 	CHECK_EQ(p.state, FWPANEL_FAILED);
+	CHECK(panel_row(&p, 2, "No SD card or USB stick to update from:"));
 	CHECK(panel_row(&p, 3, "no SD card found"));
 	CHECK_EQ(fwpanel_input(&p, 'x'), FWPANEL_CANCEL);
 	fwpanel_close(&p, &panel_platform);
 	CHECK_EQ(panel_unmounts, 0);
 
-	// No file: the check refuses it; leaving lets the card go.
+	// No file: says where it looked; leaving lets the card go.
 	panel_card = true;
 	f_unlink(FWPANEL_FILE);
 	fwpanel_open(&p);
 	fwpanel_run(&p, &panel_platform);
 	CHECK_EQ(p.state, FWPANEL_FAILED);
-	CHECK(panel_row(&p, 2, "cannot be installed"));
+	CHECK(panel_row(&p, 2, "No FIRMWARE.UF2 to install:"));
+	CHECK(panel_row(&p, 3, "none in the root of the SD card (and no USB stick)"));
 	fwpanel_close(&p, &panel_platform);
 	CHECK_EQ(panel_unmounts, 1);
+
+	// A file the check refuses.
+	write_file(FWPANEL_FILE, "BAD");
+	fwpanel_open(&p);
+	fwpanel_run(&p, &panel_platform);
+	CHECK_EQ(p.state, FWPANEL_FAILED);
+	CHECK(panel_row(&p, 2, "FIRMWARE.UF2 on the SD card cannot be installed:"));
+	CHECK(panel_row(&p, 3, "not a UF2 file"));
+	fwpanel_close(&p, &panel_platform);
 
 	// Declined with N, or Escape.
 	write_file(FWPANEL_FILE, "GOOD");
@@ -628,7 +644,7 @@ static void test_firmware_panel(void) {
 		fwpanel_open(&p);
 		fwpanel_run(&p, &panel_platform);
 		CHECK_EQ(p.state, FWPANEL_ASK);
-		CHECK(panel_row(&p, 2, "Install it and restart (Y/N)?"));
+		CHECK(panel_row(&p, 2, "Install it from the SD card and restart (Y/N)?"));
 		CHECK(panel_row(&p, 3, "test firmware"));
 		CHECK(panel_row(&p, 6, "Y install and restart"));
 		CHECK_EQ(fwpanel_input(&p, 'x'), FWPANEL_NONE);
@@ -668,6 +684,98 @@ static void test_firmware_panel(void) {
 	CHECK_EQ(f_stat(FWPANEL_FILE_OLD, &info), FR_OK);
 	CHECK_EQ(info.fsize, 6);
 	f_unlink(FWPANEL_FILE_OLD);
+}
+
+// The firmware panel with a USB stick as volume 1 (qur.27): the file on the
+// stick alone, on neither, on both (S or U picks), installed from the stick.
+static void test_firmware_panel_stick(void) {
+	static fwpanel_t p;
+	static FATFS usb_fs;
+	static uint8_t work[4096];
+	FILINFO info;
+	diskio_ram_init_drive(1, 2048);
+	const MKFS_PARM opt = {.fmt = FM_FAT | FM_SFD};
+	CHECK_EQ(f_mkfs("1:", &opt, work, sizeof work), FR_OK);
+	CHECK_EQ(f_mount(&usb_fs, "1:", 1), FR_OK);
+	stages = commits = panel_unmounts = panel_commit_unmounts = 0;
+	panel_stick = true;
+	f_unlink(FWPANEL_FILE);
+
+	// On neither.
+	panel_card = true;
+	fwpanel_open(&p);
+	fwpanel_run(&p, &panel_platform);
+	CHECK_EQ(p.state, FWPANEL_FAILED);
+	CHECK(panel_row(&p, 3, "none in the root of the SD card or the USB stick"));
+	fwpanel_close(&p, &panel_platform);
+	panel_card = false;
+	fwpanel_open(&p);
+	fwpanel_run(&p, &panel_platform);
+	CHECK(panel_row(&p, 3, "none in the root of the USB stick (and no SD card)"));
+	fwpanel_close(&p, &panel_platform);
+
+	// On the stick alone, no card: checked and offered from the stick.
+	panel_unmounts = 0;
+	write_file(fwpanel_path(FWPANEL_USB), "BAD");
+	fwpanel_open(&p);
+	fwpanel_run(&p, &panel_platform);
+	CHECK(panel_row(&p, 2, "FIRMWARE.UF2 on the USB stick cannot be installed:"));
+	fwpanel_close(&p, &panel_platform);
+	write_file(fwpanel_path(FWPANEL_USB), "GOOD");
+	fwpanel_open(&p);
+	fwpanel_run(&p, &panel_platform);
+	CHECK_EQ(p.state, FWPANEL_ASK);
+	CHECK_EQ(p.source, FWPANEL_USB);
+	CHECK(panel_row(&p, 2, "Install it from the USB stick and restart (Y/N)?"));
+	CHECK_EQ(fwpanel_input(&p, 'n'), FWPANEL_CANCEL);
+	fwpanel_close(&p, &panel_platform);
+	CHECK_EQ(panel_unmounts, 0); // no card was mounted
+
+	// On both: S or U picks (other keys do nothing), N or Escape goes back.
+	panel_card = true;
+	write_file(FWPANEL_FILE, "GOOD");
+	for (const char *k = "nN\x1b"; *k; ++k) {
+		fwpanel_open(&p);
+		fwpanel_run(&p, &panel_platform);
+		CHECK_EQ(p.state, FWPANEL_PICK);
+		CHECK(panel_row(&p, 2, "FIRMWARE.UF2 is on both the SD card and the USB stick."));
+		CHECK(panel_row(&p, 6, "S SD card   U USB stick"));
+		CHECK_EQ(fwpanel_input(&p, 'y'), FWPANEL_NONE);
+		CHECK_EQ(fwpanel_input(&p, (uint8_t)*k), FWPANEL_CANCEL);
+		fwpanel_close(&p, &panel_platform);
+	}
+	fwpanel_open(&p);
+	fwpanel_run(&p, &panel_platform);
+	CHECK_EQ(fwpanel_input(&p, 's'), FWPANEL_WORK);
+	CHECK_EQ(fwpanel_input(&p, 'u'), FWPANEL_NONE); // busy checking
+	CHECK_EQ(fwpanel_run(&p, &panel_platform), FWPANEL_REDRAW);
+	CHECK_EQ(p.state, FWPANEL_ASK);
+	CHECK(panel_row(&p, 2, "from the SD card"));
+	fwpanel_close(&p, &panel_platform);
+
+	// Installed from the stick: renamed there, the card's file left alone.
+	write_file(fwpanel_path(FWPANEL_USB), "STAGES");
+	fwpanel_open(&p);
+	fwpanel_run(&p, &panel_platform);
+	CHECK_EQ(fwpanel_input(&p, 'U'), FWPANEL_WORK);
+	fwpanel_run(&p, &panel_platform);
+	CHECK_EQ(p.state, FWPANEL_ASK);
+	CHECK(panel_row(&p, 2, "from the USB stick"));
+	CHECK_EQ(fwpanel_input(&p, 'y'), FWPANEL_WORK);
+	fwpanel_run(&p, &panel_platform);
+	CHECK_EQ(stages, 1);
+	CHECK_EQ(commits, 1);
+	CHECK_EQ(panel_commit_unmounts, 1);
+	CHECK_EQ(f_stat("1:" FWPANEL_FILE, &info), FR_NO_FILE);
+	CHECK_EQ(f_stat("1:" FWPANEL_FILE_OLD, &info), FR_OK);
+	CHECK_EQ(info.fsize, 6);
+	CHECK_EQ(f_stat(FWPANEL_FILE, &info), FR_OK);
+	CHECK_EQ(f_stat(FWPANEL_FILE_OLD, &info), FR_NO_FILE);
+
+	f_unlink(FWPANEL_FILE);
+	panel_stick = false;
+	CHECK_EQ(f_unmount("1:"), FR_OK);
+	diskio_ram_free_drive(1);
 }
 
 // On a card's usual 32 KB clusters a blank disk reaches the card many
@@ -996,6 +1104,7 @@ int main(void) {
 	RUN(test_monitor_autoboot);
 	RUN(test_monitor_no_firmware_update);
 	RUN(test_firmware_panel);
+	RUN(test_firmware_panel_stick);
 	RUN(test_blank_disk_chunks);
 	RUN(test_xfer_port);
 	RUN(test_xfer_tools);

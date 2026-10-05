@@ -221,8 +221,15 @@ static void fw_draw_panel(void) {
 
 // The firmware panel's platform. In CP/M mode the monitor keeps the card
 // mounted (with the drives' images open); in terminal mode the card is
-// mounted only while the panel is open.
+// mounted only while the panel is open. The stick (volume 1) is usbmsc.c's,
+// mounted in both modes.
 static FATFS fw_fs;
+
+static usbmsc_status_t usb_status(void);
+
+static bool fw_stick(void) {
+	return usb_status().mounted;
+}
 
 static bool fw_mount(char *info, size_t n) {
 	if (cpm.on)
@@ -241,10 +248,11 @@ static void fw_unmount(bool commit) {
 	if (cpm.on && !commit)
 		return; // the monitor's
 	if (cpm.on) {
-		xfer_reset();
+		xfer_reset(); // also closes what XLS/XPIP had open on the stick
 		drives_flush();
 		drives_unmount_all();
 	}
+	// The stick stays mounted: the rename left its file system in sync.
 	f_unmount("");
 }
 
@@ -259,6 +267,7 @@ static void fw_show(const fwpanel_t *p) {
 // showing it from RAM while the flash is rewritten.
 static const fwpanel_platform_t fw_platform = {
 	.mount = fw_mount,
+	.stick = fw_stick,
 	.check = fwupdate_check,
 	.stage = fwupdate_stage,
 	.unmount = fw_unmount,
