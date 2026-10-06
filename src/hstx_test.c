@@ -86,8 +86,10 @@ int main(void) {
 	hstx_dvi_init();
 	// After the clock change: the UART's divisor depends on clk_peri.
 	stdio_init_all();
+#ifdef PICO_DEFAULT_LED_PIN
 	gpio_init(PICO_DEFAULT_LED_PIN);
 	gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
+#endif
 
 	build_rows();
 	hstx_dvi_start(line);
@@ -105,7 +107,9 @@ int main(void) {
 			(unsigned long)frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_SYS),
 			(unsigned long)frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_HSTX),
 			(unsigned long)(frames - last), (unsigned long)frames);
+#ifdef PICO_DEFAULT_LED_PIN
 		gpio_put(PICO_DEFAULT_LED_PIN, frames != last && (s & 1));
+#endif
 		last = frames;
 	}
 }

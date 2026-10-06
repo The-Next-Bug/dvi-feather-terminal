@@ -109,8 +109,10 @@ static void mount_card(void) {
 
 static void show_card(void) {
 	const char *info = plat->card_info();
-	if (!info)
-		say("SD card:  none found (SPI0: GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI)\r\n");
+	if (!info && plat->card_pins)
+		say("SD card:  none found (%s)\r\n", plat->card_pins);
+	else if (!info)
+		say("SD card:  none found\r\n");
 	else if (mount_result != FR_OK)
 		say("SD card:  %s, no FAT file system (error %d)\r\n", info, (int)mount_result);
 	else

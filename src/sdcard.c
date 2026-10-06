@@ -10,10 +10,12 @@
 #include "pico/stdlib.h"
 #include "hardware/spi.h"
 
+#include "board.h"
+
 #include "ff.h"
 #include "diskio.h"
 
-#define SD_SPI spi0
+#define SD_SPI BOARD_SD_SPI_INST
 #define INIT_HZ 400000     // the spec's limit until initialised
 #define RUN_HZ 25000000    // default-speed cards
 #define BLOCK 512
@@ -64,12 +66,12 @@ static bool wait_ready(uint32_t ms) {
 }
 
 static void deselect(void) {
-	gpio_put(SDCARD_CS_PIN, 1);
+	gpio_put(BOARD_SD_CS_PIN, 1);
 	xfer(0xff); // the card releases DO on the next clock
 }
 
 static bool select_card(void) {
-	gpio_put(SDCARD_CS_PIN, 0);
+	gpio_put(BOARD_SD_CS_PIN, 0);
 	xfer(0xff);
 	if (wait_ready(500))
 		return true;
@@ -118,13 +120,13 @@ static void pins_init(void) {
 		return;
 	spi_init(SD_SPI, INIT_HZ);
 	spi_set_format(SD_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
-	gpio_set_function(SDCARD_MISO_PIN, GPIO_FUNC_SPI);
-	gpio_set_function(SDCARD_SCK_PIN, GPIO_FUNC_SPI);
-	gpio_set_function(SDCARD_MOSI_PIN, GPIO_FUNC_SPI);
-	gpio_pull_up(SDCARD_MISO_PIN); // DO floats until the card drives it
-	gpio_init(SDCARD_CS_PIN);
-	gpio_set_dir(SDCARD_CS_PIN, GPIO_OUT);
-	gpio_put(SDCARD_CS_PIN, 1);
+	gpio_set_function(BOARD_SD_MISO_PIN, GPIO_FUNC_SPI);
+	gpio_set_function(BOARD_SD_SCK_PIN, GPIO_FUNC_SPI);
+	gpio_set_function(BOARD_SD_MOSI_PIN, GPIO_FUNC_SPI);
+	gpio_pull_up(BOARD_SD_MISO_PIN); // DO floats until the card drives it
+	gpio_init(BOARD_SD_CS_PIN);
+	gpio_set_dir(BOARD_SD_CS_PIN, GPIO_OUT);
+	gpio_put(BOARD_SD_CS_PIN, 1);
 	pins_ready = true;
 }
 
@@ -158,7 +160,7 @@ static sdcard_type_t card_init(void) {
 	spi_set_baudrate(SD_SPI, INIT_HZ);
 	// At least 74 clocks with CS high put the card in its native mode,
 	// ready for CMD0 with CS low to switch it to SPI mode.
-	gpio_put(SDCARD_CS_PIN, 1);
+	gpio_put(BOARD_SD_CS_PIN, 1);
 	for (int i = 0; i < 10; ++i)
 		xfer(0xff);
 

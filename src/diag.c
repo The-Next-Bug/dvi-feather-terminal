@@ -5,7 +5,9 @@
 #include "hardware/structs/sio.h"
 #include "hardware/uart.h"
 
-#define DIAG_UART uart0
+#include "board.h"
+
+#define DIAG_UART BOARD_UART_INST
 #define DIAG_BAUD 115200
 
 // stdio on UART0 TX, blocking, so panic() messages (TinyUSB's driver panics
@@ -13,6 +15,12 @@
 // debugger is a HardFault, reported below.
 static void diag_out_chars(const char *buf, int len) {
 	uart_write_blocking(DIAG_UART, (const uint8_t *)buf, (size_t)len);
+}
+
+static void led_toggle(void) {
+#ifdef PICO_DEFAULT_LED_PIN
+	gpio_xor_mask64(1ull << PICO_DEFAULT_LED_PIN);
+#endif
 }
 
 static stdio_driver_t diag_stdio = {
@@ -26,10 +34,12 @@ void diag_init(void) {
 	if (!VIDEO_DIAG)
 		return;
 	uart_init(DIAG_UART, DIAG_BAUD);
-	gpio_set_function(PICO_DEFAULT_UART_TX_PIN, UART_FUNCSEL_NUM(DIAG_UART, PICO_DEFAULT_UART_TX_PIN));
+	gpio_set_function(BOARD_UART_TX_PIN, UART_FUNCSEL_NUM(DIAG_UART, BOARD_UART_TX_PIN));
+#ifdef PICO_DEFAULT_LED_PIN
 	gpio_init(PICO_DEFAULT_LED_PIN);
 	gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 	gpio_put(PICO_DEFAULT_LED_PIN, 1);
+#endif
 	uart_puts(DIAG_UART, "\r\n\r\ndiag: boot\r\n");
 	stdio_set_driver_enabled(&diag_stdio, true);
 }
@@ -51,7 +61,7 @@ void diag_mark(const char *text) {
 
 void diag_heartbeat(void) {
 	if (VIDEO_DIAG)
-		gpio_xor_mask(1u << PICO_DEFAULT_LED_PIN);
+		led_toggle();
 }
 
 #if VIDEO_DIAG
@@ -72,7 +82,7 @@ void __used hardfault_report(const uint32_t *frame) {
 	put_hex(frame[5]);
 	uart_puts(DIAG_UART, "\r\n");
 	for (;;) {
-		gpio_xor_mask(1u << PICO_DEFAULT_LED_PIN);
+		led_toggle();
 		busy_wait_us_32(100000);
 	}
 }
