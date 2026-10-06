@@ -15,9 +15,12 @@ if(NOT DEFINED picotool_DIR AND EXISTS "${TOOLCHAIN_DIR}/picotool/picotool")
   set(picotool_DIR "${TOOLCHAIN_DIR}/picotool/picotool")
 endif()
 
-# RP2350 only: the RP2040 ran out of SRAM and could not run the USB keyboard
-# at the DVI clock (bd dmt.20, dmt.29).
-set(PICO_BOARD pico2 CACHE STRING "pico-sdk board (an RP2350 board)")
+# The board: boards/<PICO_BOARD>.h, a pico-sdk board header with the
+# terminal's pins (boards/example.h; checked by src/board.h). RP2350 only:
+# the RP2040 ran out of SRAM and could not run the USB keyboard at the DVI
+# clock (bd dmt.20, dmt.29).
+set(PICO_BOARD pico2-dvi-sock CACHE STRING "Board: boards/<PICO_BOARD>.h (an RP2350 board)")
+list(APPEND PICO_BOARD_HEADER_DIRS "${CMAKE_CURRENT_LIST_DIR}/boards")
 option(STARTUP_LOGO "Show the logo (LOGO_IMAGE) for a few seconds at power-on/reset" ON)
 # Monitors take a few seconds to lock onto the signal after power-on, which
 # comes out of this.
@@ -32,7 +35,7 @@ option(VIDEO_DIAG "Bring-up diagnostics on UART0 TX: boot markers, core 1 timing
 # at the 400 MHz DVI clock flash execution is unreliable (on the RP2040 it hung
 # above 252 MHz). See bd dvi-feather-terminal-dmt.10.
 # Off by default: needs the two handshake wires (see README, "Flow control").
-option(SERIAL_FLOW_CONTROL "RTS/CTS on UART0 (GP3 RTS out, GP2 CTS in)" OFF)
+option(SERIAL_FLOW_CONTROL "RTS/CTS on the terminal UART (the board's BOARD_UART_RTS_PIN/CTS_PIN)" OFF)
 option(COPY_TO_RAM "Run the whole program from SRAM instead of flash" ON)
 # Video timing (src/hstx_dvi.h): 800x600 at 60 Hz needs clk_hstx at 200 MHz,
 # beyond its 150 MHz rating; the others are fallbacks with slower clocks.

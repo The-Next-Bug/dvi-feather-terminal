@@ -34,6 +34,7 @@
 #include "hardware/watchdog.h"
 
 #include "blank.h"
+#include "board.h"
 #include "demo.h"
 #include "diag.h"
 #include "drivepanel.h"
@@ -78,9 +79,6 @@
 #define SERIAL_FLOW_CONTROL 0
 #endif
 
-// UART0 hardware flow control pins (UART0 CTS/RTS function).
-#define CTS_PIN 2
-#define RTS_PIN 3
 #define TERM_COLS 80
 #define DEMO_INTERVAL_MS 5000
 #ifndef LOGO_MS
@@ -175,7 +173,7 @@ static void diag_poll(void) {
 		(unsigned long)st.core1_stage, (unsigned long)st.frames, (unsigned long)st.max_line_cycles, (unsigned long)st.cycles_budget,
 		(unsigned long)(st.max_line_cycles * 100 / st.cycles_budget), (unsigned long)st.late,
 		(unsigned long)(clock_get_hz(clk_sys) / 1000));
-	uart_puts(uart0, text);
+	uart_puts(BOARD_UART_INST, text);
 	diag_heartbeat();
 }
 
@@ -238,7 +236,7 @@ static bool fw_mount(char *info, size_t n) {
 	if (r == FR_OK)
 		return true;
 	if (sdcard_type() == SDCARD_NONE)
-		snprintf(info, n, "none found (SPI0: GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI)");
+		snprintf(info, n, "none found (" BOARD_SD_PINS_TEXT ")");
 	else
 		snprintf(info, n, "no FAT file system on it (error %d)", (int)r);
 	return false;
@@ -815,6 +813,7 @@ static void cpm_flush(void) {
 static const monitor_platform_t cpm_monitor = {
 	.write = cpm_write,
 	.card_info = cpm_card_info,
+	.card_pins = BOARD_SD_PINS_TEXT,
 	.flush = cpm_flush,
 #if USB_KEYBOARD
 	.usb_info = usbmsc_info,
@@ -1068,9 +1067,12 @@ int main(void) {
 	// After video_init: the baud divisor depends on the final clk_peri.
 	// Diagnostic builds write to UART0 with blocking calls, which a CTS that
 	// is unwired or held off would block forever: RTS only there.
-	serial_init(uart0, settings_baud_rate(&settings), PICO_DEFAULT_UART_TX_PIN, PICO_DEFAULT_UART_RX_PIN,
-		SERIAL_FLOW_CONTROL && !VIDEO_DIAG ? CTS_PIN : SERIAL_NO_PIN,
-		SERIAL_FLOW_CONTROL ? RTS_PIN : SERIAL_NO_PIN);
+	serial_init(BOARD_UART_INST, settings_baud_rate(&settings), BOARD_UART_TX_PIN, BOARD_UART_RX_PIN,
+#if SERIAL_FLOW_CONTROL
+		VIDEO_DIAG ? SERIAL_NO_PIN : BOARD_UART_CTS_PIN, BOARD_UART_RTS_PIN);
+#else
+		SERIAL_NO_PIN, SERIAL_NO_PIN);
+#endif
 	apply_line(&settings);
 	diag_mark("serial_init done");
 #if USB_KEYBOARD
@@ -1111,15 +1113,19 @@ int main(void) {
 	term_puts(&term, banner);
 	if (cpm.on) {
 		// UART input before now was for the terminal, not the Z80.
-		term_puts(&term, "Z80 CP/M machine: UART0 (GP0/GP1) is its second serial port\r\n");
+		term_puts(&term, "Z80 CP/M machine: " BOARD_UART_NAME " (GP" BOARD_STR(BOARD_UART_TX_PIN) "/GP" BOARD_STR(
+			BOARD_UART_RX_PIN) ") is its second serial port\r\n");
 		machine_init(&cpm_platform);
 #if USB_KEYBOARD
 		usbkbd_set_reset_key(reset_key);
 #endif
 		monitor_start(&cpm_monitor, true, to_ms_since_boot(get_absolute_time()));
 	} else {
-		term_puts(&term, SERIAL_FLOW_CONTROL ? "UART0 on TX (GP0) / RX (GP1), RTS (GP3) / CTS (GP2)\r\n\r\n"
-			: "UART0 on TX (GP0) / RX (GP1)\r\n\r\n");
+#if SERIAL_FLOW_CONTROL
+		term_puts(&term, BOARD_UART_PINS_TEXT BOARD_UART_FLOW_TEXT "\r\n\r\n");
+#else
+		term_puts(&term, BOARD_UART_PINS_TEXT "\r\n\r\n");
+#endif
 		if (pending)
 			term_write(&term, buf, pending);
 	}

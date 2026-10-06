@@ -5,6 +5,8 @@
 #include "pico/stdlib.h"
 #include "tusb.h"
 
+#include "board.h"
+
 // Attached keyboard interfaces, for the lock LEDs.
 static struct {
 	bool used;
@@ -115,6 +117,12 @@ void usbkbd_init(kbd_output_t output, kbd_setup_t setup, void *ctx) {
 	kbd_init(&kbd, output, ctx);
 	kbd_set_setup_key(&kbd, setup);
 	led_report = kbd_leds(&kbd);
+#ifdef BOARD_USB_VBUS_EN_PIN
+	// The board switches the port's 5 V; the RP2350 cannot supply it.
+	gpio_init(BOARD_USB_VBUS_EN_PIN);
+	gpio_put(BOARD_USB_VBUS_EN_PIN, BOARD_USB_VBUS_EN_LEVEL);
+	gpio_set_dir(BOARD_USB_VBUS_EN_PIN, GPIO_OUT);
+#endif
 	tusb_rhport_init_t host = {.role = TUSB_ROLE_HOST, .speed = TUSB_SPEED_AUTO};
 	tusb_init(0, &host);
 }

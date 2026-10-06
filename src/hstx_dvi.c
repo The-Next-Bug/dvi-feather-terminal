@@ -4,6 +4,8 @@
 
 #include "hstx_dvi.h"
 
+#include "board.h"
+
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
@@ -168,23 +170,26 @@ void hstx_dvi_init(void) {
 	hstx_ctrl_hw->csr = 0;
 	hstx_ctrl_hw->csr = csr_on;
 
-	// HSTX bit n is GPIO 12 + n. Clock on bits 2/3; lanes 0, 1, 2 (D0-D2)
-	// on bits 0/1, 6/7, 4/5. Each lane's even shift-register bit goes out in
-	// the first half of the cycle, the odd one in the second; the - pin is
-	// the + pin inverted.
-	hstx_ctrl_hw->bit[2] = HSTX_CTRL_BIT0_CLK_BITS;
-	hstx_ctrl_hw->bit[3] = HSTX_CTRL_BIT0_CLK_BITS | HSTX_CTRL_BIT0_INV_BITS;
-	static const uint8_t lane_bit[3] = { 0, 6, 4 };
+	// Pins from the board header (board.h): HSTX bit n drives GPIO 12 + n.
+	// The clock pair carries the clock; a data pair its lane's shift
+	// register bits, the even one in the first half of each cycle and the odd
+	// one in the second. The - pin is the + pin inverted, so a pair routed
+	// the other way round only moves the inversion to the other pin.
+	hstx_ctrl_hw->bit[BOARD_DVI_CLK_P_PIN - BOARD_HSTX_FIRST_PIN] = HSTX_CTRL_BIT0_CLK_BITS;
+	hstx_ctrl_hw->bit[BOARD_DVI_CLK_N_PIN - BOARD_HSTX_FIRST_PIN] = HSTX_CTRL_BIT0_CLK_BITS | HSTX_CTRL_BIT0_INV_BITS;
+	static const uint8_t lane_p[3] = { BOARD_DVI_D0_P_PIN, BOARD_DVI_D1_P_PIN, BOARD_DVI_D2_P_PIN };
+	static const uint8_t lane_n[3] = { BOARD_DVI_D0_N_PIN, BOARD_DVI_D1_N_PIN, BOARD_DVI_D2_N_PIN };
 	for (uint lane = 0; lane < 3; ++lane) {
 		uint32_t sel = (lane * 10) << HSTX_CTRL_BIT0_SEL_P_LSB | (lane * 10 + 1) << HSTX_CTRL_BIT0_SEL_N_LSB;
-		hstx_ctrl_hw->bit[lane_bit[lane]] = sel;
-		hstx_ctrl_hw->bit[lane_bit[lane] + 1] = sel | HSTX_CTRL_BIT0_INV_BITS;
+		hstx_ctrl_hw->bit[lane_p[lane] - BOARD_HSTX_FIRST_PIN] = sel;
+		hstx_ctrl_hw->bit[lane_n[lane] - BOARD_HSTX_FIRST_PIN] = sel | HSTX_CTRL_BIT0_INV_BITS;
 	}
-	for (uint gpio = 12; gpio <= 19; ++gpio) {
+	for (uint gpio = BOARD_HSTX_FIRST_PIN; gpio < BOARD_HSTX_FIRST_PIN + 8; ++gpio) {
 		gpio_set_function(gpio, GPIO_FUNC_HSTX);
-		// As PicoDVI set them: 2 mA, slew limited, input off. Enough at
-		// these rates, and the 3V3 regulator stays cool.
-		hw_write_masked(&pads_bank0_hw->io[gpio], PADS_BANK0_GPIO0_DRIVE_VALUE_2MA << PADS_BANK0_GPIO0_DRIVE_LSB,
+		// By default as PicoDVI set them: 2 mA, slew limited, input off.
+		// Enough at these rates, and the 3V3 regulator stays cool.
+		hw_write_masked(&pads_bank0_hw->io[gpio],
+			BOARD_DVI_DRIVE << PADS_BANK0_GPIO0_DRIVE_LSB | (BOARD_DVI_SLEW_FAST ? PADS_BANK0_GPIO0_SLEWFAST_BITS : 0u),
 			PADS_BANK0_GPIO0_DRIVE_BITS | PADS_BANK0_GPIO0_SLEWFAST_BITS | PADS_BANK0_GPIO0_IE_BITS);
 	}
 

@@ -25,6 +25,10 @@ function(unit_test name)
   add_test(NAME ${name} COMMAND test_${name})
 endfunction()
 
+# src/board.h's pin checks against every boards/*.h and some mistakes.
+add_test(NAME board COMMAND ${CMAKE_CURRENT_LIST_DIR}/test_board.sh)
+set_tests_properties(board PROPERTIES ENVIRONMENT "CC=${CMAKE_C_COMPILER}")
+
 unit_test(screen screen.c)
 unit_test(vtparse vtparse.c)
 unit_test(term term.c vtparse.c screen.c palette.c)

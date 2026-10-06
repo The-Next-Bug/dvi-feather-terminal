@@ -69,13 +69,28 @@ git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only neste
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
 scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimised, no sanitisers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
-scripts/build.sh                     # TARGET=pico2-dvi-sock (default, the only one) -> build/<target>/dvi_terminal.uf2
+scripts/build.sh                     # TARGET=pico2-dvi-sock (default; any boards/<target>.h) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
 ```
 
+Boards (bd axq): `boards/<target>.h` is a pico-sdk board header
+(PICO_BOARD = target, PICO_BOARD_HEADER_DIRS = boards/) plus every pin the
+firmware uses: BOARD_DVI_{CLK,D0,D1,D2}_{P,N}_PIN (any order/polarity in
+GP12-19), optional BOARD_DVI_DRIVE_MA / _SLEW_FAST, BOARD_UART (0/1) +
+BOARD_UART_{TX,RX,CTS,RTS}_PIN (terminal UART, also VIDEO_DIAG; CTS/RTS
+optional; the header points PICO_DEFAULT_UART* at them for hstx_test's
+stdio, before including an SDK board), BOARD_SD_SPI + BOARD_SD_{MISO,CS,SCK,MOSI}_PIN,
+optional BOARD_USB_VBUS_EN_PIN / _LEVEL, optional PICO_DEFAULT_LED_PIN.
+`src/board.h` (RP2350 code only) #errors on missing settings, wrong
+function pins, pins used twice or off the chip; test/test_board.sh (ctest
+`board`) runs it on every board header and on broken variants. Pin values
+must be plain numbers (they are stringified into on-screen messages).
+`boards/example.h` is the documented template (same pins as the Sock, and
+standalone: RP2350A, flash, crystal). The user is designing a custom board.
+
 Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
 the environment, other options via `CMAKE_ARGS`):
-`SERIAL_FLOW_CONTROL` (RTS/CTS on GP3/GP2, default OFF), `STARTUP_LOGO`
+`SERIAL_FLOW_CONTROL` (RTS/CTS on the board's CTS/RTS pins, GP2/GP3 on the Sock, default OFF), `STARTUP_LOGO`
 (default ON; image from `LOGO_IMAGE`, shown `LOGO_MS`, default 10000: monitors
 need seconds to sync), `LOGO_IN_FLASH` (default ON, experimental dmt.25: logo data in a
 `.flashdata` section read via XIP after `nvflash_retime()`; frees ~19 KB of
@@ -138,7 +153,8 @@ status line (row 24); UART0 on GP0/GP1.
   x = 4. Core 1's helpers are ternaries, no tables (GCC's CSWTCH tables
   land in RAM, but check the .dis when changing them).
 - `src/hstx_dvi.[ch]` (RP2350): DVI from the HSTX on the DVI Sock pins
-  (GP12-19 = HSTX bits 0-7: D0 0/1, CK 2/3, D2 4/5, D1 6/7). clk_sys = 10 x
+  (GP12-19 = HSTX bits 0-7; the Sock: D0 0/1, CK 2/3, D2 4/5, D1 6/7;
+  per-pin from the board header, - = + inverted). clk_sys = 10 x
   pixel clock, clk_hstx = clk_sys / 2 (set explicitly: the SDK leaves it
   undivided from clk_sys); RGB565 through the TMDS expander; two chained
   DMA channels, reloaded by DMA_IRQ_0 with blanking command lists and
@@ -329,7 +345,8 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   0x20078934, ~30.4 KB free; the USB debug log and video-fixes (ful,
   3rk) to 0x200796a0, ~26.3 KB free (v0.6.1: .text 177 KB, .data 21 KB,
   .bss 287 KB); firmware update from a stick (qur.27, ~1 KB) to
-  0x20079a88, ~25.3 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  0x20079a88, ~25.3 KB free; board headers (axq, pin strings) to
+  0x20079ac8. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, setup 10 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit.

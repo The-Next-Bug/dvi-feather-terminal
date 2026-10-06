@@ -88,6 +88,30 @@ supported up to v0.4.0. The firmware outgrew the RP2040 (SRAM, and the USB
 keyboard crashed it at the DVI clock), so RP2040 builds were dropped; the
 name stayed.
 
+### Other boards
+
+Every pin the firmware uses comes from a board header, `boards/<target>.h`,
+built with `TARGET=<target> scripts/build.sh`. `boards/pico2-dvi-sock.h` is
+the board above; `boards/example.h` is a template for a new board with each
+setting explained:
+
+- **DVI**: the four TMDS pairs must be on GP12-19 (the RP2350's HSTX pins),
+  but in any order and either way round. Each pair's + and - pin is set
+  separately, so a pair routed with + and - crossed is fixed by swapping
+  its two numbers. Drive strength and slew rate can be raised.
+- **Terminal UART**: which UART, TX and RX, and the CTS/RTS pins for
+  flow control builds.
+- **SD card**: which SPI, its MISO/SCK/MOSI, and CS (any GPIO).
+- **USB host**: an optional pin that switches on the port's 5 V.
+- **LED** (diagnostic builds only), and for a board without a Pico 2
+  module, the RP2350 variant, flash size and crystal (a pico-sdk board
+  header; the SDK's own boards can be included, as the DVI Sock's does).
+
+`src/board.h` checks the header when it compiles. A missing setting, a pin
+that cannot carry its signal, or a pin used twice stops the build with an
+error that names the setting (`test/test_board.sh` covers the checks). The
+messages that show pins on screen use the header's pins.
+
 ### Flow control
 
 The default build has no flow control. At 115200 baud the terminal keeps up
@@ -526,8 +550,8 @@ scripts/build.sh                     # -> build/pico2-dvi-sock/dvi_terminal.uf2,
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<rev>.zip, dist/CHANGES.md
 ```
 
-`scripts/build.sh` takes `TARGET` (default and only target:
-`pico2-dvi-sock`), `SERIAL_FLOW_CONTROL`, `CMAKE_ARGS` (extra configure
+`scripts/build.sh` takes `TARGET` (a board header in `boards/`, default
+`pico2-dvi-sock`; see [Other boards](#other-boards)), `SERIAL_FLOW_CONTROL`, `CMAKE_ARGS` (extra configure
 arguments, e.g. `CMAKE_ARGS=-DVIDEO_DIAG=ON`) and `SDCARD` (a mounted card
 to copy `FIRMWARE.UF2` to). It also writes `build/<target>/FIRMWARE.UF2`
 and runs `scripts/check_fwupdate.py`, which fails the build if the firmware
@@ -545,7 +569,7 @@ submodule.
 | CMake option | Default | |
 |---|---|---|
 | `USB_KEYBOARD` | ON | TinyUSB host keyboard on the native USB port |
-| `SERIAL_FLOW_CONTROL` | OFF | RTS/CTS on GP3/GP2 (see [Flow control](#flow-control)); `scripts/build.sh` takes it from the environment |
+| `SERIAL_FLOW_CONTROL` | OFF | RTS/CTS on the board's flow control pins, GP3/GP2 on the Pico 2 (see [Flow control](#flow-control)); `scripts/build.sh` takes it from the environment |
 | `STARTUP_LOGO` | ON | show the startup logo at power-on/reset |
 | `LOGO_IMAGE` | `assets/logo/ColorLogo-576.png` | the logo's PNG (see [Startup logo](#startup-logo)) |
 | `LOGO_MS` | 10000 | how long the logo shows, in ms |
@@ -644,6 +668,7 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | Path | Contents |
 |---|---|
 | `src/` | Firmware; see below |
+| `boards/` | Board headers: pins, flash, crystal per build target; `example.h` is the template (see [Other boards](#other-boards)) |
 | `test/` | Host unit tests (plain CMake + gcc with ASan/UBSan, no pico-sdk) |
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see [Trying it from a PC](#trying-it-from-a-pc)) |
 | `lib/pico-sdk` | Pinned submodule (plus its `lib/tinyusb`) |
@@ -678,7 +703,8 @@ In `src/`:
   files: `/XFER`), `usbvol.[ch]` (which USB stick is `USB:`), `cpm/` (the
   CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP and XERA; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
   images).
-- **RP2350**: `main.c`, `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]`
+- **RP2350**: `main.c`, `board.h` (the board header's pins, checked),
+  `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]`
   (scanlines on core 1), `hstx_test.c` (test pattern), `serial.[ch]` (UART
   with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors,
   written at the DVI clock), `sdcard.[ch]` (SPI SD card for FatFs),

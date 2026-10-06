@@ -19,6 +19,8 @@ typedef struct {
 	void (*write)(const char *text); // to the console (\r\n line ends)
 	// The card found by the last mount, e.g. "SDHC, 7.4 GB"; NULL: no card.
 	const char *(*card_info)(void);
+	// The card's pins, shown when none is found (NULL: not shown).
+	const char *card_pins;
 	// Show the console's text so far (NULL: nothing to do). Called during
 	// long operations, which hold up the caller's main loop.
 	void (*flush)(void);

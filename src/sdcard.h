@@ -1,10 +1,11 @@
 #ifndef SDCARD_H
 #define SDCARD_H
 
-// microSD card on SPI0 for FatFs (drive 0's disk I/O, through diskio.c): SD v1 (SDSC) and v2 (SDSC/SDHC/SDXC) cards in SPI mode,
+// microSD card on SPI for FatFs (drive 0's disk I/O, through diskio.c): SD v1 (SDSC) and v2 (SDSC/SDHC/SDXC) cards in SPI mode,
 // polled, 512-byte blocks (written several at a time).
 //
-// Pins (SPI0): GP4 MISO (card DO), GP5 CS, GP6 SCK, GP7 MOSI (card DI);
+// Pins: the board header's BOARD_SD_* (boards/; on the Pico 2 with the DVI
+// Sock SPI0: GP4 MISO (card DO), GP5 CS, GP6 SCK, GP7 MOSI (card DI));
 // 3V3 and GND. The adapter has no card-detect line: a card is found by
 // initialising it (FatFs does on f_mount), and a removed card shows up as
 // I/O errors until it is mounted again.
@@ -14,11 +15,6 @@
 
 #include "ff.h"
 #include "diskio.h"
-
-#define SDCARD_MISO_PIN 4
-#define SDCARD_CS_PIN 5
-#define SDCARD_SCK_PIN 6
-#define SDCARD_MOSI_PIN 7
 
 typedef enum {
 	SDCARD_NONE,  // not initialised, or no card answered

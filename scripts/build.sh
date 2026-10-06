@@ -3,7 +3,7 @@
 # from scripts/setup-toolchain.sh.
 #
 # Environment overrides:
-#   TARGET          board target (default: pico2-dvi-sock; see below)
+#   TARGET          board: boards/<TARGET>.h (default: pico2-dvi-sock)
 #   BUILD_DIR       output root; the build lands in BUILD_DIR/TARGET (default: build)
 #   BUILD_TYPE      CMake build type (default: Release)
 #   TOOLCHAIN_DIR   toolchain location (default: <repo>/.toolchain)
@@ -22,16 +22,14 @@ BUILD_TYPE="${BUILD_TYPE:-Release}"
 SERIAL_FLOW_CONTROL="${SERIAL_FLOW_CONTROL:-OFF}"
 TOOLCHAIN_DIR="${TOOLCHAIN_DIR:-$ROOT/.toolchain}"
 
-# Targets: pico-sdk board (the DVI pins are the HSTX ones, GP12-19).
-case "$TARGET" in
-  pico2-dvi-sock) # Raspberry Pi Pico 2 (RP2350) with the Pico DVI Sock
-    pico_board=pico2
-    ;;
-  *)
-    echo "error: unknown TARGET '$TARGET'" >&2
-    exit 1
-    ;;
-esac
+# Targets: one per board header, boards/<TARGET>.h (pins, flash, crystal;
+# boards/example.h is the template for a new board).
+[[ -f "boards/$TARGET.h" ]] || {
+  echo "error: unknown TARGET '$TARGET': no boards/$TARGET.h; targets:" \
+    $(basename -s .h boards/*.h) >&2
+  exit 1
+}
+pico_board="$TARGET"
 
 cmake="$TOOLCHAIN_DIR/cmake/bin/cmake"
 gcc="$TOOLCHAIN_DIR/arm-none-eabi/bin/arm-none-eabi-gcc"
