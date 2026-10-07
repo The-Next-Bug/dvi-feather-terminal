@@ -68,7 +68,6 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
   echo "hstx_mode=$(sed -n 's/^HSTX_MODE:STRING=//p' "$out/CMakeCache.txt")"
   echo "build_type=$BUILD_TYPE"
   echo "serial_flow_control=$SERIAL_FLOW_CONTROL"
-  echo "usb_keyboard=$(sed -n 's/^USB_KEYBOARD:BOOL=//p' "$out/CMakeCache.txt")"
   echo "machine_banks=$(sed -n 's/^MACHINE_BANKS:STRING=//p' "$out/CMakeCache.txt")"
   echo "compiler=$("$gcc" --version | head -1)"
   echo "cmake=$("$cmake" --version | head -1)"

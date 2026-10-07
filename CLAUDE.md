@@ -88,7 +88,8 @@ must be plain numbers (they are stringified into on-screen messages).
 `boards/example.h` is the documented template (same pins as the Sock, and
 standalone: RP2350A, flash, crystal). The user is designing a custom board.
 
-Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
+The USB host (keyboards, sticks) is always built in (USB_KEYBOARD=OFF
+was removed: bd s0i). Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
 the environment, other options via `CMAKE_ARGS`):
 `SERIAL_FLOW_CONTROL` (RTS/CTS on the board's CTS/RTS pins, GP2/GP3 on the Sock, default OFF), `STARTUP_LOGO`
 (default ON; image from `LOGO_IMAGE`, shown `LOGO_MS`, default 10000: monitors
@@ -96,7 +97,7 @@ need seconds to sync), `LOGO_IN_FLASH` (default ON, experimental dmt.25: logo da
 `.flashdata` section read via XIP after `nvflash_retime()`; frees ~19 KB of
 SRAM), `STARTUP_DEMO` (default OFF),
 `VIDEO_DIAG` (UART0 TX diagnostics, default OFF; also prints
-panic() text), `USB_KEYBOARD` (TinyUSB host keyboard; default ON),
+panic() text),
 `COPY_TO_RAM` (default ON; must stay ON, see below), `MACHINE_BANKS` (Z80
 machine: 48 KB banks besides bank 0, default 2; each costs 48 KB of SRAM).
 
@@ -168,8 +169,7 @@ status line (row 24); UART0 on GP0/GP1.
   slots and the blink phase.
 - `src/keyboard.[ch]` (portable): HID boot keyboard reports -> VT100 key
   codes (DECCKM, DECKPAM, LNM, Num/Caps Lock, autorepeat via kbd_tick).
-- `src/usbkbd.[ch]` + `src/tusb_config.h` (USB_KEYBOARD builds, the
-  default): TinyUSB host on the native USB port, boot keyboards (and USB
+- `src/usbkbd.[ch]` + `src/tusb_config.h` (always built): TinyUSB host on the native USB port, boot keyboards (and USB
   sticks, usbmsc.c); keys
   go to the serial TX queue. The board does not power VBUS in host mode
   (5 V fed into the VBUS pin).
@@ -258,7 +258,7 @@ status line (row 24); UART0 on GP0/GP1.
   test_machine's test_xfer_tools runs them under CP/M.
   USB sticks (bd qur.3): FatFs volume 1 ("1:", USB: to the tools; ffconf
   FF_VOLUMES 2). `src/diskio.c` (RP2350) dispatches FatFs drives: 0
-  sdcard_disk_*, 1 usbmsc_disk_*. `src/usbmsc.[ch]` (USB_KEYBOARD builds):
+  sdcard_disk_*, 1 usbmsc_disk_*. `src/usbmsc.[ch]`:
   TinyUSB MSC host (CFG_TUH_MSC, LUN 0 only, 512-byte sectors; no exFAT),
   blocking I/O by running tuh_task until the transfer's callback (3 s
   timeout; gives up at once if the stick is detached). TinyUSB callbacks
