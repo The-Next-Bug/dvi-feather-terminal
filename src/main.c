@@ -4,7 +4,7 @@
 // a ring buffer (serial.c), feeds it to the VT100 emulator (term.c) that
 // owns rows 0-23, queues its replies back on UART0 TX, and rasterises changed
 // lines; row 24 is a status line. With -DSERIAL_FLOW_CONTROL=ON, UART0 uses
-// RTS/CTS on GP3/GP2. With USB_KEYBOARD (the default), a USB keyboard on the native USB port (usbkbd.c) types to the host through
+// RTS/CTS on GP3/GP2. A USB keyboard on the native USB port (usbkbd.c) types to the host through
 // UART0 TX.
 //
 // At power-on/reset, with STARTUP_LOGO (the default), the logo (splash.h)
@@ -66,14 +66,8 @@
 #define STARTUP_DEMO 0
 #endif
 
-#ifndef USB_KEYBOARD
-#define USB_KEYBOARD 0
-#endif
-
-#include "usbmsc.h"
-#if USB_KEYBOARD
 #include "usbkbd.h"
-#endif
+#include "usbmsc.h"
 
 #ifndef SERIAL_FLOW_CONTROL
 #define SERIAL_FLOW_CONTROL 0
@@ -542,7 +536,6 @@ static bool status_shown(void) {
 	return false;
 }
 
-#if USB_KEYBOARD
 // A key while the screen is blanked only wakes it (it is dropped, not
 // typed blind); any other key restarts the blanking delay.
 static bool key_wakes(void) {
@@ -622,29 +615,6 @@ static void usb_log_text(char *out, size_t size) {
 static bool usb_activity(void) {
 	return usbmsc_activity();
 }
-#else
-static void keyboard_poll(void) {
-}
-
-static unsigned keyboards_attached(void) {
-	return 0;
-}
-
-static void usbmsc_poll(void) {
-}
-
-static usbmsc_status_t usb_status(void) {
-	return (usbmsc_status_t){0};
-}
-
-static void usb_log_text(char *out, size_t size) {
-	snprintf(out, size, " none (no USB host)");
-}
-
-static bool usb_activity(void) {
-	return false;
-}
-#endif
 
 // The USB stick on the status line: "USB" while one is volume 1 (USB: to
 // XLS and XPIP), "+n" for others waiting to take over, "?" if one could
@@ -815,9 +785,7 @@ static const monitor_platform_t cpm_monitor = {
 	.card_info = cpm_card_info,
 	.card_pins = BOARD_SD_PINS_TEXT,
 	.flush = cpm_flush,
-#if USB_KEYBOARD
 	.usb_info = usbmsc_info,
-#endif
 };
 
 // F11: reset the machine and boot from drive A, as the reset button of a
@@ -1075,10 +1043,8 @@ int main(void) {
 #endif
 	apply_line(&settings);
 	diag_mark("serial_init done");
-#if USB_KEYBOARD
 	usbkbd_init(send_key, setup_key, NULL);
 	diag_mark("usbkbd_init done");
-#endif
 
 	screen_init(&screen, TERM_COLS, PALETTE_TEXT, PALETTE_BACKGROUND);
 	video_start(&screen);
@@ -1116,9 +1082,7 @@ int main(void) {
 		term_puts(&term, "Z80 CP/M machine: " BOARD_UART_NAME " (GP" BOARD_STR(BOARD_UART_TX_PIN) "/GP" BOARD_STR(
 			BOARD_UART_RX_PIN) ") is its second serial port\r\n");
 		machine_init(&cpm_platform);
-#if USB_KEYBOARD
 		usbkbd_set_reset_key(reset_key);
-#endif
 		monitor_start(&cpm_monitor, true, to_ms_since_boot(get_absolute_time()));
 	} else {
 #if SERIAL_FLOW_CONTROL

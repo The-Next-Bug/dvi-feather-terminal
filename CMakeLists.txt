@@ -55,9 +55,6 @@ if(NOT PICO_PLATFORM MATCHES "^rp2350")
   message(FATAL_ERROR "PICO_BOARD ${PICO_BOARD} is ${PICO_PLATFORM}: only RP2350 boards are supported")
 endif()
 
-option(USB_KEYBOARD "USB keyboard on the native USB port (TinyUSB host)" ON)
-message(STATUS "USB_KEYBOARD: ${USB_KEYBOARD}")
-
 set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
 include(cmake/fonts.cmake)
 include(cmake/logo.cmake)
@@ -137,7 +134,6 @@ target_compile_definitions(dvi_terminal PRIVATE
   FONT_FLASH=1
   STARTUP_DEMO=$<BOOL:${STARTUP_DEMO}>
   VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>
-  USB_KEYBOARD=$<BOOL:${USB_KEYBOARD}>
   SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>
   MACHINE_BANKS=${MACHINE_BANKS}
   # The built-in disk images stay in flash (read by core 0 when installed).
@@ -165,11 +161,10 @@ if(STARTUP_LOGO)
   target_sources(dvi_terminal PRIVATE ${LOGO_SOURCES})
 endif()
 
-if(USB_KEYBOARD)
-  target_sources(dvi_terminal PRIVATE src/keyboard.c src/usbkbd.c src/usbmsc.c)
-  # tusb_config.h is in src/.
-  target_link_libraries(dvi_terminal tinyusb_host)
-endif()
+# The USB host: keyboards and sticks on the native USB port (tusb_config.h
+# is in src/).
+target_sources(dvi_terminal PRIVATE src/keyboard.c src/usbkbd.c src/usbmsc.c)
+target_link_libraries(dvi_terminal tinyusb_host)
 
 # UART0 belongs to the terminal (serial.c): no stdio on it or on USB.
 if(VIDEO_DIAG)

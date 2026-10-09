@@ -151,8 +151,6 @@ position reports) to the host.
 
 ### USB keyboard
 
-Built in by default; `-DUSB_KEYBOARD=OFF` leaves it out.
-
 Plug a USB keyboard into the Pico 2's micro-USB port through an OTG adapter
 or cable; a hub (or a keyboard with one built in) works too. The firmware is
 the USB host, so the port is no longer the board's power input, and the
@@ -568,7 +566,6 @@ submodule.
 
 | CMake option | Default | |
 |---|---|---|
-| `USB_KEYBOARD` | ON | TinyUSB host keyboard on the native USB port |
 | `SERIAL_FLOW_CONTROL` | OFF | RTS/CTS on the board's flow control pins, GP3/GP2 on the Pico 2 (see [Flow control](#flow-control)); `scripts/build.sh` takes it from the environment |
 | `STARTUP_LOGO` | ON | show the startup logo at power-on/reset |
 | `LOGO_IMAGE` | `assets/logo/ColorLogo-576.png` | the logo's PNG (see [Startup logo](#startup-logo)) |
@@ -710,9 +707,8 @@ In `src/`:
   written at the DVI clock), `sdcard.[ch]` (SPI SD card for FatFs),
   `diskio.c` (FatFs drives: 0 the SD card, 1 a USB stick),
   `fwupdate.[ch]` (firmware update from the SD card), `usbkbd.[ch]`,
-  `usbmsc.[ch]` (USB sticks) and `tusb_config.h` (TinyUSB host,
-  `USB_KEYBOARD` builds), `diag.[ch]`
-  (`VIDEO_DIAG`).
+  `usbmsc.[ch]` (USB sticks), `tusb_config.h` (TinyUSB host) and
+  `diag.[ch]` (`VIDEO_DIAG`).
 - **Build-time generators**: `font_gen.py` (font tables), `logo_gen.py`
   (the logo), `diskimg_gen.py` (the compressed disk images).
 

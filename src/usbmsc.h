@@ -4,7 +4,7 @@
 // A USB stick as FatFs volume 1 ("1:", USB: to XLS and XPIP): TinyUSB's
 // mass storage host on the port the keyboard uses (through a hub for both),
 // LUN 0 only, 512-byte sectors only. usbvol.c picks the stick when several
-// are plugged in. Built with USB_KEYBOARD (the USB host).
+// are plugged in.
 //
 // Disk I/O waits for each transfer by running the USB stack (tuh_task), so
 // it happens in the middle of FatFs calls: TinyUSB's callbacks only note
