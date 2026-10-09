@@ -597,14 +597,19 @@ static void reset_key(void *ctx) {
 }
 
 // The terminal modes that change what keys send (none before it starts).
+// SET-UP and the CP/M monitor read keys as a VT100 in ANSI mode sends them
+// (ESC [ A ...), whatever the host has set: only the host's program gets
+// its own modes.
 static void keyboard_poll(void) {
 	kbd_modes_t modes = {.backspace_bs = settings.backspace == 0x08};
 	if (term_started) {
-		modes.cursor_keys_app = term.vt100.cursor_keys_app;
-		modes.keypad_app = term.vt100.keypad_app;
-		modes.vt52 = term.vt100.vt52;
 		modes.newline_mode = term.newline_mode;
 		modes.backspace_bs = term.backspace_bs;
+		if (!setup.active && (!cpm.on || cpm.running)) {
+			modes.cursor_keys_app = term.vt100.cursor_keys_app;
+			modes.keypad_app = term.vt100.keypad_app;
+			modes.vt52 = term.vt100.vt52;
+		}
 	}
 	usbkbd_poll(&modes);
 }
