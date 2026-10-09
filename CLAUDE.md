@@ -132,7 +132,8 @@ status line (row 24); UART0 on GP0/GP1.
   replies (DA, DSR/CPR, DECREQTPARM) through a callback. `src/vt52.c`
   (dmt.16): the VT100's VT52 mode (CSI ? 2 l in, ESC < out; own small
   parser for ESC Y row col; ESC Z -> ESC / Z; ANSI G0/G1 put aside),
-  keyboard.c sends ESC x / ESC ? x when kbd_modes_t.vt52. `src/adm3a.[ch]`
+  keyboard.c sends ESC x / ESC ? x when kbd_modes_t.vt52 (keys a VT52
+  lacks, Home to Page Down and F5-F11, send nothing). `src/adm3a.[ch]`
   (dmt.28): the ADM-3A personality per terminfo adm3a (^H ^J ^K ^L moves
   stopping at edges, ^Z clear, ^^ home, ESC = row+32 col+32 clamped,
   immediate wrap, 8th bit stripped, no replies, 80 columns only) plus the

@@ -164,11 +164,24 @@ static void test_vt52_keys(void) {
 	CHECK(!strcmp(tap(0, 0x52), "\x1b" "A"));
 	CHECK(!strcmp(tap(0, 0x3a), "\x1bP"));
 	CHECK(!strcmp(tap(0, 0x3d), "\x1bS"));
+	// Keys a VT52 does not have: nothing.
+	CHECK(!strcmp(tap(0, 0x4a), "")); // Home
+	CHECK(!strcmp(tap(0, 0x4d), "")); // End
+	CHECK(!strcmp(tap(0, 0x49), "")); // Insert
+	CHECK(!strcmp(tap(0, 0x4c), "")); // Delete
+	CHECK(!strcmp(tap(0, 0x4b), "")); // Page Up
+	CHECK(!strcmp(tap(0, 0x4e), "")); // Page Down
+	CHECK(!strcmp(tap(0, 0x3e), "")); // F5
+	CHECK(!strcmp(tap(0, 0x44), "")); // F11
 	CHECK(!strcmp(tap(0, 0x59), "1"));
 	modes.keypad_app = true;
 	CHECK(!strcmp(tap(0, 0x59), "\x1b?q"));
 	CHECK(!strcmp(tap(0, 0x63), "\x1b?n"));
 	CHECK(!strcmp(tap(0, 0x58), "\x1b?M"));
+	report(0, 0x53, 0); // Num Lock off: keypad 8 is up, keypad 7 (Home) nothing
+	report(0, 0, 0);
+	CHECK(!strcmp(tap(0, 0x60), "\x1b" "A"));
+	CHECK(!strcmp(tap(0, 0x5f), ""));
 }
 
 // ADM-3A: the cursor keys are the controls that move its cursor.

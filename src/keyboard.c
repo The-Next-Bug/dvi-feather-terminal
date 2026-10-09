@@ -159,6 +159,11 @@ static bool adm3a_editing_key(seq_t *s, uint8_t key) {
 static bool editing_key(seq_t *s, uint8_t key, const kbd_modes_t *modes) {
 	if (modes->adm3a)
 		return adm3a_editing_key(s, key);
+	// A VT52 has the four cursor keys only: the rest send nothing in VT52
+	// mode (their ESC [ n ~ would reach a VT52 program as garbage).
+	if (modes->vt52 && key != KEY_UP && key != KEY_DOWN && key != KEY_RIGHT && key != KEY_LEFT)
+		return key == KEY_HOME || key == KEY_END || key == KEY_INSERT || key == KEY_DELETE ||
+			key == KEY_PAGE_UP || key == KEY_PAGE_DOWN;
 	switch (key) {
 	case KEY_UP:
 		seq_ss3(s, modes, modes->cursor_keys_app, 'A');
@@ -231,6 +236,8 @@ static void translate(const kbd_t *k, uint8_t key, uint8_t modifiers, const kbd_
 		// no function keys on an ADM-3A (F11 as the reset key is caught earlier)
 	} else if (key >= KEY_F1 && key < KEY_F1 + 4) {
 		seq_ss3(s, modes, true, (char)('P' + (key - KEY_F1))); // PF1-PF4
+	} else if (key >= KEY_F1 + 4 && key < KEY_F12 && modes->vt52) {
+		// F5-F11: no such keys on a VT52
 	} else if (key >= KEY_F1 + 4 && key < KEY_F12) {
 		seq_tilde(s, function_keys[key - KEY_F1 - 4]);
 	} else if (key >= KEY_KP_1 && key <= KEY_KP_DOT) {

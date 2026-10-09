@@ -42,7 +42,8 @@ typedef struct {
 	bool keypad_app;      // DECKPAM
 	bool newline_mode;    // LNM
 	bool backspace_bs;    // DECBKM
-	bool vt52;            // VT52 mode: cursor keys ESC x, PF keys ESC P-S, keypad ESC ? x
+	bool vt52;            // VT52 mode: cursor keys ESC x, PF keys ESC P-S, keypad ESC ? x;
+	                      // Home, End, Insert, Delete, Page Up/Down, F5-F11 send nothing
 	bool adm3a;           // ADM-3A: cursor keys ^K ^J ^H ^L, Home ^^, no function keys
 } kbd_modes_t;
 
