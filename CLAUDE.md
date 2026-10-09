@@ -132,8 +132,16 @@ status line (row 24); UART0 on GP0/GP1.
   replies (DA, DSR/CPR, DECREQTPARM) through a callback. `src/vt52.c`
   (dmt.16): the VT100's VT52 mode (CSI ? 2 l in, ESC < out; own small
   parser for ESC Y row col; ESC Z -> ESC / Z; ANSI G0/G1 put aside),
-  keyboard.c sends ESC x / ESC ? x when kbd_modes_t.vt52. Planned: ADM-3A
-  personality (dmt.28). Writes palette indices
+  keyboard.c sends ESC x / ESC ? x when kbd_modes_t.vt52. `src/adm3a.[ch]`
+  (dmt.28): the ADM-3A personality per terminfo adm3a (^H ^J ^K ^L moves
+  stopping at edges, ^Z clear, ^^ home, ESC = row+32 col+32 clamped,
+  immediate wrap, 8th bit stripped, no replies, 80 columns only) plus the
+  Kaypro's ^X/^W clear EOL/EOS and ESC E/R insert/delete line; keys
+  ^K ^J ^L ^H, Home ^^ (kbd_modes_t.adm3a). Changing personality
+  (term_set_defaults) resets the terminal. SET-UP and the CP/M monitor
+  always get VT100 ANSI-mode keys (main.c keyboard_poll), whatever the
+  host's modes; the host cannot open SET-UP (CSI ? 999 ~) from the ADM-3A.
+  Writes palette indices
   only (nothing depends on the palette): default fg 7, bold default 15, bg
   0; bold brightens 0-7 to 8-15; 38;5;n as is; 24-bit -> palette_nearest.
 - `src/palette.[ch]` (portable, bd pb2): the xterm-256 palette as RGB565
@@ -198,8 +206,9 @@ status line (row 24); UART0 on GP0/GP1.
   makes core 1 stop the DVI signal: hstx_dvi_stop (DMA aborted, FIFO
   drained, HSTX off), frame time kept on the timer (diag_frames,
   palette_used) for core 0's waits, hstx_dvi_resume at a frame start on
-  wake; bd 3rk), term_type (VT100 0 / VT52 2: power-on/RIS mode; byte 11
-  once held the retired layout, so 1 is never a value; ADM-3A will be 3);
+  wake; bd 3rk), term_type (VT100 0 / VT52 2 / ADM-3A 3: personality and
+  power-on/RIS mode; byte 11 once held the retired layout, so 1 is never a
+  value; settings_columns() is 80 for the ADM-3A);
   settings_colours() gives the status
   line's indices and the logo's tint. CRC-32 in
   `src/crc32.[ch]` (shared with the disk images). main.c apply_settings()
@@ -359,7 +368,8 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   3rk) to 0x200796a0, ~26.3 KB free (v0.6.1: .text 177 KB, .data 21 KB,
   .bss 287 KB); firmware update from a stick (qur.27, ~1 KB) to
   0x20079a88, ~25.3 KB free; board headers (axq, pin strings) to
-  0x20079ac8. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  0x20079ac8; terminal personalities (dmt.37 split, dmt.16 VT52, dmt.28
+  ADM-3A, SET-UP's Terminal type row) to 0x2007a330, ~23.7 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, setup 10 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit.

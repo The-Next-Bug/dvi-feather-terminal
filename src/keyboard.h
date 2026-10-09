@@ -43,6 +43,7 @@ typedef struct {
 	bool newline_mode;    // LNM
 	bool backspace_bs;    // DECBKM
 	bool vt52;            // VT52 mode: cursor keys ESC x, PF keys ESC P-S, keypad ESC ? x
+	bool adm3a;           // ADM-3A: cursor keys ^K ^J ^H ^L, Home ^^, no function keys
 } kbd_modes_t;
 
 typedef struct {

@@ -842,6 +842,164 @@ static void test_vt52_default(void) {
 	CHECK(!t.vt100.vt52);
 }
 
+// ---------------------------------------------------------------------------
+// ADM-3A personality
+
+static void adm3a(void) {
+	setup();
+	term_set_defaults(&t, &(term_defaults_t){.personality = TERM_ADM3A});
+}
+
+// number_rows with ESC = row col.
+static void adm3a_number_rows(void) {
+	char text[24];
+	for (unsigned r = 0; r < ROWS; ++r) {
+		snprintf(text, sizeof text, "\x1b=%c row %u", (char)(32 + r), r);
+		put(text);
+	}
+}
+
+static void test_adm3a_switch(void) {
+	setup();
+	put("\x1b[1;31mred");
+	term_set_defaults(&t, &(term_defaults_t){.personality = TERM_ADM3A});
+	CHECK_EQ(t.personality, TERM_ADM3A);
+	CHECK(row_is(0, "")); // a new personality starts as RIS leaves it
+	CHECK(row_is(STATUS, "status"));
+	CHECK_CURSOR(0, 0);
+	put("x");
+	CHECK(fg_at(0, 0) == FG && bg_at(0, 0) == BG);
+	term_set_defaults(&t, &(term_defaults_t){.personality = TERM_ADM3A}); // same: nothing
+	CHECK(row_is(0, "x"));
+	term_set_defaults(&t, &(term_defaults_t){.personality = TERM_VT100});
+	CHECK_EQ(t.personality, TERM_VT100);
+	put("\x1b[2;3Hy");
+	CHECK(row_is(1, "  y"));
+}
+
+static void test_adm3a_from_vt52_and_132(void) {
+	cols = 132;
+	setup();
+	put("\x1b[?2l\x1bY!!"); // VT52 mode, half-way through an ESC Y
+	term_set_defaults(&t, &(term_defaults_t){.personality = TERM_ADM3A});
+	CHECK_EQ(s.cols, 80);
+	CHECK(!t.vt100.vt52);
+	put("ab");
+	CHECK(row_is(0, "ab"));
+	term_set_columns(&t, 132); // 80 only
+	CHECK_EQ(s.cols, 80);
+	cols = 80;
+}
+
+static void test_adm3a_cursor(void) {
+	adm3a();
+	put("\x1b[2Jz"); // no CSI: ESC [ means nothing, the rest prints
+	CHECK(row_is(0, "2Jz"));
+	adm3a();
+	put("\x1b=%("); // row 5, column 8
+	CHECK_CURSOR(8, 5);
+	put("\x0b\x0b\x0c"); // up, up, right
+	CHECK_CURSOR(9, 3);
+	put("\n\x08\x08"); // down, left, left
+	CHECK_CURSOR(7, 4);
+	put("\x1e"); // home
+	CHECK_CURSOR(0, 0);
+	put("\x0b\x08"); // edges: stop
+	CHECK_CURSOR(0, 0);
+	put("\x1b=7o\x0c"); // row 23, column 79
+	CHECK_CURSOR(79, 23);
+	put("\x1b=\x7f\x7f"); // out of range: the nearest edge
+	CHECK_CURSOR(79, 23);
+	put("\x1b=  \r");
+	CHECK_CURSOR(0, 0);
+}
+
+static void test_adm3a_controls_dont_erase(void) {
+	adm3a();
+	put("abc\x08\x08\x0c\x0b\nX"); // left 2, right 1, up (top: stays), down
+	CHECK(row_is(0, "abc"));
+	CHECK(row_is(1, "  X"));
+}
+
+static void test_adm3a_immediate_wrap(void) {
+	adm3a();
+	put("\x1b=!n"); // row 1, column 78
+	put("ab");
+	CHECK_CURSOR(0, 2); // wrapped at once
+	put("c\r\n");
+	CHECK(row_is(2, "c"));
+	CHECK(row_is(3, ""));
+	CHECK_CURSOR(0, 3);
+	// The bottom right scrolls.
+	put("\x1b=7n");
+	put("yz");
+	CHECK_CURSOR(0, 23);
+	CHECK_EQ(screen_glyph(&s, 79, 22), 'z');
+	CHECK(row_is(23, ""));
+	CHECK(row_is(STATUS, "status"));
+}
+
+static void test_adm3a_clear_and_scroll(void) {
+	adm3a();
+	adm3a_number_rows();
+	put("\x1b=7 \n"); // LF on the bottom line scrolls
+	CHECK(row_is(0, "row 1"));
+	CHECK(row_is(23, ""));
+	put("\x1a"); // clear and home
+	for (unsigned r = 0; r < ROWS; ++r)
+		CHECK(row_is(r, ""));
+	CHECK_CURSOR(0, 0);
+	CHECK(row_is(STATUS, "status"));
+}
+
+// The Kaypro's additions: ^X / ^W clear to end of line / screen, ESC E /
+// ESC R insert / delete line.
+static void test_adm3a_kaypro(void) {
+	adm3a();
+	adm3a_number_rows();
+	put("\x1b=\"\"\x18");
+	CHECK(row_is(2, "ro"));
+	CHECK(row_is(3, "row 3"));
+	put("\x1b=$\"\x17");
+	CHECK(row_is(4, "ro"));
+	CHECK(row_is(5, ""));
+	CHECK(row_is(3, "row 3"));
+	adm3a();
+	adm3a_number_rows();
+	put("\x1b=\"$\x1b" "E");
+	CHECK_CURSOR(0, 2);
+	CHECK(row_is(2, ""));
+	CHECK(row_is(3, "row 2"));
+	CHECK(row_is(23, "row 22"));
+	put("\x1b" "R\x1b" "R");
+	CHECK(row_is(2, "row 3"));
+	CHECK(row_is(22, ""));
+	CHECK(row_is(STATUS, "status"));
+}
+
+static void test_adm3a_no_replies_and_7_bits(void) {
+	adm3a();
+	put("\x1b[c\x1b[6n\x1bZ\x05");
+	CHECK_REPLY("");
+	adm3a();
+	put("\xc1\xe2\x7f\xa0"); // 8th bit stripped: A b, DEL nothing, space
+	CHECK(row_is(0, "Ab"));
+	CHECK_CURSOR(3, 0);
+	unsigned requests = t.setup_requests;
+	put("\x1b[?999~");
+	CHECK_EQ(t.setup_requests, requests); // the host cannot open SET-UP
+}
+
+static void test_adm3a_reset(void) {
+	adm3a();
+	put("abc\x1b=");
+	term_reset(&t); // abandons ESC =, stays an ADM-3A
+	CHECK_EQ(t.personality, TERM_ADM3A);
+	CHECK(row_is(0, ""));
+	put("xy");
+	CHECK(row_is(0, "xy"));
+}
+
 int main(void) {
 	for (cols = 80; cols <= 132; cols += 52) {
 		printf("-- basics, %u columns\n", cols);
@@ -895,5 +1053,15 @@ int main(void) {
 	RUN(test_vt52_graphics);
 	RUN(test_vt52_identify_and_keypad);
 	RUN(test_vt52_default);
+	printf("-- ADM-3A\n");
+	RUN(test_adm3a_switch);
+	RUN(test_adm3a_from_vt52_and_132);
+	RUN(test_adm3a_cursor);
+	RUN(test_adm3a_controls_dont_erase);
+	RUN(test_adm3a_immediate_wrap);
+	RUN(test_adm3a_clear_and_scroll);
+	RUN(test_adm3a_kaypro);
+	RUN(test_adm3a_no_replies_and_7_bits);
+	RUN(test_adm3a_reset);
 	return tests_done();
 }

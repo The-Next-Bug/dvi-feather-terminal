@@ -139,8 +139,26 @@ static uint8_t control(uint8_t c) {
 	}
 }
 
+// The ADM-3A's cursor keys are the controls that move its cursor, and
+// Home is ^^; it has no other editing keys.
+static bool adm3a_editing_key(seq_t *s, uint8_t key) {
+	switch (key) {
+	case KEY_UP: seq_add(s, 0x0b); return true;
+	case KEY_DOWN: seq_add(s, 0x0a); return true;
+	case KEY_RIGHT: seq_add(s, 0x0c); return true;
+	case KEY_LEFT: seq_add(s, 0x08); return true;
+	case KEY_HOME: seq_add(s, 0x1e); return true;
+	case KEY_END: case KEY_INSERT: case KEY_DELETE: case KEY_PAGE_UP: case KEY_PAGE_DOWN:
+		return true; // nothing
+	default:
+		return false;
+	}
+}
+
 // Editing and cursor keys (also the keypad with Num Lock off).
 static bool editing_key(seq_t *s, uint8_t key, const kbd_modes_t *modes) {
+	if (modes->adm3a)
+		return adm3a_editing_key(s, key);
 	switch (key) {
 	case KEY_UP:
 		seq_ss3(s, modes, modes->cursor_keys_app, 'A');
@@ -209,6 +227,8 @@ static void translate(const kbd_t *k, uint8_t key, uint8_t modifiers, const kbd_
 		ctrl = false;
 	} else if (key == KEY_ENTER) {
 		seq_return(s, modes);
+	} else if (key >= KEY_F1 && key < KEY_F12 && modes->adm3a) {
+		// no function keys on an ADM-3A (F11 as the reset key is caught earlier)
 	} else if (key >= KEY_F1 && key < KEY_F1 + 4) {
 		seq_ss3(s, modes, true, (char)('P' + (key - KEY_F1))); // PF1-PF4
 	} else if (key >= KEY_F1 + 4 && key < KEY_F12) {

@@ -171,6 +171,27 @@ static void test_vt52_keys(void) {
 	CHECK(!strcmp(tap(0, 0x58), "\x1b?M"));
 }
 
+// ADM-3A: the cursor keys are the controls that move its cursor.
+static void test_adm3a_keys(void) {
+	setup();
+	modes.adm3a = true;
+	CHECK(!strcmp(tap(0, 0x52), "\x0b"));
+	CHECK(!strcmp(tap(0, 0x51), "\n"));
+	CHECK(!strcmp(tap(0, 0x4f), "\x0c"));
+	CHECK(!strcmp(tap(0, 0x50), "\x08"));
+	CHECK(!strcmp(tap(0, 0x4a), "\x1e")); // Home
+	CHECK(!strcmp(tap(0, 0x4d), ""));     // End
+	CHECK(!strcmp(tap(0, 0x4c), ""));     // Delete
+	CHECK(!strcmp(tap(0, 0x3a), ""));     // F1
+	CHECK(!strcmp(tap(0, 0x3e), ""));     // F5
+	CHECK(!strcmp(tap(0, 0x59), "1"));    // keypad
+	CHECK(!strcmp(tap(0, 0x58), "\r"));
+	CHECK(!strcmp(tap(0, 0x2a), "\x7f")); // Backspace as set
+	report(0, 0x53, 0); // Num Lock off: keypad 8 is up
+	report(0, 0, 0);
+	CHECK(!strcmp(tap(0, 0x60), "\x0b"));
+}
+
 static void test_held_keys_and_rollover(void) {
 	setup();
 	out[0] = 0;
@@ -300,6 +321,7 @@ int main(void) {
 	RUN(test_function_and_editing_keys);
 	RUN(test_keypad);
 	RUN(test_vt52_keys);
+	RUN(test_adm3a_keys);
 	RUN(test_held_keys_and_rollover);
 	RUN(test_repeat);
 	return tests_done();

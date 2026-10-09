@@ -12,8 +12,12 @@
 //   80/132 columns and replies to the host. term_core.h has its helpers.
 // - vt100.c (vt100.h): the VT100/VT102 personality, the only one so far:
 //   escape sequences through vtparse, C0 controls, modes, SGR, device
-//   reports, and its VT52 mode (vt52.c). term_write and term_reset
-//   dispatch on term_t.personality.
+//   reports, and its VT52 mode (vt52.c).
+// - adm3a.c (adm3a.h): the Lear Siegler ADM-3A, with the Kaypro II's
+//   additions (clear to end of line/screen, insert/delete line): 80
+//   columns, no attributes, no replies.
+// term_write and term_reset dispatch on term_t.personality; the SET-UP
+// default (term_set_defaults) picks it.
 //
 // The terminal owns a band of screen rows (top .. top + rows - 1); rows
 // outside it (e.g. a status line) are left alone. Its width is the screen's
@@ -36,7 +40,8 @@
 #define TERM_SETUP_PARAM 999     // CSI ? 999 ~: open SET-UP
 
 typedef enum {
-	TERM_VT100, // vt100.c
+	TERM_VT100, // vt100.c (and its VT52 mode, vt52.c)
+	TERM_ADM3A, // adm3a.c: Lear Siegler ADM-3A, with the Kaypro's additions
 } term_personality_t;
 
 typedef void (*term_reply_t)(void *ctx, const uint8_t *data, size_t len);
@@ -46,6 +51,7 @@ typedef struct {
 	bool backspace_bs; // DECBKM
 	bool newline_mode; // LNM
 	bool vt52;         // VT100 personality: VT52 mode (DECANM reset) rather than ANSI
+	term_personality_t personality;
 } term_defaults_t;
 
 typedef struct {
@@ -75,6 +81,11 @@ typedef struct {
 	uint8_t vt52_ansi_charset[2], vt52_ansi_gl; // G0/G1 and GL of ANSI mode, back at ESC <
 } term_vt100_t;
 
+// The ADM-3A personality's own state (adm3a.c).
+typedef struct {
+	uint8_t state, row; // ESC = in progress, and its row byte
+} term_adm3a_t;
+
 typedef struct {
 	screen_t *screen;
 	unsigned top, rows;
@@ -98,6 +109,7 @@ typedef struct {
 	void *reply_ctx;
 
 	term_vt100_t vt100;
+	term_adm3a_t adm3a;
 } term_t;
 
 // Reset the terminal (as RIS), clear its rows, home the cursor and show it.
@@ -123,10 +135,13 @@ size_t term_write(term_t *t, const uint8_t *data, size_t len);
 void term_putc(term_t *t, uint8_t c);
 void term_puts(term_t *t, const char *text);
 
-// Set these modes now and as the values RIS resets them to.
+// Set these modes now and as the values RIS resets them to. A different
+// personality resets the terminal (clearing its rows) and, for the
+// ADM-3A, sets 80 columns.
 void term_set_defaults(term_t *t, const term_defaults_t *d);
 
 // Switch to 80 or 132 columns, as DECCOLM does (clears the whole screen).
+// The ADM-3A has 80 only.
 void term_set_columns(term_t *t, unsigned cols);
 
 #endif

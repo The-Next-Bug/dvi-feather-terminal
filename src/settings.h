@@ -47,6 +47,7 @@ typedef struct {
 
 #define SETTINGS_TERM_VT100 0 // VT100, ANSI mode
 #define SETTINGS_TERM_VT52 2  // VT100 in VT52 mode (DECANM reset)
+#define SETTINGS_TERM_ADM3A 3 // Lear Siegler ADM-3A (80 columns)
 
 #define SETTINGS_STATUS_DEBUG 2 // status_line: core 1 timing, late lines, frame rate, main-loop time
 #define SETTINGS_STATUS_DEBUG_USB 3 // status_line: the USB host's last events (usbkbd_log)
@@ -71,6 +72,9 @@ static inline uint8_t *settings_field(settings_t *s, unsigned i) {
 }
 
 unsigned settings_baud_rate(const settings_t *s);
+
+// The width in use: the Columns setting, but 80 for the ADM-3A.
+unsigned settings_columns(const settings_t *s);
 
 // Data bits (7 or 8), parity ('N', 'E' or 'O') and stop bits (1 or 2).
 void settings_framing(const settings_t *s, unsigned *data_bits, char *parity, unsigned *stop_bits);

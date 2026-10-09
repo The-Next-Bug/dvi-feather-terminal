@@ -6,6 +6,7 @@
 
 #include "font.h"
 #include "palette.h"
+#include "adm3a.h"
 #include "term_core.h"
 #include "vt100.h"
 
@@ -252,6 +253,7 @@ void term_reset_cursor(term_cursor_t *c) {
 static void personality_reset(term_t *t) {
 	switch (t->personality) {
 	case TERM_VT100: vt100_reset(t); break;
+	case TERM_ADM3A: adm3a_reset(t); break;
 	}
 }
 
@@ -282,6 +284,8 @@ void term_set_reverse_screen(term_t *t, bool on) {
 // also when the width does not change (status line included; its owner
 // redraws it when it sees screen_resets change).
 static void set_columns(term_t *t, unsigned n) {
+	if (t->personality == TERM_ADM3A)
+		n = 80;
 	bool visible = t->screen->cursor_visible;
 	screen_init(t->screen, n, PALETTE_TEXT, PALETTE_BACKGROUND);
 	++t->screen_resets;
@@ -307,6 +311,7 @@ void term_init(term_t *t, screen_t *screen, unsigned top, unsigned rows) {
 void term_reset(term_t *t) {
 	switch (t->personality) {
 	case TERM_VT100: vt100_cancel(t); break;
+	case TERM_ADM3A: break; // reset abandons ESC =
 	}
 	reset(t);
 	sync_cursor(t);
@@ -324,6 +329,7 @@ size_t term_write(term_t *t, const uint8_t *data, size_t len) {
 	while (i < len && t->setup_requests == setup_requests) {
 		switch (t->personality) {
 		case TERM_VT100: vt100_byte(t, data[i]); break;
+		case TERM_ADM3A: adm3a_byte(t, data[i]); break;
 		}
 		++i;
 	}
@@ -335,9 +341,23 @@ void term_set_defaults(term_t *t, const term_defaults_t *d) {
 	t->defaults = *d;
 	t->backspace_bs = d->backspace_bs;
 	t->newline_mode = d->newline_mode;
+	if (d->personality != t->personality) {
+		// Leave the old one's sequences and modes behind (ANSI mode's
+		// charsets included), then start the new one as RIS would.
+		if (t->personality == TERM_VT100) {
+			vt100_cancel(t);
+			vt100_set_vt52(t, false);
+		}
+		t->personality = d->personality;
+		if (t->personality == TERM_ADM3A && term_cols(t) != 80)
+			set_columns(t, 80);
+		reset(t);
+	}
 	switch (t->personality) {
 	case TERM_VT100: vt100_set_vt52(t, d->vt52); break;
+	case TERM_ADM3A: break;
 	}
+	sync_cursor(t);
 }
 
 void term_set_columns(term_t *t, unsigned cols) {

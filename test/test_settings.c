@@ -180,6 +180,22 @@ static void test_term_type(void) {
 	uint32_t seq;
 	CHECK(settings_decode(rec, &out, &seq));
 	CHECK_EQ(out.term_type, SETTINGS_TERM_VT52);
+	in.term_type = SETTINGS_TERM_ADM3A;
+	settings_encode(&in, 2, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.term_type, SETTINGS_TERM_ADM3A);
+}
+
+// The ADM-3A has 80 columns whatever the Columns setting says.
+static void test_columns_in_use(void) {
+	settings_t s;
+	settings_defaults(&s);
+	s.columns = 132;
+	CHECK_EQ(settings_columns(&s), 132);
+	s.term_type = SETTINGS_TERM_VT52;
+	CHECK_EQ(settings_columns(&s), 132);
+	s.term_type = SETTINGS_TERM_ADM3A;
+	CHECK_EQ(settings_columns(&s), 80);
 }
 
 static void test_line_and_colours(void) {
@@ -235,6 +251,7 @@ int main(void) {
 	RUN(test_older_record);
 	RUN(test_retired_wide80);
 	RUN(test_term_type);
+	RUN(test_columns_in_use);
 	RUN(test_line_and_colours);
 	return tests_done();
 }
