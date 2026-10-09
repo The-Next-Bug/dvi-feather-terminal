@@ -144,27 +144,42 @@ static void test_older_record(void) {
 	CHECK_EQ(seq, 3);
 }
 
-// A record saved with the retired 80 columns setting (a 12th byte): it is
-// ignored, the rest stand.
+// Records saved with the retired 80 columns setting in byte 11, where
+// term_type is now: 0 (centred) and 1 (full width) both come back as
+// VT100, the rest stand.
 static void test_retired_wide80(void) {
-	settings_t in;
+	for (uint8_t old = 0; old <= 1; ++old) {
+		settings_t in;
+		settings_defaults(&in);
+		in.columns = 132;
+		in.blank_after = 5;
+		uint8_t rec[SETTINGS_RECORD_SIZE];
+		settings_encode(&in, 7, rec);
+		CHECK_EQ(rec[5], 12);
+		rec[16 + 11] = old;
+		uint32_t crc = crc_of(rec, 12);
+		for (unsigned i = 0; i < 4; ++i)
+			rec[12 + i] = (uint8_t)(crc >> 8 * i);
+		settings_t out;
+		uint32_t seq;
+		CHECK(settings_decode(rec, &out, &seq));
+		CHECK_EQ(out.columns, 132);
+		CHECK_EQ(out.blank_after, 5);
+		CHECK_EQ(out.term_type, SETTINGS_TERM_VT100);
+		CHECK_EQ(seq, 7);
+	}
+}
+
+static void test_term_type(void) {
+	settings_t in, out;
 	settings_defaults(&in);
-	in.columns = 132;
-	in.blank_after = 5;
+	CHECK_EQ(in.term_type, SETTINGS_TERM_VT100);
+	in.term_type = SETTINGS_TERM_VT52;
 	uint8_t rec[SETTINGS_RECORD_SIZE];
-	settings_encode(&in, 7, rec);
-	CHECK_EQ(rec[5], SETTINGS_FIELDS);
-	rec[5] = SETTINGS_FIELDS + 1;
-	rec[16 + SETTINGS_FIELDS] = 1; // full width
-	uint32_t crc = crc_of(rec, SETTINGS_FIELDS + 1);
-	for (unsigned i = 0; i < 4; ++i)
-		rec[12 + i] = (uint8_t)(crc >> 8 * i);
-	settings_t out;
+	settings_encode(&in, 1, rec);
 	uint32_t seq;
 	CHECK(settings_decode(rec, &out, &seq));
-	CHECK_EQ(out.columns, 132);
-	CHECK_EQ(out.blank_after, 5);
-	CHECK_EQ(seq, 7);
+	CHECK_EQ(out.term_type, SETTINGS_TERM_VT52);
 }
 
 static void test_line_and_colours(void) {
@@ -219,6 +234,7 @@ int main(void) {
 	RUN(test_bad_value_keeps_default);
 	RUN(test_older_record);
 	RUN(test_retired_wide80);
+	RUN(test_term_type);
 	RUN(test_line_and_colours);
 	return tests_done();
 }

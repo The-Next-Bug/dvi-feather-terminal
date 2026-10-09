@@ -152,6 +152,25 @@ static void test_keypad(void) {
 	CHECK(!strcmp(tap(0, 0x63), "\x1b[3~"));
 }
 
+// VT52 mode: cursor and PF keys ESC x, the alternate keypad ESC ? x.
+static void test_vt52_keys(void) {
+	setup();
+	modes.vt52 = true;
+	CHECK(!strcmp(tap(0, 0x52), "\x1b" "A"));
+	CHECK(!strcmp(tap(0, 0x51), "\x1b" "B"));
+	CHECK(!strcmp(tap(0, 0x4f), "\x1b" "C"));
+	CHECK(!strcmp(tap(0, 0x50), "\x1b" "D"));
+	modes.cursor_keys_app = true; // DECCKM does not apply
+	CHECK(!strcmp(tap(0, 0x52), "\x1b" "A"));
+	CHECK(!strcmp(tap(0, 0x3a), "\x1bP"));
+	CHECK(!strcmp(tap(0, 0x3d), "\x1bS"));
+	CHECK(!strcmp(tap(0, 0x59), "1"));
+	modes.keypad_app = true;
+	CHECK(!strcmp(tap(0, 0x59), "\x1b?q"));
+	CHECK(!strcmp(tap(0, 0x63), "\x1b?n"));
+	CHECK(!strcmp(tap(0, 0x58), "\x1b?M"));
+}
+
 static void test_held_keys_and_rollover(void) {
 	setup();
 	out[0] = 0;
@@ -280,6 +299,7 @@ int main(void) {
 	RUN(test_cursor_keys);
 	RUN(test_function_and_editing_keys);
 	RUN(test_keypad);
+	RUN(test_vt52_keys);
 	RUN(test_held_keys_and_rollover);
 	RUN(test_repeat);
 	return tests_done();

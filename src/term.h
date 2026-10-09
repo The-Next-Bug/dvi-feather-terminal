@@ -12,7 +12,8 @@
 //   80/132 columns and replies to the host. term_core.h has its helpers.
 // - vt100.c (vt100.h): the VT100/VT102 personality, the only one so far:
 //   escape sequences through vtparse, C0 controls, modes, SGR, device
-//   reports. term_write and term_reset dispatch on term_t.personality.
+//   reports, and its VT52 mode (vt52.c). term_write and term_reset
+//   dispatch on term_t.personality.
 //
 // The terminal owns a band of screen rows (top .. top + rows - 1); rows
 // outside it (e.g. a status line) are left alone. Its width is the screen's
@@ -44,6 +45,7 @@ typedef void (*term_reply_t)(void *ctx, const uint8_t *data, size_t len);
 typedef struct {
 	bool backspace_bs; // DECBKM
 	bool newline_mode; // LNM
+	bool vt52;         // VT100 personality: VT52 mode (DECANM reset) rather than ANSI
 } term_defaults_t;
 
 typedef struct {
@@ -66,6 +68,11 @@ typedef struct {
 	bool cursor_keys_app; // DECCKM, for the keyboard
 	bool keypad_app;      // DECKPAM / DECKPNM, for the keyboard
 	uint8_t last_char; // for REP: the last character printed, 0 after anything else
+
+	// VT52 mode (DECANM reset, vt52.c): bytes go to vt52_byte, not vtparse.
+	bool vt52;
+	uint8_t vt52_state, vt52_row;   // ESC Y in progress, and its row byte
+	uint8_t vt52_ansi_charset[2], vt52_ansi_gl; // G0/G1 and GL of ANSI mode, back at ESC <
 } term_vt100_t;
 
 typedef struct {

@@ -724,6 +724,124 @@ static void test_set_columns(void) {
 	CHECK_EQ(s.cursor_row, 0);
 }
 
+// ---------------------------------------------------------------------------
+// VT52 mode (DECANM reset)
+
+static void test_vt52_enter_leave(void) {
+	setup();
+	CHECK(!t.vt100.vt52);
+	put("\x1b[?2l");
+	CHECK(t.vt100.vt52);
+	put("\x1b[2Jx"); // no CSI in VT52 mode: ESC [ is ignored, the rest prints
+	CHECK(row_is(0, "2Jx"));
+	put("\x1b<\x1b[2J\x1b[Hy");
+	CHECK(!t.vt100.vt52);
+	CHECK(row_is(0, "y"));
+	put("\x1b[?2h"); // DECANM set while in ANSI mode: nothing
+	CHECK(!t.vt100.vt52);
+}
+
+static void test_vt52_cursor(void) {
+	setup();
+	number_rows();
+	put("\x1b[?2l\x1bH");
+	CHECK_CURSOR(0, 0);
+	put("\x1bY%("); // row 5, column 8
+	CHECK_CURSOR(8, 5);
+	put("\x1b" "A\x1b" "A\x1b" "C");
+	CHECK_CURSOR(9, 3);
+	put("\x1b" "B\x1b" "D\x1b" "D");
+	CHECK_CURSOR(7, 4);
+	put("\x1bH\x1b" "A\x1b" "D"); // stop at the edges
+	CHECK_CURSOR(0, 0);
+	put("\x1bY\x37\x6f"); // row 23, column 79
+	CHECK_CURSOR(79, 23);
+	put("\x1b" "B\x1b" "C");
+	CHECK_CURSOR(79, 23);
+	// Out of range: the row stays, the column goes to the last one.
+	put("\x1bY%(\x1bY\x7f\x7f");
+	CHECK_CURSOR(79, 5);
+	put("\x1bY%%\x1bY \x18 z"); // CAN cancels ESC Y; the rest prints
+	CHECK(row_is(5, "row 5 z"));
+}
+
+static void test_vt52_origin_mode_ignored(void) {
+	setup();
+	put("\x1b[5;10r\x1b[?6h\x1b[?2l\x1bH");
+	CHECK_CURSOR(0, 0);
+	put("\x1bY\"\"");
+	CHECK_CURSOR(2, 2);
+}
+
+static void test_vt52_erase_and_reverse_lf(void) {
+	setup();
+	number_rows();
+	put("\x1b[?2l\x1bY\"\"\x1bK");
+	CHECK(row_is(2, "ro"));
+	CHECK(row_is(3, "row 3"));
+	put("\x1bJ");
+	CHECK(row_is(2, "ro"));
+	CHECK(row_is(3, ""));
+	CHECK(row_is(1, "row 1"));
+	put("\x1bH\x1bI"); // at the top: scrolls down
+	CHECK(row_is(0, ""));
+	CHECK(row_is(1, "row 0"));
+	CHECK_CURSOR(0, 0);
+	CHECK(row_is(STATUS, "status"));
+}
+
+static void test_vt52_controls_and_wrap(void) {
+	setup();
+	put("\x1b[?2lab\rc\tx\n\x08y");
+	CHECK(row_is(0, "cb      x"));
+	CHECK(row_is(1, "        y"));
+	put("\x1bY!\x20");
+	for (unsigned i = 0; i < 81; ++i)
+		term_putc(&t, 'w');
+	CHECK_CURSOR(1, 2); // autowrap as in ANSI mode
+}
+
+static void test_vt52_graphics(void) {
+	setup();
+	put("\x1b(A\x1b[?2l#\x1b" "Fq#\x1bGq");
+	CHECK_EQ(screen_glyph(&s, 0, 0), '#'); // ANSI mode's UK set put aside
+	CHECK_EQ(screen_glyph(&s, 1, 0), GLYPH_DEC_GRAPHICS('q'));
+	CHECK_EQ(screen_glyph(&s, 3, 0), 'q');
+	put("\x1b" "F\x1b<#"); // back in ANSI mode: the UK set again
+	CHECK_EQ(screen_glyph(&s, 4, 0), 0xa3);
+}
+
+static void test_vt52_identify_and_keypad(void) {
+	setup();
+	put("\x1b[?2l\x1bZ");
+	CHECK_REPLY("\x1b/Z");
+	put("\x1b[c\x1b[6n"); // no ANSI reports in VT52 mode
+	CHECK_REPLY("");
+	put("\x1b=");
+	CHECK(t.vt100.keypad_app);
+	put("\x1b>");
+	CHECK(!t.vt100.keypad_app);
+	put("\x1b<\x1bZ"); // DECID in ANSI mode
+	CHECK_REPLY("\x1b[?1;2c");
+}
+
+// The SET-UP default: VT52 now and after RIS; ESC < leaves it until RIS.
+static void test_vt52_default(void) {
+	setup();
+	term_set_defaults(&t, &(term_defaults_t){.vt52 = true});
+	CHECK(t.vt100.vt52);
+	put("\x1b<\x1b" "c");
+	CHECK(t.vt100.vt52);
+	term_reset(&t);
+	CHECK(t.vt100.vt52);
+	put("\x1bY!");  // half an ESC Y ...
+	term_reset(&t); // ... abandoned
+	put("x");
+	CHECK(row_is(0, "x"));
+	term_set_defaults(&t, &(term_defaults_t){.vt52 = false});
+	CHECK(!t.vt100.vt52);
+}
+
 int main(void) {
 	for (cols = 80; cols <= 132; cols += 52) {
 		printf("-- basics, %u columns\n", cols);
@@ -768,5 +886,14 @@ int main(void) {
 	RUN(test_replies);
 	RUN(test_unknown_and_aborted_sequences);
 	RUN(test_random_input_is_safe);
+	printf("-- VT52 mode\n");
+	RUN(test_vt52_enter_leave);
+	RUN(test_vt52_cursor);
+	RUN(test_vt52_origin_mode_ignored);
+	RUN(test_vt52_erase_and_reverse_lf);
+	RUN(test_vt52_controls_and_wrap);
+	RUN(test_vt52_graphics);
+	RUN(test_vt52_identify_and_keypad);
+	RUN(test_vt52_default);
 	return tests_done();
 }

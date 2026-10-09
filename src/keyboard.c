@@ -85,10 +85,19 @@ static void seq_add(seq_t *s, uint8_t c) {
 		s->data[s->len++] = c;
 }
 
-// ESC [ x, or ESC O x in the given application mode.
-static void seq_ss3(seq_t *s, bool app, char final) {
+// ESC [ x, or ESC O x in the given application mode; ESC x in VT52 mode
+// (cursor and PF keys).
+static void seq_ss3(seq_t *s, const kbd_modes_t *modes, bool app, char final) {
 	seq_add(s, 0x1b);
-	seq_add(s, app ? 'O' : '[');
+	if (!modes->vt52)
+		seq_add(s, app ? 'O' : '[');
+	seq_add(s, (uint8_t)final);
+}
+
+// A keypad key in application mode: ESC O x, or ESC ? x in VT52 mode.
+static void seq_keypad(seq_t *s, const kbd_modes_t *modes, char final) {
+	seq_add(s, 0x1b);
+	seq_add(s, modes->vt52 ? '?' : 'O');
 	seq_add(s, (uint8_t)final);
 }
 
@@ -134,22 +143,22 @@ static uint8_t control(uint8_t c) {
 static bool editing_key(seq_t *s, uint8_t key, const kbd_modes_t *modes) {
 	switch (key) {
 	case KEY_UP:
-		seq_ss3(s, modes->cursor_keys_app, 'A');
+		seq_ss3(s, modes, modes->cursor_keys_app, 'A');
 		return true;
 	case KEY_DOWN:
-		seq_ss3(s, modes->cursor_keys_app, 'B');
+		seq_ss3(s, modes, modes->cursor_keys_app, 'B');
 		return true;
 	case KEY_RIGHT:
-		seq_ss3(s, modes->cursor_keys_app, 'C');
+		seq_ss3(s, modes, modes->cursor_keys_app, 'C');
 		return true;
 	case KEY_LEFT:
-		seq_ss3(s, modes->cursor_keys_app, 'D');
+		seq_ss3(s, modes, modes->cursor_keys_app, 'D');
 		return true;
 	case KEY_HOME:
-		seq_ss3(s, modes->cursor_keys_app, 'H');
+		seq_ss3(s, modes, modes->cursor_keys_app, 'H');
 		return true;
 	case KEY_END:
-		seq_ss3(s, modes->cursor_keys_app, 'F');
+		seq_ss3(s, modes, modes->cursor_keys_app, 'F');
 		return true;
 	case KEY_INSERT:
 		seq_tilde(s, 2);
@@ -171,7 +180,7 @@ static bool editing_key(seq_t *s, uint8_t key, const kbd_modes_t *modes) {
 // A keypad key in numeric or application mode: the character, or ESC O x.
 static void keypad_key(seq_t *s, const kbd_modes_t *modes, char numeric, char app) {
 	if (modes->keypad_app)
-		seq_ss3(s, true, app);
+		seq_keypad(s, modes, app);
 	else
 		seq_add(s, (uint8_t)numeric);
 }
@@ -201,7 +210,7 @@ static void translate(const kbd_t *k, uint8_t key, uint8_t modifiers, const kbd_
 	} else if (key == KEY_ENTER) {
 		seq_return(s, modes);
 	} else if (key >= KEY_F1 && key < KEY_F1 + 4) {
-		seq_ss3(s, true, (char)('P' + (key - KEY_F1))); // PF1-PF4
+		seq_ss3(s, modes, true, (char)('P' + (key - KEY_F1))); // PF1-PF4
 	} else if (key >= KEY_F1 + 4 && key < KEY_F12) {
 		seq_tilde(s, function_keys[key - KEY_F1 - 4]);
 	} else if (key >= KEY_KP_1 && key <= KEY_KP_DOT) {
@@ -212,7 +221,7 @@ static void translate(const kbd_t *k, uint8_t key, uint8_t modifiers, const kbd_
 			editing_key(s, keypad[i].nav, modes);
 	} else if (key == KEY_KP_ENTER) {
 		if (modes->keypad_app)
-			seq_ss3(s, true, 'M');
+			seq_keypad(s, modes, 'M');
 		else
 			seq_return(s, modes);
 	} else if (key == KEY_KP_MINUS) {

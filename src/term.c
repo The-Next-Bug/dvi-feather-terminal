@@ -335,6 +335,9 @@ void term_set_defaults(term_t *t, const term_defaults_t *d) {
 	t->defaults = *d;
 	t->backspace_bs = d->backspace_bs;
 	t->newline_mode = d->newline_mode;
+	switch (t->personality) {
+	case TERM_VT100: vt100_set_vt52(t, d->vt52); break;
+	}
 }
 
 void term_set_columns(term_t *t, unsigned cols) {

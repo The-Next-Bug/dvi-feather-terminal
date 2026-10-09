@@ -49,6 +49,7 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 	{"Status line", 4, {1, 0, SETTINGS_STATUS_DEBUG, SETTINGS_STATUS_DEBUG_USB},
 		{"shown", "hidden", "debug", "debug usb"}},
 	{"Blank after", 6, {0, 1, 5, 10, 30, 60}, {"never", "1 min", "5 min", "10 min", "30 min", "60 min"}},
+	{"Terminal type", 2, {SETTINGS_TERM_VT100, SETTINGS_TERM_VT52}, {"VT100", "VT52"}},
 };
 
 unsigned settings_baud_rate(const settings_t *s) {
@@ -90,7 +91,7 @@ static uint32_t record_crc(const uint8_t *rec, unsigned len) {
 void settings_defaults(settings_t *s) {
 	*s = (settings_t){.columns = 80, .backspace = 0x7f, .local_echo = 0, .baud = BAUD_DEFAULT,
 		.framing = 0, .newline = 0, .colours = 0, .palette = 0, .mode = SETTINGS_MODE_TERMINAL,
-		.status_line = 1, .blank_after = 0};
+		.status_line = 1, .blank_after = 0, .term_type = SETTINGS_TERM_VT100};
 }
 
 void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_RECORD_SIZE]) {

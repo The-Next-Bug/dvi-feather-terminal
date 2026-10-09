@@ -37,19 +37,23 @@ typedef struct {
 	                     // SETTINGS_STATUS_DEBUG(_USB): video and main-loop timing (USB events) instead
 	uint8_t blank_after; // minutes without a key before the screen blanks; 0: never (blank.h)
 	// Payload byte 11 held the retired 80 columns layout (0 centred 8x16,
-	// 1 full width): a setting appended there inherits it from older
-	// records, unless the version changes.
+	// 1 full width), so term_type's values avoid 1: older records come back
+	// as VT100 (0, or 1 rejected as invalid).
+	uint8_t term_type; // SETTINGS_TERM_*: the personality and mode at power-on/RIS
 } settings_t;
 
 #define SETTINGS_MODE_TERMINAL 0 // a serial terminal on UART0
 #define SETTINGS_MODE_CPM 1      // the console of the Z80 CP/M machine (machine.h)
+
+#define SETTINGS_TERM_VT100 0 // VT100, ANSI mode
+#define SETTINGS_TERM_VT52 2  // VT100 in VT52 mode (DECANM reset)
 
 #define SETTINGS_STATUS_DEBUG 2 // status_line: core 1 timing, late lines, frame rate, main-loop time
 #define SETTINGS_STATUS_DEBUG_USB 3 // status_line: the USB host's last events (usbkbd_log)
 
 // The settings, in settings_t order, with the values each can take (the
 // first choice need not be the default) and their names for SET-UP.
-#define SETTINGS_FIELDS 11
+#define SETTINGS_FIELDS 12
 #define SETTINGS_MAX_CHOICES 9
 
 typedef struct {

@@ -42,6 +42,7 @@ typedef struct {
 	bool keypad_app;      // DECKPAM
 	bool newline_mode;    // LNM
 	bool backspace_bs;    // DECBKM
+	bool vt52;            // VT52 mode: cursor keys ESC x, PF keys ESC P-S, keypad ESC ? x
 } kbd_modes_t;
 
 typedef struct {

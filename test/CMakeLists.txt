@@ -31,7 +31,7 @@ set_tests_properties(board PROPERTIES ENVIRONMENT "CC=${CMAKE_C_COMPILER}")
 
 unit_test(screen screen.c)
 unit_test(vtparse vtparse.c)
-unit_test(term term.c vt100.c vtparse.c screen.c palette.c)
+unit_test(term term.c vt100.c vt52.c vtparse.c screen.c palette.c)
 unit_test(palette palette.c)
 unit_test(raster raster.c screen.c demo.c)
 target_sources(test_raster PRIVATE ${FONT_SOURCES})

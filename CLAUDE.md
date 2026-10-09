@@ -129,8 +129,11 @@ status line (row 24); UART0 on GP0/GP1.
   personalities only); term_write/term_reset dispatch on term_t.personality.
   `src/vt100.[ch]`: the VT100/VT102 personality (vtparse, C0/ESC/CSI, modes,
   SGR; its state in term_t.vt100: parser, DECSC, DECCKM/DECKPAM, REP);
-  replies (DA, DSR/CPR, DECREQTPARM) through a callback. Planned: ADM-3A
-  personality (dmt.28), VT52 as a VT100 sub-mode (dmt.16). Writes palette indices
+  replies (DA, DSR/CPR, DECREQTPARM) through a callback. `src/vt52.c`
+  (dmt.16): the VT100's VT52 mode (CSI ? 2 l in, ESC < out; own small
+  parser for ESC Y row col; ESC Z -> ESC / Z; ANSI G0/G1 put aside),
+  keyboard.c sends ESC x / ESC ? x when kbd_modes_t.vt52. Planned: ADM-3A
+  personality (dmt.28). Writes palette indices
   only (nothing depends on the palette): default fg 7, bold default 15, bg
   0; bold brightens 0-7 to 8-15; 38;5;n as is; 24-bit -> palette_nearest.
 - `src/palette.[ch]` (portable, bd pb2): the xterm-256 palette as RGB565
@@ -195,7 +198,9 @@ status line (row 24); UART0 on GP0/GP1.
   makes core 1 stop the DVI signal: hstx_dvi_stop (DMA aborted, FIFO
   drained, HSTX off), frame time kept on the timer (diag_frames,
   palette_used) for core 0's waits, hstx_dvi_resume at a frame start on
-  wake; bd 3rk); settings_colours() gives the status
+  wake; bd 3rk), term_type (VT100 0 / VT52 2: power-on/RIS mode; byte 11
+  once held the retired layout, so 1 is never a value; ADM-3A will be 3);
+  settings_colours() gives the status
   line's indices and the logo's tint. CRC-32 in
   `src/crc32.[ch]` (shared with the disk images). main.c apply_settings()
   -> serial_configure, term_set_defaults, show_palette.

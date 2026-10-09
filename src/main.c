@@ -343,6 +343,7 @@ static void setup_enter(bool from_host) {
 	settings_t current = settings;
 	current.columns = screen.cols;
 	current.backspace = term.backspace_bs ? 0x08 : 0x7f;
+	current.term_type = term.vt100.vt52 ? SETTINGS_TERM_VT52 : SETTINGS_TERM_VT100;
 	// CP/M mode keeps LNM off (apply_settings): the saved choice stands.
 	current.newline = cpm.on ? settings.newline : term.newline_mode;
 	setup_open(&setup.ui, &current);
@@ -373,7 +374,7 @@ static void apply_line(const settings_t *s) {
 static void apply_settings(const settings_t *s) {
 	apply_line(s);
 	term_set_defaults(&term, &(term_defaults_t){.backspace_bs = s->backspace == 0x08,
-		.newline_mode = s->newline && !cpm.on});
+		.newline_mode = s->newline && !cpm.on, .vt52 = s->term_type == SETTINGS_TERM_VT52});
 	default_columns = s->columns;
 	blank_init(&blank, s->blank_after * 60000u, to_ms_since_boot(get_absolute_time()));
 	colours = settings_colours(s);
@@ -601,6 +602,7 @@ static void keyboard_poll(void) {
 	if (term_started) {
 		modes.cursor_keys_app = term.vt100.cursor_keys_app;
 		modes.keypad_app = term.vt100.keypad_app;
+		modes.vt52 = term.vt100.vt52;
 		modes.newline_mode = term.newline_mode;
 		modes.backspace_bs = term.backspace_bs;
 	}

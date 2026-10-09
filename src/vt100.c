@@ -32,8 +32,9 @@ static void set_mode(term_t *t, bool dec, unsigned mode, bool on) {
 	case 6: t->cur.origin_mode = on; term_move_to(t, 0, 0); break;
 	case 7: t->autowrap = on; if (!on) t->cur.wrap_pending = false; break;
 	case 25: t->screen->cursor_visible = on; break;
+	case 2: if (!on) vt100_set_vt52(t, true); break; // DECANM: ESC < comes back
 	case 67: t->backspace_bs = on; break; // DECBKM
-	default: break; // DECANM (VT52), DECSCLM, DECARM...: ignored
+	default: break; // DECSCLM, DECARM...: ignored
 	}
 }
 
@@ -278,7 +279,7 @@ static void esc_dispatch(term_t *t, const vtparse_t *p, uint8_t final) {
 	}
 }
 
-static void execute(term_t *t, uint8_t ch) {
+void vt100_execute(term_t *t, uint8_t ch) {
 	switch (ch) {
 	case BS:
 		if (t->cur.col > 0)
@@ -318,7 +319,7 @@ static void on_parse(vtparse_t *p, vtparse_action_t action, uint8_t ch) {
 		term_print(t, ch);
 		t->vt100.last_char = ch == 0x7f ? 0 : ch;
 		return;
-	case VTPARSE_EXECUTE: execute(t, ch); break;
+	case VTPARSE_EXECUTE: vt100_execute(t, ch); break;
 	case VTPARSE_ESC_DISPATCH: esc_dispatch(t, p, ch); break;
 	case VTPARSE_CSI_DISPATCH: csi_dispatch(t, p, ch); break;
 	}
@@ -336,9 +337,32 @@ void vt100_reset(term_t *t) {
 	term_reset_cursor(&t->vt100.saved);
 	t->vt100.cursor_keys_app = t->vt100.keypad_app = false;
 	t->vt100.last_char = 0; // REP must not repeat a character from before the reset
+	t->vt100.vt52 = false;
+	vt100_set_vt52(t, t->defaults.vt52);
 }
 
 // vtparse_reset may run inside the parser's callback (RIS).
 void vt100_cancel(term_t *t) {
 	vtparse_reset(&t->vt100.parser);
+	t->vt100.vt52_state = 0;
+}
+
+// VT52 mode has its own character set switch (ESC F / ESC G), so ANSI
+// mode's G0/G1 and GL are put aside, ASCII, and back at ESC <.
+void vt100_set_vt52(term_t *t, bool on) {
+	term_vt100_t *v = &t->vt100;
+	if (on == v->vt52)
+		return;
+	if (on) {
+		memcpy(v->vt52_ansi_charset, t->cur.charset, sizeof v->vt52_ansi_charset);
+		v->vt52_ansi_gl = t->cur.gl;
+		t->cur.charset[0] = t->cur.charset[1] = 'B';
+		t->cur.gl = 0;
+	} else {
+		memcpy(t->cur.charset, v->vt52_ansi_charset, sizeof v->vt52_ansi_charset);
+		t->cur.gl = v->vt52_ansi_gl;
+	}
+	v->vt52 = on;
+	v->vt52_state = 0;
+	v->last_char = 0;
 }
