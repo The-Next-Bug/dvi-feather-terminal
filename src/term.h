@@ -1,17 +1,18 @@
 #ifndef TERM_H
 #define TERM_H
 
-// VT100 emulation on top of screen_t. Portable C (no pico-sdk), host-tested.
+// The terminal: a band of screen rows driven by bytes from the host.
+// Portable C (no pico-sdk), host-tested.
 //
-// Bytes from the host go through vtparse (escape sequence parsing) and are
-// applied here: printing with DEC-style deferred autowrap, C0 controls,
-// cursor movement, scrolling regions, erasing, line and character
-// insert/delete (VT102), tab stops, character sets (G0/G1: ASCII, UK, DEC
-// Special Graphics), modes (including DECSCNM reverse screen), save/restore
-// cursor, SGR colours (as palette indices: palette.h), underline and blink, DECBKM (what Backspace sends, for
-// the keyboard), and replies to
-// device attribute and status requests, and REP (repeat character, which
-// ncurses uses under TERM=xterm-16color).
+// It is split by personality, so that what one terminal type means by a
+// byte stays out of the others:
+// - term.c (this API): the cell-level terminal any personality drives:
+//   the cursor, printing with DEC-style deferred autowrap, scrolling (with
+//   a scrolling region), erasing, tab stops, character sets, reverse screen,
+//   80/132 columns and replies to the host. term_core.h has its helpers.
+// - vt100.c (vt100.h): the VT100/VT102 personality, the only one so far:
+//   escape sequences through vtparse, C0 controls, modes, SGR, device
+//   reports. term_write and term_reset dispatch on term_t.personality.
 //
 // The terminal owns a band of screen rows (top .. top + rows - 1); rows
 // outside it (e.g. a status line) are left alone. Its width is the screen's
@@ -22,9 +23,6 @@
 // CSI ? 999 ~ (private to this terminal) asks for SET-UP: it bumps
 // setup_requests, and term_write stops right after it, so the owner can hand
 // the bytes that follow to SET-UP instead.
-//
-// Not (yet) implemented: VT52 mode (dmt.16), the alternate screen (dmt.15),
-// double-width/height lines (dmt.12/13), smooth scrolling (dmt.14).
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -35,6 +33,10 @@
 
 #define TERM_DEFAULT_COLOUR 0x100 // SGR 39 / 49: the terminal's default fg/bg
 #define TERM_SETUP_PARAM 999     // CSI ? 999 ~: open SET-UP
+
+typedef enum {
+	TERM_VT100, // vt100.c
+} term_personality_t;
 
 typedef void (*term_reply_t)(void *ctx, const uint8_t *data, size_t len);
 
@@ -57,31 +59,38 @@ typedef struct {
 	uint8_t gl;         // which of G0/G1 is invoked (SI/SO)
 } term_cursor_t;
 
+// The VT100 personality's own state (vt100.c).
+typedef struct {
+	vtparse_t parser;
+	term_cursor_t saved;  // DECSC
+	bool cursor_keys_app; // DECCKM, for the keyboard
+	bool keypad_app;      // DECKPAM / DECKPNM, for the keyboard
+	uint8_t last_char; // for REP: the last character printed, 0 after anything else
+} term_vt100_t;
+
 typedef struct {
 	screen_t *screen;
 	unsigned top, rows;
 	term_defaults_t defaults;
+	term_personality_t personality;
 
-	vtparse_t parser;
 	term_cursor_t cur;   // row relative to top
-	term_cursor_t saved; // DECSC
 	unsigned margin_top, margin_bottom; // scrolling region, relative, inclusive
 
 	bool autowrap;        // DECAWM
 	bool insert_mode;     // IRM
 	bool newline_mode;    // LNM: LF, VT and FF also do CR
-	bool cursor_keys_app; // DECCKM, for the keyboard
-	bool keypad_app;      // DECKPAM / DECKPNM, for the keyboard
 	bool backspace_bs;    // DECBKM: Backspace sends BS (else DEL), for the keyboard
 	bool reverse_screen;  // DECSCNM
 
 	uint8_t tabs[(SCREEN_MAX_COLS + 7) / 8];
-	uint8_t last_char; // for REP: the last character printed, 0 after anything else
 	unsigned screen_resets; // times DECCOLM cleared the whole screen
 	unsigned setup_requests; // times the host sent CSI ? 999 ~
 
 	term_reply_t reply;
 	void *reply_ctx;
+
+	term_vt100_t vt100;
 } term_t;
 
 // Reset the terminal (as RIS), clear its rows, home the cursor and show it.

@@ -599,8 +599,8 @@ static void reset_key(void *ctx) {
 static void keyboard_poll(void) {
 	kbd_modes_t modes = {.backspace_bs = settings.backspace == 0x08};
 	if (term_started) {
-		modes.cursor_keys_app = term.cursor_keys_app;
-		modes.keypad_app = term.keypad_app;
+		modes.cursor_keys_app = term.vt100.cursor_keys_app;
+		modes.keypad_app = term.vt100.keypad_app;
 		modes.newline_mode = term.newline_mode;
 		modes.backspace_bs = term.backspace_bs;
 	}

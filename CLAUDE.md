@@ -121,8 +121,16 @@ status line (row 24); UART0 on GP0/GP1.
   since core 1 draws raster[], which only catches up at video_update.
 - `src/vtparse.[ch]` (portable): Paul Williams' DEC parser. C1 (0x80-0x9F)
   ignored unless `c1_controls` (keeps UTF-8 safe); OSC/DCS/APC discarded.
-- `src/term.[ch]` (portable): VT100/VT102 emulation on the screen; replies
-  (DA, DSR/CPR, DECREQTPARM) through a callback. Writes palette indices
+- `src/term.[ch]` (portable): the terminal, split by personality (bd
+  dmt.37) so each terminal type's meaning of a byte stays in its own file:
+  term.c is the cell-level core and the public API (cursor, print with
+  charsets and deferred wrap, scroll region, erase, IL/DL, tabs, reverse
+  screen, 80/132, replies), its helpers in `src/term_core.h` (for
+  personalities only); term_write/term_reset dispatch on term_t.personality.
+  `src/vt100.[ch]`: the VT100/VT102 personality (vtparse, C0/ESC/CSI, modes,
+  SGR; its state in term_t.vt100: parser, DECSC, DECCKM/DECKPAM, REP);
+  replies (DA, DSR/CPR, DECREQTPARM) through a callback. Planned: ADM-3A
+  personality (dmt.28), VT52 as a VT100 sub-mode (dmt.16). Writes palette indices
   only (nothing depends on the palette): default fg 7, bold default 15, bg
   0; bold brightens 0-7 to 8-15; 38;5;n as is; 24-bit -> palette_nearest.
 - `src/palette.[ch]` (portable, bd pb2): the xterm-256 palette as RGB565
