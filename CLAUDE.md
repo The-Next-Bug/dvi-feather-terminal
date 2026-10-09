@@ -278,6 +278,13 @@ status line (row 24); UART0 on GP0/GP1.
   by build.sh from src/cpm (INCLUDE is cwd-relative) and put on CPM22 by
   diskimg_gen.py --file; --delete CPM22 XDIR.COM removes z80pack's XDIR.
   test_machine's test_xfer_tools runs them under CP/M.
+  src/cpm/termtest.asm (bd dmt.38) -> TERMTEST.COM on Z80TESTS (--file
+  Z80TESTS): a page each for addressing, moves, erasing, IL/DL, scrolling,
+  wrap, line graphics, replies and key codes, per personality (VT100,
+  VT52 via CSI ? 2 l / ESC <, ADM-3A) from one table of sequences (OPS);
+  test_machine's test_termtest runs it with the console fed into a real
+  term_t (machine_host's host_console_hook; replies typed back) and checks
+  every page's screen for all three.
   USB sticks (bd qur.3): FatFs volume 1 ("1:", USB: to the tools; ffconf
   FF_VOLUMES 2). `src/diskio.c` (RP2350) dispatches FatFs drives: 0
   sdcard_disk_*, 1 usbmsc_disk_*. `src/usbmsc.[ch]` (USB_KEYBOARD builds):
