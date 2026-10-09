@@ -337,6 +337,8 @@ static void setup_enter(bool from_host) {
 	settings_t current = settings;
 	current.columns = screen.cols;
 	current.backspace = term.backspace_bs ? 0x08 : 0x7f;
+	current.term_type = term.personality == TERM_ADM3A ? SETTINGS_TERM_ADM3A
+		: term.vt100.vt52 ? SETTINGS_TERM_VT52 : SETTINGS_TERM_VT100;
 	// CP/M mode keeps LNM off (apply_settings): the saved choice stands.
 	current.newline = cpm.on ? settings.newline : term.newline_mode;
 	setup_open(&setup.ui, &current);
@@ -367,8 +369,9 @@ static void apply_line(const settings_t *s) {
 static void apply_settings(const settings_t *s) {
 	apply_line(s);
 	term_set_defaults(&term, &(term_defaults_t){.backspace_bs = s->backspace == 0x08,
-		.newline_mode = s->newline && !cpm.on});
-	default_columns = s->columns;
+		.newline_mode = s->newline && !cpm.on, .vt52 = s->term_type == SETTINGS_TERM_VT52,
+		.personality = s->term_type == SETTINGS_TERM_ADM3A ? TERM_ADM3A : TERM_VT100});
+	default_columns = settings_columns(s);
 	blank_init(&blank, s->blank_after * 60000u, to_ms_since_boot(get_absolute_time()));
 	colours = settings_colours(s);
 	show_palette(s);
@@ -389,8 +392,8 @@ static void setup_leave(bool apply) {
 		return;
 	}
 	apply_settings(&setup.ui.values);
-	if (setup.ui.values.columns != screen.cols)
-		term_set_columns(&term, setup.ui.values.columns);
+	if (settings_columns(&setup.ui.values) != screen.cols)
+		term_set_columns(&term, settings_columns(&setup.ui.values));
 }
 
 static bool setup_save(void) {
@@ -589,13 +592,23 @@ static void reset_key(void *ctx) {
 }
 
 // The terminal modes that change what keys send (none before it starts).
+// SET-UP and the CP/M monitor read keys as a VT100 in ANSI mode sends them
+// (ESC [ A ...), whatever the host has set: only the host's program gets
+// its own modes.
 static void keyboard_poll(void) {
 	kbd_modes_t modes = {.backspace_bs = settings.backspace == 0x08};
 	if (term_started) {
-		modes.cursor_keys_app = term.cursor_keys_app;
-		modes.keypad_app = term.keypad_app;
 		modes.newline_mode = term.newline_mode;
 		modes.backspace_bs = term.backspace_bs;
+		if (setup.active || (cpm.on && !cpm.running)) {
+			// VT100 keys for SET-UP or the monitor
+		} else if (term.personality == TERM_ADM3A) {
+			modes.adm3a = true;
+		} else {
+			modes.cursor_keys_app = term.vt100.cursor_keys_app;
+			modes.keypad_app = term.vt100.keypad_app;
+			modes.vt52 = term.vt100.vt52;
+		}
 	}
 	usbkbd_poll(&modes);
 }
@@ -1060,7 +1073,7 @@ int main(void) {
 		pending = run_demo(buf, sizeof buf);
 
 	cpm.on = settings.mode == SETTINGS_MODE_CPM;
-	screen_init(&screen, settings.columns, PALETTE_TEXT, PALETTE_BACKGROUND);
+	screen_init(&screen, settings_columns(&settings), PALETTE_TEXT, PALETTE_BACKGROUND);
 	term_init(&term, &screen, 0, TERM_ROWS);
 	apply_settings(&settings);
 	term_set_reply(&term, send_reply, NULL);

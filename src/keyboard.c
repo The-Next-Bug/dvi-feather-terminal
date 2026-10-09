@@ -85,10 +85,19 @@ static void seq_add(seq_t *s, uint8_t c) {
 		s->data[s->len++] = c;
 }
 
-// ESC [ x, or ESC O x in the given application mode.
-static void seq_ss3(seq_t *s, bool app, char final) {
+// ESC [ x, or ESC O x in the given application mode; ESC x in VT52 mode
+// (cursor and PF keys).
+static void seq_ss3(seq_t *s, const kbd_modes_t *modes, bool app, char final) {
 	seq_add(s, 0x1b);
-	seq_add(s, app ? 'O' : '[');
+	if (!modes->vt52)
+		seq_add(s, app ? 'O' : '[');
+	seq_add(s, (uint8_t)final);
+}
+
+// A keypad key in application mode: ESC O x, or ESC ? x in VT52 mode.
+static void seq_keypad(seq_t *s, const kbd_modes_t *modes, char final) {
+	seq_add(s, 0x1b);
+	seq_add(s, modes->vt52 ? '?' : 'O');
 	seq_add(s, (uint8_t)final);
 }
 
@@ -130,26 +139,49 @@ static uint8_t control(uint8_t c) {
 	}
 }
 
+// The ADM-3A's cursor keys are the controls that move its cursor, and
+// Home is ^^; it has no other editing keys.
+static bool adm3a_editing_key(seq_t *s, uint8_t key) {
+	switch (key) {
+	case KEY_UP: seq_add(s, 0x0b); return true;
+	case KEY_DOWN: seq_add(s, 0x0a); return true;
+	case KEY_RIGHT: seq_add(s, 0x0c); return true;
+	case KEY_LEFT: seq_add(s, 0x08); return true;
+	case KEY_HOME: seq_add(s, 0x1e); return true;
+	case KEY_END: case KEY_INSERT: case KEY_DELETE: case KEY_PAGE_UP: case KEY_PAGE_DOWN:
+		return true; // nothing
+	default:
+		return false;
+	}
+}
+
 // Editing and cursor keys (also the keypad with Num Lock off).
 static bool editing_key(seq_t *s, uint8_t key, const kbd_modes_t *modes) {
+	if (modes->adm3a)
+		return adm3a_editing_key(s, key);
+	// A VT52 has the four cursor keys only: the rest send nothing in VT52
+	// mode (their ESC [ n ~ would reach a VT52 program as garbage).
+	if (modes->vt52 && key != KEY_UP && key != KEY_DOWN && key != KEY_RIGHT && key != KEY_LEFT)
+		return key == KEY_HOME || key == KEY_END || key == KEY_INSERT || key == KEY_DELETE ||
+			key == KEY_PAGE_UP || key == KEY_PAGE_DOWN;
 	switch (key) {
 	case KEY_UP:
-		seq_ss3(s, modes->cursor_keys_app, 'A');
+		seq_ss3(s, modes, modes->cursor_keys_app, 'A');
 		return true;
 	case KEY_DOWN:
-		seq_ss3(s, modes->cursor_keys_app, 'B');
+		seq_ss3(s, modes, modes->cursor_keys_app, 'B');
 		return true;
 	case KEY_RIGHT:
-		seq_ss3(s, modes->cursor_keys_app, 'C');
+		seq_ss3(s, modes, modes->cursor_keys_app, 'C');
 		return true;
 	case KEY_LEFT:
-		seq_ss3(s, modes->cursor_keys_app, 'D');
+		seq_ss3(s, modes, modes->cursor_keys_app, 'D');
 		return true;
 	case KEY_HOME:
-		seq_ss3(s, modes->cursor_keys_app, 'H');
+		seq_ss3(s, modes, modes->cursor_keys_app, 'H');
 		return true;
 	case KEY_END:
-		seq_ss3(s, modes->cursor_keys_app, 'F');
+		seq_ss3(s, modes, modes->cursor_keys_app, 'F');
 		return true;
 	case KEY_INSERT:
 		seq_tilde(s, 2);
@@ -171,7 +203,7 @@ static bool editing_key(seq_t *s, uint8_t key, const kbd_modes_t *modes) {
 // A keypad key in numeric or application mode: the character, or ESC O x.
 static void keypad_key(seq_t *s, const kbd_modes_t *modes, char numeric, char app) {
 	if (modes->keypad_app)
-		seq_ss3(s, true, app);
+		seq_keypad(s, modes, app);
 	else
 		seq_add(s, (uint8_t)numeric);
 }
@@ -200,8 +232,12 @@ static void translate(const kbd_t *k, uint8_t key, uint8_t modifiers, const kbd_
 		ctrl = false;
 	} else if (key == KEY_ENTER) {
 		seq_return(s, modes);
+	} else if (key >= KEY_F1 && key < KEY_F12 && modes->adm3a) {
+		// no function keys on an ADM-3A (F11 as the reset key is caught earlier)
 	} else if (key >= KEY_F1 && key < KEY_F1 + 4) {
-		seq_ss3(s, true, (char)('P' + (key - KEY_F1))); // PF1-PF4
+		seq_ss3(s, modes, true, (char)('P' + (key - KEY_F1))); // PF1-PF4
+	} else if (key >= KEY_F1 + 4 && key < KEY_F12 && modes->vt52) {
+		// F5-F11: no such keys on a VT52
 	} else if (key >= KEY_F1 + 4 && key < KEY_F12) {
 		seq_tilde(s, function_keys[key - KEY_F1 - 4]);
 	} else if (key >= KEY_KP_1 && key <= KEY_KP_DOT) {
@@ -212,7 +248,7 @@ static void translate(const kbd_t *k, uint8_t key, uint8_t modifiers, const kbd_
 			editing_key(s, keypad[i].nav, modes);
 	} else if (key == KEY_KP_ENTER) {
 		if (modes->keypad_app)
-			seq_ss3(s, true, 'M');
+			seq_keypad(s, modes, 'M');
 		else
 			seq_return(s, modes);
 	} else if (key == KEY_KP_MINUS) {

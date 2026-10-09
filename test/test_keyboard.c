@@ -152,6 +152,59 @@ static void test_keypad(void) {
 	CHECK(!strcmp(tap(0, 0x63), "\x1b[3~"));
 }
 
+// VT52 mode: cursor and PF keys ESC x, the alternate keypad ESC ? x.
+static void test_vt52_keys(void) {
+	setup();
+	modes.vt52 = true;
+	CHECK(!strcmp(tap(0, 0x52), "\x1b" "A"));
+	CHECK(!strcmp(tap(0, 0x51), "\x1b" "B"));
+	CHECK(!strcmp(tap(0, 0x4f), "\x1b" "C"));
+	CHECK(!strcmp(tap(0, 0x50), "\x1b" "D"));
+	modes.cursor_keys_app = true; // DECCKM does not apply
+	CHECK(!strcmp(tap(0, 0x52), "\x1b" "A"));
+	CHECK(!strcmp(tap(0, 0x3a), "\x1bP"));
+	CHECK(!strcmp(tap(0, 0x3d), "\x1bS"));
+	// Keys a VT52 does not have: nothing.
+	CHECK(!strcmp(tap(0, 0x4a), "")); // Home
+	CHECK(!strcmp(tap(0, 0x4d), "")); // End
+	CHECK(!strcmp(tap(0, 0x49), "")); // Insert
+	CHECK(!strcmp(tap(0, 0x4c), "")); // Delete
+	CHECK(!strcmp(tap(0, 0x4b), "")); // Page Up
+	CHECK(!strcmp(tap(0, 0x4e), "")); // Page Down
+	CHECK(!strcmp(tap(0, 0x3e), "")); // F5
+	CHECK(!strcmp(tap(0, 0x44), "")); // F11
+	CHECK(!strcmp(tap(0, 0x59), "1"));
+	modes.keypad_app = true;
+	CHECK(!strcmp(tap(0, 0x59), "\x1b?q"));
+	CHECK(!strcmp(tap(0, 0x63), "\x1b?n"));
+	CHECK(!strcmp(tap(0, 0x58), "\x1b?M"));
+	report(0, 0x53, 0); // Num Lock off: keypad 8 is up, keypad 7 (Home) nothing
+	report(0, 0, 0);
+	CHECK(!strcmp(tap(0, 0x60), "\x1b" "A"));
+	CHECK(!strcmp(tap(0, 0x5f), ""));
+}
+
+// ADM-3A: the cursor keys are the controls that move its cursor.
+static void test_adm3a_keys(void) {
+	setup();
+	modes.adm3a = true;
+	CHECK(!strcmp(tap(0, 0x52), "\x0b"));
+	CHECK(!strcmp(tap(0, 0x51), "\n"));
+	CHECK(!strcmp(tap(0, 0x4f), "\x0c"));
+	CHECK(!strcmp(tap(0, 0x50), "\x08"));
+	CHECK(!strcmp(tap(0, 0x4a), "\x1e")); // Home
+	CHECK(!strcmp(tap(0, 0x4d), ""));     // End
+	CHECK(!strcmp(tap(0, 0x4c), ""));     // Delete
+	CHECK(!strcmp(tap(0, 0x3a), ""));     // F1
+	CHECK(!strcmp(tap(0, 0x3e), ""));     // F5
+	CHECK(!strcmp(tap(0, 0x59), "1"));    // keypad
+	CHECK(!strcmp(tap(0, 0x58), "\r"));
+	CHECK(!strcmp(tap(0, 0x2a), "\x7f")); // Backspace as set
+	report(0, 0x53, 0); // Num Lock off: keypad 8 is up
+	report(0, 0, 0);
+	CHECK(!strcmp(tap(0, 0x60), "\x0b"));
+}
+
 static void test_held_keys_and_rollover(void) {
 	setup();
 	out[0] = 0;
@@ -280,6 +333,8 @@ int main(void) {
 	RUN(test_cursor_keys);
 	RUN(test_function_and_editing_keys);
 	RUN(test_keypad);
+	RUN(test_vt52_keys);
+	RUN(test_adm3a_keys);
 	RUN(test_held_keys_and_rollover);
 	RUN(test_repeat);
 	return tests_done();

@@ -16,8 +16,10 @@
 #include "machine.h"
 #include "machine_host.h"
 #include "monitor.h"
+#include "palette.h"
 #include "xfer.h"
 #include "scratch.h"
+#include "term.h"
 #include "test.h"
 
 #define VOLUME_SECTORS (40u * 1024 * 1024 / 512) // FAT32 needs 65525+ clusters
@@ -1087,6 +1089,219 @@ static void test_xfer_tools(void) {
 	drives_unmount_all();
 }
 
+// ---- TERMTEST (src/cpm/termtest.asm on Z80TESTS) through the terminal ----
+
+static screen_t tscreen;
+static term_t tterm;
+
+static void console_to_term(uint8_t c) {
+	term_write(&tterm, &c, 1);
+}
+
+static void term_replies_to_keys(void *ctx, const uint8_t *data, size_t len) {
+	(void)ctx;
+	for (size_t i = 0; i < len; ++i)
+		machine_key(data[i]);
+}
+
+// The text of a terminal row, trailing blanks dropped.
+static const char *trow(unsigned row) {
+	static char text[SCREEN_MAX_COLS + 1];
+	unsigned len = 0;
+	for (unsigned col = 0; col < tscreen.cols; ++col) {
+		text[col] = (char)screen_glyph(&tscreen, col, row);
+		if (text[col] != ' ')
+			len = col + 1;
+	}
+	text[len] = '\0';
+	return text;
+}
+
+static bool trow_check(unsigned row, const char *want, bool whole, int line) {
+	const char *got = trow(row);
+	bool ok = whole ? strcmp(got, want) == 0 : strstr(got, want) != NULL;
+	if (!ok)
+		fprintf(stderr, "%s:%d: row %u \"%s\", want %s\"%s\"\n", __FILE__, line, row, got,
+			whole ? "" : "it to contain ", want);
+	return ok;
+}
+#define TROW_IS(row, want) CHECK(trow_check(row, want, true, __LINE__))
+#define TROW_HAS(row, want) CHECK(trow_check(row, want, false, __LINE__))
+#define TGLYPH(col, row, want) CHECK_EQ(screen_glyph(&tscreen, col, row), want)
+
+static void next_page(void) {
+	CHECK(type(" "));
+}
+
+static bool page_shown(void) {
+	return run_until("back to the menu", 30) == MACHINE_RUNNING;
+}
+
+// TERMTEST's pages for personality p (0 VT100, 1 VT52, 2 ADM-3A) on a
+// terminal of that type.
+static void termtest_pages(unsigned p) {
+	static const char *const names[] = {"-- VT100", "-- VT52", "-- ADM-3A"};
+	screen_init(&tscreen, 80, PALETTE_TEXT, PALETTE_BACKGROUND);
+	term_init(&tterm, &tscreen, 0, 24);
+	term_set_reply(&tterm, term_replies_to_keys, NULL);
+	if (p == 2)
+		term_set_defaults(&tterm, &(term_defaults_t){.personality = TERM_ADM3A});
+	CHECK(type("B:TERMTEST\r"));
+	CHECK_EQ(run_until("Choice? ", 30), MACHINE_RUNNING);
+	CHECK(type(p == 0 ? "1" : p == 1 ? "2" : "3"));
+
+	// Cursor addressing.
+	CHECK(page_shown());
+	TROW_HAS(0, "Cursor addressing");
+	TROW_HAS(0, names[p]);
+	CHECK_EQ(tterm.vt100.vt52, p == 1);
+	TGLYPH(10, 2, '+');
+	TGLYPH(69, 2, '+');
+	TGLYPH(10, 21, '+');
+	TGLYPH(69, 21, '+');
+	TGLYPH(11, 2, '-');
+	TGLYPH(10, 3, '|');
+	TGLYPH(69, 20, '|');
+	TROW_HAS(11, "centre");
+	TROW_IS(1, "top left (row 2)");
+	TGLYPH(68, 22, 'b');
+	TGLYPH(79, 22, 't');
+	next_page();
+
+	// Moves: OK on every ??.
+	CHECK(page_shown());
+	TGLYPH(0, 0, 'O');
+	TGLYPH(1, 0, 'K');
+	for (unsigned row = 2; row <= 11; ++row) {
+		TGLYPH(30, row, 'O');
+		TGLYPH(31, row, 'K');
+	}
+	for (unsigned row = 0; row < 23; ++row)
+		CHECK(strstr(trow(row), "??") == NULL);
+	next_page();
+
+	// Erasing.
+	CHECK(page_shown());
+	TGLYPH(29, 3, 'X');
+	TGLYPH(30, 3, ' ');
+	TGLYPH(59, 7, 'X');
+	TGLYPH(59, 8, 'X');
+	TGLYPH(29, 9, 'X');
+	TGLYPH(30, 9, ' ');
+	TROW_IS(10, "");
+	TROW_IS(20, "");
+	next_page();
+
+	// Insert and delete line.
+	CHECK(page_shown());
+	if (p == 1) {
+		TROW_HAS(2, "neither");
+	} else {
+		TROW_IS(4, "line 04");
+		TROW_IS(5, "");
+		TROW_IS(6, "line 05");
+		TROW_IS(9, "line 08");
+		TROW_IS(10, "line 11");
+		TROW_IS(20, "line 21");
+		TROW_IS(21, "");
+	}
+	next_page();
+
+	// Scrolling.
+	CHECK(page_shown());
+	if (p == 2) {
+		TROW_IS(1, "line 02");
+		TROW_IS(21, "line 22");
+		TROW_IS(22, "");
+	} else {
+		TROW_IS(1, "line 01");
+		TROW_IS(22, "line 22");
+	}
+	next_page();
+
+	// Wrapping.
+	CHECK(page_shown());
+	TGLYPH(75, 4, 'A');
+	TGLYPH(79, 4, 'E');
+	TROW_IS(5, "FGHIJ <- row 6");
+	if (p == 2) {
+		TROW_IS(10, "");
+		TROW_HAS(11, "After a blank row");
+	} else {
+		TROW_HAS(10, "follows at once");
+	}
+	next_page();
+
+	// Line graphics.
+	CHECK(page_shown());
+	if (p == 2) {
+		TROW_HAS(2, "has none");
+	} else {
+		TGLYPH(10, 4, GLYPH_DEC_GRAPHICS('l'));
+		TGLYPH(17, 4, GLYPH_DEC_GRAPHICS('k'));
+		TGLYPH(10, 5, GLYPH_DEC_GRAPHICS('x'));
+		TGLYPH(12, 5, 'b');
+		TGLYPH(17, 6, GLYPH_DEC_GRAPHICS('j'));
+		TROW_HAS(8, "lqk");
+	}
+	next_page();
+
+	// Replies.
+	CHECK(page_shown());
+	if (p == 0) {
+		TROW_HAS(6, "): ESC [ 5 ; 1 1 R");
+		TROW_HAS(9, "): ESC [ ? 1 ; 2 c");
+	} else if (p == 1) {
+		TROW_HAS(4, "): ESC / Z");
+	} else {
+		TROW_HAS(2, "sends none");
+	}
+	next_page();
+
+	// Keys, then ^C back to the menu, and Q.
+	CHECK_EQ(run_until("Ctrl-C ends", 30), MACHINE_RUNNING);
+	CHECK(type("\x1b[A"));
+	CHECK_EQ(run_until("1B 5B 41", 30), MACHINE_RUNNING);
+	CHECK(type("x"));
+	CHECK_EQ(run_until("= 78", 30), MACHINE_RUNNING);
+	TROW_IS(2, "ESC [ A   = 1B 5B 41");
+	TROW_IS(3, "x   = 78");
+	CHECK(type("\x03"));
+	CHECK_EQ(run_until("Choice? ", 30), MACHINE_RUNNING);
+	CHECK(!tterm.vt100.vt52); // ESC < at the end
+	CHECK(type("q"));
+	CHECK_EQ(run_until("A>", 30), MACHINE_RUNNING);
+}
+
+static void test_termtest(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("Z80TESTS"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "Z80TESTS"), DRIVES_OK);
+	host_cpr_reply = NULL;
+	screen_init(&tscreen, 80, PALETTE_TEXT, PALETTE_BACKGROUND);
+	term_init(&tterm, &tscreen, 0, 24);
+	host_console_hook = console_to_term;
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("DIR B:TERMTEST.COM", "TERMTEST COM"));
+	for (unsigned p = 0; p < 3; ++p)
+		termtest_pages(p);
+
+	// Esc on a page goes back to the menu.
+	CHECK(type("B:TERMTEST\r"));
+	CHECK_EQ(run_until("Choice? ", 30), MACHINE_RUNNING);
+	CHECK(type("1"));
+	CHECK(page_shown());
+	CHECK(type("\x1b"));
+	CHECK_EQ(run_until("Choice? ", 30), MACHINE_RUNNING);
+	CHECK(type("q"));
+	CHECK_EQ(run_until("A>", 30), MACHINE_RUNNING);
+	host_console_hook = NULL;
+}
+
 int main(void) {
 	srand(1);
 	RUN(test_fat32_volume);
@@ -1108,6 +1323,7 @@ int main(void) {
 	RUN(test_blank_disk_chunks);
 	RUN(test_xfer_port);
 	RUN(test_xfer_tools);
+	RUN(test_termtest);
 	drives_unmount_all();
 	f_unmount("");
 	diskio_ram_free();

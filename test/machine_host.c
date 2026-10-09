@@ -13,6 +13,7 @@ char screen[HOST_SCREEN_SIZE];
 size_t screen_len;
 bool host_echo;
 const char *host_cpr_reply;
+void (*host_console_hook)(uint8_t c);
 char aux_sent[256];
 size_t aux_len;
 
@@ -26,6 +27,8 @@ static void idle(void) {
 }
 
 static void console_out(uint8_t c) {
+	if (host_console_hook)
+		host_console_hook(c);
 	if (c == 0) // padding (CPUTEST sends it), as a terminal ignores it
 		return;
 	if (host_echo) {

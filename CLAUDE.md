@@ -122,8 +122,28 @@ status line (row 24); UART0 on GP0/GP1.
   since core 1 draws raster[], which only catches up at video_update.
 - `src/vtparse.[ch]` (portable): Paul Williams' DEC parser. C1 (0x80-0x9F)
   ignored unless `c1_controls` (keeps UTF-8 safe); OSC/DCS/APC discarded.
-- `src/term.[ch]` (portable): VT100/VT102 emulation on the screen; replies
-  (DA, DSR/CPR, DECREQTPARM) through a callback. Writes palette indices
+- `src/term.[ch]` (portable): the terminal, split by personality (bd
+  dmt.37) so each terminal type's meaning of a byte stays in its own file:
+  term.c is the cell-level core and the public API (cursor, print with
+  charsets and deferred wrap, scroll region, erase, IL/DL, tabs, reverse
+  screen, 80/132, replies), its helpers in `src/term_core.h` (for
+  personalities only); term_write/term_reset dispatch on term_t.personality.
+  `src/vt100.[ch]`: the VT100/VT102 personality (vtparse, C0/ESC/CSI, modes,
+  SGR; its state in term_t.vt100: parser, DECSC, DECCKM/DECKPAM, REP);
+  replies (DA, DSR/CPR, DECREQTPARM) through a callback. `src/vt52.c`
+  (dmt.16): the VT100's VT52 mode (CSI ? 2 l in, ESC < out; own small
+  parser for ESC Y row col; ESC Z -> ESC / Z; ANSI G0/G1 put aside),
+  keyboard.c sends ESC x / ESC ? x when kbd_modes_t.vt52 (keys a VT52
+  lacks, Home to Page Down and F5-F11, send nothing). `src/adm3a.[ch]`
+  (dmt.28): the ADM-3A personality per terminfo adm3a (^H ^J ^K ^L moves
+  stopping at edges, ^Z clear, ^^ home, ESC = row+32 col+32 clamped,
+  immediate wrap, 8th bit stripped, no replies, 80 columns only) plus the
+  Kaypro's ^X/^W clear EOL/EOS and ESC E/R insert/delete line; keys
+  ^K ^J ^L ^H, Home ^^ (kbd_modes_t.adm3a). Changing personality
+  (term_set_defaults) resets the terminal. SET-UP and the CP/M monitor
+  always get VT100 ANSI-mode keys (main.c keyboard_poll), whatever the
+  host's modes; the host cannot open SET-UP (CSI ? 999 ~) from the ADM-3A.
+  Writes palette indices
   only (nothing depends on the palette): default fg 7, bold default 15, bg
   0; bold brightens 0-7 to 8-15; 38;5;n as is; 24-bit -> palette_nearest.
 - `src/palette.[ch]` (portable, bd pb2): the xterm-256 palette as RGB565
@@ -187,7 +207,10 @@ status line (row 24); UART0 on GP0/GP1.
   makes core 1 stop the DVI signal: hstx_dvi_stop (DMA aborted, FIFO
   drained, HSTX off), frame time kept on the timer (diag_frames,
   palette_used) for core 0's waits, hstx_dvi_resume at a frame start on
-  wake; bd 3rk); settings_colours() gives the status
+  wake; bd 3rk), term_type (VT100 0 / VT52 2 / ADM-3A 3: personality and
+  power-on/RIS mode; byte 11 once held the retired layout, so 1 is never a
+  value; settings_columns() is 80 for the ADM-3A);
+  settings_colours() gives the status
   line's indices and the logo's tint. CRC-32 in
   `src/crc32.[ch]` (shared with the disk images). main.c apply_settings()
   -> serial_configure, term_set_defaults, show_palette.
@@ -256,6 +279,13 @@ status line (row 24); UART0 on GP0/GP1.
   by build.sh from src/cpm (INCLUDE is cwd-relative) and put on CPM22 by
   diskimg_gen.py --file; --delete CPM22 XDIR.COM removes z80pack's XDIR.
   test_machine's test_xfer_tools runs them under CP/M.
+  src/cpm/termtest.asm (bd dmt.38) -> TERMTEST.COM on Z80TESTS (--file
+  Z80TESTS): a page each for addressing, moves, erasing, IL/DL, scrolling,
+  wrap, line graphics, replies and key codes, per personality (VT100,
+  VT52 via CSI ? 2 l / ESC <, ADM-3A) from one table of sequences (OPS);
+  test_machine's test_termtest runs it with the console fed into a real
+  term_t (machine_host's host_console_hook; replies typed back) and checks
+  every page's screen for all three.
   USB sticks (bd qur.3): FatFs volume 1 ("1:", USB: to the tools; ffconf
   FF_VOLUMES 2). `src/diskio.c` (RP2350) dispatches FatFs drives: 0
   sdcard_disk_*, 1 usbmsc_disk_*. `src/usbmsc.[ch]`:
@@ -346,7 +376,8 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   3rk) to 0x200796a0, ~26.3 KB free (v0.6.1: .text 177 KB, .data 21 KB,
   .bss 287 KB); firmware update from a stick (qur.27, ~1 KB) to
   0x20079a88, ~25.3 KB free; board headers (axq, pin strings) to
-  0x20079ac8. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  0x20079ac8; terminal personalities (dmt.37 split, dmt.16 VT52, dmt.28
+  ADM-3A, SET-UP's Terminal type row) and s0i to 0x2007a380, ~23.6 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, setup 10 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit.
