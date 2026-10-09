@@ -377,7 +377,8 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   .bss 287 KB); firmware update from a stick (qur.27, ~1 KB) to
   0x20079a88, ~25.3 KB free; board headers (axq, pin strings) to
   0x20079ac8; terminal personalities (dmt.37 split, dmt.16 VT52, dmt.28
-  ADM-3A, SET-UP's Terminal type row) and s0i to 0x2007a380, ~23.6 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  ADM-3A, SET-UP's Terminal type row, status line type) and s0i to
+  0x2007a2b8 (v0.7.0), ~23.8 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, setup 10 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit.

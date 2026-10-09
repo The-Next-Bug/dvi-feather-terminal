@@ -23,7 +23,9 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
   LNM, DECCKM, DECKPAM, DECCOLM 80/132, DECSCNM, DECTCEM, DECBKM),
   save/restore cursor, DECALN, RIS, REP. Replies to DA, DSR/CPR and
   DECREQTPARM go back on UART0 TX. Checked with `vttest` (menus 1-3, 6 and
-  8) through `tools/hostbridge.py`.
+  8) through `tools/hostbridge.py`. Also the VT100's VT52 mode and a Lear
+  Siegler ADM-3A (with the Kaypro's additions); see
+  [Terminal types](#terminal-types).
 - **Attributes**: SGR bold (bright, and in 80 columns the bold face), underline, blink,
   reverse; colors 8/16, 256 (the xterm palette, exact) and 24-bit (the
   nearest of those 256).
@@ -33,7 +35,8 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
   checking a keyboard without a host; in CP/M mode, the drives and the
   emulated clock rate. See [Status line](#status-line).
 - **SET-UP**: power-on width, Backspace (DEL/BS), local echo, baud rate,
-  data/parity/stop bits, new line mode, colors, palette and mode, kept in
+  data/parity/stop bits, new line mode, colors, palette, mode and terminal
+  type, kept in
   flash. F12 or Pause on the USB keyboard, or `CSI ? 999 ~` from the host,
   opens it; see [SET-UP](#set-up).
 - **Startup logo**: at power-on/reset the logo shows for 10 seconds
@@ -53,7 +56,6 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
 
 - No alternate screen (`CSI ? 1049 h` and friends): full-screen programs
   such as vim or less leave their last screen behind when they exit.
-- No VT52 mode and no other terminal types.
 - Double-width and double-height lines show as normal lines; scrolling is
   jump scrolling only (DECSCLM is ignored).
 - Flow control is a build option (RTS/CTS), not a SET-UP setting, and
@@ -172,13 +174,45 @@ off, as on a PC. Home, End, Insert, Delete, Page Up/Down and F5-F11 send the
 xterm/VT220 codes (`ESC [ H`/`F`, `ESC [ 2 ~`, ...). Keys repeat after
 0.5 s at about 30 per second. Caps Lock and Num Lock light the keyboard's
 LEDs. F12 (and Pause) open [SET-UP](#set-up) instead of sending anything.
+In VT52 mode and on the ADM-3A the keys send what those terminals send
+instead (see [Terminal types](#terminal-types)); SET-UP and the CP/M
+monitor always get the VT100 keys.
 
 A USB stick can share the port (through a hub) for
 [moving files](#moving-files): up to three sticks next to the keyboard.
 
+### Terminal types
+
+SET-UP's Terminal type picks what the terminal is (in either mode, so CP/M
+software set up for one of these works on the built-in Z80 too):
+
+- **VT100**: everything above.
+- **VT52**: the VT100's own VT52 mode, which the host can also switch to
+  with `CSI ? 2 l` (back with `ESC <`). `ESC A`-`D` move the cursor,
+  `ESC H` homes it, `ESC Y row col` (each + 32) addresses it, `ESC J`/`K`
+  erase to the end of the screen/line, `ESC I` is a reverse line feed,
+  `ESC F`/`G` turn line graphics on/off, `ESC =`/`>` set the keypad mode
+  and `ESC Z` answers `ESC / Z`. The cursor keys send `ESC A`-`D`, F1-F4
+  `ESC P`-`S`, the keypad in alternate mode `ESC ? x`; keys a VT52 does
+  not have (Home, End, Insert, Delete, Page Up/Down, F5-F11) send nothing.
+- **ADM-3A**: a Lear Siegler ADM-3A as terminfo's `adm3a` describes it:
+  ^H, ^J, ^K and ^L move the cursor (^J scrolls at the bottom), ^Z clears
+  the screen, ^^ homes the cursor, `ESC = row col` (each + 32) addresses
+  it, and printing wraps at once in the last column. Plus the Kaypro's
+  additions (terminfo `kaypro`): ^X and ^W erase to the end of the
+  line/screen, `ESC E` and `ESC R` insert/delete a line. No colors or
+  attributes, no replies, 80 columns only; the 8th bit of each byte is
+  ignored. The cursor keys send ^K ^J ^L ^H and Home ^^; other editing and
+  function keys send nothing. The host cannot open SET-UP (`CSI ? 999 ~`)
+  in this mode; F12 still does.
+
+`TERMTEST` on the `Z80TESTS` disk shows each type's functions page by page
+(see [TERMTEST](#termtest)).
+
 ### Status line
 
-Row 24 shows, in terminal mode: `VT100` and the width (`80x24`), the build,
+Row 24 shows, in terminal mode: the terminal type (`VT100`, `VT52` or
+`ADM-3A`) and the width (`80x24`), the build,
 the baud rate and framing (`115200 8N1`, plus `RTS/CTS` in flow control
 builds), `kbd` while a keyboard is attached, the USB stick (as in CP/M
 mode, below), `echo` when local echo is on, and the last key sent to the
@@ -212,6 +246,7 @@ shown in reverse video:
 | Palette | color, mono | mono: every color is a shade of the Colors hue (below) |
 | Mode | terminal, CP/M machine | a serial terminal on UART0, or the console of the [Z80 CP/M machine](#z80-cpm-machine). Saving a new mode restarts the board |
 | Status line | shown, hidden, debug, debug usb | hidden: row 24 stays blank (the text area is still 24 rows; the boot logo's build line and CP/M's drive lights are not shown). debug: video timing instead; debug usb: the USB host's last events (both below, refreshed four times a second) |
+| Terminal type | VT100, VT52, ADM-3A | what the terminal is at power-on and after a reset: a VT100, a VT100 in VT52 mode, or an ADM-3A (80 columns only); see [Terminal types](#terminal-types). Changing to or from ADM-3A clears the screen |
 | Blank after | never, 1, 5, 10, 30, 60 min | the screen goes black after this long without a key, against burn-in. The next key only wakes it (it is not sent). Output from the host or the Z80 does not wake it; it carries on unseen. The DVI signal is turned off, so the monitor can go into power saving (backlight off); on waking it has to resync, which takes it a few seconds |
 
 **Debug status line**: `late T+N | line C/P% | F fps | loop M/Q ms |
@@ -372,6 +407,19 @@ terminal for the screen size, so it fills 132 columns too. Any key ends it.
 
 For example `WORMS -N 10 -L 30 -F` or `WORMS -C -N 6 -L 40`.
 
+### TERMTEST
+
+`Z80TESTS` carries `TERMTEST` (`src/cpm/termtest.asm`), a check of the
+[terminal types](#terminal-types): run `B:TERMTEST` with `Z80TESTS` on B:,
+pick the type the terminal is set to (for VT52, leave it on VT100:
+TERMTEST switches it with `CSI ? 2 l` and back with `ESC <`), then any
+key turns the page and Esc goes back to the menu. One page each for cursor
+addressing, cursor moves (`OK` on every row when they are right), erasing,
+inserting and deleting lines, scrolling, wrapping at the last column, line
+graphics, the terminal's replies and the codes the keys send (Ctrl-C ends
+that one). Each page says what it should look like. Install `Z80TESTS`
+again from the monitor to get it onto a card that already has the disk.
+
 ### Moving files
 
 `CPM22` carries three tools (`src/cpm/xls.asm`, `xpip.asm`, `xera.asm`)
@@ -448,7 +496,7 @@ A after 3 seconds (any key stops that), or shows its menu:
 - **N**: make a new blank disk: name, then 8" floppy, 4 MB or 8 MB
   (an 8 MB one takes a few seconds to write).
 - **I**: install the built-in disk images onto the card: `CPM22` (CP/M 2.2
-  with its tools: boots), `Z80TESTS` (the Z80 instruction exercisers
+  with its tools: boots), `Z80TESTS` (`TERMTEST`, and the Z80 instruction exercisers
   `EXZ80DOC` and `EXZ80ALL`, about 10 minutes each at full speed, and the
   `CPUTEST` diagnostics; `PRELIM` needs an emulator that runs block moves
   in one go, as z80pack's cpmsim does, and wrecks CP/M here: reset after
@@ -589,7 +637,8 @@ clocks.
 
 - **Core 0** runs the terminal: UART0 receive interrupt into a ring buffer
   (`src/serial.c`), the escape sequence parser (`src/vtparse.c`, Paul
-  Williams' DEC state machine), the VT100 emulation (`src/term.c`) on a cell
+  Williams' DEC state machine), the terminal (`src/term.c` with the
+  personalities `src/vt100.c`, `vt52.c` and `adm3a.c`) on a cell
   buffer (`src/screen.c`), rasterization of changed lines (glyph bits per
   cell with the attributes applied, and each cell's colors:
   `src/raster.c`, driven by `video_update` in `src/video.c`), and the USB
@@ -685,7 +734,8 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 In `src/`:
 
 - **Terminal, portable and host-tested**: `screen.[ch]` (cell buffer),
-  `vtparse.[ch]` (escape sequence parser), `term.[ch]` (VT100 emulation),
+  `vtparse.[ch]` (escape sequence parser), `term.[ch]` (the terminal; its
+  personalities `vt100.[ch]` with `vt52.c`, and `adm3a.[ch]`),
   `palette.[ch]` (the 256-color palette per Colors/Palette setting),
   `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100
   codes), `keyname.[ch]` (key names for the status line), `splash.[ch]`
@@ -698,7 +748,7 @@ In `src/`:
   images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel),
   `fwpanel.[ch]` (SET-UP's firmware update), `xfer.[ch]` (port 10's
   files: `/XFER`), `usbvol.[ch]` (which USB stick is `USB:`), `cpm/` (the
-  CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP and XERA; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
+  CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA and TERMTEST; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
   images).
 - **RP2350**: `main.c`, `board.h` (the board header's pins, checked),
   `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]`

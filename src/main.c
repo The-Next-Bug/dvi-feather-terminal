@@ -992,17 +992,24 @@ typedef struct {
 	uint32_t keys_sent; // last_key.count
 	settings_t settings;
 	char usb[12];       // usb_label
+	const char *type;   // term_type_name: the host can switch VT52 mode
 } status_t;
 
+// The terminal type now, for the status line.
+static const char *term_type_name(void) {
+	return term.personality == TERM_ADM3A ? "ADM-3A" : term.vt100.vt52 ? "VT52" : "VT100";
+}
+
 static status_t status_now(void) {
-	status_t st = {keyboards_attached(), last_key.count, settings, ""};
+	status_t st = {keyboards_attached(), last_key.count, settings, "", term_type_name()};
 	usb_label(st.usb, sizeof st.usb);
 	return st;
 }
 
 static bool status_equal(const status_t *a, const status_t *b) {
 	return a->keyboards == b->keyboards && a->keys_sent == b->keys_sent &&
-		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0 && strcmp(a->usb, b->usb) == 0;
+		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0 && strcmp(a->usb, b->usb) == 0 &&
+		a->type == b->type;
 }
 
 static void draw_status(const status_t *st) {
@@ -1022,8 +1029,8 @@ static void draw_status(const status_t *st) {
 	char parity;
 	settings_framing(&st->settings, &data_bits, &parity, &stop_bits);
 	char text[SCREEN_MAX_COLS + 1];
-	snprintf(text, sizeof text, " VT100 %ux24 | %s | %u %u%c%u%s%s%s%s%s%s",
-		screen.cols, TERM_BUILD_ID, settings_baud_rate(&st->settings), data_bits, parity, stop_bits,
+	snprintf(text, sizeof text, " %s %ux24 | %s | %u %u%c%u%s%s%s%s%s%s",
+		st->type, screen.cols, TERM_BUILD_ID, settings_baud_rate(&st->settings), data_bits, parity, stop_bits,
 		SERIAL_FLOW_CONTROL ? " RTS/CTS" : "", st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "", st->usb,
 		st->settings.local_echo ? " | echo" : "", key);
 	screen_clear_line(&screen, STATUS_ROW, colours.status_fg, colours.status_bg);
