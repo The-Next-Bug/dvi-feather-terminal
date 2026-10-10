@@ -31,12 +31,17 @@ _Static_assert(SCREEN_ROWS * RASTER_ROW_HEIGHT == RASTER_ACTIVE_HEIGHT, "rows fi
 // Everything core 1 (and its interrupt) reads lives in SRAM (not const,
 // which would put it in flash): an XIP stall would starve the HSTX.
 static uint32_t line_buf[LINE_BUFS][RASTER_LINE_WORDS];
-// Scanlines are numbered from the first one of the first frame, so frame
-// and line are seq / RASTER_ACTIVE_HEIGHT and seq % RASTER_ACTIVE_HEIGHT.
-// Unsigned and compared by difference, so they may wrap.
+// Scanlines are numbered in order from the first one of the first frame.
+// Unsigned and compared by difference, so they may wrap (every 33 hours);
+// seq % LINE_BUFS survives that, as LINE_BUFS divides 2^32, but
+// RASTER_ACTIVE_HEIGHT does not: the frame and the line within it are
+// counted apart (frame_no, frame_y), or the picture shifts at the wrap.
 static volatile uint32_t requested = UINT32_MAX; // last line handed to the DMA
 static volatile uint32_t composed;               // lines composed so far
 static volatile uint32_t late_lines;
+// Core 1: the frame and the line of it that compose makes next.
+static uint32_t frame_no;
+static uint frame_y;
 
 // The palette (video_set_palette): index c as an RGB565 pixel in both
 // halves of a word. Two tables: core 0 fills the one core 1 is not using,
@@ -108,10 +113,9 @@ static void __not_in_flash_func(start_frame)(uint32_t n) {
 	}
 }
 
-static void __not_in_flash_func(compose)(uint32_t seq) {
-	uint y = seq % RASTER_ACTIVE_HEIGHT;
+static void __not_in_flash_func(compose_line)(uint32_t seq, uint y) {
 	if (y == 0)
-		start_frame(seq / RASTER_ACTIVE_HEIGHT);
+		start_frame(frame_no);
 	uint32_t *px = line_buf[seq % LINE_BUFS];
 	if (frame.blank) {
 		for (uint i = 0; i < RASTER_LINE_WORDS; ++i)
@@ -133,6 +137,25 @@ static void __not_in_flash_func(compose)(uint32_t seq) {
 		frame.palette);
 }
 
+// Compose line seq: frame line frame_y, then step to the next.
+static void __not_in_flash_func(compose)(uint32_t seq) {
+	compose_line(seq, frame_y);
+	if (++frame_y == RASTER_ACTIVE_HEIGHT) {
+		frame_y = 0;
+		diag_frames = ++frame_no;
+	}
+}
+
+// Skip the rest of the frame being composed (none at a frame start).
+static uint32_t __not_in_flash_func(to_frame_start)(uint32_t next) {
+	if (frame_y) {
+		next += RASTER_ACTIVE_HEIGHT - frame_y;
+		frame_y = 0;
+		diag_frames = ++frame_no;
+	}
+	return next;
+}
+
 // The DMA interrupt (core 1) wants line y's pixels: the next in order.
 static const uint32_t *__not_in_flash_func(next_line)(unsigned y) {
 	(void)y;
@@ -149,15 +172,14 @@ static const uint32_t *__not_in_flash_func(next_line)(unsigned y) {
 // starts again at a frame start. Returns the next line to compose.
 static uint32_t __not_in_flash_func(signal_off)(uint32_t next) {
 	hstx_dvi_stop();
-	next = (next / RASTER_ACTIVE_HEIGHT + 1) * RASTER_ACTIVE_HEIGHT; // a frame start
-	diag_frames = next / RASTER_ACTIVE_HEIGHT;
+	next = to_frame_start(next);
 	const uint32_t frame_us = hstx_dvi_frame_us();
 	uint64_t frame_end = time_us_64() + frame_us;
 	while (blank_next) {
 		if (time_us_64() >= frame_end) {
 			frame_end += frame_us;
 			next += RASTER_ACTIVE_HEIGHT;
-			diag_frames = next / RASTER_ACTIVE_HEIGHT;
+			diag_frames = ++frame_no;
 			palette_used = palette_next;
 		}
 		tight_loop_contents();
@@ -204,8 +226,6 @@ static void __not_in_flash_func(core1_main)(void) {
 		if (cycles > diag_max_cycles)
 			diag_max_cycles = cycles;
 		composed = ++next;
-		if (next % RASTER_ACTIVE_HEIGHT == 0)
-			diag_frames = next / RASTER_ACTIVE_HEIGHT;
 	}
 }
 
