@@ -477,8 +477,8 @@ static void test_term_reset(void) {
 	CHECK(row_is(STATUS, "status"));
 }
 
-// An unterminated OSC (or DCS) swallows everything after it; term_reset
-// gets the parser out.
+// An unterminated OSC (or DCS) swallows printable text until a control or
+// the length limit; term_reset gets the parser out at once.
 static void test_term_reset_recovers_wedged_parser(void) {
 	setup();
 	put("\x1b]0;no terminator ... ab");
@@ -499,6 +499,18 @@ static void test_term_reset_recovers_wedged_parser(void) {
 	CHECK(row_is(0, "ok"));
 	CHECK_EQ(fg_at(0, 0), FG);
 	CHECK_EQ(screen_attr(&s, 0, 0), 0);
+}
+
+// Alt+] echoed back opens an OSC string; the next Return ends it and still
+// moves the cursor (dmt.36).
+static void test_unterminated_string_ends_on_control(void) {
+	setup();
+	put("\x1b]lost\r\nok");
+	CHECK(row_is(0, ""));
+	CHECK(row_is(1, "ok"));
+	setup();
+	put("\x1bPq#0;2\r\nok");
+	CHECK(row_is(1, "ok"));
 }
 
 // REP right after a reset has nothing to repeat.
@@ -1035,6 +1047,7 @@ int main(void) {
 	RUN(test_reset);
 	RUN(test_term_reset);
 	RUN(test_term_reset_recovers_wedged_parser);
+	RUN(test_unterminated_string_ends_on_control);
 	RUN(test_reset_forgets_rep_char);
 	RUN(test_sgr_colours);
 	RUN(test_sgr_extended_colours);

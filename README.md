@@ -58,6 +58,10 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
   such as vim or less leave their last screen behind when they exit.
 - Double-width and double-height lines show as normal lines; scrolling is
   jump scrolling only (DECSCLM is ignored).
+- OSC, DCS, SOS, PM and APC strings (window titles, sixels, ...) are
+  discarded. A string that is never terminated (an Alt+] typed by
+  accident sends `ESC ]`) ends at the next control character, which then
+  acts as usual, or after 1024 bytes, as with xterm's brokenStringTerm.
 - Flow control is a build option (RTS/CTS), not a SET-UP setting, and
   there is no XON/XOFF.
 
@@ -236,7 +240,7 @@ shown in reverse video:
 
 | Setting | Values | |
 |---|---|---|
-| Columns | 80, 132 | the width at power-on and after F11 in CP/M mode |
+| Columns | 80, 132 | the width at power-on and after F11 in CP/M mode. With Terminal type ADM-3A it shows `80 (ADM-3A)` and is skipped; the choice comes back with VT100 or VT52 |
 | Backspace sends | DEL, BS | DECBKM at power-on and after RIS (vttest and CP/M software want BS) |
 | Local echo | off, on | keys typed are shown on the terminal as well as sent |
 | Baud rate | 300 - 115200 | default 115200 |

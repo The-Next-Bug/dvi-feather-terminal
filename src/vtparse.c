@@ -37,6 +37,7 @@ static void clear(vtparse_t *p) {
 	memset(p->params, 0, sizeof p->params);
 	p->ignoring = false;
 	p->params_full = false;
+	p->string_len = 0;
 }
 
 void vtparse_reset(vtparse_t *p) {
@@ -196,11 +197,17 @@ void vtparse_byte(vtparse_t *p, uint8_t ch) {
 		break;
 
 	case OSC_STRING:
-		if (c == BEL)
+	case STRING:
+		// Ended by ST, ESC, CAN or SUB (above), BEL in OSC, and, for hosts
+		// that never end their strings, by any other C0 control but NUL
+		// (padding), which then acts, or by the length limit.
+		if (c == BEL && p->state == OSC_STRING)
+			p->state = GROUND;
+		else if (is_c0(c) && c != 0) {
+			p->state = GROUND;
+			dispatch(p, VTPARSE_EXECUTE, c);
+		} else if (++p->string_len >= VTPARSE_MAX_STRING)
 			p->state = GROUND;
 		break;
-
-	case STRING:
-		break; // until ST, ESC, CAN or SUB (handled above)
 	}
 }

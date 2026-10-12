@@ -76,6 +76,12 @@ unsigned settings_baud_rate(const settings_t *s);
 // The width in use: the Columns setting, but 80 for the ADM-3A.
 unsigned settings_columns(const settings_t *s);
 
+// Why field i is decided by the other settings and has no effect as it is
+// (Columns under the ADM-3A: "ADM-3A"), or NULL when it can be changed.
+// SET-UP skips such a field and shows the value in use; the stored value is
+// kept for when it counts again.
+const char *settings_field_fixed(const settings_t *s, unsigned i);
+
 // Data bits (7 or 8), parity ('N', 'E' or 'O') and stop bits (1 or 2).
 void settings_framing(const settings_t *s, unsigned *data_bits, char *parity, unsigned *stop_bits);
 

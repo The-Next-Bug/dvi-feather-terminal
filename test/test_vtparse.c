@@ -146,6 +146,56 @@ static void test_c1_controls_when_enabled(void) {
 	EXPECT("\x1b[\xb1\xed", "C[1m]"); // GR bytes inside a sequence act as GL
 }
 
+static void test_unterminated_strings(void) {
+	setup();
+	// A C0 control ends the string and still acts (xterm brokenStringTerm).
+	EXPECT("\x1b]0;title\rok", "X(0d)P(o)P(k)");
+	EXPECT("\x1b]x\nok", "X(0a)P(o)P(k)");
+	EXPECT("\x1bPq#0\rok", "X(0d)P(o)P(k)");
+	EXPECT("\x1b_apc\bok", "X(08)P(o)P(k)");
+	EXPECT("\x1bX\x07ok", "X(07)P(o)P(k)"); // BEL ends only OSC silently
+	EXPECT("\x1b^pm\tok", "X(09)P(o)P(k)");
+	// NUL (padding) and DEL stay in the string.
+	static const uint8_t nul[] = { 0x1b, ']', '0', 0x00, 0x7f, 'x', 0x07, 'o' };
+	got[0] = 0;
+	for (unsigned i = 0; i < sizeof nul; ++i)
+		vtparse_byte(&p, nul[i]);
+	CHECK(strcmp(got, "P(o)") == 0);
+	// GR bytes in a string do not end it.
+	EXPECT("\x1b]0;\xe9\xff\x07ok", "P(o)P(k)");
+
+	// The length limit: VTPARSE_MAX_STRING bytes are discarded, then the
+	// parser is back in ground state.
+	for (int kind = 0; kind < 2; ++kind) {
+		got[0] = 0;
+		vtparse_byte(&p, 0x1b);
+		vtparse_byte(&p, kind ? 'P' : ']');
+		for (unsigned i = 0; i < VTPARSE_MAX_STRING - 1; ++i)
+			vtparse_byte(&p, 'a');
+		CHECK(strcmp(got, "") == 0);
+		vtparse_byte(&p, 'b'); // the last one discarded
+		CHECK(strcmp(got, "") == 0);
+		EXPECT("ok", "P(o)P(k)");
+	}
+	// Each string starts its own count.
+	for (int n = 0; n < 3; ++n) {
+		got[0] = 0;
+		vtparse_byte(&p, 0x1b);
+		vtparse_byte(&p, ']');
+		for (unsigned i = 0; i < VTPARSE_MAX_STRING - 2; ++i)
+			vtparse_byte(&p, 'a');
+		vtparse_byte(&p, 0x07);
+		CHECK(strcmp(got, "") == 0);
+	}
+	p.c1_controls = true;
+	got[0] = 0;
+	vtparse_byte(&p, 0x90);
+	for (unsigned i = 0; i < VTPARSE_MAX_STRING - 1; ++i)
+		vtparse_byte(&p, 'a');
+	vtparse_byte(&p, 0x9c);
+	EXPECT("ok", "P(o)P(k)");
+}
+
 static void test_reset(void) {
 	setup();
 	EXPECT("\x1b]0;stuck", ""); // unterminated OSC
@@ -174,6 +224,7 @@ int main(void) {
 	RUN(test_del_ignored_in_sequences);
 	RUN(test_c1_ignored_by_default);
 	RUN(test_c1_controls_when_enabled);
+	RUN(test_unterminated_strings);
 	RUN(test_reset);
 	return tests_done();
 }

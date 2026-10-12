@@ -304,6 +304,62 @@ static void test_blank_after_setting(void) {
 	CHECK(row_contains(&scr, r, "< 60 min >"));
 }
 
+// The ADM-3A is 80 columns only: Columns shows 80 and what fixes it, is
+// skipped by Up/Down and cannot change, and its own value is kept (dmt.39).
+static void test_columns_fixed_by_adm3a(void) {
+	static screen_t s;
+	screen_init(&s, 80, FG, BG);
+	settings_t v;
+	settings_defaults(&v);
+	v.columns = 132;
+	v.term_type = SETTINGS_TERM_ADM3A;
+	setup_open(&u, &v);
+	CHECK_EQ(u.item, 1); // not on Columns
+	const unsigned type = offsetof(settings_t, term_type);
+	for (unsigned i = 0; i < 2 * SETUP_ITEMS; ++i) {
+		send("\x1b[B", 0);
+		CHECK(u.item != 0);
+	}
+	for (unsigned i = 0; i < 2 * SETUP_ITEMS; ++i) {
+		send("\x1b[A", 0);
+		CHECK(u.item != 0);
+	}
+	u.item = 0; // even if selected, it does not change
+	send(" \x1b[C", 0);
+	CHECK_EQ(u.values.columns, 132);
+	setup_draw(&u, &s, 0, "", FG, BG, BORDER);
+	CHECK(row_contains(&s, 1, "> Columns"));
+	CHECK(row_contains(&s, 1, " 80  (ADM-3A)")); // where 132 would be
+	CHECK(!row_contains(&s, 1, "132"));
+	char line[81];
+	for (unsigned c = 0; c < 80; ++c)
+		line[c] = (char)screen_glyph(&s, c, 1);
+	line[80] = 0;
+	unsigned at80 = (unsigned)(strstr(line, " 80 ") - line) + 1;
+	uint8_t fg, bg;
+	screen_colours(&s, at80, 1, &fg, &bg);
+	CHECK(fg == BG && bg == FG); // the value in use, reversed
+
+	// Live: Terminal type back to VT100 frees Columns with its 132.
+	u.item = type;
+	send("\x1b[C", 0); // ADM-3A -> VT100 (wraps)
+	CHECK_EQ(u.values.term_type, SETTINGS_TERM_VT100);
+	setup_draw(&u, &s, 0, "", FG, BG, BORDER);
+	CHECK(row_contains(&s, 1, " 80   132 "));
+	CHECK(!row_contains(&s, 1, "ADM-3A"));
+	u.item = 1;
+	send("\x1b[A", 0);
+	CHECK_EQ(u.item, 0);
+	send(" ", 0);
+	CHECK_EQ(u.values.columns, 80);
+	// And back to ADM-3A: fixed again.
+	u.item = type;
+	send("\x1b[D", 0);
+	CHECK_EQ(u.values.term_type, SETTINGS_TERM_ADM3A);
+	send("\x1b[B", 0); // from Terminal type (last) round past Columns
+	CHECK_EQ(u.item, 1);
+}
+
 // The panel is a box in the border colour; the selected setting's name is
 // bold and its current choice reversed, so mono shows them too.
 static void test_box_and_selection(void) {
@@ -351,6 +407,7 @@ int main(void) {
 	RUN(test_message_cleared_by_next_key);
 	RUN(test_draw_marks_current_choice);
 	RUN(test_box_and_selection);
+	RUN(test_columns_fixed_by_adm3a);
 	RUN(test_colours_preview);
 	RUN(test_machine_menu_key);
 	RUN(test_demo_key);
