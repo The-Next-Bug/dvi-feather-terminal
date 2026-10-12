@@ -380,10 +380,13 @@ status line (row 24); UART0 on GP0/GP1.
   scratch buffer (`src/scratch.[ch]`, portable: one holder at a time; also
   the monitor's LZ window and blank-disk chunks, and fwupdate's UF2 block), skipping equal sectors, then watchdog_reboot. It must read
   nothing from the old image (.rodata is in flash):
-  `scripts/check_fwupdate.py` (run by build.sh) follows its calls in the
-  .dis and fails on 0x10xxxxxx literals, or if the image reaches the
-  staging area. nvflash_erase/program/read: raw access, interrupts off
-  per operation.
+  `scripts/check_sram_only.py` (run by build.sh; was check_fwupdate.py)
+  follows its calls in the .dis and fails on 0x10xxxxxx literals or code
+  outside SRAM, or if the image reaches the staging area; the same for
+  core1_main, dma_irq, video_init and main()'s calls up to
+  nvflash_retime, and the nvflash operations (ADDRESS_ONLY lists flash
+  addresses only compared against). nvflash_erase/program/write: raw
+  access, interrupts off per operation (USB handlers' code is in flash).
   newlib's localtime/scanf cost ~20 KB of SRAM, so the clock avoids them.
 - `tools/hostbridge.py`: run a host program with the terminal as display,
   typing on the PC.
@@ -413,7 +416,8 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   ADM-3A, SET-UP's Terminal type row, status line type) and s0i to
   0x2007a2b8 (v0.7.0), ~23.8 KB free; dmt.36/39 to 0x2007a4d0; the
   alternate screen with SET-UP's rows in one 13.4 KB stash (qur.15/16,
-  dmt.15: +4.4 KB) to 0x2007b640, ~18.4 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  dmt.15: +4.4 KB) to 0x2007b640, ~18.4 KB free; cold code in flash
+  (qur.24, -48.5 KB) to 0x2006f458, ~67 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, stash_buf 13.4 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit.
@@ -439,9 +443,20 @@ SRAM is the tight resource; peripherals and pins are mostly free.
 - Style: C11, tabs, K&R braces, comments explain why; match surrounding
   code. Portable modules must not include pico-sdk headers (host-tested).
 - Hardware constraints learned the hard way:
-  - Code must run from SRAM (`COPY_TO_RAM`): the boot XIP setup assumes
+  - Code runs from SRAM (`COPY_TO_RAM`): the boot XIP setup assumes
     clk_sys <= 150 MHz (on the RP2040, flash execution hung above ~252 MHz:
-    dmt.10).
+    dmt.10). Cold code is the exception (bd qur.24): ld/
+    section_copy_to_ram_rodata.incl (pico_add_linker_script_override_path)
+    keeps whole objects' .text and .rodata in flash, run through XIP at
+    03h/50 MHz after nvflash_retime: FatFs, TinyUSB's usbh/hub/hid_host/
+    msc_host, monitor, drivepanel, setup, fwpanel, demo, palette, xfer,
+    usbmsc, lz, diskimg, keyname, settings, uf2, qsort, machine.c's
+    .rodata (~51 KB). Hot paths (Z80 core, machine.c code, term, vtparse,
+    raster, video, screen, sdcard, drives, serial, keyboard, hcd_rp2040,
+    printf for panic) stay in SRAM. Nothing may run from flash on core 1,
+    between video_init and nvflash_retime, while flash is written, or in
+    the update's commit: check_sram_only.py. Adding an object there: check
+    it is none of those.
   - Core 1 must never touch flash or `const` data (which lands in flash):
     keep its data non-const/static and its code `__not_in_flash_func`.
   - The HSTX DMA reads line buffers in SRAM at high bus priority; a line

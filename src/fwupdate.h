@@ -12,7 +12,8 @@
 // 2. fwupdate_commit: with interrupts off, copy the staging area over the
 //    image a sector at a time, then restart through the watchdog. Runs from
 //    SRAM and reads nothing from the old image: no string literals, const
-//    tables or printf (scripts/check_fwupdate.py checks the code it runs).
+//    tables, printf or cold code (scripts/check_sram_only.py checks the code
+//    it runs).
 //    Power lost meanwhile leaves the flash unbootable; BOOTSEL and a USB
 //    flash still recover the board.
 

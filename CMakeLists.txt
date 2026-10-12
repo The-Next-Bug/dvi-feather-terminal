@@ -176,6 +176,8 @@ if(VIDEO_DIAG)
 endif()
 if(COPY_TO_RAM)
   pico_set_binary_type(dvi_terminal copy_to_ram)
+  # Cold code runs from flash (XIP) to save SRAM: ld/ (bd qur.24).
+  pico_add_linker_script_override_path(dvi_terminal ${CMAKE_CURRENT_LIST_DIR}/ld GLOB_FILES)
 endif()
 
 pico_enable_stdio_uart(dvi_terminal 0)

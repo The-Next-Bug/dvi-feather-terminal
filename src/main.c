@@ -1065,10 +1065,11 @@ int main(void) {
 	colours = settings_colours(&settings); // the status line under the logo uses them
 
 	video_init();
-	show_palette(&settings);
-	// Before anything reads flash at the new clock: the settings saves and,
-	// with LOGO_IN_FLASH, the logo.
+	// Before anything reads flash at the new clock: the settings saves,
+	// with LOGO_IN_FLASH the logo, and the cold code left in flash
+	// (ld/section_copy_to_ram_rodata.incl), palette.c's included.
 	nvflash_retime();
+	show_palette(&settings);
 	// After video_init: the baud divisor depends on the final clk_peri.
 	// Diagnostic builds write to UART0 with blocking calls, which a CTS that
 	// is unwired or held off would block forever: RTS only there.

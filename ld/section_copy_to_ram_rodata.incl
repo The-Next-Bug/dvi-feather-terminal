@@ -1,0 +1,44 @@
+/* Replaces pico-sdk's section_copy_to_ram_rodata.incl (bd qur.24).
+
+   In a copy_to_ram binary everything runs from SRAM and only .flashdata*
+   stays in flash. Cold code (and its constants) runs from flash through
+   XIP here instead, to save SRAM: code core 0 needs only now and then
+   (panels, the monitor, FatFs, the USB host's enumeration). printf stays
+   in SRAM: panic() uses it, also during the firmware update's commit.
+   This section comes before .text and .data, so these objects' code and
+   constants land here and not in SRAM.
+
+   Code in flash may run only after nvflash_retime() and never on core 1,
+   during a flash erase/program or in the firmware update's commit:
+   scripts/check_sram_only.py checks that from the disassembly. */
+
+SECTIONS
+{
+    .rodata : {
+        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.flashdata*)))
+        . = ALIGN(4);
+        __cold_text_start__ = .;
+        *fatfs/ff.c.o(.text* .rodata*)
+        *tinyusb/src/host/usbh.c.o(.text* .rodata*)
+        *tinyusb/src/host/hub.c.o(.text* .rodata*)
+        *tinyusb/src/class/hid/hid_host.c.o(.text* .rodata*)
+        *tinyusb/src/class/msc/msc_host.c.o(.text* .rodata*)
+        *src/monitor.c.o(.text* .rodata*)
+        *src/drivepanel.c.o(.text* .rodata*)
+        *src/setup.c.o(.text* .rodata*)
+        *src/fwpanel.c.o(.text* .rodata*)
+        *src/demo.c.o(.text* .rodata*)
+        *src/palette.c.o(.text* .rodata*)
+        *src/xfer.c.o(.text* .rodata*)
+        *src/usbmsc.c.o(.text* .rodata*)
+        *src/lz.c.o(.text* .rodata*)
+        *src/diskimg.c.o(.text* .rodata*)
+        *src/keyname.c.o(.text* .rodata*)
+        *src/settings.c.o(.text* .rodata*)
+        *src/uf2.c.o(.text* .rodata*)
+        *src/machine.c.o(.rodata*)
+        *libg.a:libc_a-qsort.o(.text* .rodata*)
+        . = ALIGN(4);
+        __cold_text_end__ = .;
+    } > TEXT_STORE
+}
