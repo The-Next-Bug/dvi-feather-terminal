@@ -73,7 +73,7 @@ build:
   needs: []
   parallel:
     matrix:
-      - TARGET: [pico2-dvi-sock]
+      - TARGET: [pico2-dvi-sock, frankless]
   script:
     - git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb
     - scripts/setup-toolchain.sh

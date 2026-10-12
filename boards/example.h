@@ -123,6 +123,13 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 // #define BOARD_USB_VBUS_EN_PIN 22
 // #define BOARD_USB_VBUS_EN_LEVEL 1
 
+// --- PSRAM (optional) ---
+//
+// A QSPI PSRAM sharing the flash's bus, on the QMI's second chip select
+// (XIP_CS1: GP0, GP8, GP19 or GP47). Nothing uses it yet; the firmware only
+// drives this pin high at start-up so the PSRAM stays off the bus.
+// #define BOARD_PSRAM_CS_PIN 8
+
 // --- LED ---
 //
 // Lit/blinked by VIDEO_DIAG builds and hstx_test only. Leave it out if the

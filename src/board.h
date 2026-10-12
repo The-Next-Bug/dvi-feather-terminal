@@ -103,6 +103,14 @@
 #endif
 #define BOARD_SD_SPI_INST SPI_INSTANCE(BOARD_SD_SPI)
 
+// --- PSRAM (optional) ---
+
+// The QMI's second chip select (XIP_CS1) is on GP0, GP8, GP19 or GP47 only.
+#if defined(BOARD_PSRAM_CS_PIN) && BOARD_PSRAM_CS_PIN != 0 && BOARD_PSRAM_CS_PIN != 8 && \
+	BOARD_PSRAM_CS_PIN != 19 && BOARD_PSRAM_CS_PIN != 47
+#error "BOARD_PSRAM_CS_PIN is not an XIP_CS1 pin (GP0, GP8, GP19, GP47)"
+#endif
+
 // --- Every pin used once ---
 
 // Pins that are optional or only used in some builds count as used when
@@ -130,13 +138,18 @@
 #else
 #define BOARD_LED_BIT 0ull
 #endif
+#ifdef BOARD_PSRAM_CS_PIN
+#define BOARD_PSRAM_BIT BOARD_PIN_BIT(BOARD_PSRAM_CS_PIN)
+#else
+#define BOARD_PSRAM_BIT 0ull
+#endif
 #define BOARD_OTHER_PINS(op)                                                                       \
 	(BOARD_PIN_BIT(BOARD_UART_TX_PIN) op BOARD_PIN_BIT(BOARD_UART_RX_PIN) op           \
 	BOARD_CTS_BIT op BOARD_RTS_BIT op BOARD_PIN_BIT(BOARD_SD_MISO_PIN) op                           \
 	BOARD_PIN_BIT(BOARD_SD_CS_PIN) op BOARD_PIN_BIT(BOARD_SD_SCK_PIN) op                            \
-	BOARD_PIN_BIT(BOARD_SD_MOSI_PIN) op BOARD_VBUS_BIT op BOARD_LED_BIT)
+	BOARD_PIN_BIT(BOARD_SD_MOSI_PIN) op BOARD_VBUS_BIT op BOARD_LED_BIT op BOARD_PSRAM_BIT)
 #if BOARD_OTHER_PINS(+) != BOARD_OTHER_PINS(|)
-#error "the board header uses a pin twice (UART, SD card, USB VBUS enable, LED)"
+#error "the board header uses a pin twice (UART, SD card, USB VBUS enable, LED, PSRAM)"
 #endif
 #if BOARD_OTHER_PINS(|) & 0xff000ull
 #error "the board header gives a DVI pin (GP12-19) another job"
