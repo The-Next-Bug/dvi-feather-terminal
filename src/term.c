@@ -269,7 +269,24 @@ static void reset(term_t *t) {
 	personality_reset(t);
 	t->screen->cursor_visible = true;
 	term_set_reverse_screen(t, false);
+	if (t->stash)
+		screen_stash_drop(t->stash, TERM_STASH_TAG);
+	t->alt_screen = false;
 	clear_band(t);
+}
+
+void term_set_alt_screen(term_t *t, bool on) {
+	if (on == t->alt_screen || !t->stash)
+		return;
+	if (on) {
+		if (!screen_stash_push(t->stash, t->screen, TERM_STASH_TAG, t->top, t->rows))
+			return; // no room: carry on with the main screen
+		clear_band(t);
+	} else {
+		// Columns a DECCOLM to 132 added meanwhile come back blank.
+		screen_stash_pop(t->stash, t->screen, TERM_STASH_TAG, PALETTE_TEXT, PALETTE_BACKGROUND);
+	}
+	t->alt_screen = on;
 }
 
 // DECSCNM: show the terminal's rows with fg and bg swapped.
@@ -315,6 +332,10 @@ void term_reset(term_t *t) {
 	}
 	reset(t);
 	sync_cursor(t);
+}
+
+void term_set_stash(term_t *t, screen_stash_t *stash) {
+	t->stash = stash;
 }
 
 void term_set_reply(term_t *t, term_reply_t reply_fn, void *ctx) {

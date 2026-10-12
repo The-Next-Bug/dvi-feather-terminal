@@ -119,16 +119,80 @@ void screen_frame(screen_t *s, unsigned top, unsigned rows, const char *title, u
 	}
 }
 
-void screen_save_row(const screen_t *s, unsigned row, screen_line_t *out) {
-	if (row < SCREEN_ROWS)
-		*out = *screen_line(s, row);
+// ---------------------------------------------------------------------------
+// Saved rows
+
+void screen_stash_init(screen_stash_t *st, uint8_t *buf, size_t size) {
+	*st = (screen_stash_t){.buf = buf, .size = size};
 }
 
-void screen_restore_row(screen_t *s, unsigned row, const screen_line_t *in) {
-	if (row >= SCREEN_ROWS)
+static int stash_find(const screen_stash_t *st, uint8_t tag) {
+	for (unsigned i = 0; i < st->n; ++i)
+		if (st->entry[i].tag == tag)
+			return (int)i;
+	return -1;
+}
+
+static size_t stash_offset(const screen_stash_t *st, unsigned i) {
+	size_t off = 0;
+	for (unsigned j = 0; j < i; ++j)
+		off += SCREEN_STASH_BYTES(st->entry[j].rows, st->entry[j].cols);
+	return off;
+}
+
+bool screen_stash_holds(const screen_stash_t *st, uint8_t tag) {
+	return stash_find(st, tag) >= 0;
+}
+
+bool screen_stash_push(screen_stash_t *st, const screen_t *s, uint8_t tag, unsigned top, unsigned rows) {
+	size_t bytes = SCREEN_STASH_BYTES(rows, s->cols);
+	if (!tag || st->n == SCREEN_STASH_ENTRIES || stash_find(st, tag) >= 0 || top + rows > SCREEN_ROWS ||
+		bytes > st->size - st->used)
+		return false;
+	uint8_t *p = st->buf + st->used;
+	for (unsigned r = 0; r < rows; ++r) {
+		const screen_line_t *line = screen_line(s, top + r);
+		memcpy(p, line->glyph, s->cols);
+		memcpy(p + s->cols, line->fg, s->cols);
+		memcpy(p + 2 * s->cols, line->bg, s->cols);
+		memcpy(p + 3 * s->cols, line->attr, s->cols);
+		p += 4 * s->cols;
+	}
+	st->entry[st->n++] = (screen_stash_entry_t){.tag = tag, .top = (uint8_t)top, .rows = (uint8_t)rows,
+		.cols = s->cols};
+	st->used += bytes;
+	return true;
+}
+
+void screen_stash_drop(screen_stash_t *st, uint8_t tag) {
+	int i = stash_find(st, tag);
+	if (i < 0)
 		return;
-	s->lines[s->row_map[row]] = *in;
-	s->dirty |= 1u << s->row_map[row];
+	size_t off = stash_offset(st, (unsigned)i);
+	size_t bytes = SCREEN_STASH_BYTES(st->entry[i].rows, st->entry[i].cols);
+	memmove(st->buf + off, st->buf + off + bytes, st->used - off - bytes);
+	st->used -= bytes;
+	memmove(&st->entry[i], &st->entry[i + 1], (st->n - (unsigned)i - 1) * sizeof st->entry[0]);
+	--st->n;
+}
+
+bool screen_stash_pop(screen_stash_t *st, screen_t *s, uint8_t tag, uint8_t fg, uint8_t bg) {
+	int i = stash_find(st, tag);
+	if (i < 0)
+		return false;
+	const uint8_t *p = st->buf + stash_offset(st, (unsigned)i);
+	unsigned cols = st->entry[i].cols, n = cols < s->cols ? cols : s->cols;
+	for (unsigned r = 0; r < st->entry[i].rows; ++r, p += 4 * cols) {
+		unsigned slot = s->row_map[st->entry[i].top + r];
+		fill_slot(s, slot, fg, bg);
+		screen_line_t *line = &s->lines[slot];
+		memcpy(line->glyph, p, n);
+		memcpy(line->fg, p + cols, n);
+		memcpy(line->bg, p + 2 * cols, n);
+		memcpy(line->attr, p + 3 * cols, n);
+	}
+	screen_stash_drop(st, tag);
+	return true;
 }
 
 void screen_scroll_down(screen_t *s, unsigned top, unsigned bottom, uint8_t fg, uint8_t bg) {

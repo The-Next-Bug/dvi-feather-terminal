@@ -13,6 +13,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "ff.h"
+
 #define MONITOR_AUTOBOOT_MS 3000
 
 typedef struct {
@@ -44,6 +46,11 @@ void monitor_start(const monitor_platform_t *platform, bool autoboot, uint32_t n
 void monitor_enter(const char *reason, bool can_resume);
 
 monitor_action_t monitor_key(uint8_t c, uint32_t now_ms);
+
+// The SD card's file system object (FatFs volume 0), mounted by the
+// monitor. Terminal mode has no monitor, so SET-UP's firmware panel mounts
+// the card with it while open: one FATFS (~560 bytes of SRAM) for both.
+FATFS *monitor_card_fs(void);
 monitor_action_t monitor_tick(uint32_t now_ms);
 
 #endif

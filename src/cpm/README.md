@@ -23,8 +23,9 @@ hold an 8" floppy, a 4 MB or an 8 MB hard disk image (`src/drives.h`).
    build fails if the name is taken or the disk is full). Programs of our
    own go on the disk the same way. `--delete CPM22 XDIR.COM` takes
    z80pack's XDIR off first (it only works on drives A and B).
-   `termtest.asm` (the terminal types, page by page) goes onto the
-   `Z80TESTS` disk the same way (`--file Z80TESTS TERMTEST.COM`).
+   `termtest.asm` (the terminal types, page by page) and `altscr.asm`
+   (the alternate screen) go onto the `Z80TESTS` disk the same way
+   (`--file Z80TESTS TERMTEST.COM`, `ALTSCR.COM`).
 
 `ccpbdos.rel` has one bit per byte of the 5632-byte CCP+BDOS, set where the
 byte is the high byte of an address inside them. It was made once by running

@@ -96,6 +96,10 @@ static const char *fs_name(void) {
 	}
 }
 
+FATFS *monitor_card_fs(void) {
+	return &fs;
+}
+
 static void mount_card(void) {
 	xfer_reset();
 	drives_unmount_all();
