@@ -606,9 +606,12 @@ update's final copy could read the flash it overwrites. Plain
 automatically.
 
 Toolchain versions are pinned in **`toolchain.env`**, the single source of
-truth for `scripts/setup-toolchain.sh` and the CI cache key. To upgrade,
-change the version and its SHA256 there. pico-sdk is upgraded by moving its
-submodule.
+truth for `scripts/setup-toolchain.sh`. To upgrade, change the version and
+its SHA256 there, and the matching `ARG`s in the CI build image's Dockerfile
+(gitlab.seg9.com `images/build-image`, which installs the toolchain in
+`/opt/pico-toolchain`; until it is rebuilt, CI downloads the new versions in
+every job). pico-sdk is upgraded by moving its submodule (and the image's
+`PICO_SDK_*`, which picotool is built against).
 
 ### Build options
 
