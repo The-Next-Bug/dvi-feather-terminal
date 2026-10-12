@@ -619,8 +619,10 @@ scripts/package.sh                   # every built target -> dist/dvi-terminal-<
 `pico2-dvi-sock`; see [Other boards](#other-boards)), `SERIAL_FLOW_CONTROL`, `CMAKE_ARGS` (extra configure
 arguments, e.g. `CMAKE_ARGS=-DVIDEO_DIAG=ON`) and `SDCARD` (a mounted card
 to copy `FIRMWARE.UF2` to). It also writes `build/<target>/FIRMWARE.UF2`
-and runs `scripts/check_fwupdate.py`, which fails the build if the firmware
-update's final copy could read the flash it overwrites. Plain
+and runs `scripts/check_sram_only.py`, which fails the build if code that
+must never read the flash could reach code or data left there: the firmware
+update's final copy, the video core, the clock change and the flash
+writes. Plain
 `cmake -S . -B build/x` also works and picks up `.toolchain/`
 automatically.
 

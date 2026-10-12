@@ -78,9 +78,10 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
   echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$out/build-info.txt"
 
-# The firmware update (src/fwupdate.c) must not read the old image's flash
-# while it overwrites it.
-python3 scripts/check_fwupdate.py "$out"
+# Code that must never read the flash (the firmware update's commit, core 1,
+# the clock change, the flash operations) cannot reach cold code or
+# constants left in flash.
+python3 scripts/check_sram_only.py "$out"
 
 # The name the CP/M monitor's U looks for (8.3: no long names on the card).
 cp "$out/dvi_terminal.uf2" "$out/FIRMWARE.UF2"

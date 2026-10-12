@@ -41,10 +41,14 @@ void __no_inline_not_in_flash_func(nvflash_retime)(void) {
 	rom_flash_select_xip_read_mode(BOOTROM_XIP_MODE_03H_SERIAL, (uint8_t)divisor(READ_SCK_MAX_HZ));
 }
 
+// Interrupts off throughout, as in nvflash_erase/program: XIP is off, and
+// some handlers' code is in flash (the USB host's, ld/, bd qur.24).
 static void write_sector(uint32_t offset, const uint8_t *page) {
+	uint32_t irq = save_and_disable_interrupts();
 	flash_range_erase(offset, FLASH_SECTOR_SIZE);
 	flash_range_program(offset, page, FLASH_PAGE_SIZE);
 	nvflash_retime();
+	restore_interrupts(irq);
 }
 
 const uint8_t *nvflash_read(uint32_t offset) {
