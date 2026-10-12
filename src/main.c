@@ -1038,6 +1038,14 @@ static void draw_status(const status_t *st) {
 }
 
 int main(void) {
+#ifdef BOARD_PSRAM_CS_PIN
+	// The PSRAM shares the QSPI bus with the flash. Its CE pull-up against
+	// the pad's reset pull-down leaves CE barely above its input-high level,
+	// so drive it high: nothing uses the PSRAM yet.
+	gpio_init(BOARD_PSRAM_CS_PIN);
+	gpio_put(BOARD_PSRAM_CS_PIN, 1);
+	gpio_set_dir(BOARD_PSRAM_CS_PIN, GPIO_OUT);
+#endif
 	diag_init();
 	// Read the settings while the flash is still in its boot-time setup.
 	nvflash_init();

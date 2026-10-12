@@ -80,13 +80,25 @@ GP12-19), optional BOARD_DVI_DRIVE_MA / _SLEW_FAST, BOARD_UART (0/1) +
 BOARD_UART_{TX,RX,CTS,RTS}_PIN (terminal UART, also VIDEO_DIAG; CTS/RTS
 optional; the header points PICO_DEFAULT_UART* at them for hstx_test's
 stdio, before including an SDK board), BOARD_SD_SPI + BOARD_SD_{MISO,CS,SCK,MOSI}_PIN,
-optional BOARD_USB_VBUS_EN_PIN / _LEVEL, optional PICO_DEFAULT_LED_PIN.
+optional BOARD_USB_VBUS_EN_PIN / _LEVEL, optional PICO_DEFAULT_LED_PIN,
+optional BOARD_PSRAM_CS_PIN (XIP_CS1: GP0/8/19/47; main() drives it high
+first thing so the PSRAM stays off the shared QSPI bus; nothing uses the
+PSRAM yet, bd g31).
 `src/board.h` (RP2350 code only) #errors on missing settings, wrong
 function pins, pins used twice or off the chip; test/test_board.sh (ctest
 `board`) runs it on every board header and on broken variants. Pin values
 must be plain numbers (they are stringified into on-screen messages).
 `boards/example.h` is the documented template (same pins as the Sock, and
 standalone: RP2350A, flash, crystal). The user is designing a custom board.
+`boards/frankless.h` (bd 59u.1): that board, the user's reworked MicroFRANK
+(github.com/arlaneenalra/pi-pico-boards, reworked/frankless; reviewed in bd
+59u), from its KiCad files, untested on hardware: RP2350A, 16 MB flash,
+12 MHz oscillator on XIN, HDMI GP12-19 (CLK 13/12, D0 15/14, D1 17/16, D2
+19/18), UART1 GP20-23 with CTS/RTS (header J8), SD on SPI0 MISO 4 / CS 1 /
+SCK 2 / MOSI 3, APS6404L PSRAM CS on GP0, LED GP9; DS3231M RTC on I2C1
+GP10/11 with its 1 Hz on GP8 (unused so far). Slide switch S1 puts the USB
+on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
+CI builds it.
 
 The USB host (keyboards, sticks) is always built in (USB_KEYBOARD=OFF
 was removed: bd s0i). Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
