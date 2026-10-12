@@ -3,7 +3,8 @@
 #
 # Environment overrides:
 #   TEST_BUILD_DIR  build directory (default: build/test)
-#   CMAKE           cmake binary    (default: .toolchain/cmake/bin/cmake, else cmake on PATH)
+#   TOOLCHAIN_DIR   toolchain location (default: <repo>/.toolchain)
+#   CMAKE           cmake binary    (default: $TOOLCHAIN_DIR/cmake/bin/cmake, else cmake on PATH)
 #   CPU_TESTS=1     also run the Z80 instruction exercisers (test_cpu: minutes)
 set -euo pipefail
 
@@ -12,7 +13,7 @@ cd "$ROOT"
 
 TEST_BUILD_DIR="${TEST_BUILD_DIR:-build/test}"
 if [[ -z "${CMAKE:-}" ]]; then
-  CMAKE="$ROOT/.toolchain/cmake/bin/cmake"
+  CMAKE="${TOOLCHAIN_DIR:-$ROOT/.toolchain}/cmake/bin/cmake"
   [[ -x "$CMAKE" ]] || CMAKE=cmake
 fi
 CTEST="$(dirname "$(command -v "$CMAKE")")/ctest"

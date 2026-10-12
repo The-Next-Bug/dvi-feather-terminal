@@ -13,9 +13,9 @@
 #   TOOLCHAIN_DIR   install location (default: <repo>/.toolchain)
 #
 # Each component is skipped when its install records the pinned version.
-# Downloads are kept, verified, in TOOLCHAIN_DIR/downloads: CI caches that
-# (about 200 MB) plus the small picotool build, rather than the ~1.2 GB of
-# unpacked toolchain, and unpacks it in each job.
+# Downloads are kept, verified, in TOOLCHAIN_DIR/downloads. CI's build image
+# (images/build-image) has the toolchain installed in this layout in
+# /opt/pico-toolchain, so there this script only prints the versions.
 #
 # Host requirements: curl, tar, xz, sha256sum, git, a host C/C++ compiler and
 # make (picotool is built from source).
