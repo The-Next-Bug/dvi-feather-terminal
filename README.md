@@ -28,7 +28,9 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
   [Terminal types](#terminal-types).
 - **Attributes**: SGR bold (bright, and in 80 columns the bold face), underline, blink,
   reverse; colors 8/16, 256 (the xterm palette, exact) and 24-bit (the
-  nearest of those 256).
+  nearest of those 256). xterm's alternate screen (`CSI ? 1049 h`, `?1047`,
+  `?47`), so vim, less and htop put the screen back when they exit; see
+  [ALTSCR](#altscr).
 - **Keyboard**: a USB keyboard on the Pico 2's USB port; see
   [USB keyboard](#usb-keyboard).
 - **Status line** (row 24): the terminal's state and the last key sent, for
@@ -54,8 +56,10 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
 
 ### Limitations
 
-- No alternate screen (`CSI ? 1049 h` and friends): full-screen programs
-  such as vim or less leave their last screen behind when they exit.
+- The alternate screen starts blank each time (xterm keeps what was last
+  on it), and `?47` works as `?1047`. SET-UP opened over it at 132 columns
+  has no room to save the rows under its panel: they come back blank (the
+  program redraws them on Ctrl-L, in most).
 - Double-width and double-height lines show as normal lines; scrolling is
   jump scrolling only (DECSCLM is ignored).
 - OSC, DCS, SOS, PM and APC strings (window titles, sixels, ...) are
@@ -335,9 +339,8 @@ tools/hostbridge.py --cols 132 /dev/ttyUSB0 $SHELL
 ```
 
 It sets `TERM=xterm-color` (8 colors); `--term vt100` turns color off,
-`--term xterm-16color` adds bright colors. All the xterm entries ask for the
-alternate screen, which the terminal ignores (see
-[Limitations](#limitations)).
+`--term xterm-16color` adds bright colors. All the xterm entries use the
+alternate screen.
 
 ## Z80 CP/M machine
 
@@ -424,6 +427,18 @@ graphics, the terminal's replies and the codes the keys send (Ctrl-C ends
 that one). Each page says what it should look like. Install `Z80TESTS`
 again from the monitor to get it onto a card that already has the disk.
 
+### ALTSCR
+
+`Z80TESTS` also carries `ALTSCR` (`src/cpm/altscr.asm`), a check of the
+alternate screen with the VT100 terminal type: run `B:ALTSCR`. It fills the
+main screen with numbered rows in bold, underlined yellow and reverse, with
+an X in the middle, then goes to the alternate screen with `?1049`, `?1047`
+and `?47` in turn, scrolls it, and comes back on a key: the main screen
+must be as it was. `?1049` also brings back the cursor and its colors, so
+`<1049` appears after the X in bold red. The last step asks you to open
+and close SET-UP over the alternate screen, whose rows must come back.
+Any key goes on; Ctrl-C leaves at once.
+
 ### Moving files
 
 `CPM22` carries three tools (`src/cpm/xls.asm`, `xpip.asm`, `xera.asm`)
@@ -500,7 +515,7 @@ A after 3 seconds (any key stops that), or shows its menu:
 - **N**: make a new blank disk: name, then 8" floppy, 4 MB or 8 MB
   (an 8 MB one takes a few seconds to write).
 - **I**: install the built-in disk images onto the card: `CPM22` (CP/M 2.2
-  with its tools: boots), `Z80TESTS` (`TERMTEST`, and the Z80 instruction exercisers
+  with its tools: boots), `Z80TESTS` (`TERMTEST`, `ALTSCR`, and the Z80 instruction exercisers
   `EXZ80DOC` and `EXZ80ALL`, about 10 minutes each at full speed, and the
   `CPUTEST` diagnostics; `PRELIM` needs an emulator that runs block moves
   in one go, as z80pack's cpmsim does, and wrecks CP/M here: reset after
@@ -755,7 +770,7 @@ In `src/`:
   images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel),
   `fwpanel.[ch]` (SET-UP's firmware update), `xfer.[ch]` (port 10's
   files: `/XFER`), `usbvol.[ch]` (which USB stick is `USB:`), `cpm/` (the
-  CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA and TERMTEST; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
+  CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA, TERMTEST and ALTSCR; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
   images).
 - **RP2350**: `main.c`, `board.h` (the board header's pins, checked),
   `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]`

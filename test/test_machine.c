@@ -19,6 +19,7 @@
 #include "palette.h"
 #include "xfer.h"
 #include "scratch.h"
+#include "setup.h"
 #include "term.h"
 #include "test.h"
 
@@ -1302,6 +1303,120 @@ static void test_termtest(void) {
 	host_console_hook = NULL;
 }
 
+// ---- ALTSCR (src/cpm/altscr.asm on Z80TESTS): the alternate screen ----
+
+// As main.c's: the main screen at up to 132 columns, or it and SET-UP's
+// rows at 80.
+#define ALT_STASH (SCREEN_STASH_BYTES(24, 132) > SCREEN_STASH_BYTES(24 + SETUP_ROWS, 80) \
+	? SCREEN_STASH_BYTES(24, 132) : SCREEN_STASH_BYTES(24 + SETUP_ROWS, 80))
+static uint8_t alt_buf[ALT_STASH];
+static screen_stash_t alt_stash;
+
+// The main screen as ALTSCR draws it, with "<1049" after the X once the
+// first step is done.
+static void altscr_main_shown(bool label) {
+	for (unsigned r = 1; r <= 22; ++r) {
+		char want[80];
+		snprintf(want, sizeof want, "Main screen row %u  the quick brown fox jumps over the lazy dog", r);
+		if (r != 12)
+			TROW_IS(r - 1, want);
+		else
+			TROW_HAS(r - 1, "Main screen row 12  the quick brown");
+	}
+	TGLYPH(39, 11, 'X');
+	if (label) {
+		TROW_HAS(11, "X<1049");
+		uint8_t fg, bg;
+		screen_colours(&tscreen, 40, 11, &fg, &bg);
+		CHECK_EQ(fg, 9); // bold red: the colours ?1049 saved came back
+		CHECK(screen_attr(&tscreen, 40, 11) & SCREEN_ATTR_BOLD);
+	}
+	CHECK(screen_attr(&tscreen, 0, 0) & SCREEN_ATTR_BOLD); // row 1's style
+	CHECK(screen_attr(&tscreen, 0, 1) & SCREEN_ATTR_UNDERLINE);
+}
+
+static void altscr_alt_shown(const char *title) {
+	CHECK(tterm.alt_screen);
+	TROW_IS(0, title);
+	TROW_IS(18, "scrolled 1");
+	TROW_IS(23, "scrolled 6");
+	TROW_IS(10, "");
+}
+
+static void test_altscr(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("Z80TESTS"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "Z80TESTS"), DRIVES_OK);
+	host_cpr_reply = NULL;
+	screen_init(&tscreen, 80, PALETTE_TEXT, PALETTE_BACKGROUND);
+	term_init(&tterm, &tscreen, 0, 24);
+	screen_stash_init(&alt_stash, alt_buf, sizeof alt_buf);
+	term_set_stash(&tterm, &alt_stash);
+	host_console_hook = console_to_term;
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("DIR B:ALTSCR.COM", "ALTSCR   COM"));
+
+	CHECK(type("B:ALTSCR\r"));
+	CHECK_EQ(run_until("back with ESC [ ? 1049 l", 30), MACHINE_RUNNING);
+	altscr_alt_shown("ALTERNATE SCREEN (ESC [ ? 1049 h)");
+	CHECK(type(" "));
+	CHECK_EQ(run_until("Any key: next step.", 30), MACHINE_RUNNING);
+	CHECK(!tterm.alt_screen);
+	altscr_main_shown(true);
+	TROW_HAS(22, "Back from ?1049");
+
+	static const char *const modes[] = {"1047", "47"};
+	for (unsigned m = 0; m < 2; ++m) {
+		char text[64];
+		CHECK(type(" "));
+		snprintf(text, sizeof text, "back with ESC [ ? %s l", modes[m]);
+		CHECK_EQ(run_until(text, 30), MACHINE_RUNNING);
+		snprintf(text, sizeof text, "ALTERNATE SCREEN (ESC [ ? %s h)", modes[m]);
+		altscr_alt_shown(text);
+		CHECK(type(" "));
+		CHECK_EQ(run_until("Any key: next step.", 30), MACHINE_RUNNING);
+		CHECK(!tterm.alt_screen);
+		altscr_main_shown(true);
+		snprintf(text, sizeof text, "Back from ?%s:", modes[m]);
+		TROW_HAS(22, text);
+	}
+
+	// SET-UP over the alternate screen at 80 columns, as main.c does it:
+	// its rows fit beside the main screen and come back.
+	CHECK(type(" "));
+	CHECK_EQ(run_until("Then any key", 30), MACHINE_RUNNING);
+	altscr_alt_shown("ALTERNATE SCREEN with SET-UP over it");
+	const unsigned setup_top = 24 - SETUP_ROWS;
+	CHECK(screen_stash_push(&alt_stash, &tscreen, 'S', setup_top, SETUP_ROWS));
+	for (unsigned r = setup_top; r < 24; ++r)
+		screen_clear_line(&tscreen, r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	CHECK(screen_stash_pop(&alt_stash, &tscreen, 'S', PALETTE_TEXT, PALETTE_BACKGROUND));
+	altscr_alt_shown("ALTERNATE SCREEN with SET-UP over it");
+	CHECK(type(" "));
+	CHECK_EQ(run_until("Back from SET-UP", 30), MACHINE_RUNNING);
+	altscr_main_shown(true);
+	CHECK(type(" "));
+	CHECK_EQ(run_until("All steps done", 30), MACHINE_RUNNING);
+	CHECK(type(" "));
+	CHECK_EQ(run_until("A>", 30), MACHINE_RUNNING);
+	CHECK(!tterm.alt_screen);
+	CHECK_EQ(alt_stash.n, 0);
+
+	// Ctrl-C on the alternate screen leaves it.
+	CHECK(type("B:ALTSCR\r"));
+	CHECK_EQ(run_until("back with ESC [ ? 1049 l", 30), MACHINE_RUNNING);
+	CHECK(tterm.alt_screen);
+	CHECK(type("\x03"));
+	CHECK_EQ(run_until("A>", 30), MACHINE_RUNNING);
+	CHECK(!tterm.alt_screen);
+	CHECK_EQ(alt_stash.n, 0);
+	host_console_hook = NULL;
+}
+
 int main(void) {
 	srand(1);
 	RUN(test_fat32_volume);
@@ -1324,6 +1439,7 @@ int main(void) {
 	RUN(test_xfer_port);
 	RUN(test_xfer_tools);
 	RUN(test_termtest);
+	RUN(test_altscr);
 	drives_unmount_all();
 	f_unmount("");
 	diskio_ram_free();

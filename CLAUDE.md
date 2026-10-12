@@ -132,6 +132,12 @@ status line (row 24); UART0 on GP0/GP1.
   recycle hook, then remaps it (bd ful): video.c's hook blanks that slot's
   raster at once (raster_blank_line, the row's colour, reverse included),
   since core 1 draws raster[], which only catches up at video_update.
+  screen_stash_t (bd qur.16): saved rows as tagged entries in one
+  owner-provided buffer (4 bytes a cell at the width then; put back or
+  dropped in any order, wider screens padded): main.c's 13.4 KB stash_buf
+  holds the alternate screen's main screen (24 rows x 132) or that plus
+  SET-UP's rows at 80 columns; at 132, SET-UP over the alternate screen
+  has no room and its rows come back blank.
 - `src/vtparse.[ch]` (portable): Paul Williams' DEC parser. C1 (0x80-0x9F)
   ignored unless `c1_controls` (keeps UTF-8 safe); OSC/DCS/APC discarded,
   and ended by any C0 but NUL (BEL in OSC is the terminator), which then
@@ -144,7 +150,10 @@ status line (row 24); UART0 on GP0/GP1.
   screen, 80/132, replies), its helpers in `src/term_core.h` (for
   personalities only); term_write/term_reset dispatch on term_t.personality.
   `src/vt100.[ch]`: the VT100/VT102 personality (vtparse, C0/ESC/CSI, modes,
-  SGR; its state in term_t.vt100: parser, DECSC, DECCKM/DECKPAM, REP);
+  SGR; its state in term_t.vt100: parser, DECSC, DECCKM/DECKPAM, REP;
+  CSI ? 47/1047/1049 h/l via term.c term_set_alt_screen (bd dmt.15): the
+  main screen goes into term_set_stash's stash (tag TERM_STASH_TAG), the
+  alternate starts blank, 1049 adds DECSC/DECRC; RIS drops the entry);
   replies (DA, DSR/CPR, DECREQTPARM) through a callback. `src/vt52.c`
   (dmt.16): the VT100's VT52 mode (CSI ? 2 l in, ESC < out; own small
   parser for ESC Y row col; ESC Z -> ESC / Z; ANSI G0/G1 put aside),
@@ -236,7 +245,8 @@ status line (row 24); UART0 on GP0/GP1.
   in the default colours; also the Drives panel) (one row per setting, plus two preview rows under Palette: ANSI colours
   as fg and as bg, spaced so no 8-px group held two samples in 132 cols
   under the old PicoDVI encoder)
-  (key bytes in, save/cancel out); main.c saves/restores those rows. Opened
+  (key bytes in, save/cancel out); main.c saves/restores those rows in
+  the stash (tag 'S'; the demo drops them, the screen is cleared). Opened
   by F12 or Pause (keyboard.c SET-UP callback) or host `CSI ? 999 ~` (term.c bumps
   `setup_requests` and term_write stops after it; later bytes are keys).
 - `src/keyname.[ch]` (portable): key bytes -> "ESC [A", "^C", ... for the
@@ -303,6 +313,11 @@ status line (row 24); UART0 on GP0/GP1.
   test_machine's test_termtest runs it with the console fed into a real
   term_t (machine_host's host_console_hook; replies typed back) and checks
   every page's screen for all three.
+  src/cpm/altscr.asm (bd dmt.15) -> ALTSCR.COM on Z80TESTS: the main
+  screen in four styles with an X, then ?1049 / ?1047 / ?47 in turn (the
+  alternate screen scrolled, back on a key; ?1049 writes <1049 at the
+  restored cursor in its bold red) and a step asking for SET-UP over it;
+  test_machine's test_altscr runs it on a term_t with main.c's stash size.
   USB sticks (bd qur.3): FatFs volume 1 ("1:", USB: to the tools; ffconf
   FF_VOLUMES 2). `src/diskio.c` (RP2350) dispatches FatFs drives: 0
   sdcard_disk_*, 1 usbmsc_disk_*. `src/usbmsc.[ch]`:
@@ -346,8 +361,9 @@ status line (row 24); UART0 on GP0/GP1.
   mode keeps ESC [ 23 ~).
   Firmware update (bd n3k): SET-UP's U in either mode (`src/fwpanel.[ch]`,
   portable, over SET-UP's rows; main.c fw_* platform: in terminal mode it
-  f_mounts the card only while open, in CP/M mode it uses the monitor's
-  mount; stubbed in test_machine). It looks for FIRMWARE.UF2 on the card
+  f_mounts the card only while open, with the monitor's FATFS
+  (monitor_card_fs, qur.15: the monitor never runs in terminal mode), in
+  CP/M mode it uses the monitor's mount; stubbed in test_machine). It looks for FIRMWARE.UF2 on the card
   and on the USB stick (volume 1, usbmsc's mount, platform stick hook;
   qur.27): one is checked, both ask S or U; renamed on its own volume. The
   stick needs nothing at the commit (the rename synced it, xfer_reset
@@ -395,9 +411,11 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   0x20079a88, ~25.3 KB free; board headers (axq, pin strings) to
   0x20079ac8; terminal personalities (dmt.37 split, dmt.16 VT52, dmt.28
   ADM-3A, SET-UP's Terminal type row, status line type) and s0i to
-  0x2007a2b8 (v0.7.0), ~23.8 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  0x2007a2b8 (v0.7.0), ~23.8 KB free; dmt.36/39 to 0x2007a4d0; the
+  alternate screen with SET-UP's rows in one 13.4 KB stash (qur.15/16,
+  dmt.15: +4.4 KB) to 0x2007b640, ~18.4 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
-  60 KB, font_copy 20 KB, screen 13 KB, setup 10 KB, line_buf 6.4 KB,
+  60 KB, font_copy 20 KB, screen 13 KB, stash_buf 13.4 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit.
 - Flash (4 MB): image 0-0x7e108 (504 KB at v0.6.1; the 4 KB LZ window costs 32 KB); free to 2 MB (image growth;
   fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used

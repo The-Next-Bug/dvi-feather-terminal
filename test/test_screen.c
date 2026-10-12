@@ -218,25 +218,96 @@ static void test_reverse_rows_mark_dirty(void) {
 	CHECK_EQ(s.reverse_rows, 0);
 }
 
-// Rows saved from under an overlay come back, in whichever slot now holds
-// the row, and are marked dirty.
-static void test_save_restore_row(void) {
+// Saved rows come back in whichever slot now holds the row, marked dirty,
+// with their colours and attributes.
+static void test_stash_round_trip(void) {
+	static uint8_t buf[SCREEN_STASH_BYTES(SCREEN_ROWS, 132)];
+	screen_stash_t st;
+	screen_stash_init(&st, buf, sizeof buf);
 	screen_init(&s, 80, FG, BG);
 	screen_puts(&s, 0, 20, "keep me", FG, BG);
-	screen_line_t saved;
-	screen_save_row(&s, 20, &saved);
+	screen_put_attr(&s, 79, 21, 'z', 5, 6, SCREEN_ATTR_BOLD);
+	CHECK(screen_stash_push(&st, &s, 'a', 20, 2));
+	CHECK(screen_stash_holds(&st, 'a'));
+	CHECK_EQ(st.used, SCREEN_STASH_BYTES(2, 80));
 	screen_puts(&s, 0, 20, "overlay", BG, FG);
+	screen_scroll_up(&s, 0, SCREEN_ROWS - 1, FG, BG); // the rows move to other slots
+	screen_scroll_down(&s, 0, SCREEN_ROWS - 1, FG, BG);
 	s.dirty = 0;
-	screen_restore_row(&s, 20, &saved);
+	CHECK(screen_stash_pop(&st, &s, 'a', FG, BG));
 	CHECK_EQ(screen_glyph(&s, 0, 20), 'k');
-	CHECK_EQ(s.dirty, 1u << s.row_map[20]);
-	screen_restore_row(&s, SCREEN_ROWS, &saved); // ignored
-	CHECK_EQ(s.dirty, 1u << s.row_map[20]);
+	CHECK_EQ(screen_glyph(&s, 79, 21), 'z');
+	uint8_t fg, bg;
+	screen_colours(&s, 79, 21, &fg, &bg);
+	CHECK(fg == 5 && bg == 6);
+	CHECK_EQ(screen_attr(&s, 79, 21), SCREEN_ATTR_BOLD);
+	CHECK_EQ(s.dirty, 1u << s.row_map[20] | 1u << s.row_map[21]);
+	CHECK(!screen_stash_holds(&st, 'a'));
+	CHECK_EQ(st.used, 0);
+	CHECK(!screen_stash_pop(&st, &s, 'a', FG, BG)); // gone
+}
+
+// Entries share the buffer: too big, a tag used twice or a third entry is
+// refused; dropping or popping the first keeps the second intact.
+static void test_stash_entries(void) {
+	static uint8_t buf[SCREEN_STASH_BYTES(30, 80)];
+	screen_stash_t st;
+	screen_stash_init(&st, buf, sizeof buf);
+	screen_init(&s, 80, FG, BG);
+	for (unsigned r = 0; r < SCREEN_ROWS; ++r)
+		screen_put(&s, 0, r, (uint8_t)('A' + r), FG, BG);
+	CHECK(!screen_stash_push(&st, &s, 0, 0, 1)); // tag 0 is none
+	CHECK(screen_stash_push(&st, &s, 'm', 0, 24));
+	CHECK(screen_stash_holds(&st, 'm'));
+	CHECK(!screen_stash_push(&st, &s, 'm', 0, 1));        // tag in use
+	CHECK(!screen_stash_push(&st, &s, 's', 10, 7));        // 24 + 7 rows > 30
+	CHECK(screen_stash_push(&st, &s, 's', 10, 6));
+	CHECK(!screen_stash_push(&st, &s, 't', 0, 0));         // only two entries
+	for (unsigned r = 0; r < SCREEN_ROWS; ++r)
+		screen_put(&s, 0, r, '.', FG, BG);
+	// The first goes: the second moves down and still comes back right.
+	screen_stash_drop(&st, 'm');
+	CHECK_EQ(st.used, SCREEN_STASH_BYTES(6, 80));
+	CHECK(screen_stash_pop(&st, &s, 's', FG, BG));
+	for (unsigned r = 10; r < 16; ++r)
+		CHECK_EQ(screen_glyph(&s, 0, r), 'A' + r);
+	CHECK_EQ(screen_glyph(&s, 0, 9), '.');
+	CHECK_EQ(screen_glyph(&s, 0, 16), '.');
+	screen_stash_drop(&st, 'x'); // no such entry: nothing happens
+	CHECK_EQ(st.n, 0);
+	CHECK(!screen_stash_push(&st, &s, 'v', 20, SCREEN_ROWS)); // off the screen
+}
+
+// Rows saved at 80 columns and put back at 132: the new columns are
+// cleared to the colours given; saved at 132 and put back at 80: cut.
+static void test_stash_width_change(void) {
+	static uint8_t buf[SCREEN_STASH_BYTES(SCREEN_ROWS, 132)];
+	screen_stash_t st;
+	screen_stash_init(&st, buf, sizeof buf);
+	screen_init(&s, 80, FG, BG);
+	screen_put(&s, 79, 3, 'x', FG, BG);
+	CHECK(screen_stash_push(&st, &s, 'a', 3, 1));
+	screen_init(&s, 132, FG, BG);
+	screen_put(&s, 100, 3, 'y', FG, BG);
+	CHECK(screen_stash_pop(&st, &s, 'a', 7, 1));
+	CHECK_EQ(screen_glyph(&s, 79, 3), 'x');
+	CHECK_EQ(screen_glyph(&s, 100, 3), ' ');
+	uint8_t fg, bg;
+	screen_colours(&s, 100, 3, &fg, &bg);
+	CHECK(fg == 7 && bg == 1);
+	screen_put(&s, 131, 3, 'w', FG, BG);
+	CHECK(screen_stash_push(&st, &s, 'a', 3, 1));
+	CHECK_EQ(st.used, SCREEN_STASH_BYTES(1, 132));
+	screen_init(&s, 80, FG, BG);
+	CHECK(screen_stash_pop(&st, &s, 'a', FG, BG));
+	CHECK_EQ(screen_glyph(&s, 79, 3), 'x');
 }
 
 int main(void) {
 	RUN(test_init_fills_blanks);
-	RUN(test_save_restore_row);
+	RUN(test_stash_round_trip);
+	RUN(test_stash_entries);
+	RUN(test_stash_width_change);
 	RUN(test_bad_width_means_80);
 	RUN(test_put_round_trips);
 	RUN(test_out_of_range_is_ignored);

@@ -20,6 +20,7 @@
 // inverting the cursor cell's pixels.
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define SCREEN_MAX_COLS 132
@@ -88,10 +89,41 @@ void screen_clear_line(screen_t *s, unsigned row, uint8_t fg, uint8_t bg);
 void screen_frame(screen_t *s, unsigned top, unsigned rows, const char *title, uint8_t fg, uint8_t bg,
 	uint8_t border);
 
-// Copy a row's cells out, or put saved cells back (e.g. under an overlay).
-// Out-of-range rows are ignored.
-void screen_save_row(const screen_t *s, unsigned row, screen_line_t *out);
-void screen_restore_row(screen_t *s, unsigned row, const screen_line_t *in);
+// Saved rows: copies of a screen's rows to put back later, as entries in
+// one buffer the owner provides, each tagged by its owner (the alternate
+// screen keeps the main screen in it, SET-UP the rows under its panel), so
+// the users share the memory. An entry keeps the width the screen had (4
+// bytes a cell), so 80 columns cost less than 132. Entries can be put back
+// or dropped in any order.
+#define SCREEN_STASH_ENTRIES 2
+#define SCREEN_STASH_BYTES(rows, cols) ((size_t)(rows) * (cols) * 4u)
+
+typedef struct {
+	uint8_t tag, top, rows, cols;
+} screen_stash_entry_t;
+
+typedef struct {
+	uint8_t *buf;
+	size_t size, used;
+	uint8_t n;
+	screen_stash_entry_t entry[SCREEN_STASH_ENTRIES]; // in buffer order
+} screen_stash_t;
+
+void screen_stash_init(screen_stash_t *st, uint8_t *buf, size_t size);
+
+// Save rows top .. top + rows - 1 under tag (non-zero). False, saving
+// nothing, when they do not fit or the tag already has an entry.
+bool screen_stash_push(screen_stash_t *st, const screen_t *s, uint8_t tag, unsigned top, unsigned rows);
+
+// Put tag's rows back where they came from and drop the entry. Cells past
+// the saved width (the screen got wider) are cleared to fg/bg. False when
+// tag has no entry.
+bool screen_stash_pop(screen_stash_t *st, screen_t *s, uint8_t tag, uint8_t fg, uint8_t bg);
+
+// Forget tag's entry, if any.
+void screen_stash_drop(screen_stash_t *st, uint8_t tag);
+
+bool screen_stash_holds(const screen_stash_t *st, uint8_t tag);
 
 // Scroll rows top..bottom (inclusive) up by one; the bottom row is cleared.
 void screen_scroll_up(screen_t *s, unsigned top, unsigned bottom, uint8_t fg, uint8_t bg);

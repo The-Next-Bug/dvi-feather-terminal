@@ -25,6 +25,12 @@
 // whole screen (even when the width stays the same) and bumps
 // screen_resets, so the owner of the other rows knows to redraw them.
 //
+// The alternate screen (CSI ? 47 / 1047 / 1049 h and l, as xterm) keeps
+// the main screen's rows in the owner's saved rows (term_set_stash, tagged
+// TERM_STASH_TAG) while it is shown, and starts cleared each time (xterm
+// keeps what was on it). Without saved rows, or with no room in them, the
+// main screen stays in use. RIS goes back to the main screen, cleared.
+//
 // CSI ? 999 ~ (private to this terminal) asks for SET-UP: it bumps
 // setup_requests, and term_write stops right after it, so the owner can hand
 // the bytes that follow to SET-UP instead.
@@ -38,6 +44,7 @@
 
 #define TERM_DEFAULT_COLOUR 0x100 // SGR 39 / 49: the terminal's default fg/bg
 #define TERM_SETUP_PARAM 999     // CSI ? 999 ~: open SET-UP
+#define TERM_STASH_TAG 'A'       // the alternate screen's entry in the saved rows
 
 typedef enum {
 	TERM_VT100, // vt100.c (and its VT52 mode, vt52.c)
@@ -100,6 +107,8 @@ typedef struct {
 	bool newline_mode;    // LNM: LF, VT and FF also do CR
 	bool backspace_bs;    // DECBKM: Backspace sends BS (else DEL), for the keyboard
 	bool reverse_screen;  // DECSCNM
+	bool alt_screen;      // the alternate screen is shown (the main one is in stash)
+	screen_stash_t *stash; // saved rows for the alternate screen; NULL: none
 
 	uint8_t tabs[(SCREEN_MAX_COLS + 7) / 8];
 	unsigned screen_resets; // times DECCOLM cleared the whole screen
@@ -128,6 +137,10 @@ void term_reset(term_t *t);
 // Where replies to the host (device attributes, cursor position reports)
 // go. Without one they are dropped.
 void term_set_reply(term_t *t, term_reply_t reply, void *ctx);
+
+// Saved rows for the alternate screen (NULL: no alternate screen). The
+// owner may keep its own entries in them too.
+void term_set_stash(term_t *t, screen_stash_t *stash);
 
 // Returns how many bytes were used: all of them, unless a SET-UP request
 // (CSI ? 999 ~) ended the call early.

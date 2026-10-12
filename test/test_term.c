@@ -513,6 +513,122 @@ static void test_unterminated_string_ends_on_control(void) {
 	CHECK(row_is(1, "ok"));
 }
 
+// ---------------------------------------------------------------------------
+// Alternate screen (dmt.15)
+
+static uint8_t stash_buf[SCREEN_STASH_BYTES(ROWS, 132)];
+static screen_stash_t stash;
+
+static void setup_alt(void) {
+	setup();
+	screen_stash_init(&stash, stash_buf, sizeof stash_buf);
+	term_set_stash(&t, &stash);
+}
+
+// ?1049: the main screen and the cursor (with its attributes) come back;
+// the alternate screen starts cleared, the status line is never touched.
+static void test_alt_screen_1049(void) {
+	setup_alt();
+	put("main 0\r\nmain 1\x1b[24;1Hlast\x1b[1;31m\x1b[5;7H");
+	put("\x1b[?1049h");
+	CHECK(t.alt_screen);
+	CHECK(row_is(0, ""));
+	CHECK(row_is(ROWS - 1, ""));
+	CHECK(row_is(STATUS, "status"));
+	CHECK_CURSOR(6, 4); // where it was: ?1049 does not move it
+	put("\x1b[0m\x1b[Halt\x1b[24;1H\n\nscrolled");
+	CHECK(row_is(ROWS - 1, "scrolled"));
+	put("\x1b[?1049l");
+	CHECK(!t.alt_screen);
+	CHECK(row_is(0, "main 0"));
+	CHECK(row_is(1, "main 1"));
+	CHECK(row_is(ROWS - 1, "last"));
+	CHECK(row_is(STATUS, "status"));
+	CHECK_CURSOR(6, 4);
+	put("x"); // bold red again
+	CHECK_EQ(fg_at(6, 4), 9); // red, brightened by bold
+	CHECK_EQ(stash.n, 0);
+}
+
+// ?47 and ?1047 switch screens without touching the cursor.
+static void test_alt_screen_47_1047(void) {
+	static const char *const modes[] = { "47", "1047" };
+	for (unsigned m = 0; m < 2; ++m) {
+		setup_alt();
+		put("main\x1b[3;3H");
+		char seq[16];
+		snprintf(seq, sizeof seq, "\x1b[?%sh", modes[m]);
+		put(seq);
+		CHECK(row_is(0, ""));
+		put("\x1b[10;10Halt");
+		snprintf(seq, sizeof seq, "\x1b[?%sl", modes[m]);
+		put(seq);
+		CHECK(row_is(0, "main"));
+		CHECK(row_is(9, ""));
+		CHECK_CURSOR(12, 9); // stays where the alternate screen left it
+	}
+}
+
+// Entering twice or leaving the main screen does nothing; a second
+// entry would otherwise save the alternate screen over the main one.
+static void test_alt_screen_repeats(void) {
+	setup_alt();
+	put("main\x1b[?1049h\x1b[?1049h\x1b[?47hx\x1b[?1049l");
+	CHECK(row_is(0, "main"));
+	put("\x1b[?1049l\x1b[?47l");
+	CHECK(row_is(0, "main"));
+}
+
+// Without saved rows (or with no room in them) the main screen stays.
+static void test_alt_screen_unavailable(void) {
+	setup();
+	put("main\x1b[?1049hx");
+	CHECK(!t.alt_screen);
+	CHECK(row_is(0, "mainx"));
+	setup_alt();
+	screen_stash_init(&stash, stash_buf, SCREEN_STASH_BYTES(ROWS, 80) - 1);
+	put("main\x1b[?1049hx");
+	CHECK(!t.alt_screen);
+	CHECK(row_is(0, "mainx"));
+}
+
+// RIS goes back to the main screen, cleared, and frees the saved rows.
+static void test_alt_screen_ris(void) {
+	setup_alt();
+	put("main\x1b[?1049halt\x1b" "c");
+	CHECK(!t.alt_screen);
+	CHECK_EQ(stash.n, 0);
+	CHECK(row_is(0, ""));
+	put("\x1b[?1049l"); // nothing to go back to
+	CHECK(row_is(0, ""));
+}
+
+// DECCOLM on the alternate screen: the main screen comes back at the new
+// width, the columns it never had blank.
+static void test_alt_screen_deccolm(void) {
+	setup_alt();
+	put("\x1b[1;75Hmain");
+	put("\x1b[?1049h\x1b[?3h");
+	CHECK_EQ(s.cols, 132);
+	put("\x1b[1;100Halt\x1b[?1049l");
+	CHECK_EQ(s.cols, 132);
+	CHECK(row_is(0, "                                                                          main"));
+}
+
+// The owner's own entry (SET-UP's rows) in the same buffer is left alone.
+static void test_alt_screen_shares_stash(void) {
+	setup_alt();
+	put("\x1b[20;1Hunder setup\x1b[H");
+	CHECK(screen_stash_push(&stash, &s, 'S', 19, 5));
+	put("\x1b[?1049h"); // 5 + 24 rows of 80 columns fit
+	CHECK(t.alt_screen);
+	put("\x1b[?1049l");
+	CHECK(screen_stash_holds(&stash, 'S'));
+	screen_erase(&s, 19, 0, 80, FG, BG);
+	CHECK(screen_stash_pop(&stash, &s, 'S', FG, BG));
+	CHECK(row_is(19, "under setup"));
+}
+
 // REP right after a reset has nothing to repeat.
 static void test_reset_forgets_rep_char(void) {
 	setup();
@@ -1048,6 +1164,13 @@ int main(void) {
 	RUN(test_term_reset);
 	RUN(test_term_reset_recovers_wedged_parser);
 	RUN(test_unterminated_string_ends_on_control);
+	RUN(test_alt_screen_1049);
+	RUN(test_alt_screen_47_1047);
+	RUN(test_alt_screen_repeats);
+	RUN(test_alt_screen_unavailable);
+	RUN(test_alt_screen_ris);
+	RUN(test_alt_screen_deccolm);
+	RUN(test_alt_screen_shares_stash);
 	RUN(test_reset_forgets_rep_char);
 	RUN(test_sgr_colours);
 	RUN(test_sgr_extended_colours);

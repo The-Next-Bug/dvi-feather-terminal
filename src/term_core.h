@@ -45,6 +45,8 @@ void term_tab(term_t *t);        // to the next tab stop or the last column
 
 void term_reset_cursor(term_cursor_t *c); // home, default attributes, ASCII
 void term_set_reverse_screen(term_t *t, bool on);
+// Show the alternate screen (cleared) or go back to the main one.
+void term_set_alt_screen(term_t *t, bool on);
 
 // 0: cursor to end, 1: start to cursor (inclusive), 2: all.
 void term_erase_display(term_t *t, unsigned how);

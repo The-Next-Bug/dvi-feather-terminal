@@ -17,6 +17,17 @@
 // ---------------------------------------------------------------------------
 // Modes
 
+// DECSC / DECRC.
+static void save_cursor(term_t *t) {
+	t->vt100.saved = t->cur;
+}
+
+static void restore_cursor(term_t *t) {
+	t->cur = t->vt100.saved;
+	term_move_to(t, t->cur.col, t->cur.row - (t->cur.origin_mode ? t->margin_top : 0));
+	t->cur.wrap_pending = t->vt100.saved.wrap_pending;
+}
+
 static void set_mode(term_t *t, bool dec, unsigned mode, bool on) {
 	if (!dec) {
 		if (mode == 4)
@@ -34,6 +45,17 @@ static void set_mode(term_t *t, bool dec, unsigned mode, bool on) {
 	case 25: t->screen->cursor_visible = on; break;
 	case 2: if (!on) vt100_set_vt52(t, true); break; // DECANM: ESC < comes back
 	case 67: t->backspace_bs = on; break; // DECBKM
+	case 47:
+	case 1047: term_set_alt_screen(t, on); break;
+	case 1049: // with the cursor saved and restored, as DECSC / DECRC
+		if (on && !t->alt_screen) {
+			save_cursor(t);
+			term_set_alt_screen(t, true);
+		} else if (!on && t->alt_screen) {
+			term_set_alt_screen(t, false);
+			restore_cursor(t);
+		}
+		break;
 	default: break; // DECSCLM, DECARM...: ignored
 	}
 }
@@ -265,12 +287,8 @@ static void esc_dispatch(term_t *t, const vtparse_t *p, uint8_t final) {
 	case 'E': t->cur.col = 0; term_index_down(t); t->cur.wrap_pending = false; break; // NEL
 	case 'M': term_index_up(t); t->cur.wrap_pending = false; break; // RI
 	case 'H': term_set_tab(t, t->cur.col, true); break; // HTS
-	case '7': t->vt100.saved = t->cur; break; // DECSC
-	case '8': // DECRC
-		t->cur = t->vt100.saved;
-		term_move_to(t, t->cur.col, t->cur.row - (t->cur.origin_mode ? t->margin_top : 0));
-		t->cur.wrap_pending = t->vt100.saved.wrap_pending;
-		break;
+	case '7': save_cursor(t); break; // DECSC
+	case '8': restore_cursor(t); break; // DECRC
 	case '=': t->vt100.keypad_app = true; break; // DECKPAM
 	case '>': t->vt100.keypad_app = false; break; // DECKPNM
 	case 'Z': device_attributes(t); break; // DECID

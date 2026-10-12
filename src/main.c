@@ -93,6 +93,15 @@ static_assert(NVFLASH_SECTORS == SETTINGS_SLOTS && NVFLASH_PAGE_SIZE == SETTINGS
 
 static screen_t screen;
 static term_t term;
+// Saved rows (screen.h): the main screen while the alternate screen is up
+// (the terminal's rows at up to 132 columns), and the rows under SET-UP.
+// At 80 columns both fit at once; at 132, SET-UP over the alternate screen
+// has no room and leaves its rows blank.
+#define STASH_SIZE (SCREEN_STASH_BYTES(TERM_ROWS, 132) > SCREEN_STASH_BYTES(TERM_ROWS + SETUP_ROWS, 80) \
+	? SCREEN_STASH_BYTES(TERM_ROWS, 132) : SCREEN_STASH_BYTES(TERM_ROWS + SETUP_ROWS, 80))
+#define STASH_SETUP 'S'
+static uint8_t stash_buf[STASH_SIZE];
+static screen_stash_t stash;
 static bool term_started;
 static bool key_pressed; // before the terminal started: ends the logo and demo
 
@@ -115,13 +124,12 @@ static struct {
 	uint32_t count; // keys sent: tells a repeat of the same key apart
 } last_key;
 
-// SET-UP state; the panel's rows are saved while it covers them.
+// SET-UP state; the panel's rows are saved (stash) while it covers them.
 static struct {
 	bool active, from_host;
 	bool open_requested;  // by the SET-UP key
 	setup_action_t action; // a save or cancel waiting for the main loop
 	setup_t ui;
-	screen_line_t saved[SETUP_ROWS];
 	uint32_t saved_reverse;
 	bool saved_cursor;
 	// CP/M mode: the Drives panel (D), over the same rows.
@@ -213,9 +221,9 @@ static void fw_draw_panel(void) {
 
 // The firmware panel's platform. In CP/M mode the monitor keeps the card
 // mounted (with the drives' images open); in terminal mode the card is
-// mounted only while the panel is open. The stick (volume 1) is usbmsc.c's,
+// mounted only while the panel is open, with the monitor's FATFS (the
+// monitor never runs in terminal mode). The stick (volume 1) is usbmsc.c's,
 // mounted in both modes.
-static FATFS fw_fs;
 
 static usbmsc_status_t usb_status(void);
 
@@ -226,7 +234,7 @@ static bool fw_stick(void) {
 static bool fw_mount(char *info, size_t n) {
 	if (cpm.on)
 		return true;
-	FRESULT r = f_mount(&fw_fs, "", 1);
+	FRESULT r = f_mount(monitor_card_fs(), "", 1);
 	if (r == FR_OK)
 		return true;
 	if (sdcard_type() == SDCARD_NONE)
@@ -324,8 +332,7 @@ static void setup_feed(const uint8_t *data, size_t len) {
 
 // Save the rows under the panel and draw it there.
 static void setup_cover(void) {
-	for (unsigned r = 0; r < SETUP_ROWS; ++r)
-		screen_save_row(&screen, SETUP_TOP + r, &setup.saved[r]);
+	screen_stash_push(&stash, &screen, STASH_SETUP, SETUP_TOP, SETUP_ROWS);
 	setup.saved_reverse = screen.reverse_rows;
 	screen_set_reverse_rows(&screen, screen.reverse_rows & ~(((1u << SETUP_ROWS) - 1) << SETUP_TOP));
 	screen.cursor_visible = false;
@@ -380,8 +387,9 @@ static void apply_settings(const settings_t *s) {
 // Put the rows back; with apply, use the edited settings now, and the width
 // if it differs (which clears the screen, as DECCOLM does).
 static void setup_leave(bool apply) {
-	for (unsigned r = 0; r < SETUP_ROWS; ++r)
-		screen_restore_row(&screen, SETUP_TOP + r, &setup.saved[r]);
+	if (!screen_stash_pop(&stash, &screen, STASH_SETUP, PALETTE_TEXT, PALETTE_BACKGROUND))
+		for (unsigned r = 0; r < SETUP_ROWS; ++r) // not saved: no room
+			screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
 	screen_set_reverse_rows(&screen, setup.saved_reverse);
 	screen.cursor_visible = setup.saved_cursor;
 	setup.active = false;
@@ -436,6 +444,7 @@ static void draw_demo(unsigned cols, const char *what) {
 // The terminal's screen is not kept (a copy would cost 13 KB of SRAM): it
 // comes back cleared, at its width, as after DECCOLM, under SET-UP again.
 static void setup_demo_start(void) {
+	screen_stash_drop(&stash, STASH_SETUP); // saved again over the cleared screen
 	setup.demo = true;
 	setup.demo_end = false;
 	setup.term_cols = screen.cols;
@@ -1090,6 +1099,8 @@ int main(void) {
 	cpm.on = settings.mode == SETTINGS_MODE_CPM;
 	screen_init(&screen, settings_columns(&settings), PALETTE_TEXT, PALETTE_BACKGROUND);
 	term_init(&term, &screen, 0, TERM_ROWS);
+	screen_stash_init(&stash, stash_buf, sizeof stash_buf);
+	term_set_stash(&term, &stash);
 	apply_settings(&settings);
 	term_set_reply(&term, send_reply, NULL);
 	term_started = true;
