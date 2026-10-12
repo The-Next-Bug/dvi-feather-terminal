@@ -7,7 +7,12 @@
 // It splits a byte stream into printable characters, C0/C1 controls, escape
 // sequences and control sequences, and hands each to a callback. Device
 // control strings, OSC strings and SOS/PM/APC strings are recognised and
-// discarded, so their contents never reach the screen.
+// discarded, so their contents never reach the screen. A string that is
+// never terminated must not swallow everything after it (an Alt key sends a
+// bare ESC prefix, so Alt+] opens an OSC string): as xterm's
+// brokenStringTerm, a C0 control other than NUL (and BEL, OSC's terminator)
+// ends a string and is then executed, and a string longer than
+// VTPARSE_MAX_STRING bytes ends there, its remaining bytes parsed as usual.
 //
 // Bytes 0xA0-0xFF are printed (Latin-1). Bytes 0x80-0x9F are ignored, as on
 // a (7-bit) VT100, unless c1_controls is set: then they are C1 controls
@@ -19,6 +24,7 @@
 
 #define VTPARSE_MAX_PARAMS 16
 #define VTPARSE_MAX_INTERMEDIATES 2
+#define VTPARSE_MAX_STRING 1024 // GNU screen stops at 768
 
 typedef enum {
 	VTPARSE_PRINT,       // ch: a printable character
@@ -47,6 +53,7 @@ struct vtparse {
 	uint8_t state;
 	bool ignoring;    // too many intermediates: dispatch nothing
 	bool params_full; // more than VTPARSE_MAX_PARAMS: drop the extras
+	uint16_t string_len; // bytes discarded in the current string
 };
 
 void vtparse_init(vtparse_t *p, vtparse_callback_t callback, void *user);

@@ -24,23 +24,36 @@ static unsigned choice_index(settings_t *v, unsigned item) {
 }
 
 static void change(setup_t *u, int step) {
+	if (settings_field_fixed(&u->values, u->item))
+		return;
 	const settings_field_t *it = &settings_fields[u->item];
 	unsigned i = (choice_index(&u->values, u->item) + it->n_choices + (unsigned)step) % it->n_choices;
 	*settings_field(&u->values, u->item) = it->values[i];
 }
 
+// Select the next setting in direction step (1 or -1) that can be changed.
+static void select_next(setup_t *u, int step) {
+	for (unsigned n = 0; n < SETUP_ITEMS; ++n) {
+		u->item = (u->item + SETUP_ITEMS + (unsigned)step) % SETUP_ITEMS;
+		if (!settings_field_fixed(&u->values, u->item))
+			return;
+	}
+}
+
 void setup_open(setup_t *u, const settings_t *values) {
 	*u = (setup_t){.values = *values};
+	if (settings_field_fixed(&u->values, u->item))
+		select_next(u, 1);
 }
 
 // The final byte of a cursor key sequence (ESC [ x or ESC O x).
 static setup_action_t cursor_key(setup_t *u, uint8_t final) {
 	switch (final) {
 	case 'A':
-		u->item = (u->item + SETUP_ITEMS - 1) % SETUP_ITEMS;
+		select_next(u, -1);
 		return SETUP_REDRAW;
 	case 'B':
-		u->item = (u->item + 1) % SETUP_ITEMS;
+		select_next(u, 1);
 		return SETUP_REDRAW;
 	case 'C':
 		change(u, 1);
@@ -177,6 +190,19 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 		for (unsigned c = 0; text[c]; ++c)
 			screen_put_attr(s, LEFT + c, row, (uint8_t)text[c], fg, bg, selected ? SCREEN_ATTR_BOLD : 0);
 		unsigned col = LEFT + 3 + NAME_WIDTH;
+		const char *fixed = settings_field_fixed(&values, i);
+		if (fixed) {
+			// Only the value in use (Columns is the one field that can be
+			// fixed), then what decides it.
+			settings_t used = values;
+			used.columns = (uint8_t)settings_columns(&values);
+			const char *label = it->labels[choice_index(&used, i)];
+			snprintf(text, sizeof text, " %s ", label);
+			screen_puts(s, col, row, text, bg, fg);
+			snprintf(text, sizeof text, "(%s)", fixed);
+			screen_puts(s, col + (unsigned)strlen(label) + 3, row, text, fg, bg);
+			continue;
+		}
 		unsigned current = choice_index(&values, i);
 		if (it->n_choices > INLINE_CHOICES) {
 			snprintf(text, sizeof text, "< %s >", it->labels[current]);

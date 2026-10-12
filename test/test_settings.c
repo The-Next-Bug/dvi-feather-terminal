@@ -186,7 +186,8 @@ static void test_term_type(void) {
 	CHECK_EQ(out.term_type, SETTINGS_TERM_ADM3A);
 }
 
-// The ADM-3A has 80 columns whatever the Columns setting says.
+// The ADM-3A has 80 columns whatever the Columns setting says, which is
+// then the only field fixed by the others.
 static void test_columns_in_use(void) {
 	settings_t s;
 	settings_defaults(&s);
@@ -194,8 +195,13 @@ static void test_columns_in_use(void) {
 	CHECK_EQ(settings_columns(&s), 132);
 	s.term_type = SETTINGS_TERM_VT52;
 	CHECK_EQ(settings_columns(&s), 132);
+	for (unsigned i = 0; i < SETTINGS_FIELDS; ++i)
+		CHECK(settings_field_fixed(&s, i) == NULL);
 	s.term_type = SETTINGS_TERM_ADM3A;
 	CHECK_EQ(settings_columns(&s), 80);
+	CHECK(strcmp(settings_field_fixed(&s, offsetof(settings_t, columns)), "ADM-3A") == 0);
+	for (unsigned i = 1; i < SETTINGS_FIELDS; ++i)
+		CHECK(settings_field_fixed(&s, i) == NULL);
 }
 
 static void test_line_and_colours(void) {

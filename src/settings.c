@@ -1,5 +1,6 @@
 #include "settings.h"
 
+#include <stddef.h>
 #include <string.h>
 
 #include "crc32.h"
@@ -59,6 +60,12 @@ unsigned settings_baud_rate(const settings_t *s) {
 
 unsigned settings_columns(const settings_t *s) {
 	return s->term_type == SETTINGS_TERM_ADM3A ? 80 : s->columns;
+}
+
+const char *settings_field_fixed(const settings_t *s, unsigned i) {
+	if (i == offsetof(settings_t, columns) && s->term_type == SETTINGS_TERM_ADM3A)
+		return "ADM-3A";
+	return NULL;
 }
 
 void settings_framing(const settings_t *s, unsigned *data_bits, char *parity, unsigned *stop_bits) {

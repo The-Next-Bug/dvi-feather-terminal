@@ -133,7 +133,10 @@ status line (row 24); UART0 on GP0/GP1.
   raster at once (raster_blank_line, the row's colour, reverse included),
   since core 1 draws raster[], which only catches up at video_update.
 - `src/vtparse.[ch]` (portable): Paul Williams' DEC parser. C1 (0x80-0x9F)
-  ignored unless `c1_controls` (keeps UTF-8 safe); OSC/DCS/APC discarded.
+  ignored unless `c1_controls` (keeps UTF-8 safe); OSC/DCS/APC discarded,
+  and ended by any C0 but NUL (BEL in OSC is the terminator), which then
+  executes, or after VTPARSE_MAX_STRING (1024) bytes (dmt.36, xterm
+  brokenStringTerm: an Alt+] sends ESC ]).
 - `src/term.[ch]` (portable): the terminal, split by personality (bd
   dmt.37) so each terminal type's meaning of a byte stays in its own file:
   term.c is the cell-level core and the public API (cursor, print with
@@ -221,7 +224,9 @@ status line (row 24); UART0 on GP0/GP1.
   palette_used) for core 0's waits, hstx_dvi_resume at a frame start on
   wake; bd 3rk), term_type (VT100 0 / VT52 2 / ADM-3A 3: personality and
   power-on/RIS mode; byte 11 once held the retired layout, so 1 is never a
-  value; settings_columns() is 80 for the ADM-3A);
+  value; settings_columns() is 80 for the ADM-3A;
+  settings_field_fixed() names what fixes a field, Columns under the
+  ADM-3A: SET-UP skips it and shows "80 (ADM-3A)", dmt.39);
   settings_colours() gives the status
   line's indices and the logo's tint. CRC-32 in
   `src/crc32.[ch]` (shared with the disk images). main.c apply_settings()
