@@ -84,7 +84,12 @@ drives_result_t drives_create(const char *name, drives_format_t f, uint8_t *buf,
 // not there or not an image.
 drives_format_t drives_image_format(const char *name);
 
-// The images in /DISKS80 (base names, sorted), up to max.
+// name (an image's, without .DSK) in upper case; false if it cannot be
+// one (empty, over 8 characters, or . / \\ : * ? or a blank in it).
+bool drives_normalise(const char *name, char upper[DRIVES_NAME_MAX + 1]);
+
+// The images in /DISKS80 (base names, sorted), up to max (drivecfg.c, as
+// the configuration and sets below).
 unsigned drives_list(char names[][DRIVES_NAME_MAX + 1], unsigned max);
 
 // Sector I/O for the FDC: track and sector within the drive's geometry
@@ -106,5 +111,26 @@ uint8_t drives_activity(void);
 // there, and returns false.
 void drives_save_config(void);
 bool drives_load_config(void);
+
+// Named drive sets (bd f8w.6): /DISKS80/SETS/<SET>.SET, a set of images
+// for drives A-H in DRIVES.CFG's form (A=CPM22, a line a drive, A= for
+// none), so they can be written on a PC too. SET-UP's Drives panel picks,
+// saves and removes them; the monitor only knows the current mounts.
+#define DRIVES_SETS_MAX 16 // sets drives_sets returns at most
+
+// A set name: 1-8 upper-case letters and digits.
+bool drives_set_name_ok(const char *set);
+
+// The sets on the card (sorted), up to max.
+unsigned drives_sets(char names[][DRIVES_NAME_MAX + 1], unsigned max);
+
+// A set's images ("" for none; names that are not image names are left
+// out), whether or not they are on the card. False if it cannot be read.
+bool drives_set_read(const char *set, char images[DRIVES][DRIVES_NAME_MAX + 1]);
+
+// Write (create or replace) a set, making /DISKS80/SETS if needed.
+bool drives_set_write(const char *set, const char images[DRIVES][DRIVES_NAME_MAX + 1]);
+
+bool drives_set_remove(const char *set);
 
 #endif

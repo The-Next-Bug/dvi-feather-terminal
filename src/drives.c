@@ -2,7 +2,6 @@
 
 #include <ctype.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "ff.h"
@@ -18,7 +17,6 @@
 #define FDC_STAT_SEC 9
 
 #define FLUSH_DELAY_MS 250
-#define CONFIG_PATH "/DISKS80/DRIVES.CFG"
 #define BLANK 0xe5 // an erased CP/M directory and data
 
 static const drives_geometry_t geometries[DRIVES_FORMATS] = {
@@ -49,7 +47,7 @@ drives_format_t drives_format_of_size(uint32_t size) {
 	return DRIVES_NONE;
 }
 
-static bool normalise(const char *in, char out[DRIVES_NAME_MAX + 1]) {
+bool drives_normalise(const char *in, char out[DRIVES_NAME_MAX + 1]) {
 	size_t n = strlen(in);
 	if (n == 0 || n > DRIVES_NAME_MAX)
 		return false;
@@ -64,7 +62,7 @@ static void image_path(char *path, size_t size, const char *upper) {
 
 drives_result_t drives_mount(unsigned d, const char *name) {
 	char upper[DRIVES_NAME_MAX + 1];
-	if (d >= DRIVES || !normalise(name, upper))
+	if (d >= DRIVES || !drives_normalise(name, upper))
 		return DRIVES_NOT_FOUND;
 	for (unsigned i = 0; i < DRIVES; ++i)
 		if (i != d && drive[i].format && strcmp(drive[i].name, upper) == 0)
@@ -121,7 +119,7 @@ drives_result_t drives_create(const char *name, drives_format_t f, uint8_t *buf,
 	drives_progress_t progress, void *ctx) {
 	char upper[DRIVES_NAME_MAX + 1], path[32];
 	const drives_geometry_t *g = drives_geometry(f);
-	if (!g || !normalise(name, upper))
+	if (!g || !drives_normalise(name, upper))
 		return DRIVES_NOT_FOUND;
 	FRESULT r = f_mkdir("/DISKS80");
 	if (r != FR_OK && r != FR_EXIST)
@@ -153,31 +151,10 @@ drives_result_t drives_create(const char *name, drives_format_t f, uint8_t *buf,
 drives_format_t drives_image_format(const char *name) {
 	char upper[DRIVES_NAME_MAX + 1], path[32];
 	FILINFO info;
-	if (!normalise(name, upper))
+	if (!drives_normalise(name, upper))
 		return DRIVES_NONE;
 	image_path(path, sizeof path, upper);
 	return f_stat(path, &info) == FR_OK ? drives_format_of_size((uint32_t)info.fsize) : DRIVES_NONE;
-}
-
-static int compare_names(const void *a, const void *b) {
-	return strcmp(a, b);
-}
-
-unsigned drives_list(char names[][DRIVES_NAME_MAX + 1], unsigned max) {
-	DIR dir;
-	FILINFO info;
-	unsigned n = 0;
-	FRESULT r = f_findfirst(&dir, &info, "/DISKS80", "*.DSK");
-	for (; r == FR_OK && info.fname[0] && n < max; r = f_findnext(&dir, &info)) {
-		char *dot = strchr(info.fname, '.');
-		if (dot)
-			*dot = '\0';
-		if (strlen(info.fname) <= DRIVES_NAME_MAX)
-			strcpy(names[n++], info.fname);
-	}
-	f_closedir(&dir);
-	qsort(names, n, sizeof names[0], compare_names);
-	return n;
 }
 
 // Position drive d at the sector, or return why not.
@@ -241,39 +218,4 @@ uint8_t drives_activity(void) {
 	uint8_t a = activity;
 	activity = 0;
 	return a;
-}
-
-void drives_save_config(void) {
-	FIL f;
-	if (f_open(&f, CONFIG_PATH, FA_WRITE | FA_CREATE_ALWAYS) != FR_OK)
-		return;
-	char text[DRIVES * (DRIVES_NAME_MAX + 4) + 1] = "";
-	for (unsigned d = 0; d < DRIVES; ++d) {
-		size_t n = strlen(text);
-		snprintf(text + n, sizeof text - n, "%c=%s\r\n", 'A' + d, drive[d].format ? drive[d].name : "");
-	}
-	UINT written;
-	f_write(&f, text, (UINT)strlen(text), &written);
-	f_close(&f);
-}
-
-bool drives_load_config(void) {
-	drives_unmount_all();
-	FIL f;
-	if (f_open(&f, CONFIG_PATH, FA_READ) != FR_OK) {
-		drives_mount(0, "CPM22");
-		drives_mount(1, "Z80TESTS");
-		return false;
-	}
-	char text[DRIVES * (DRIVES_NAME_MAX + 4) + 32];
-	UINT n = 0;
-	f_read(&f, text, sizeof text - 1, &n);
-	f_close(&f);
-	text[n] = '\0';
-	for (char *p = strtok(text, "\r\n"); p; p = strtok(NULL, "\r\n")) {
-		unsigned d = (unsigned)(toupper((unsigned char)p[0]) - 'A');
-		if (d < DRIVES && p[1] == '=' && p[2])
-			drives_mount(d, p + 2);
-	}
-	return true;
 }

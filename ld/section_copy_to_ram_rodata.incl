@@ -25,6 +25,7 @@ SECTIONS
         *tinyusb/src/class/msc/msc_host.c.o(.text* .rodata*)
         *src/monitor.c.o(.text* .rodata*)
         *src/drivepanel.c.o(.text* .rodata*)
+        *src/drivecfg.c.o(.text* .rodata*)
         *src/setup.c.o(.text* .rodata*)
         *src/fwpanel.c.o(.text* .rodata*)
         *src/demo.c.o(.text* .rodata*)

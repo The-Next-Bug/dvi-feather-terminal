@@ -229,7 +229,7 @@ static void test_drive_panel(void) {
 	CHECK_EQ(screen_glyph(&s, 0, 0), GLYPH_DEC_GRAPHICS('l')); // in a box
 	char row[81] = "";
 	for (unsigned c = 0; c < 80; ++c)
-		row[c] = (char)screen_glyph(&s, c, 5);
+		row[c] = (char)screen_glyph(&s, c, 6); // under the title and the Set row
 	CHECK(strstr(row, "E:") && strstr(row, "HD8") && strstr(row, "8 MB disk"));
 
 	// C: none -> CPM22 is on A, CPM31 is free: the first step takes it.
@@ -269,6 +269,123 @@ static void test_drive_panel(void) {
 	drivepanel_open(&p);
 	CHECK_EQ(panel_keys(&p, "\x1b"), DRIVEPANEL_NONE);
 	CHECK_EQ(drivepanel_tick(&p, DRIVEPANEL_ESC_TIMEOUT_MS), DRIVEPANEL_CANCEL);
+}
+
+static bool panel_row_has(const drivepanel_t *p, unsigned row, const char *text) {
+	static screen_t s;
+	screen_init(&s, 80, 0x3f, 0);
+	drivepanel_draw(p, &s, 0, 0x3f, 0, 0x0c);
+	char line[81] = "";
+	for (unsigned c = 0; c < 80; ++c)
+		line[c] = (char)screen_glyph(&s, c, row);
+	bool found = strstr(line, text) != NULL;
+	if (!found)
+		fprintf(stderr, "row %u: no \"%s\" in \"%s\"\n", row, text, line);
+	return found;
+}
+
+static void write_file(const char *path, const char *text);
+
+// Named drive sets in the Drives panel (bd f8w.6): saved from the drives,
+// picked on the Set row, removed; files in /DISKS80/SETS as DRIVES.CFG.
+static void test_drive_sets(void) {
+	static drivepanel_t p;
+	char before[DRIVES][DRIVES_NAME_MAX + 1];
+	for (unsigned d = 0; d < DRIVES; ++d)
+		strcpy(before[d], drives_name(d) ? drives_name(d) : "");
+	drivepanel_open(&p);
+	CHECK_EQ(p.n_sets, 0);
+	CHECK(panel_row_has(&p, 1, "no sets on the card yet"));
+	CHECK_EQ(panel_keys(&p, "\x1b[A"), DRIVEPANEL_REDRAW); // up from A: to the Set row
+	CHECK(p.on_set);
+	CHECK_EQ(panel_keys(&p, "\x1b[C"), DRIVEPANEL_REDRAW);
+	CHECK(p.message && strstr(p.message, "No sets"));
+
+	// S: the drives as a set, its name typed (lower case taken as upper).
+	CHECK_EQ(panel_keys(&p, "s"), DRIVEPANEL_REDRAW);
+	CHECK_EQ(p.prompt, DRIVEPANEL_PROMPT_NAME);
+	CHECK_EQ(panel_keys(&p, "my-2.2x\x7f"), DRIVEPANEL_REDRAW); // - and . are not taken
+	CHECK(strcmp(p.name, "MY22") == 0);
+	CHECK(panel_row_has(&p, DRIVEPANEL_ROWS - 4, "Save these drives as set: MY22_"));
+	CHECK_EQ(panel_keys(&p, "\r"), DRIVEPANEL_SAVE_SET);
+	drivepanel_save_set(&p);
+	CHECK(p.message && strcmp(p.message, "Saved set MY22") == 0);
+	CHECK_EQ(p.n_sets, 1);
+	CHECK_EQ(p.set, 0);
+	CHECK(panel_row_has(&p, 1, "MY22"));
+	char images[DRIVES][DRIVES_NAME_MAX + 1];
+	CHECK(drives_set_read("MY22", images));
+	for (unsigned d = 0; d < DRIVES; ++d)
+		CHECK(strcmp(images[d], before[d]) == 0);
+
+	// One written on a PC: any order, lower case, blanks, an image that is
+	// not on the card.
+	write_file("/DISKS80/SETS/OTHER.SET", "b = cpm32\nA=CPM31\r\nC=NOSUCH\r\nH=\r\n");
+	drivepanel_open(&p);
+	CHECK_EQ(p.n_sets, 2);
+	CHECK(strcmp(p.sets[1], "OTHER") == 0);
+	CHECK_EQ(p.set, 0); // the drives are MY22
+	CHECK_EQ(panel_keys(&p, "\x1b[A "), DRIVEPANEL_REDRAW); // Space steps too
+	CHECK_EQ(p.set, 1);
+	CHECK(strcmp(p.images[p.choice[0]], "CPM31") == 0);
+	CHECK(strcmp(p.images[p.choice[1]], "CPM32") == 0);
+	for (unsigned d = 2; d < DRIVES; ++d)
+		CHECK_EQ(p.choice[d], -1);
+	CHECK(p.message && strcmp(p.message, "1 of OTHER's disks is not on the card") == 0);
+	// Changing a drive leaves the set.
+	CHECK_EQ(panel_keys(&p, "\x1b[B\x1b[B\x1b[B "), DRIVEPANEL_REDRAW);
+	CHECK_EQ(p.set, -1);
+	CHECK(panel_row_has(&p, 1, "the drives below are no set"));
+	CHECK_EQ(panel_keys(&p, "\x1b[D"), DRIVEPANEL_REDRAW);
+	CHECK_EQ(p.set, 1);
+	CHECK_EQ(panel_keys(&p, "\r"), DRIVEPANEL_APPLY);
+	bool failed;
+	CHECK(drivepanel_apply(&p, &failed) > 0);
+	CHECK(!failed);
+	CHECK(strcmp(drives_name(0), "CPM31") == 0);
+	CHECK(drives_name(2) == NULL);
+	drivepanel_open(&p);
+	CHECK_EQ(p.set, 1); // as mounted
+
+	// R asks first; only Y removes. Delete (ESC [ 3 ~) asks too.
+	CHECK_EQ(panel_keys(&p, "r"), DRIVEPANEL_REDRAW);
+	CHECK_EQ(p.prompt, DRIVEPANEL_PROMPT_REMOVE);
+	CHECK(panel_row_has(&p, DRIVEPANEL_ROWS - 4, "Remove set OTHER from the card? (Y/N)"));
+	CHECK_EQ(panel_keys(&p, "n"), DRIVEPANEL_REDRAW);
+	CHECK_EQ(p.prompt, DRIVEPANEL_PROMPT_NONE);
+	CHECK_EQ(panel_keys(&p, "\x1b[3~"), DRIVEPANEL_REDRAW);
+	CHECK_EQ(p.prompt, DRIVEPANEL_PROMPT_REMOVE);
+	CHECK_EQ(panel_keys(&p, "Y"), DRIVEPANEL_REMOVE_SET);
+	drivepanel_remove_set(&p);
+	CHECK(p.message && strcmp(p.message, "Removed set OTHER") == 0);
+	CHECK_EQ(p.n_sets, 1);
+	CHECK_EQ(p.set, -1);
+	CHECK(!fat_file_exists("/DISKS80/SETS/OTHER.SET"));
+	CHECK_EQ(panel_keys(&p, "r"), DRIVEPANEL_REDRAW); // no set shown
+	CHECK_EQ(p.prompt, DRIVEPANEL_PROMPT_NONE);
+
+	// A name is needed; Escape closes the prompt, not the panel.
+	CHECK_EQ(panel_keys(&p, "S\r"), DRIVEPANEL_REDRAW);
+	CHECK_EQ(p.prompt, DRIVEPANEL_PROMPT_NAME);
+	CHECK(p.message && strstr(p.message, "1-8 letters and digits"));
+	CHECK_EQ(panel_keys(&p, "\x1b"), DRIVEPANEL_REDRAW); // the message goes
+	CHECK_EQ(drivepanel_tick(&p, DRIVEPANEL_ESC_TIMEOUT_MS), DRIVEPANEL_REDRAW);
+	CHECK_EQ(p.prompt, DRIVEPANEL_PROMPT_NONE);
+	// Saving over a set replaces it.
+	CHECK_EQ(panel_keys(&p, "Smy22\r"), DRIVEPANEL_SAVE_SET);
+	drivepanel_save_set(&p);
+	CHECK(p.message && strcmp(p.message, "Saved set MY22 (replaced)") == 0);
+	CHECK(drives_set_read("MY22", images));
+	CHECK(strcmp(images[0], "CPM31") == 0);
+	CHECK(!drives_set_name_ok("my22") && !drives_set_name_ok("TOOLONGNM") && !drives_set_name_ok(""));
+
+	// Back as it was.
+	CHECK(drives_set_remove("MY22"));
+	drives_unmount_all();
+	for (unsigned d = 0; d < DRIVES; ++d)
+		if (before[d][0])
+			CHECK_EQ(drives_mount(d, before[d]), DRIVES_OK);
+	drives_save_config();
 }
 
 static void test_benchmark(void) {
@@ -449,6 +566,13 @@ static void test_monitor_fresh_card(void) {
 	clear_screen();
 	CHECK_EQ(keys("i"), MONITOR_NONE);
 	CHECK(strstr(screen, "CPM22    written") != NULL);
+	CHECK(strstr(screen, "Set CPM22 written") != NULL);
+	CHECK(strstr(screen, "Set CPM3  written") != NULL);
+	char images[DRIVES][DRIVES_NAME_MAX + 1];
+	CHECK(drives_set_read("CPM3", images));
+	CHECK(strcmp(images[0], "CPM31") == 0 && strcmp(images[1], "CPM32") == 0 && images[2][0] == '\0');
+	CHECK(drives_set_read("CPM22", images));
+	CHECK(strcmp(images[0], "CPM22") == 0 && strcmp(images[1], "Z80TESTS") == 0);
 	CHECK(strstr(screen, "A: CPM22") != NULL);
 	CHECK(strstr(screen, "B: Z80TESTS") != NULL);
 
@@ -497,6 +621,20 @@ static void test_monitor_fresh_card(void) {
 	CHECK(strstr(screen, "(Y/N)") != NULL);
 	CHECK_EQ(keys("n"), MONITOR_NONE);
 	CHECK(strstr(screen, "already there") != NULL);
+	CHECK(strstr(screen, "Set CPM3  already there") != NULL);
+
+	// A changed or removed starter set: kept as it is, or written again,
+	// even when the disks are replaced.
+	CHECK(drives_set_read("CPM3", images));
+	strcpy(images[2], "EMPTY");
+	CHECK(drives_set_write("CPM3", images));
+	CHECK(drives_set_remove("CPM22"));
+	clear_screen();
+	CHECK_EQ(keys("iy"), MONITOR_NONE);
+	CHECK(strstr(screen, "Set CPM22 written") != NULL);
+	CHECK(strstr(screen, "Set CPM3  already there") != NULL);
+	CHECK(drives_set_read("CPM3", images));
+	CHECK(strcmp(images[2], "EMPTY") == 0);
 
 	clear_screen();
 	CHECK_EQ(keys("\r"), MONITOR_RUN);
@@ -1642,6 +1780,7 @@ int main(void) {
 	RUN(test_write_persists);
 	RUN(test_hard_disks);
 	RUN(test_drive_panel);
+	RUN(test_drive_sets);
 	RUN(test_benchmark);
 	RUN(test_worms);
 	RUN(test_bye_halts);
