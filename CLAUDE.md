@@ -318,6 +318,16 @@ status line (row 24); UART0 on GP0/GP1.
   alternate screen scrolled, back on a key; ?1049 writes <1049 at the
   restored cursor in its bold red) and a step asking for SET-UP over it;
   test_machine's test_altscr runs it on a term_t with main.c's stash size.
+  CP/M 3 (bd f8w): picosim's banked CP/M 3 disks are built in as CPM31
+  (boots), CPM32 (our WORMS/XLS/XPIP/XERA added: CPM31 is nearly full;
+  PROFILE.SUB's SETDEF puts B: on the path) and CPM3GEN; booted by
+  mounting them on A:/B:, no OS setting. picosim's BNKBIOS3 has drives
+  A-D, all 8" floppies, and never asks port 8: machine.c refuses FDC I/O
+  to a 4/8 MB image on a drive port 8 was not asked about since the reset
+  (FDC_STAT_NODISK; f8w.7), so it cannot read an HD as a floppy and write
+  over it. Our own BNKBIOS3 (drives A-H, HD formats) is f8w.4.
+  test_machine: test_boot_cpm3, test_cpm3_tools, test_hd_guard (raw Z80
+  bytes in the ROM page, as test_xfer_port).
   USB sticks (bd qur.3): FatFs volume 1 ("1:", USB: to the tools; ffconf
   FF_VOLUMES 2). `src/diskio.c` (RP2350) dispatches FatFs drives: 0
   sdcard_disk_*, 1 usbmsc_disk_*. `src/usbmsc.[ch]`:
@@ -421,7 +431,8 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, stash_buf 13.4 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit.
-- Flash (4 MB): image 0-0x7e108 (504 KB at v0.6.1; the 4 KB LZ window costs 32 KB); free to 2 MB (image growth;
+- Flash (4 MB): image 0-0x7e108 (504 KB at v0.6.1; the 4 KB LZ window costs 32 KB;
+  ~875 KB with the CP/M 3 disks, f8w.1: ~610 KB of compressed images in all); free to 2 MB (image growth;
   fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used
   only during an update, up to the new image's length); settings
   0x3fd000-0x3fefff; last sector left blank (E10). New persistent storage

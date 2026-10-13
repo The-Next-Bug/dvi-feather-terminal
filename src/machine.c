@@ -52,6 +52,7 @@ static struct {
 	char reason[48];
 	BYTE clk_cmd, clk_fmt; // clock: register selected, 1 = decimal (else BCD)
 	BYTE dinfo_drive;      // port 8: the drive asked about
+	uint8_t dinfo_asked;   // drives (bit n) asked about since the reset
 	// Port 10: 0 waiting for a command, 1/2 for the DMA address's low/high
 	// byte; the address and the last command's status.
 	BYTE xfer_state, xfer_status;
@@ -307,7 +308,19 @@ static void dinfo_out(BYTE data) {
 }
 
 static BYTE dinfo_in(void) {
+	if (m.dinfo_drive < 8)
+		m.dinfo_asked |= (uint8_t)(1u << m.dinfo_drive);
 	return plat->disk_format ? plat->disk_format(m.dinfo_drive) : 0;
+}
+
+// A hard-disk image is only read or written for a system that asked port 8
+// for its format (bd f8w.7): a BIOS that does not ask (picosim's CP/M 3 and
+// MP/M) takes every drive for an 8" floppy, whose tracks and sectors fit
+// inside a hard disk's, so it would read garbage and write over the image.
+static bool disk_refused(int drive) {
+	if (drive < 0 || drive >= 8 || (m.dinfo_asked & (1u << drive)) || !plat->disk_format)
+		return false;
+	return plat->disk_format((unsigned)drive) >= 2;
 }
 
 // Port 10: the file transfer device (machine.h). Input and output move
@@ -406,6 +419,8 @@ void exit_io(void) {
 BYTE read_sec(int drive, int track, int sector, WORD addr) {
 	if (addr > 0x10000 - SEC_SZ)
 		return FDC_STAT_DMAADR;
+	if (disk_refused(drive))
+		return FDC_STAT_NODISK;
 	uint8_t buf[SEC_SZ];
 	BYTE st = plat->disk_read((unsigned)drive, (unsigned)track, (unsigned)sector, buf);
 	if (st == FDC_STAT_OK)
@@ -417,6 +432,8 @@ BYTE read_sec(int drive, int track, int sector, WORD addr) {
 BYTE write_sec(int drive, int track, int sector, WORD addr) {
 	if (addr > 0x10000 - SEC_SZ)
 		return FDC_STAT_DMAADR;
+	if (disk_refused(drive))
+		return FDC_STAT_NODISK;
 	uint8_t buf[SEC_SZ];
 	for (unsigned i = 0; i < SEC_SZ; ++i)
 		buf[i] = dma_read((WORD)(addr + i));
@@ -433,6 +450,7 @@ void get_fdccmd(BYTE *cmd, WORD addr) {
 void machine_reset(void) {
 	m.timer = false;
 	m.hwctl_lock = 0xff;
+	m.dinfo_asked = 0; // the next system has to ask again
 	// No file stays open for a program that is gone.
 	m.xfer_state = 0;
 	m.xfer_status = XFER_ST_OK;

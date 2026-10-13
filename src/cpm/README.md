@@ -50,6 +50,9 @@ changing a disk type `^C` at the prompt.
 cpmtools definitions for them are in `docs/cpmtools-diskdefs`.
 
 The CP/M 3 and MP/M II images z80pack ships keep their own BIOSes: four
-floppy drives, A-D. On `CPM22` itself, `BIOS.ASM`, `MOVCPM.COM` and
+floppy drives, A-D, which never ask port 8, so the machine refuses them
+hard-disk images (`machine.h`). CP/M 3's are built in as `CPM31` (boot
+disk), `CPM32` (with WORMS, XLS, XPIP and XERA added by `--file CPM32`) and
+`CPM3GEN` (its BIOS sources and GENCPM), unchanged otherwise (bd f8w). On `CPM22` itself, `BIOS.ASM`, `MOVCPM.COM` and
 `SYSGEN64.SUB` are still picosim's 64K four-drive system: running them would
 replace this one.
