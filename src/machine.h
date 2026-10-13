@@ -11,8 +11,9 @@
 // serial), 4 FDC, 5/6 printer, 64 MMU (bank select; reads banks << 4 |
 // bank), 65/66 clock, 67 60 Hz timer (RST 38H), 160 hardware control
 // (after 0xAA: bit 7 halt, bit 6 reset), 254/255 front panel switches;
-// and our own 8: the format of a drive (OUT the drive, IN its format), for
-// the 8-drive BIOS in src/cpm; and 10: the file transfer device (below).
+// and our own 8: the format of a drive (OUT the drive, IN its format, IN
+// again its mount count), for our 8-drive BIOSes in src/cpm; and 10: the
+// file transfer device (below).
 //
 // The CPU runs in slices (machine_run) from the platform's main loop;
 // while it waits (HALT, the speed limit) it calls the platform's idle hook,
@@ -40,6 +41,10 @@ typedef struct {
 	// reset), the disk controller refuses hard-disk images on it (status 2,
 	// no disk): BIOSes that never ask treat every disk as a floppy.
 	uint8_t (*disk_format)(unsigned drive);
+	// How many images have been mounted on a drive (mod 256; port 8's
+	// second IN), so a BIOS sees another image of the same format. May be
+	// NULL: always 0.
+	uint8_t (*disk_mounts)(unsigned drive);
 	// The file transfer device (port 10, xfer.h): run command cmd
 	// (XFER_*) on volume, with buf holding its input and taking its output
 	// (XFER_RECORD bytes). Returns an XFER_ST_* status. May be NULL: every

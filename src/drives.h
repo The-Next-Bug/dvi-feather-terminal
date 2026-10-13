@@ -65,6 +65,11 @@ void drives_unmount_all(void);
 const char *drives_name(unsigned drive);
 drives_format_t drives_format(unsigned drive);
 
+// How many images have been mounted on drive (mod 256): it changes with
+// every mount, so a system can tell another image from the one it logged
+// in, even of the same format (port 8).
+uint8_t drives_mounts(unsigned drive);
+
 // Progress of a long write: done of total bytes.
 typedef void (*drives_progress_t)(void *ctx, uint32_t done, uint32_t total);
 

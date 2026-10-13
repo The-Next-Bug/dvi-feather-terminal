@@ -49,10 +49,40 @@ changing a disk type `^C` at the prompt.
 
 cpmtools definitions for them are in `docs/cpmtools-diskdefs`.
 
-The CP/M 3 and MP/M II images z80pack ships keep their own BIOSes: four
-floppy drives, A-D, which never ask port 8, so the machine refuses them
-hard-disk images (`machine.h`). CP/M 3's are built in as `CPM31` (boot
-disk), `CPM32` (with WORMS, XLS, XPIP and XERA added by `--file CPM32`) and
-`CPM3GEN` (its BIOS sources and GENCPM), unchanged otherwise (bd f8w). On `CPM22` itself, `BIOS.ASM`, `MOVCPM.COM` and
+The MP/M II images z80pack ships keep their own BIOS: four floppy drives,
+A-D, which never asks port 8, so the machine refuses it hard-disk images
+(`machine.h`). On `CPM22` itself, `BIOS.ASM`, `MOVCPM.COM` and
 `SYSGEN64.SUB` are still picosim's 64K four-drive system: running them would
 replace this one.
+
+## CP/M 3 (`cpm3/`)
+
+picosim's banked CP/M 3 disks are built in as `CPM31` (boot disk), `CPM32`
+(with WORMS, XLS, XPIP, XERA and MEM added by `--file CPM32`) and
+`CPM3GEN` (bd f8w). `CPM31`'s `CPM3.SYS` is ours, made at build time:
+
+- `cpm3/bnkbios3.asm`: picosim's banked BIOS (8080, RMAC) with eight drives,
+  A-H, of any of the formats above. SELDSK asks port 8 when the BDOS logs a
+  drive in and puts that format's DPB (common memory: BDOS function 31
+  hands programs its address) and skew in the drive's DPH (banked). GENCPM
+  sizes the vectors from `DPBMAX`, the DPB every DPH starts with: the most
+  blocks and checksums of any format. READ and WRITE ask port 8 again and
+  return 0FFH, media changed, when the drive's format or mount count
+  differs from its log-in's, so the BDOS logs it in again. Hard disks have
+  no checksums but are not marked permanent (8000H), whose media changes
+  the BDOS ignores. No hashing, as in picosim's.
+- `cpm3/gencpm.dat`: picosim's, with 16 directory buffers for E-H too and
+  bank 0's segment cut to 0000H-76FFH (the BIOS's vectors and buffers grew
+  into the rest). The TPA is 61K, a page more than picosim's.
+- `cpm3/build.sh` (from `cmake/diskimg.cmake`): builds `cpm3/cpmrun.c`, a
+  host program that runs `src/machine.c` on plain 8" images with a script
+  at the console, and runs `cpm3/sysgen.run`: picosim's `SYSGEN.SUB` steps
+  (`RMAC`, `LINK`, `GENCPM AUTO`) with `CPM31` on A:, a copy of `CPM3GEN`
+  holding our sources on B: and `CPM32` (RMAC, LINK) on C:. RMAC's error
+  lines, LINK's undefined symbols, any GENCPM error or a TPA under 61K fail
+  the build. The work disk becomes the built-in `CPM3GEN`, so its RELs,
+  SPRs and `CPM3.SYS` are the shipped ones. Run unchanged on picosim's
+  BIOS, this makes picosim's `CPM3.SYS` byte for byte.
+
+`diskimg_gen.py --edit IMAGE` changes a raw image in place (`--delete`,
+`--file`, `--extract`), for the work disks.

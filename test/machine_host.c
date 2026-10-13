@@ -69,6 +69,10 @@ static uint8_t disk_format(unsigned drive) {
 	return (uint8_t)drives_format(drive);
 }
 
+static uint8_t disk_mounts(unsigned drive) {
+	return drives_mounts(drive);
+}
+
 const machine_platform_t host_platform = {
 	.clock_us = host_clock_us,
 	.idle = idle,
@@ -78,6 +82,7 @@ const machine_platform_t host_platform = {
 	.disk_read = disk_read,
 	.disk_write = disk_write,
 	.disk_format = disk_format,
+	.disk_mounts = disk_mounts,
 	.xfer = xfer_command,
 };
 

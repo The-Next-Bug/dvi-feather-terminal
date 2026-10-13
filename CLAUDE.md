@@ -292,7 +292,8 @@ status line (row 24); UART0 on GP0/GP1.
   (portable): 8 drives A-H; .DSK images in /DISKS80 via FatFs, format by
   size (8" FD 77x26, z80pack 4 MB HD 255x128, 8 MB HD 256x255; 128-byte
   sectors), kept open, flushed 250 ms after writes, DRIVES.CFG, blank image
-  creation. Port 8 (machine.c, ours) tells the BIOS a drive's format.
+  creation. Port 8 (machine.c, ours) tells the BIOS a drive's format
+  (OUT drive, IN format, IN again drives_mounts: images mounted on it).
   Port 10 (ours, bd qur.2; protocol in machine.h): the file transfer
   device, FDC-style (SETDMA + commands moving 11-byte FCB names, 15-byte
   listing entries or 128-byte records by DMA), through the platform's
@@ -319,15 +320,26 @@ status line (row 24); UART0 on GP0/GP1.
   restored cursor in its bold red) and a step asking for SET-UP over it;
   test_machine's test_altscr runs it on a term_t with main.c's stash size.
   CP/M 3 (bd f8w): picosim's banked CP/M 3 disks are built in as CPM31
-  (boots), CPM32 (our WORMS/XLS/XPIP/XERA added: CPM31 is nearly full;
-  PROFILE.SUB's SETDEF puts B: on the path) and CPM3GEN; booted by
-  mounting them on A:/B:, no OS setting. picosim's BNKBIOS3 has drives
-  A-D, all 8" floppies, and never asks port 8: machine.c refuses FDC I/O
-  to a 4/8 MB image on a drive port 8 was not asked about since the reset
-  (FDC_STAT_NODISK; f8w.7), so it cannot read an HD as a floppy and write
-  over it. Our own BNKBIOS3 (drives A-H, HD formats) is f8w.4.
-  test_machine: test_boot_cpm3, test_cpm3_tools, test_hd_guard (raw Z80
-  bytes in the ROM page, as test_xfer_port).
+  (boots), CPM32 (our WORMS/XLS/XPIP/XERA/MEM added: CPM31 is nearly
+  full; PROFILE.SUB's SETDEF puts B: on the path) and CPM3GEN; booted by
+  mounting them on A:/B:, no OS setting. CPM31's CPM3.SYS is ours
+  (f8w.3/.4, src/cpm/README.md): src/cpm/cpm3/bnkbios3.asm (picosim's,
+  8080/RMAC, drives A-H of any format via port 8; DPBs in common memory,
+  DPHs banked, GENCPM sized by DPBMAX; READ/WRITE return 0FFH media
+  changed when port 8's format or mount count differs from the log-in's;
+  HD CKS 0, not 8000H: the BDOS ignores media changes on permanent
+  drives) made by build.sh at build time: cpmrun.c (machine.c on the host,
+  plain 8" images, a script at the console: sysgen.run) runs DRI's RMAC,
+  LINK and GENCPM under CP/M 3; the work disk ships as CPM3GEN;
+  diskimg_gen.py --edit/--extract handles the images. Unchanged picosim
+  sources give picosim's CPM3.SYS byte for byte. machine.c still refuses
+  FDC I/O to a 4/8 MB image on a drive port 8 was not asked about since
+  the reset (FDC_STAT_NODISK; f8w.7), for BIOSes that never ask (MP/M's,
+  picosim's), so they cannot read an HD as a floppy and write over it.
+  src/cpm/mem.asm (f8w.8) -> MEM.COM on CPM22 and CPM32: version, TPA,
+  banks from IN 64. test_machine: test_boot_cpm3, test_cpm3_tools,
+  test_cpm3_drives, test_hd_guard (raw Z80 bytes in the ROM page, as
+  test_xfer_port).
   USB sticks (bd qur.3): FatFs volume 1 ("1:", USB: to the tools; ffconf
   FF_VOLUMES 2). `src/diskio.c` (RP2350) dispatches FatFs drives: 0
   sdcard_disk_*, 1 usbmsc_disk_*. `src/usbmsc.[ch]`:
