@@ -364,8 +364,15 @@ status line (row 24); UART0 on GP0/GP1.
   answers ESC [ 6 n through host_cpr_reply). `src/monitor.[ch]`
   (portable): menu (boot, mount, list, new blank disk, install, speed
   test, rescan), 3 s autoboot. `src/drivepanel.[ch]` (portable): SET-UP's
-  Drives panel (D in CP/M mode); main.c defers its FatFs work to the main
-  loop (setup_feed runs inside the USB stack). Status line: drive letters
+  Drives panel (D in CP/M mode); main.c defers its FatFs work (mount,
+  save/remove a set: drives_work) to the main loop (setup_feed runs inside
+  the USB stack). Named drive sets (bd f8w.6): /DISKS80/SETS/NAME.SET in
+  DRIVES.CFG's form (A=NAME lines, hand-editable), at most 16; the panel's
+  Set row picks one (fills the choices; Return mounts), S saves the
+  choices (name prompt), R/Delete removes (Y/N); the monitor knows only the
+  current mounts (its install, I, writes the starter sets CPM22 and CPM3
+  when missing). `src/drivecfg.c` (cold, in flash): the image list,
+  DRIVES.CFG and the sets, split from drives.c (sector I/O, SRAM). Status line: drive letters
   only, reverse while accessed. `src/diskimg.[ch]` + `src/lz.[ch]` (portable)
   + `src/diskimg_gen.py` (`cmake/diskimg.cmake`): CPM22, Z80TESTS, EMPTY
   from z80pack as LZ4-format blocks (offsets < 4 KB, streamed through a
@@ -472,7 +479,7 @@ SRAM is the tight resource; peripherals and pins are mostly free.
     section_copy_to_ram_rodata.incl (pico_add_linker_script_override_path)
     keeps whole objects' .text and .rodata in flash, run through XIP at
     03h/50 MHz after nvflash_retime: FatFs, TinyUSB's usbh/hub/hid_host/
-    msc_host, monitor, drivepanel, setup, fwpanel, demo, palette, xfer,
+    msc_host, monitor, drivepanel, drivecfg, setup, fwpanel, demo, palette, xfer,
     usbmsc, lz, diskimg, keyname, settings, uf2, qsort, machine.c's
     .rodata (~51 KB). Hot paths (Z80 core, machine.c code, term, vtparse,
     raster, video, screen, sdcard, drives, serial, keyboard, hcd_rp2040,

@@ -569,9 +569,32 @@ keys:
 
 - **D** opens the Drives panel, which shows what is mounted on A-H and
   changes it (Up/Down a drive, Left/Right or Space a disk image from the
-  card, Return mounts and saves). CP/M sees a changed drive after a warm
-  boot, so type **^C** at the prompt afterwards (as after swapping
-  floppies; don't change a drive a program is using).
+  card, Return mounts and saves). CP/M 2.2 sees a changed drive after a
+  warm boot, so type **^C** at the prompt afterwards (as after swapping
+  floppies); CP/M 3 sees it at once. Don't change a drive a program is
+  using.
+
+  **Drive sets**: the Set row above A: steps through named sets of disks
+  (Left/Right or Space), each filling in A-H; Return mounts them as
+  above. It shows the set the drives match. **S** saves the drives as a
+  set (type a name of up to 8 letters and digits; an existing name is
+  replaced), **R** or **Delete** removes the set shown (after **Y**). To
+  switch systems, pick a set, Return, then **F11** (reset). Sets are
+  files in `/DISKS80/SETS`, `NAME.SET`, one line a drive as in
+  `DRIVES.CFG`, so they can be written on a PC too:
+
+  ```
+  A=CPM31
+  B=CPM32
+  E=HD8
+  ```
+
+  Drives left out are empty; a disk not on the card is left out (the panel
+  says how many). The monitor knows only what is mounted now.
+
+  The monitor's install (**I**) writes two to start with, if they are
+  missing: `CPM22` (CPM22, Z80TESTS) and `CPM3` (CPM31, CPM32); after
+  that they are yours to change or remove.
 - **M** returns to the monitor.
 
 **F11** is the reset button: it reboots from drive A at once (keys typed
@@ -799,7 +822,8 @@ In `src/`:
   update).
 - **Z80 machine, portable**: `machine.[ch]` (z80pack glue; `z80pack/`
   holds its configuration headers), `monitor.[ch]`, `drives.[ch]` (disk
-  images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel),
+  images on FatFs), `drivecfg.c` (`DRIVES.CFG`, the image list and the drive sets),
+  `drivepanel.[ch]` (SET-UP's Drives panel),
   `fwpanel.[ch]` (SET-UP's firmware update), `xfer.[ch]` (port 10's
   files: `/XFER`), `usbvol.[ch]` (which USB stick is `USB:`), `cpm/` (the
   CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA, TERMTEST, ALTSCR and MEM, and in `cpm3/` CP/M 3's

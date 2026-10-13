@@ -172,6 +172,31 @@ static void list_disks(void) {
 
 static_assert(LZ_WINDOW <= SCRATCH_SIZE, "the LZ window is the scratch buffer");
 
+// Starter sets for SET-UP's Drives panel (bd f8w.6), one per system on
+// the built-in disks. Written only when missing: once there, a set is the
+// user's to change or remove, even when the disks are replaced.
+static const struct {
+	const char *name;
+	const char *a, *b;
+} starter_sets[] = {
+	{"CPM22", "CPM22", "Z80TESTS"},
+	{"CPM3", "CPM31", "CPM32"},
+};
+
+static void install_sets(void) {
+	for (unsigned i = 0; i < sizeof starter_sets / sizeof starter_sets[0]; ++i) {
+		char images[DRIVES][DRIVES_NAME_MAX + 1] = {{0}};
+		say("Set %-6s", starter_sets[i].name);
+		if (drives_set_read(starter_sets[i].name, images)) {
+			put("already there\r\n");
+			continue;
+		}
+		strcpy(images[0], starter_sets[i].a);
+		strcpy(images[1], starter_sets[i].b);
+		put(drives_set_write(starter_sets[i].name, images) ? "written\r\n" : "FAILED\r\n");
+	}
+}
+
 static void install(bool overwrite) {
 	if (mount_result != FR_OK) {
 		say("No card.\r\n");
@@ -203,6 +228,7 @@ static void install(bool overwrite) {
 			drives_mount((unsigned)mounted_on, img->name);
 	}
 	scratch_release(window);
+	install_sets();
 	// Empty drives get the boot and test disks.
 	if (!drives_name(0) || !drives_name(1)) {
 		if (!drives_name(0))

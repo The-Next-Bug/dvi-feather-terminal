@@ -132,8 +132,10 @@ static struct {
 	setup_t ui;
 	uint32_t saved_reverse;
 	bool saved_cursor;
-	// CP/M mode: the Drives panel (D), over the same rows.
-	bool drives_open, drives_apply;
+	// CP/M mode: the Drives panel (D), over the same rows; its card work
+	// (mount, save or remove a set) waits for the main loop.
+	bool drives_open;
+	drivepanel_action_t drives_work;
 	drivepanel_t drives;
 	// The firmware update panel (U), over the same rows; its work and its
 	// cancel wait for the main loop.
@@ -290,13 +292,14 @@ static void fw_feed(uint8_t c) {
 		setup.fw_cancel = true;
 }
 
-// A key for the Drives panel. Mounting is left for the main loop.
+// A key for the Drives panel. Mounting and the sets' files are left for
+// the main loop.
 static void drives_feed(uint8_t c, uint32_t now) {
 	drivepanel_action_t a = drivepanel_input(&setup.drives, c, now);
 	if (a == DRIVEPANEL_REDRAW) {
 		drives_draw_panel();
-	} else if (a == DRIVEPANEL_APPLY) {
-		setup.drives_apply = true;
+	} else if (a == DRIVEPANEL_APPLY || a == DRIVEPANEL_SAVE_SET || a == DRIVEPANEL_REMOVE_SET) {
+		setup.drives_work = a;
 	} else if (a == DRIVEPANEL_CANCEL) {
 		setup.drives_open = false;
 		setup_draw_panel();
@@ -312,7 +315,7 @@ static void setup_feed(const uint8_t *data, size_t len) {
 		setup.demo_end |= len > 0; // any key; the rest of it is dropped
 		return;
 	}
-	for (size_t i = 0; i < len && setup.action == SETUP_NONE && !setup.drives_apply && !setup.fw_work &&
+	for (size_t i = 0; i < len && setup.action == SETUP_NONE && !setup.drives_work && !setup.fw_work &&
 		!setup.fw_cancel; ++i) {
 		if (setup.fw_open) {
 			fw_feed(data[i]);
@@ -351,7 +354,8 @@ static void setup_enter(bool from_host) {
 	setup_open(&setup.ui, &current);
 	setup.ui.machine_menu = cpm.on;
 	setup.active = true;
-	setup.drives_open = setup.drives_apply = false;
+	setup.drives_open = false;
+	setup.drives_work = DRIVEPANEL_NONE;
 	setup.fw_open = setup.fw_work = setup.fw_cancel = false;
 	setup.from_host = from_host;
 	setup.action = SETUP_NONE;
@@ -393,7 +397,8 @@ static void setup_leave(bool apply) {
 	screen_set_reverse_rows(&screen, setup.saved_reverse);
 	screen.cursor_visible = setup.saved_cursor;
 	setup.active = false;
-	setup.drives_open = setup.drives_apply = false;
+	setup.drives_open = false;
+	setup.drives_work = DRIVEPANEL_NONE;
 	fw_close();
 	if (!apply) {
 		show_palette(&settings); // back from SET-UP's preview
@@ -415,15 +420,22 @@ static bool setup_save(void) {
 	return true;
 }
 
-// The Drives panel's pending mount, or its Escape key timeout.
+// The Drives panel's pending card work, or its Escape key timeout.
 static void drives_service(void) {
-	if (setup.drives_apply) {
-		setup.drives_apply = false;
+	drivepanel_action_t work = setup.drives_work;
+	setup.drives_work = DRIVEPANEL_NONE;
+	if (work == DRIVEPANEL_SAVE_SET || work == DRIVEPANEL_REMOVE_SET) {
+		if (work == DRIVEPANEL_SAVE_SET)
+			drivepanel_save_set(&setup.drives);
+		else
+			drivepanel_remove_set(&setup.drives);
+		drives_draw_panel();
+	} else if (work == DRIVEPANEL_APPLY) {
 		bool failed;
 		unsigned changed = drivepanel_apply(&setup.drives, &failed);
 		drivepanel_open(&setup.drives); // as now mounted
 		setup.drives.message = failed ? "A disk could not be mounted (not a disk image?)"
-			: changed ? "Done: type ^C at the CP/M prompt to use the changed drives"
+			: changed ? "Done (under CP/M 2.2, ^C at the prompt to use the changed drives)"
 			: "No changes";
 		drives_draw_panel();
 	} else if (drivepanel_tick(&setup.drives, to_ms_since_boot(get_absolute_time())) == DRIVEPANEL_CANCEL) {
