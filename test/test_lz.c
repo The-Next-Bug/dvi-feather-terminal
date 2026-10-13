@@ -8,8 +8,9 @@
 static uint8_t window[LZ_WINDOW];
 
 typedef struct {
-	uint8_t out[300000];
+	uint8_t out[300000]; // the first bytes
 	size_t len;
+	uint32_t crc; // of all of it
 	size_t max_chunk;
 	size_t stop_after; // 0: never stop
 } collect_t;
@@ -20,9 +21,9 @@ static bool collect(void *ctx, const uint8_t *data, size_t len) {
 	collect_t *c = ctx;
 	if (len > c->max_chunk)
 		c->max_chunk = len;
-	if (c->len + len > sizeof c->out)
-		return false;
-	memcpy(c->out + c->len, data, len);
+	if (c->len < sizeof c->out) // the 8 MB disks are only counted
+		memcpy(c->out + c->len, data, len < sizeof c->out - c->len ? len : sizeof c->out - c->len);
+	c->crc = crc32_update(c->crc, data, len);
 	c->len += len;
 	return !c->stop_after || c->len < c->stop_after;
 }
@@ -84,7 +85,7 @@ static void test_embedded_images(void) {
 		const diskimg_t *img = &diskimg_list[i];
 		CHECK(decode(img->data, img->data_len, img->size));
 		CHECK_EQ(got.len, img->size);
-		CHECK_EQ(crc32_update(0, got.out, got.len), img->crc);
+		CHECK_EQ(got.crc, img->crc);
 		CHECK(got.max_chunk <= LZ_WINDOW / 2);
 		CHECK(diskimg_find(img->name) == img);
 	}

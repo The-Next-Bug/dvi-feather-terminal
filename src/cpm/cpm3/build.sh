@@ -7,7 +7,9 @@
 #
 #   build.sh OUTDIR
 #
-# Writes OUTDIR/cpm3.sys and OUTDIR/cpm3gen.dsk (picosim's cpm3gen.dsk
+# Writes OUTDIR/cpm3.sys, OUTDIR/vt100dyn.com (picosim's, quieter),
+# OUTDIR/profile.sub, OUTDIR/readme.txt and
+# OUTDIR/cpm3gen.dsk (picosim's cpm3gen.dsk
 # with our sources and this build's RELs, SPRs and CPM3.SYS: the same
 # SYSGEN.SUB run on the machine makes the same system), and the console
 # log OUTDIR/sysgen.log. Fails if a step reports an error or the
@@ -32,6 +34,11 @@ mkdir -p "$work"
 # CP/M text files end their lines in CR LF.
 sed 's/$/\r/' "$here/bnkbios3.asm" > "$work/bnkbios3.asm"
 sed 's/$/\r/' "$here/gencpm.dat" > "$work/gencpm.dat"
+# CPM31's PROFILE.SUB without picosim's SETDEFs: our BIOS sets their
+# defaults (bd f8w.9), so the boot prints no tables; README.TXT says how
+# to change them.
+sed 's/$/\r/' "$here/profile.sub" > "$out/profile.sub"
+sed 's/$/\r/' "$here/readme.txt" > "$out/readme.txt"
 
 cp "$disks/cpm3-1.dsk" "$work/a.dsk"
 cp "$disks/cpm3gen.dsk" "$work/b.dsk"
@@ -60,4 +67,19 @@ resbdos=$(sed -n 's/^ RESBDOS3 SPR  \([0-9A-F]\{4\}\)H.*/\1/p' "$out/sysgen.log"
   { grep "SPR" "$out/sysgen.log" >&2; echo "CP/M 3's TPA is below 61K" >&2; exit 1; }
 
 edit "$work/b.dsk" --extract CPM3.SYS "$out/cpm3.sys"
+
+# VT100DYN (PROFILE.SUB's RSX) without its "Try DEVICE CONSOLE [PAGE]"
+# help (bd f8w.9): a $ after "RSX loaded and initialized." ends the
+# BDOS 9 message there; nothing moves.
+edit "$work/a.dsk" --extract VT100DYN.COM "$work/vt100dyn.com"
+"${PYTHON:-python3}" - "$work/vt100dyn.com" "$out/vt100dyn.com" <<'PY'
+import sys
+data = open(sys.argv[1], 'rb').read()
+text = b'RSX loaded and initialized.\r\n'
+at = data.find(text + b'\nTry')
+if at < 0 or data.count(text) != 1:
+    sys.exit('VT100DYN.COM: its help text is not where it was')
+at += len(text)
+open(sys.argv[2], 'wb').write(data[:at] + b'$' + data[at + 1:])
+PY
 cp "$work/b.dsk" "$out/cpm3gen.dsk"

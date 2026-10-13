@@ -13,12 +13,22 @@ set(DISKIMG_IMAGES
   "Z80TESTS=${Z80PACK_DIR}/cpmsim/disks/library/z80tests.dsk"
   "EMPTY=${Z80PACK_DIR}/picosim/disks/empty.dsk"
   "CPM31=${Z80PACK_DIR}/picosim/disks/cpm3-1.dsk"
-  "CPM32=${Z80PACK_DIR}/picosim/disks/cpm3-2.dsk"
+  "CPM32=${GENERATED}/cpm32.dsk"
   "CPM3GEN=${GENERATED}/cpm3/cpm3gen.dsk")
 # CPM31 (boot disk) and CPM32 are picosim's banked CP/M 3: mount them on A:
 # and B: and boot (bd f8w). CPM31's CPM3.SYS is ours (below); CPM3GEN is
 # picosim's system generation disk with our BIOS sources and what they made.
+# CPM32 is picosim's second floppy's files on an 8 MB disk: room for our
+# tools, and for temporary files (our BIOS makes B: the temporary drive).
 set(DISKIMG_SOURCES "${GENERATED}/diskimg_data.c")
+add_custom_command(
+  OUTPUT ${GENERATED}/cpm32.dsk
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${GENERATED}
+  COMMAND Python3::Interpreter ${DISKIMG_GEN} --convert ${Z80PACK_DIR}/picosim/disks/cpm3-2.dsk HD8
+    ${GENERATED}/cpm32.dsk
+  DEPENDS ${DISKIMG_GEN} ${Z80PACK_DIR}/picosim/disks/cpm3-2.dsk
+  COMMENT "Copying CP/M 3's second disk onto an 8 MB disk (CPM32)"
+  VERBATIM)
 
 # CPM22 gets our CP/M 2.2 system (src/cpm): 62K, eight drives of any of the
 # image formats. The boot loader and BIOS are assembled by src/cpm/build.sh
@@ -45,10 +55,11 @@ set(CPM3_OUT "${GENERATED}/cpm3")
 file(GLOB _machine_sources "${Z80PACK_DIR}/z80core/*.[ch]" "${Z80PACK_DIR}/iodevices/sd-fdc.[ch]"
   "${CMAKE_CURRENT_LIST_DIR}/../src/z80pack/*.h")
 add_custom_command(
-  OUTPUT ${CPM3_OUT}/cpm3.sys ${CPM3_OUT}/cpm3gen.dsk
+  OUTPUT ${CPM3_OUT}/cpm3.sys ${CPM3_OUT}/vt100dyn.com ${CPM3_OUT}/profile.sub ${CPM3_OUT}/readme.txt
+    ${CPM3_OUT}/cpm3gen.dsk
   COMMAND ${CMAKE_COMMAND} -E env CC=${HOST_CC} PYTHON=${Python3_EXECUTABLE} ${CPM3_DIR}/build.sh ${CPM3_OUT}
   DEPENDS ${CPM3_DIR}/build.sh ${CPM3_DIR}/cpmrun.c ${CPM3_DIR}/sysgen.run ${CPM3_DIR}/bnkbios3.asm
-    ${CPM3_DIR}/gencpm.dat ${DISKIMG_GEN} ${CMAKE_CURRENT_LIST_DIR}/../src/machine.c
+    ${CPM3_DIR}/gencpm.dat ${CPM3_DIR}/profile.sub ${CPM3_DIR}/readme.txt ${DISKIMG_GEN} ${CMAKE_CURRENT_LIST_DIR}/../src/machine.c
     ${CMAKE_CURRENT_LIST_DIR}/../src/machine.h ${_machine_sources}
     ${Z80PACK_DIR}/picosim/disks/cpm3-1.dsk ${Z80PACK_DIR}/picosim/disks/cpm3-2.dsk
     ${Z80PACK_DIR}/picosim/disks/cpm3gen.dsk
@@ -61,11 +72,16 @@ set(DISKIMG_SYSTEM --system CPM22 ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin
 # refuses drives other than A and B; DIR and STAT cover all eight).
 # TERMTEST (the terminal's personalities) and ALTSCR (the alternate
 # screen) go with the test programs. MEM shows the memory and the banks.
-# Our tools go on CPM32 too (CPM31 is nearly full; its PROFILE.SUB puts B:
-# on the search path).
+# Our tools go on CPM32 too (CPM31 is nearly full; B: is on CP/M 3's
+# search path), and README.TXT, on the defaults, on CPM31.
 set(DISKIMG_FILES --delete CPM22 XDIR.COM
   --delete CPM31 CPM3.SYS
+  --delete CPM31 VT100DYN.COM
+  --delete CPM31 PROFILE.SUB
   --file CPM31 CPM3.SYS ${CPM3_OUT}/cpm3.sys
+  --file CPM31 VT100DYN.COM ${CPM3_OUT}/vt100dyn.com
+  --file CPM31 PROFILE.SUB ${CPM3_OUT}/profile.sub
+  --file CPM31 README.TXT ${CPM3_OUT}/readme.txt
   --file CPM22 WORMS.COM ${CPM_OUT}/worms.com
   --file CPM22 XLS.COM ${CPM_OUT}/xls.com
   --file CPM22 XPIP.COM ${CPM_OUT}/xpip.com
@@ -93,7 +109,8 @@ add_custom_command(
   DEPENDS ${DISKIMG_GEN} ${_diskimg_files} ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin ${CPM_OUT}/worms.com
     ${CPM_OUT}/xls.com ${CPM_OUT}/xpip.com ${CPM_OUT}/xera.com ${CPM_OUT}/termtest.com
     ${CPM_OUT}/altscr.com ${CPM_OUT}/mem.com ${Z80PACK_DIR}/picosim/srccpm2/cpm.bin ${CPM_DIR}/ccpbdos.rel
-    ${CPM3_OUT}/cpm3.sys
+    ${CPM3_OUT}/cpm3.sys ${CPM3_OUT}/vt100dyn.com ${CPM3_OUT}/profile.sub
+    ${CPM3_OUT}/readme.txt ${GENERATED}/cpm32.dsk
   COMMENT "Compressing the built-in CP/M disk images"
   VERBATIM)
 

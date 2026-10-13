@@ -320,9 +320,14 @@ status line (row 24); UART0 on GP0/GP1.
   restored cursor in its bold red) and a step asking for SET-UP over it;
   test_machine's test_altscr runs it on a term_t with main.c's stash size.
   CP/M 3 (bd f8w): picosim's banked CP/M 3 disks are built in as CPM31
-  (boots), CPM32 (our WORMS/XLS/XPIP/XERA/MEM added: CPM31 is nearly
-  full; PROFILE.SUB's SETDEF puts B: on the path) and CPM3GEN; booted by
-  mounting them on A:/B:, no OS setting. CPM31's CPM3.SYS is ours
+  (boots), CPM32 (picosim's cpm3-2.dsk files on an 8 MB disk:
+  diskimg_gen.py --convert HD8; our WORMS/XLS/XPIP/XERA/MEM added) and
+  CPM3GEN. Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
+  default, A:, B:; order COM,SUB; temporary drive B:; no display: f8w.9),
+  so PROFILE.SUB (src/cpm/cpm3/profile.sub) only loads VT100DYN, whose
+  help text build.sh patches away; README.TXT (src/cpm/cpm3/readme.txt)
+  on CPM31 tells how to change them;
+  booted by mounting them on A:/B:, no OS setting. CPM31's CPM3.SYS is ours
   (f8w.3/.4, src/cpm/README.md): src/cpm/cpm3/bnkbios3.asm (picosim's,
   8080/RMAC, drives A-H of any format via port 8; DPBs in common memory,
   DPHs banked, GENCPM sized by DPBMAX; READ/WRITE return 0FFH media
