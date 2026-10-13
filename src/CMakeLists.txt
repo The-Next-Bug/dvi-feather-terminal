@@ -10,6 +10,7 @@ add_subdirectory(input)
 add_subdirectory(settings)
 add_subdirectory(machine)
 add_subdirectory(disks)
+add_subdirectory(ui)
 
 if(DVT_FIRMWARE)
 endif()

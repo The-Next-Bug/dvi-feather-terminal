@@ -86,19 +86,14 @@ add_custom_target(build_info
   VERBATIM)
 
 add_executable(dvi_terminal
-  src/demo.c
   src/diag.c
   src/led.c
-  src/drivepanel.c
-  src/fwpanel.c
   src/fwupdate.c
   src/hstx_dvi.c
   src/main.c
-  src/monitor.c
   src/nvflash.c
   src/diskio.c
   src/sdcard.c
-  src/setup.c
   src/serial.c
   src/video.c
 )
@@ -110,9 +105,9 @@ target_include_directories(dvi_terminal PRIVATE
 )
 
 # Warnings for our sources only, not the SDK's.
-set_source_files_properties(src/demo.c src/diag.c src/drivepanel.c src/diskio.c src/fwpanel.c src/fwupdate.c src/hstx_dvi.c src/led.c
-  src/main.c src/monitor.c src/nvflash.c src/sdcard.c
-  src/setup.c src/serial.c src/usbkbd.c src/usbmsc.c src/video.c
+set_source_files_properties(src/diag.c src/diskio.c src/fwupdate.c src/hstx_dvi.c src/led.c
+  src/main.c src/nvflash.c src/sdcard.c
+  src/serial.c src/usbkbd.c src/usbmsc.c src/video.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 # Cold code (it runs only while files move, or a USB stick comes or goes):
 # small rather than fast, as all code takes SRAM.
@@ -144,6 +139,7 @@ target_link_libraries(dvi_terminal
   dvt_render
   dvt_screen
   dvt_term
+  dvt_ui
   pico_stdlib
   pico_multicore
   hardware_flash
