@@ -380,19 +380,25 @@ BIOS for the eight drives and the three formats (`src/cpm`).
 ### Other operating systems
 
 The machine has picosim's hardware, so the disk images for z80pack's
-picosim run as they are, with their own BIOSes. Their BIOSes know only
+picosim run as they are, with their own BIOSes. Those BIOSes know only
 four 8" floppy drives, A-D, and never ask the machine what a drive holds,
 so the disk controller refuses them 4 MB and 8 MB images (a disk error
 instead of reading a hard disk as a floppy and writing over it).
 
 - **CP/M 3** (built in): mount `CPM31` on A: and `CPM32` on B: in the
   monitor and boot (Return); mount `CPM22` on A: again to go back. The
-  banked system uses bank 1, so the default build runs it. Its
-  `PROFILE.SUB` puts A: and B: on the search path (`SETDEF`), so `XLS`,
-  `XPIP`, `XERA` and `WORMS` on `CPM32` run from any drive. `CPM3GEN`
-  holds picosim's BIOS sources and `GENCPM`, to rebuild the system.
-  CP/M 3 shows the user number in its prompt (`3A>`), finds system files
-  in user 0 from any user area, and keeps the date (`DATE`).
+  banked system uses bank 1, so the default build runs it. Its BIOS is
+  ours (`src/cpm/cpm3`): eight drives, A-H, each any of the image
+  formats, as under CP/M 2.2, with a 61K TPA. Mounting another image on a
+  drive while CP/M 3 runs needs no `^C`: the BIOS tells the BDOS the
+  media changed (port 8 gives each drive's format and a count of the
+  images mounted on it). `PROFILE.SUB` puts A: and B: on the search path
+  (`SETDEF`), so `XLS`, `XPIP`, `XERA`, `MEM` and `WORMS` on `CPM32` run
+  from any drive. CP/M 3 shows the user number in its prompt (`3A>`),
+  finds system files in user 0 from any user area, and keeps the date
+  (`DATE`). `CPM3GEN` holds the BIOS sources and `GENCPM.DAT`, `GENCPM`,
+  and the RELs, SPRs and `CPM3.SYS` the firmware's build made from them
+  (`SYSGEN.SUB` lists the steps; `RMAC` and `LINK` are on `CPM32`).
 - **MP/M II** (copy `mpm-1.dsk` and `mpm-2.dsk` from z80pack's
   [`picosim/disks`](https://github.com/udo-munk/z80pack/tree/master/picosim/disks)
   into `/DISKS80`): `mpm-1.dsk` (boots) and `mpm-2.dsk`. Its `MPM.SYS` is
@@ -402,6 +408,21 @@ instead of reading a hard disk as a floppy and writing over it).
   `GENSYS` from `mpm-2.dsk` first.
 
 MP/M II has not been tested on this board yet.
+
+### MEM
+
+`CPM22` and `CPM32` carry `MEM` (`src/cpm/mem.asm`): the CP/M version,
+the TPA (the room programs get, up to the BDOS or an RSX below it), the
+machine's memory from the MMU, and what each bank holds:
+
+```
+CP/M 3.1
+TPA     0100H-F205H: 61702 bytes (60K)
+Memory  160K: bank 0 64K, banks 1-2 48K each (C000H-FFFFH common)
+Bank 0  the system: banked BDOS and BIOS, disk buffers
+Bank 1  the TPA (programs)
+Bank 2  not used by CP/M
+```
 
 ### WORMS
 
@@ -522,7 +543,7 @@ A after 3 seconds (any key stops that), or shows its menu:
 - **N**: make a new blank disk: name, then 8" floppy, 4 MB or 8 MB
   (an 8 MB one takes a few seconds to write).
 - **I**: install the built-in disk images onto the card: `CPM22` (CP/M 2.2
-  with its tools: boots), `Z80TESTS` (`TERMTEST`, `ALTSCR`, and the Z80 instruction exercisers
+  with its tools and `MEM`: boots), `Z80TESTS` (`TERMTEST`, `ALTSCR`, and the Z80 instruction exercisers
   `EXZ80DOC` and `EXZ80ALL`, about 10 minutes each at full speed, and the
   `CPUTEST` diagnostics; `PRELIM` needs an emulator that runs block moves
   in one go, as z80pack's cpmsim does, and wrecks CP/M here: reset after
@@ -573,7 +594,7 @@ The machine is picosim's:
 | 2/3 | second serial port (UART0 at the SET-UP baud rate) |
 | 4 | disk controller |
 | 5/6 | printer (none) |
-| 8 | the format of the disk in a drive, for the BIOS (ours, not picosim's) |
+| 8 | the disk in a drive, for our BIOSes (ours, not picosim's): OUT the drive, IN its format (0 none, 1 8" floppy, 2 4 MB, 3 8 MB), IN again the count of images mounted on it. A hard-disk image is refused to a system that has not asked about its drive since the reset |
 | 10 | file transfer: files in the `/XFER` folder of the SD card or a USB stick, a 128-byte record at a time by DMA, for `XLS`, `XPIP` and `XERA` (ours; `src/machine.h` has the commands) |
 | 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II uses as many as it was generated for, see [Other operating systems](#other-operating-systems)) |
 | 65/66 | clock (no RTC: it starts at 1 Jan 2026 at power-on) |
@@ -781,7 +802,8 @@ In `src/`:
   images on FatFs), `drivepanel.[ch]` (SET-UP's Drives panel),
   `fwpanel.[ch]` (SET-UP's firmware update), `xfer.[ch]` (port 10's
   files: `/XFER`), `usbvol.[ch]` (which USB stick is `USB:`), `cpm/` (the
-  CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA, TERMTEST and ALTSCR; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
+  CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA, TERMTEST, ALTSCR and MEM, and in `cpm3/` CP/M 3's
+  banked BIOS, made into `CPM3.SYS` at build time; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
   images).
 - **RP2350**: `main.c`, `board.h` (the board header's pins, checked),
   `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]`

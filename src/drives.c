@@ -31,6 +31,7 @@ static struct {
 	FIL file;
 	drives_format_t format; // DRIVES_NONE: not mounted
 	bool dirty;
+	uint8_t mounts; // images mounted on it (mod 256)
 	char name[DRIVES_NAME_MAX + 1];
 } drive[DRIVES];
 
@@ -86,6 +87,7 @@ drives_result_t drives_mount(unsigned d, const char *name) {
 	}
 	drive[d].format = f;
 	drive[d].dirty = false;
+	++drive[d].mounts;
 	strcpy(drive[d].name, upper);
 	return DRIVES_OK;
 }
@@ -109,6 +111,10 @@ const char *drives_name(unsigned d) {
 
 drives_format_t drives_format(unsigned d) {
 	return d < DRIVES ? drive[d].format : DRIVES_NONE;
+}
+
+uint8_t drives_mounts(unsigned d) {
+	return d < DRIVES ? drive[d].mounts : 0;
 }
 
 drives_result_t drives_create(const char *name, drives_format_t f, uint8_t *buf, size_t buf_size,

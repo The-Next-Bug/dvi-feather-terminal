@@ -52,6 +52,7 @@ static struct {
 	char reason[48];
 	BYTE clk_cmd, clk_fmt; // clock: register selected, 1 = decimal (else BCD)
 	BYTE dinfo_drive;      // port 8: the drive asked about
+	bool dinfo_format_read; // its format read: the next IN is the mount count
 	uint8_t dinfo_asked;   // drives (bit n) asked about since the reset
 	// Port 10: 0 waiting for a command, 1/2 for the DMA address's low/high
 	// byte; the address and the last command's status.
@@ -302,12 +303,17 @@ static void clkd_out(BYTE data) {
 	UNUSED(data); // the clock cannot be set
 }
 
-// Port 8: the format of the disk in the drive last written.
+// Port 8: the format of the disk in the drive last written, then (IN
+// again) how many images have been mounted on it.
 static void dinfo_out(BYTE data) {
 	m.dinfo_drive = data;
+	m.dinfo_format_read = false;
 }
 
 static BYTE dinfo_in(void) {
+	if (m.dinfo_format_read)
+		return plat->disk_mounts ? plat->disk_mounts(m.dinfo_drive) : 0;
+	m.dinfo_format_read = true;
 	if (m.dinfo_drive < 8)
 		m.dinfo_asked |= (uint8_t)(1u << m.dinfo_drive);
 	return plat->disk_format ? plat->disk_format(m.dinfo_drive) : 0;

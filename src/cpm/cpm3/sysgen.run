@@ -1,0 +1,22 @@
+# cpmrun script (build.sh): picosim's SYSGEN.SUB on the work disk in B:,
+# with RMAC and LINK on C: and GENCPM on B:. A: boots (its PROFILE.SUB
+# runs first; VT100DYN's cursor query takes typed keys, so wait it out).
+! UNDEFINED SYMBOL
+! ERROR
+! NO FILE
+> to see if it works
+> A>
+< B:
+> B>
+< C:RMAC BNKBIOS3 $PZ SZ
+> END OF ASSEMBLY
+> B>
+< C:RMAC SCB $PZ SZ
+> END OF ASSEMBLY
+> B>
+< C:LINK BNKBIOS3[B]=BNKBIOS3,SCB[NR]
+> USE FACTOR
+> B>
+< GENCPM AUTO DISPLAY
+> SYSTEM GENERATION DONE
+> B>

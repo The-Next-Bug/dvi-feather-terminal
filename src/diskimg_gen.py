@@ -5,6 +5,8 @@ Usage: diskimg_gen.py OUTPUT.c [--system NAME BOOT BIOS CPMBIN RELOC MSIZE]
                         [--delete NAME CPMNAME ...]
                         [--file NAME CPMNAME HOSTFILE ...]
                         NAME=IMAGE [NAME=IMAGE ...]
+       diskimg_gen.py --edit IMAGE [--delete CPMNAME | --file CPMNAME HOSTFILE
+                        | --extract CPMNAME HOSTFILE] ...
 
 Each IMAGE is compressed as an LZ4 block with match offsets below
 LZ_WINDOW (src/lz.h), which src/lz.c decodes a window at a time while the
@@ -28,6 +30,10 @@ NAME (an 8" floppy, user 0): its directory entries and blocks are blanked
 --file (any number) adds HOSTFILE to the CP/M file system of image NAME (an
 8" floppy, user 0) as CPMNAME (8.3, e.g. WORMS.COM); the name must not be
 there already.
+
+--edit changes an uncompressed 8" image in place (src/cpm/cpm3/build.sh's
+work disks): --delete and --file as above, and --extract, which copies
+CPMNAME off the disk into HOSTFILE (whole records), in the order given.
 """
 
 import sys
@@ -267,7 +273,57 @@ def add_file(image, cpm_name, host_file):
         fd_block(image, b, directory[b * FD_BLOCK:(b + 1) * FD_BLOCK])
 
 
+def extract_file(image, cpm_name, host_file):
+    """cpm_name (user 0) from the CP/M directory of image into host_file,
+    whole records (a text file keeps its ^Z padding)."""
+    name = fcb_name(cpm_name)
+    directory = b"".join(fd_block(image, b) for b in range(FD_DIR_BLOCKS))
+    extents = {}
+    for i in range(FD_DIR_ENTRIES):
+        entry = directory[i * 32:(i + 1) * 32]
+        if entry[0] == 0 and bytes(c & 0x7F for c in entry[1:12]) == name:
+            extents[entry[12] + 32 * entry[14]] = entry
+    if not extents:
+        sys.exit(f"{cpm_name}: not on the disk")
+    data = b""
+    for x in range(len(extents)):
+        entry = extents.get(x)
+        if entry is None:
+            sys.exit(f"{cpm_name}: extent {x} missing")
+        blocks = b"".join(fd_block(image, b) for b in entry[16:32] if b)
+        data += blocks[:entry[15] * SECTOR]
+    with open(host_file, "wb") as f:
+        f.write(data)
+
+
+def edit(args):
+    """--edit IMAGE: the --delete, --file and --extract steps that follow
+    (in that order, each as given) on the uncompressed IMAGE, in place."""
+    path = args[0]
+    args = args[1:]
+    with open(path, "rb") as f:
+        image = bytearray(f.read())
+    steps = {"--delete": 1, "--file": 2, "--extract": 2}
+    while args:
+        op = args[0]
+        if op not in steps or len(args) <= steps[op]:
+            sys.exit(__doc__)
+        operands = args[1:1 + steps[op]]
+        args = args[1 + steps[op]:]
+        if op == "--delete":
+            delete_file(image, *operands)
+        elif op == "--file":
+            add_file(image, *operands)
+        else:
+            extract_file(image, *operands)
+    with open(path, "wb") as f:
+        f.write(image)
+
+
 def main():
+    if len(sys.argv) >= 3 and sys.argv[1] == "--edit":
+        edit(sys.argv[2:])
+        return
     if len(sys.argv) < 3:
         sys.exit(__doc__)
     output = sys.argv[1]

@@ -1127,6 +1127,14 @@ static void test_boot_cpm3(void) {
 	CHECK(type("\x03"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(cpm("DIRSYS CCP.COM", "CCP      COM")); // a system file
+	// MEM: programs in bank 1, the system in bank 0, bank 2 free.
+	CHECK(cpm("MEM", "CP/M 3.1"));
+	// The TPA ends below VT100DYN's RSX, under the BDOS.
+	CHECK(strstr(screen, "TPA     0100H-F205H: 61702 bytes (60K)") != NULL);
+	CHECK(strstr(screen, "Memory  160K: bank 0 64K, banks 1-2 48K each (C000H-FFFFH common)") != NULL);
+	CHECK(strstr(screen, "Bank 0  the system: banked BDOS and BIOS, disk buffers") != NULL);
+	CHECK(strstr(screen, "Bank 1  the TPA (programs)") != NULL);
+	CHECK(strstr(screen, "Bank 2  not used by CP/M") != NULL);
 }
 
 // XLS, XPIP and XERA under CP/M 3, run from B: through its search path;
@@ -1153,6 +1161,85 @@ static void test_cpm3_tools(void) {
 	drives_unmount_all();
 }
 
+// Our banked BIOS (src/cpm/cpm3, bd f8w.4): drives A-H, each of the
+// formats port 8 reports; what it writes, CP/M 2.2 reads (the same file
+// system layout).
+static void test_cpm3_drives(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("EMPTY"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("Z80TESTS"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_create("C3HD8", DRIVES_HD8, window, sizeof window, NULL, NULL), DRIVES_OK);
+	CHECK_EQ(drives_create("C3HD4", DRIVES_HD4, window, sizeof window, NULL, NULL), DRIVES_OK);
+	CHECK_EQ(drives_mount(0, "CPM31"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "CPM32"), DRIVES_OK);
+	CHECK_EQ(drives_mount(4, "C3HD8"), DRIVES_OK);
+	CHECK_EQ(drives_mount(5, "C3HD4"), DRIVES_OK);
+	CHECK_EQ(drives_mount(7, "EMPTY"), DRIVES_OK);
+	cpm3_boot();
+	CHECK(strstr(screen, "Banked BIOS V1.3, drives A-H") != NULL);
+	CHECK(strstr(screen, "61K TPA") != NULL);
+	CHECK(cpm("DIR E:", "No File"));
+	CHECK(cpm("SHOW E:[DRIVE]", " 8,160: Kilobyte Drive  Capacity"));
+	CHECK(cpm("SHOW F:[DRIVE]", " 4,080: Kilobyte Drive  Capacity"));
+	CHECK(cpm("SHOW H:[DRIVE]", "   243: Kilobyte Drive  Capacity"));
+	// Files to and from every format (PIP leaves out system files such as
+	// A:'s; XLS is ours, an ordinary file).
+	CHECK(cpm("PIP E:MYXLS.COM=B:XLS.COM[V]", ""));
+	CHECK(cpm("PIP F:=E:MYXLS.COM[V]", ""));
+	CHECK(cpm("PIP H:=F:MYXLS.COM[V]", ""));
+	CHECK(cpm("DIR H:MYXLS.COM", "MYXLS    COM"));
+	CHECK(strstr(screen, "Verify") == NULL);
+	// A program found on E: through the search path.
+	CHECK(cpm("SETDEF *,E:", "2nd Drive            - E:"));
+	CHECK(cpm("MYXLS NOSUCH.*", "No files"));
+	// G: has nothing mounted: a select error.
+	CHECK(cpm("DIR G:", "CP/M Error On G: Invalid Drive"));
+	// Another image on F: while the system runs: the BIOS sees the new
+	// format and the BDOS logs the drive in again.
+	CHECK_EQ(drives_mount(5, "Z80TESTS"), DRIVES_OK);
+	CHECK(cpm("DIR F:TERMTEST.COM", "TERMTEST COM"));
+	CHECK_EQ(drives_mount(5, "C3HD4"), DRIVES_OK);
+	CHECK(cpm("DIR F:MYXLS.COM", "MYXLS    COM"));
+	// ^C keeps all of it.
+	clear_screen();
+	CHECK(type("\x03"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("DIR E:MYXLS.COM", "MYXLS    COM"));
+	CHECK(cpm("ERA H:MYXLS.COM", ""));
+	// Another image of the same format. Logged in with an empty image,
+	// the BDOS must not write to C3HD8 by the empty one's allocation, over
+	// MYXLS's blocks (between commands it logs the drive in again; in the
+	// middle of a program, port 8's mount count tells the BIOS).
+	CHECK_EQ(drives_create("C3HD8B", DRIVES_HD8, window, sizeof window, NULL, NULL), DRIVES_OK);
+	CHECK_EQ(drives_mount(4, "C3HD8B"), DRIVES_OK);
+	CHECK(cpm("DIR E:", "No File"));
+	CHECK_EQ(drives_mount(4, "C3HD8"), DRIVES_OK);
+	static uint8_t junk[8192]; // XPIP: no disk reset first, as PIP does
+	memset(junk, 0x76, sizeof junk); // HALT
+	put_fat_file("/XFER/JUNK.BIN", junk, sizeof junk);
+	CHECK(cpm("B:XPIP E:=SD:JUNK.BIN", "1 copied"));
+	CHECK(cpm("DIR E:", "E: MYXLS    COM : JUNK     BIN"));
+	CHECK(cpm("E:MYXLS NOSUCH.*", "No files")); // still XLS
+	CHECK(cpm("ERA E:JUNK.BIN", ""));
+	f_unlink("/XFER/JUNK.BIN");
+	CHECK_EQ(f_unlink("/DISKS80/C3HD8B.DSK"), FR_OK);
+	// CP/M 2.2 reads the hard disks CP/M 3 wrote.
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	clear_screen();
+	machine_reset();
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("DIR E:", "E: MYXLS    COM"));
+	CHECK(cpm("DIR F:", "F: MYXLS    COM"));
+	// MEM under CP/M 2.2: everything in bank 0.
+	CHECK(cpm("MEM", "CP/M 2.2"));
+	CHECK(strstr(screen, "TPA     0100H-E405H: 58118 bytes (56K)") != NULL);
+	CHECK(strstr(screen, "Bank 0  the TPA (programs)") != NULL);
+	CHECK(strstr(screen, "Bank 1  not used by CP/M") != NULL);
+	drives_unmount_all();
+	CHECK_EQ(f_unlink("/DISKS80/C3HD8.DSK"), FR_OK);
+	CHECK_EQ(f_unlink("/DISKS80/C3HD4.DSK"), FR_OK);
+}
+
 // The disk controller refuses a hard-disk image to a system that has not
 // asked port 8 about the drive since the reset (bd f8w.7); floppies are
 // always served.
@@ -1175,7 +1262,7 @@ static void test_hd_guard(void) {
 	static const uint8_t steps[][2] = {
 		{0x22, 0}, {0x42, 1}, // read, write C: (not asked about)
 		{0x20, 2},            // read A: (a floppy)
-		{0x00, 3},            // ask port 8 about C:
+		{0x00, 3},            // ask port 8 about C: (and IN again, below)
 		{0x22, 4}, {0x42, 5}, // read, write C:
 	};
 	for (unsigned i = 0; i < sizeof steps / sizeof steps[0]; ++i) {
@@ -1186,6 +1273,10 @@ static void test_hd_guard(void) {
 		emit(2, 0xdb, steps[i][0] ? 4 : 8);   // IN A,(4) or (8)
 		uint16_t at = (uint16_t)(st + steps[i][1]);
 		emit(3, 0x32, at & 0xff, at >> 8);    // LD (at),A
+		if (!steps[i][0]) {
+			emit(2, 0xdb, 8);                       // IN A,(8): the mount count
+			emit(3, 0x32, (st + 8) & 0xff, (st + 8) >> 8); // LD (st+8),A
+		}
 	}
 	emit(1, 0x76); // HALT
 	CHECK(z80.n <= sizeof z80.code);
@@ -1204,11 +1295,13 @@ static void test_hd_guard(void) {
 		CHECK_EQ(bnk0[st + 1], 2);
 		CHECK_EQ(bnk0[st + 2], 0); // the floppy is read
 		CHECK_EQ(bnk0[st + 3], 3); // C: is an 8 MB hard disk
+		CHECK_EQ(bnk0[st + 8], drives_mounts(2));
 		CHECK_EQ(bnk0[st + 4], 0); // now served
 		CHECK_EQ(bnk0[st + 5], 0);
 		CHECK_EQ(drives_read(2, 1, 1, after), 0);
 		CHECK(memcmp(before, after, sizeof before) == 0);
 		CHECK(memcmp(bnk0 + dma, before, sizeof before) == 0);
+		CHECK_EQ(drives_mount(2, "GUARD"), DRIVES_OK); // the count moves on
 	}
 	drives_unmount_all();
 }
@@ -1563,6 +1656,7 @@ int main(void) {
 	RUN(test_xfer_tools);
 	RUN(test_boot_cpm3);
 	RUN(test_cpm3_tools);
+	RUN(test_cpm3_drives);
 	RUN(test_hd_guard);
 	RUN(test_termtest);
 	RUN(test_altscr);

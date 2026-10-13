@@ -771,6 +771,10 @@ static uint8_t cpm_disk_format(unsigned drive) {
 	return (uint8_t)drives_format(drive);
 }
 
+static uint8_t cpm_disk_mounts(unsigned drive) {
+	return drives_mounts(drive);
+}
+
 static const machine_platform_t cpm_platform = {
 	.clock_us = cpm_clock_us,
 	.idle = cpm_idle,
@@ -780,6 +784,7 @@ static const machine_platform_t cpm_platform = {
 	.disk_read = cpm_disk_read,
 	.disk_write = cpm_disk_write,
 	.disk_format = cpm_disk_format,
+	.disk_mounts = cpm_disk_mounts,
 	.xfer = xfer_command,
 };
 
