@@ -2,7 +2,8 @@
 # terminal, stdio on the board's UART. HSTX_MODE picks the timing
 # (src/video/hstx_dvi.h).
 add_executable(hstx_test hstx_test.c)
-target_compile_options(hstx_test PRIVATE -Wall -Wextra)
+# Warnings for our source only, not the SDK's (built here too).
+set_source_files_properties(hstx_test.c PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 # Next to the terminal's files, where CI and scripts/package.sh look.
 # (pico_add_extra_outputs writes the UF2 to ARCHIVE_OUTPUT_DIRECTORY.)
 set_target_properties(hstx_test PROPERTIES

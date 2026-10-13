@@ -55,7 +55,6 @@ if(NOT PICO_PLATFORM MATCHES "^rp2350")
   message(FATAL_ERROR "PICO_BOARD ${PICO_BOARD} is ${PICO_PLATFORM}: only RP2350 boards are supported")
 endif()
 
-set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
 include(cmake/dvt.cmake)
 
 # The libraries (src/<name>, bd gr1), the RP2350 ones too. They do not
@@ -80,90 +79,6 @@ target_compile_definitions(dvt_board INTERFACE SERIAL_FLOW_CONTROL=$<BOOL:${SERI
 target_compile_definitions(dvt_platform PUBLIC VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>)
 target_compile_definitions(dvt_video PUBLIC HSTX_MODE=${HSTX_MODE})
 
-# Runs on every build; rewrites term_build.h only when git state changes.
-add_custom_target(build_info
-  COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_CURRENT_LIST_DIR}
-          -DOUTPUT=${GENERATED}/term_build.h
-          -P ${CMAKE_CURRENT_LIST_DIR}/cmake/build_info.cmake
-  BYPRODUCTS ${GENERATED}/term_build.h
-  VERBATIM)
-
-add_executable(dvi_terminal
-  src/main.c
-)
-add_dependencies(dvi_terminal build_info)
-
-target_include_directories(dvi_terminal PRIVATE
-  src
-  ${GENERATED}
-)
-
-# Warnings for our sources only, not the SDK's.
-set_source_files_properties(src/main.c PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
-# TinyUSB's MSC host is cold code (it runs only while a USB stick comes or
-# goes, or files move): small rather than fast, as all code takes SRAM.
-set_property(SOURCE
-  ${PICO_TINYUSB_PATH}/src/class/msc/msc_host.c APPEND PROPERTY COMPILE_OPTIONS "-Os")
-
-target_compile_definitions(dvi_terminal PRIVATE
-  HSTX_MODE=${HSTX_MODE}
-  STARTUP_LOGO=$<BOOL:${STARTUP_LOGO}>
-  LOGO_MS=${LOGO_MS}
-  LOGO_IN_FLASH=$<BOOL:${LOGO_IN_FLASH}>
-  STARTUP_DEMO=$<BOOL:${STARTUP_DEMO}>
-  VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>
-  SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>
-  # The compose loop needs very little stack.
-  PICO_CORE1_STACK_SIZE=0x200
-  # Nothing prints floating point: its printf code (and the soft-float it
-  # pulls in) would only take SRAM.
-  PICO_PRINTF_SUPPORT_FLOAT=0
-  PICO_PRINTF_SUPPORT_EXPONENTIAL=0
-)
-
-target_link_libraries(dvi_terminal
-  dvt_board
-  dvt_common
-  dvt_disks
-  dvt_machine
-  dvt_platform
-  dvt_settings
-  dvt_storage
-  dvt_usb
-  dvt_video
-  dvt_input
-  dvt_render
-  dvt_screen
-  dvt_term
-  dvt_ui
-  pico_stdlib
-  pico_multicore
-  hardware_flash
-  hardware_uart
-  hardware_dma
-  hardware_spi
-  hardware_vreg
-  hardware_watchdog
-)
-
-# The USB host: keyboards and sticks on the native USB port (TinyUSB's
-# sources, built here, find tusb_config.h through dvt_usb).
-target_link_libraries(dvi_terminal tinyusb_host)
-
-# UART0 belongs to the terminal (serial.c): no stdio on it or on USB.
-if(VIDEO_DIAG)
-  # Stack overflows fault (and are reported) instead of corrupting memory.
-  target_compile_definitions(dvi_terminal PRIVATE PICO_USE_STACK_GUARDS=1)
-endif()
-if(COPY_TO_RAM)
-  pico_set_binary_type(dvi_terminal copy_to_ram)
-  # Cold code runs from flash (XIP) to save SRAM: ld/ (bd qur.24).
-  pico_add_linker_script_override_path(dvi_terminal ${CMAKE_CURRENT_LIST_DIR}/ld GLOB_FILES)
-endif()
-
-pico_enable_stdio_uart(dvi_terminal 0)
-pico_enable_stdio_usb(dvi_terminal 0)
-pico_add_extra_outputs(dvi_terminal)
-
-# The programs: the terminal above; the HSTX test pattern.
+# The programs: the terminal and the HSTX test pattern.
+add_subdirectory(apps/terminal)
 add_subdirectory(apps/hstx_test)
