@@ -4,6 +4,8 @@
 #include "hardware/irq.h"
 #include "hardware/sync.h"
 
+#include "led.h"
+
 // Receive: single producer (IRQ) and single consumer (main loop), both on
 // core 0.
 static uint8_t rx_buffer[SERIAL_RX_BUFFER_SIZE];
@@ -100,6 +102,8 @@ size_t serial_read(uint8_t *buf, size_t max) {
 	// Make sure the copy is done before the IRQ may reuse the space.
 	__compiler_memory_barrier();
 	rx_tail = t + (uint32_t)n;
+	if (n)
+		led_activity();
 	if (rx_paused && SERIAL_RX_BUFFER_SIZE - (rx_head - rx_tail) >= RX_RESUME_ROOM) {
 		rx_paused = false;
 		set_rx_irqs(true); // fires at once if the FIFO has data
@@ -111,6 +115,8 @@ size_t serial_write(const uint8_t *data, size_t len) {
 	size_t n = 0;
 	for (; n < len && tx_head - tx_tail < SERIAL_TX_BUFFER_SIZE; ++n)
 		tx_buffer[tx_head++ % SERIAL_TX_BUFFER_SIZE] = data[n];
+	if (n)
+		led_activity();
 	if (n < len) {
 		uint32_t saved = save_and_disable_interrupts();
 		stats.tx_dropped += (uint32_t)(len - n);

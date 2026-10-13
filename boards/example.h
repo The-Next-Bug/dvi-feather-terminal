@@ -132,8 +132,9 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 
 // --- LED ---
 //
-// Lit/blinked by VIDEO_DIAG builds and hstx_test only. Leave it out if the
-// board has none.
+// Flashes on SD card, USB stick and serial activity, and once a second
+// while the screen is blanked (src/led.c); VIDEO_DIAG builds and hstx_test
+// blink it their own way. Leave it out if the board has none.
 #define PICO_DEFAULT_LED_PIN 25
 
 #endif

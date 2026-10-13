@@ -1,10 +1,11 @@
 // FatFs disk I/O on the board: drive 0 the SD card (sdcard.c), drive 1 a
 // USB stick (usbmsc.c, with the USB host). The host tests use
-// test/diskio_ram.c instead.
+// test/diskio_ram.c instead. Reads and writes blink the LED.
 
 #include "ff.h"
 #include "diskio.h"
 
+#include "led.h"
 #include "sdcard.h"
 #include "usbmsc.h"
 
@@ -25,6 +26,7 @@ DSTATUS disk_initialize(BYTE pdrv) {
 }
 
 DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
+	led_activity();
 	if (pdrv == 0)
 		return sdcard_disk_read(buff, sector, count);
 	if (pdrv == 1)
@@ -33,6 +35,7 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
 }
 
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
+	led_activity();
 	if (pdrv == 0)
 		return sdcard_disk_write(buff, sector, count);
 	if (pdrv == 1)

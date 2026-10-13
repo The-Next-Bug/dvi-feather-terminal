@@ -113,9 +113,21 @@ setting explained:
   flow control builds.
 - **SD card**: which SPI, its MISO/SCK/MOSI, and CS (any GPIO).
 - **USB host**: an optional pin that switches on the port's 5 V.
-- **LED** (diagnostic builds only), and for a board without a Pico 2
-  module, the RP2350 variant, flash size and crystal (a pico-sdk board
-  header; the SDK's own boards can be included, as the DVI Sock's does).
+- **LED** (optional): off while the screen is on, flashing while the SD
+  card, a USB stick or the serial line is busy. With the screen blanked it
+  also flashes once a second, so a board that has hung shows a light that
+  stays on or stays off.
+- For a board without a Pico 2 module, the RP2350 variant, flash size and
+  crystal (a pico-sdk board header; the SDK's own boards can be included,
+  as the DVI Sock's does).
+
+Board headers so far (only the DVI Sock is checked on hardware):
+
+| Target | Board |
+|---|---|
+| `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default) |
+| `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS |
+| `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing) |
 
 `src/board.h` checks the header when it compiles. A missing setting, a pin
 that cannot carry its signal, or a pin used twice stops the build with an
