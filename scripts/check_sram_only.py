@@ -102,12 +102,31 @@ def main():
                         indirect.append(f'{name}: {line.strip()}')
         reached[root] = seen
 
-    end = None
+    # Every pattern of the cold code's linker script must place something:
+    # one that no longer matches (an object or archive renamed or moved)
+    # silently puts that code back in SRAM.
+    end, cold, pattern, in_cold = None, None, None, False
     with open(f'{build}/dvi_terminal.elf.map') as f:
         for line in f:
             m = re.match(r'\s+0x([0-9a-f]+)\s+(?:PROVIDE \()?__flash_binary_end\b', line)
             if m:
                 end = int(m.group(1), 16)
+            if re.search(r'\b__cold_text_start__ = ', line):
+                cold, in_cold = {}, True
+            elif re.search(r'\b__cold_text_end__ = ', line):
+                in_cold = False
+            elif in_cold:
+                m = re.match(r'^ (\*\S+)\(', line)
+                if m:
+                    pattern = m.group(1)
+                    cold[pattern] = 0
+                elif pattern and line.startswith(' .'):
+                    cold[pattern] += 1
+    if not cold:
+        errors.append('no cold code patterns between __cold_text_start__ and __cold_text_end__ in the link map')
+    for p, n in (cold or {}).items():
+        if not n:
+            errors.append(f'cold code pattern {p} placed nothing (its code left in SRAM?)')
     if end is None:
         errors.append('__flash_binary_end not in the link map')
     elif end - FLASH_LO > staging:
@@ -119,6 +138,8 @@ def main():
         print(f'check_sram_only: indirect call (not followed): {i}')
     if end is not None:
         print(f'check_sram_only: image ends at {end:#x}, staging area at {FLASH_LO + staging:#x}')
+    if cold:
+        print(f'check_sram_only: {len(cold)} cold code patterns, each placing something')
     for e in errors:
         print(f'check_sram_only: error: {e}', file=sys.stderr)
     sys.exit(1 if errors else 0)

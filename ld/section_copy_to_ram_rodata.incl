@@ -8,6 +8,12 @@
    This section comes before .text and .data, so these objects' code and
    constants land here and not in SRAM.
 
+   Our code is in static libraries (src/<name> -> libdvt_<name>.a, bd gr1):
+   *libdvt_<name>.a:<file>.c.o picks one object, *libdvt_<name>.a:* the
+   whole library. A pattern that matches nothing leaves its code in SRAM
+   without a word from the linker: scripts/check_sram_only.py fails the
+   build then.
+
    Code in flash may run only after nvflash_retime() and never on core 1,
    during a flash erase/program or in the firmware update's commit:
    scripts/check_sram_only.py checks that from the disassembly. */
