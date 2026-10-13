@@ -375,7 +375,27 @@ BOOT1:	MOV	A,M		; get next message bye
 	INX	H		; and do next
 	JMP	BOOT1
 ;
-BOOT2:	JMP	WBOOT
+;
+;	SETDEF's defaults (bd f8w.9), in the SCB from its @CIVEC at +22H
+;	(RMAC takes external + constant, but no EQU of one): programs found
+;	on the default drive, then A:, then B:; COM before SUB; temporary
+;	files on B: (CPM32, an 8 MB disk); no program name display.
+;	PROFILE.SUB can change them (README.TXT on CPM31).
+BOOT2:	LXI	H,@civec+(4CH-22H) ; drive search chain, 0 the default
+	MVI	M,0		; default drive
+	INX	H
+	MVI	M,1		; A:
+	INX	H
+	MVI	M,2		; B:
+	INX	H
+	MVI	M,0FFH		; end of the chain
+	MVI	A,2		; temporary file drive (SCB+50H): B:
+	STA	@civec+(50H-22H)
+	LDA	@civec+(18H-22H) ; CCP flags: bits 3-4 order, 0-1 display
+	ANI	0E4H		; no display, order bits clear (COM)
+	ORI	08H		; order COM, SUB
+	STA	@civec+(18H-22H)
+	JMP	WBOOT
 ;
 	CSEG
 ;

@@ -1236,8 +1236,8 @@ static void test_xfer_tools(void) {
 static void cpm3_boot(void) {
 	clear_screen();
 	machine_reset();
-	CHECK_EQ(run_until("to see if it works", 30), MACHINE_RUNNING);
-	const char *banner = strstr(screen, "to see if it works");
+	CHECK_EQ(run_until("RSX loaded and initialized.", 30), MACHINE_RUNNING);
+	const char *banner = strstr(screen, "RSX loaded and initialized.");
 	if (!banner || !strstr(banner, "A>")) // the prompt may have come with it
 		CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 }
@@ -1252,7 +1252,20 @@ static void test_boot_cpm3(void) {
 	CHECK(strstr(screen, "CP/M V3.0 Loader") != NULL);
 	CHECK(strstr(screen, "61K TPA") != NULL);
 	CHECK(strstr(screen, "Banked BIOS") != NULL);
+	// PROFILE.SUB's VT100DYN loads, without its help, and no SETDEF
+	// runs (bd f8w.9):
+	CHECK(strstr(screen, "RSX loaded and initialized.") != NULL);
+	CHECK(strstr(screen, "DEVICE CONSOLE") == NULL);
+	CHECK(strstr(screen, "Drive Search Path") == NULL);
+	// the BIOS sets SETDEF's defaults.
 	CHECK(cpm("SETDEF", "2nd Drive            - A:"));
+	CHECK(strstr(screen, "3rd Drive            - B:") != NULL);
+	CHECK(strstr(screen, "Search Order         - COM, SUB") != NULL);
+	CHECK(strstr(screen, "Temporary Drive      - B:") != NULL);
+	CHECK(strstr(screen, "Program Name Display - Off") != NULL);
+	CHECK(cpm("TYPE README.TXT [NO PAGE]", "Temporary drive     B:"));
+	// CPM32 is an 8 MB disk.
+	CHECK(cpm("SHOW B:[DRIVE]", " 8,160: Kilobyte Drive  Capacity"));
 	CHECK(cpm("DATE", "/20"));
 	CHECK(cpm("DIR B:X*.COM", "XPIP     COM"));
 	// The user number shows in the prompt.
@@ -1265,6 +1278,7 @@ static void test_boot_cpm3(void) {
 	CHECK(type("\x03"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(cpm("DIRSYS CCP.COM", "CCP      COM")); // a system file
+	CHECK(cpm("SETDEF", "Temporary Drive      - B:")); // kept
 	// MEM: programs in bank 1, the system in bank 0, bank 2 free.
 	CHECK(cpm("MEM", "CP/M 3.1"));
 	// The TPA ends below VT100DYN's RSX, under the BDOS.
@@ -1273,6 +1287,30 @@ static void test_boot_cpm3(void) {
 	CHECK(strstr(screen, "Bank 0  the system: banked BDOS and BIOS, disk buffers") != NULL);
 	CHECK(strstr(screen, "Bank 1  the TPA (programs)") != NULL);
 	CHECK(strstr(screen, "Bank 2  not used by CP/M") != NULL);
+
+	// README.TXT's way of changing a default: a SETDEF line put in
+	// PROFILE.SUB with ED, run at the next cold boot.
+	clear_screen();
+	CHECK(type("ED PROFILE.SUB\r"));
+	CHECK_EQ(run_until(": *", 10), MACHINE_RUNNING); // ED numbers lines
+	const struct {
+		const char *keys, *prompt;
+	} ed[] = {
+		{"#A\r", ": *"},
+		{"BI\r", ":  "}, // inserting
+		{"SETDEF [TEMPORARY=A]\r", ":  "},
+		{"\x1a", ": *"},
+		{"E\r", "A>"},
+	};
+	for (unsigned i = 0; i < sizeof ed / sizeof ed[0]; ++i) {
+		clear_screen();
+		CHECK(type(ed[i].keys));
+		CHECK_EQ(run_until(ed[i].prompt, 10), MACHINE_RUNNING);
+	}
+	cpm3_boot();
+	CHECK(strstr(screen, "Temporary Drive      - A:") != NULL);
+	CHECK(cpm("SETDEF", "Temporary Drive      - A:"));
+	CHECK(strstr(screen, "3rd Drive            - B:") != NULL); // the rest as before
 }
 
 // XLS, XPIP and XERA under CP/M 3, run from B: through its search path;

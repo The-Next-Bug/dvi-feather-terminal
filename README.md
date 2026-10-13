@@ -392,9 +392,14 @@ instead of reading a hard disk as a floppy and writing over it).
   formats, as under CP/M 2.2, with a 61K TPA. Mounting another image on a
   drive while CP/M 3 runs needs no `^C`: the BIOS tells the BDOS the
   media changed (port 8 gives each drive's format and a count of the
-  images mounted on it). `PROFILE.SUB` puts A: and B: on the search path
-  (`SETDEF`), so `XLS`, `XPIP`, `XERA`, `MEM` and `WORMS` on `CPM32` run
-  from any drive. CP/M 3 shows the user number in its prompt (`3A>`),
+  images mounted on it). `CPM32` is an 8 MB disk (picosim's second
+  floppy's files, with room to spare). The BIOS sets `SETDEF`'s defaults
+  at every cold boot: programs are found on the default drive, then A:,
+  then B:, so `XLS`, `XPIP`, `XERA`, `MEM` and `WORMS` on `CPM32` run
+  from any drive; COM files before SUB files; temporary files on B:, not
+  the nearly full A:. `README.TXT` on `CPM31` describes them and how to
+  change them with a `SETDEF` line in `PROFILE.SUB`. CP/M 3 shows the
+  user number in its prompt (`3A>`),
   finds system files in user 0 from any user area, and keeps the date
   (`DATE`). `CPM3GEN` holds the BIOS sources and `GENCPM.DAT`, `GENCPM`,
   and the RELs, SPRs and `CPM3.SYS` the firmware's build made from them

@@ -58,8 +58,13 @@ replace this one.
 ## CP/M 3 (`cpm3/`)
 
 picosim's banked CP/M 3 disks are built in as `CPM31` (boot disk), `CPM32`
-(with WORMS, XLS, XPIP, XERA and MEM added by `--file CPM32`) and
-`CPM3GEN` (bd f8w). `CPM31`'s `CPM3.SYS` is ours, made at build time:
+(picosim's second floppy's files on an 8 MB disk, `diskimg_gen.py --convert`,
+with WORMS, XLS, XPIP, XERA and MEM added by `--file CPM32`) and
+`CPM3GEN` (bd f8w). `CPM31` gets our `PROFILE.SUB` (`cpm3/profile.sub`:
+VT100DYN only, its help text patched away by `cpm3/build.sh`) and
+`README.TXT` (`cpm3/readme.txt`): our BIOS sets SETDEF's defaults (search
+default, A:, B:; COM before SUB; temporary files on B:; bd f8w.9).
+`CPM31`'s `CPM3.SYS` is ours, made at build time:
 
 - `cpm3/bnkbios3.asm`: picosim's banked BIOS (8080, RMAC) with eight drives,
   A-H, of any of the formats above. SELDSK asks port 8 when the BDOS logs a

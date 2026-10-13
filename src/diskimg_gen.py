@@ -7,6 +7,7 @@ Usage: diskimg_gen.py OUTPUT.c [--system NAME BOOT BIOS CPMBIN RELOC MSIZE]
                         NAME=IMAGE [NAME=IMAGE ...]
        diskimg_gen.py --edit IMAGE [--delete CPMNAME | --file CPMNAME HOSTFILE
                         | --extract CPMNAME HOSTFILE] ...
+       diskimg_gen.py --convert IMAGE LAYOUT OUTPUT
 
 Each IMAGE is compressed as an LZ4 block with match offsets below
 LZ_WINDOW (src/lz.h), which src/lz.c decodes a window at a time while the
@@ -23,17 +24,23 @@ per byte, set where the byte is the high byte of an address in CCP/BDOS;
 made by comparing with MOVCPM's 62K output, see src/cpm/README.md), then
 the BIOS BIOS (src/cpm/build.sh).
 
+The file system steps work on an 8" floppy or an 8 MB hard disk image
+(the layout comes from the size).
+
 --delete (any number) removes CPMNAME from the CP/M file system of image
-NAME (an 8" floppy, user 0): its directory entries and blocks are blanked
+NAME (user 0): its directory entries and blocks are blanked
 (E5). The file must be there. Deletions come before --file additions.
 
---file (any number) adds HOSTFILE to the CP/M file system of image NAME (an
-8" floppy, user 0) as CPMNAME (8.3, e.g. WORMS.COM); the name must not be
+--file (any number) adds HOSTFILE to the CP/M file system of image NAME
+(user 0) as CPMNAME (8.3, e.g. WORMS.COM); the name must not be
 there already.
 
---edit changes an uncompressed 8" image in place (src/cpm/cpm3/build.sh's
+--edit changes an uncompressed image in place (src/cpm/cpm3/build.sh's
 work disks): --delete and --file as above, and --extract, which copies
 CPMNAME off the disk into HOSTFILE (whole records), in the order given.
+
+--convert copies every file on IMAGE (all users, attributes kept) onto a
+blank image of LAYOUT (FD or HD8) written to OUTPUT.
 """
 
 import sys
@@ -92,7 +99,8 @@ def compress(data):
         out += bytes((best_off & 255, best_off >> 8))
         if match >= 15:
             length_bytes(match - 15)
-        for p in range(i, i + best_len):
+        # Only the last window of the match can be matched again.
+        for p in range(max(i, i + best_len - WINDOW), i + best_len):
             insert(p)
         i += best_len
         anchor = i
@@ -172,36 +180,80 @@ def put_system(image, boot_file, bios_file, cpm_file, reloc_file, msize):
     image[0:len(system)] = system
 
 
-# The 8" floppy's CP/M file system (src/cpm/bios.asm's DPB and TRANS).
-FD_SECTORS = 26
-FD_SKEW = [1, 7, 13, 19, 25, 5, 11, 17, 23, 3, 9, 15, 21,
-           2, 8, 14, 20, 26, 6, 12, 18, 24, 4, 10, 16, 22]
-FD_RESERVED_TRACKS = 2
-FD_BLOCK = 1024
-FD_BLOCKS = 243          # DSM + 1
-FD_DIR_ENTRIES = 64      # DRM + 1, in blocks 0 and 1
-FD_DIR_BLOCKS = 2
-EXTENT_RECORDS = 128     # 16 KB per directory entry (EXM 0)
+class Layout:
+    """A disk format's CP/M file system, as our BIOSes' DPBs give it
+    (src/cpm/bios.asm, src/cpm/cpm3/bnkbios3.asm)."""
 
+    def __init__(self, name, tracks, sectors, skew, reserved_tracks, block, blocks, dir_entries):
+        self.name = name
+        self.sectors = sectors
+        self.skew = skew                    # 1-based physical sectors, or None
+        self.reserved_tracks = reserved_tracks
+        self.block = block
+        self.blocks = blocks                # DSM + 1
+        self.dir_entries = dir_entries      # DRM + 1, from block 0
+        self.dir_blocks = dir_entries * 32 // block
+        self.wide = blocks > 256            # 16-bit block numbers
+        self.pointers = 8 if self.wide else 16
+        self.size = tracks * sectors * SECTOR
+        # Logical (16 KB) extents an entry covers: EXM + 1.
+        self.extents_per_entry = self.pointers * block // (EXTENT_RECORDS * SECTOR)
 
-def fd_sector_offset(record):
-    """Image offset of logical 128-byte record (after the system tracks)."""
-    track = FD_RESERVED_TRACKS + record // FD_SECTORS
-    sector = FD_SKEW[record % FD_SECTORS] - 1
-    return (track * FD_SECTORS + sector) * SECTOR
+    def sector_offset(self, record):
+        """Image offset of logical 128-byte record (after the system tracks)."""
+        track = self.reserved_tracks + record // self.sectors
+        sector = record % self.sectors
+        if self.skew:
+            sector = self.skew[sector] - 1
+        return (track * self.sectors + sector) * SECTOR
 
+    def read_block(self, image, block):
+        per_block = self.block // SECTOR
+        return b"".join(bytes(image[o:o + SECTOR]) for o in
+                        (self.sector_offset(block * per_block + i) for i in range(per_block)))
 
-def fd_block(image, block, data=None):
-    """Read block (or write data to it) through the skew."""
-    per_block = FD_BLOCK // SECTOR
-    out = b""
-    for i in range(per_block):
-        off = fd_sector_offset(block * per_block + i)
-        if data is None:
-            out += bytes(image[off:off + SECTOR])
-        else:
+    def write_block(self, image, block, data):
+        per_block = self.block // SECTOR
+        for i in range(per_block):
+            off = self.sector_offset(block * per_block + i)
             image[off:off + SECTOR] = data[i * SECTOR:(i + 1) * SECTOR]
-    return out
+
+    def read_dir(self, image):
+        return bytearray(b"".join(self.read_block(image, b) for b in range(self.dir_blocks)))
+
+    def write_dir(self, image, directory):
+        for b in range(self.dir_blocks):
+            self.write_block(image, b, directory[b * self.block:(b + 1) * self.block])
+
+    def entry_blocks(self, entry):
+        if self.wide:
+            ptrs = [entry[16 + 2 * i] | entry[17 + 2 * i] << 8 for i in range(8)]
+        else:
+            ptrs = list(entry[16:32])
+        return [b for b in ptrs if b]
+
+    def pack_blocks(self, blocks):
+        if self.wide:
+            return b"".join(bytes((b & 255, b >> 8)) for b in blocks).ljust(16, b"\0")
+        return bytes(blocks).ljust(16, b"\0")
+
+
+EXTENT_RECORDS = 128     # records in a logical extent (16 KB)
+LAYOUTS = [
+    # 8" SSSD floppy: two system tracks, skew 6, 1 KB blocks.
+    Layout("FD", 77, 26, [1, 7, 13, 19, 25, 5, 11, 17, 23, 3, 9, 15, 21,
+                                 2, 8, 14, 20, 26, 6, 12, 18, 24, 4, 10, 16, 22],
+           2, 1024, 243, 64),
+    # 8 MB hard disk: no system tracks, no skew, 4 KB blocks.
+    Layout("HD8", 256, 255, None, 0, 4096, 2040, 1024),
+]
+
+
+def layout_of(image):
+    for layout in LAYOUTS:
+        if len(image) == layout.size:
+            return layout
+    sys.exit(f"{len(image)} bytes: not an 8\" floppy or 8 MB disk image")
 
 
 def fcb_name(cpm_name):
@@ -212,88 +264,137 @@ def fcb_name(cpm_name):
     return base.ljust(8).encode() + ext.ljust(3).encode()
 
 
+def plain(name):
+    """A directory name without its attribute bits."""
+    return bytes(c & 0x7F for c in name)
+
+
+def extent_number(entry):
+    return entry[12] + 32 * entry[14]
+
+
 def delete_file(image, cpm_name):
     """cpm_name out of the CP/M directory of image (a bytearray), user 0:
     its entries and blocks blanked, as on a fresh disk."""
+    layout = layout_of(image)
     name = fcb_name(cpm_name)
-    directory = bytearray(b"".join(fd_block(image, b) for b in range(FD_DIR_BLOCKS)))
+    directory = layout.read_dir(image)
     blocks = []
     found = False
-    for i in range(FD_DIR_ENTRIES):
+    for i in range(layout.dir_entries):
         entry = directory[i * 32:(i + 1) * 32]
-        if entry[0] == 0 and bytes(c & 0x7F for c in entry[1:12]) == name:
+        if entry[0] == 0 and plain(entry[1:12]) == name:
             found = True
-            blocks += [b for b in entry[16:32] if b]
+            blocks += layout.entry_blocks(entry)
             directory[i * 32:(i + 1) * 32] = b"\xe5" * 32
     if not found:
         sys.exit(f"{cpm_name}: not on the disk")
     for b in blocks:
-        fd_block(image, b, b"\xe5" * FD_BLOCK)
-    for b in range(FD_DIR_BLOCKS):
-        fd_block(image, b, directory[b * FD_BLOCK:(b + 1) * FD_BLOCK])
+        layout.write_block(image, b, b"\xe5" * layout.block)
+    layout.write_dir(image, directory)
 
 
-def add_file(image, cpm_name, host_file):
-    """host_file into the CP/M directory of image (a bytearray), user 0."""
-    name = fcb_name(cpm_name)
-    with open(host_file, "rb") as f:
-        data = f.read()
-    records = -(-len(data) // SECTOR)
-    data = data.ljust(records * SECTOR, b"\x1a")
-
-    directory = bytearray(b"".join(fd_block(image, b) for b in range(FD_DIR_BLOCKS)))
-    used = set(range(FD_DIR_BLOCKS))
+def put_file(image, user, name, data, last_bytes=0):
+    """data (whole records) into the CP/M directory of image as name (11
+    bytes, attribute bits kept) for user; last_bytes is the directory's S1
+    byte of the last entry (CP/M 3's byte count of the last record)."""
+    layout = layout_of(image)
+    records = len(data) // SECTOR
+    directory = layout.read_dir(image)
+    used = set(range(layout.dir_blocks))
     free_entries = []
-    for i in range(FD_DIR_ENTRIES):
+    for i in range(layout.dir_entries):
         entry = directory[i * 32:(i + 1) * 32]
         if entry[0] == 0xE5:
             free_entries.append(i)
             continue
-        if bytes(c & 0x7F for c in entry[1:12]) == name:
-            sys.exit(f"{cpm_name}: already on the disk")
-        used.update(b for b in entry[16:32] if b)
-    free_blocks = [b for b in range(FD_BLOCKS) if b not in used]
-    blocks_needed = -(-records * SECTOR // FD_BLOCK)
-    extents = max(1, -(-records // EXTENT_RECORDS))
-    if blocks_needed > len(free_blocks) or extents > len(free_entries):
-        sys.exit(f"{cpm_name}: no room on the disk")
+        if entry[0] == user and plain(entry[1:12]) == plain(name):
+            sys.exit(f"{plain(name).decode()}: already on the disk")
+        if entry[0] < 32:
+            used.update(layout.entry_blocks(entry))
+    free_blocks = [b for b in range(layout.blocks) if b not in used]
+    blocks_needed = -(-records * SECTOR // layout.block)
+    entry_records = EXTENT_RECORDS * layout.extents_per_entry
+    entries = max(1, -(-records // entry_records))
+    if blocks_needed > len(free_blocks) or entries > len(free_entries):
+        sys.exit(f"{plain(name).decode()}: no room on the disk")
 
     blocks = free_blocks[:blocks_needed]
-    block_data = data.ljust(blocks_needed * FD_BLOCK, b"\x1a")
+    block_data = data.ljust(blocks_needed * layout.block, b"\x1a")
     for i, b in enumerate(blocks):
-        fd_block(image, b, block_data[i * FD_BLOCK:(i + 1) * FD_BLOCK])
-    per_extent = EXTENT_RECORDS * SECTOR // FD_BLOCK
-    for x in range(extents):
-        ext_blocks = blocks[x * per_extent:(x + 1) * per_extent]
-        rc = min(EXTENT_RECORDS, records - x * EXTENT_RECORDS)
-        entry = bytes([0]) + name + bytes([x, 0, 0, rc]) + bytes(ext_blocks).ljust(16, b"\0")
+        layout.write_block(image, b, block_data[i * layout.block:(i + 1) * layout.block])
+    for x in range(entries):
+        in_entry = min(entry_records, records - x * entry_records)
+        # The entry's extent number is its last logical extent's; RC
+        # counts that extent's records.
+        last = max(0, in_entry - 1) // EXTENT_RECORDS
+        extent = x * layout.extents_per_entry + last
+        rc = in_entry - last * EXTENT_RECORDS
+        s1 = last_bytes if x == entries - 1 else 0
+        entry = (bytes([user]) + name + bytes([extent & 31, s1, extent >> 5, rc])
+                 + layout.pack_blocks(blocks[x * layout.pointers:(x + 1) * layout.pointers]))
         i = free_entries[x]
         directory[i * 32:(i + 1) * 32] = entry
-    for b in range(FD_DIR_BLOCKS):
-        fd_block(image, b, directory[b * FD_BLOCK:(b + 1) * FD_BLOCK])
+    layout.write_dir(image, directory)
+
+
+def add_file(image, cpm_name, host_file):
+    """host_file into the CP/M directory of image (a bytearray), user 0."""
+    with open(host_file, "rb") as f:
+        data = f.read()
+    records = -(-len(data) // SECTOR)
+    put_file(image, 0, fcb_name(cpm_name), data.ljust(records * SECTOR, b"\x1a"))
+
+
+def files(image):
+    """Every file on image: (user, name with attributes, data, S1 of its
+    last entry), whole records."""
+    layout = layout_of(image)
+    directory = layout.read_dir(image)
+    found = {}
+    for i in range(layout.dir_entries):
+        entry = bytes(directory[i * 32:(i + 1) * 32])
+        if entry[0] < 16:
+            found.setdefault((entry[0], plain(entry[1:12])), []).append(entry)
+    out = []
+    for (user, name), entries in found.items():
+        entries.sort(key=extent_number)
+        data = b""
+        for n, entry in enumerate(entries):
+            in_entry = (extent_number(entry) % layout.extents_per_entry) * EXTENT_RECORDS + entry[15]
+            if n != extent_number(entry) // layout.extents_per_entry:
+                sys.exit(f"{name.decode()}: an extent is missing")
+            blocks = b"".join(layout.read_block(image, b) for b in layout.entry_blocks(entry))
+            data += blocks[:in_entry * SECTOR]
+        out.append((user, entries[-1][1:12], data, entries[-1][13]))
+    return out
 
 
 def extract_file(image, cpm_name, host_file):
     """cpm_name (user 0) from the CP/M directory of image into host_file,
     whole records (a text file keeps its ^Z padding)."""
     name = fcb_name(cpm_name)
-    directory = b"".join(fd_block(image, b) for b in range(FD_DIR_BLOCKS))
-    extents = {}
-    for i in range(FD_DIR_ENTRIES):
-        entry = directory[i * 32:(i + 1) * 32]
-        if entry[0] == 0 and bytes(c & 0x7F for c in entry[1:12]) == name:
-            extents[entry[12] + 32 * entry[14]] = entry
-    if not extents:
-        sys.exit(f"{cpm_name}: not on the disk")
-    data = b""
-    for x in range(len(extents)):
-        entry = extents.get(x)
-        if entry is None:
-            sys.exit(f"{cpm_name}: extent {x} missing")
-        blocks = b"".join(fd_block(image, b) for b in entry[16:32] if b)
-        data += blocks[:entry[15] * SECTOR]
-    with open(host_file, "wb") as f:
-        f.write(data)
+    for user, fname, data, _ in files(image):
+        if user == 0 and plain(fname) == name:
+            with open(host_file, "wb") as f:
+                f.write(data)
+            return
+    sys.exit(f"{cpm_name}: not on the disk")
+
+
+def convert(source, layout_name, output):
+    """--convert: every file on image source onto a blank image of layout
+    layout_name (users, attributes and byte counts kept)."""
+    with open(source, "rb") as f:
+        src = f.read()
+    layout = next((l for l in LAYOUTS if l.name == layout_name), None)
+    if not layout:
+        sys.exit(f"{layout_name}: no such layout")
+    image = bytearray(b"\xe5" * layout.size)
+    for user, name, data, last_bytes in files(src):
+        put_file(image, user, name, data, last_bytes)
+    with open(output, "wb") as f:
+        f.write(image)
 
 
 def edit(args):
@@ -321,6 +422,9 @@ def edit(args):
 
 
 def main():
+    if len(sys.argv) == 5 and sys.argv[1] == "--convert":
+        convert(*sys.argv[2:])
+        return
     if len(sys.argv) >= 3 and sys.argv[1] == "--edit":
         edit(sys.argv[2:])
         return
