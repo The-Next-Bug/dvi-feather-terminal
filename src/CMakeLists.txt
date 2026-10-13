@@ -13,4 +13,6 @@ add_subdirectory(disks)
 add_subdirectory(ui)
 
 if(DVT_FIRMWARE)
+  add_subdirectory(board)
+  add_subdirectory(platform)
 endif()

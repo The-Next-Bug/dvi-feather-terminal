@@ -76,6 +76,8 @@ target_compile_definitions(dvt_render PRIVATE LOGO_IN_FLASH=$<BOOL:${LOGO_IN_FLA
 # installed); the Z80 machine's banks.
 target_compile_definitions(dvt_disks PUBLIC DISKIMG_IN_FLASH=1)
 target_compile_definitions(dvt_z80pack PUBLIC MACHINE_BANKS=${MACHINE_BANKS})
+target_compile_definitions(dvt_board INTERFACE SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>)
+target_compile_definitions(dvt_platform PUBLIC VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>)
 
 # Runs on every build; rewrites term_build.h only when git state changes.
 add_custom_target(build_info
@@ -86,15 +88,10 @@ add_custom_target(build_info
   VERBATIM)
 
 add_executable(dvi_terminal
-  src/diag.c
-  src/led.c
-  src/fwupdate.c
   src/hstx_dvi.c
   src/main.c
-  src/nvflash.c
   src/diskio.c
   src/sdcard.c
-  src/serial.c
   src/video.c
 )
 add_dependencies(dvi_terminal build_info)
@@ -105,9 +102,9 @@ target_include_directories(dvi_terminal PRIVATE
 )
 
 # Warnings for our sources only, not the SDK's.
-set_source_files_properties(src/diag.c src/diskio.c src/fwupdate.c src/hstx_dvi.c src/led.c
-  src/main.c src/nvflash.c src/sdcard.c
-  src/serial.c src/usbkbd.c src/usbmsc.c src/video.c
+set_source_files_properties(src/diskio.c src/hstx_dvi.c
+  src/main.c src/sdcard.c
+  src/usbkbd.c src/usbmsc.c src/video.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 # Cold code (it runs only while files move, or a USB stick comes or goes):
 # small rather than fast, as all code takes SRAM.
@@ -131,9 +128,11 @@ target_compile_definitions(dvi_terminal PRIVATE
 )
 
 target_link_libraries(dvi_terminal
+  dvt_board
   dvt_common
   dvt_disks
   dvt_machine
+  dvt_platform
   dvt_settings
   dvt_input
   dvt_render
@@ -174,7 +173,7 @@ pico_add_extra_outputs(dvi_terminal)
 # terminal. HSTX_MODE picks the timing (see src/hstx_dvi.h).
 add_executable(hstx_test src/hstx_test.c src/hstx_dvi.c)
 target_include_directories(hstx_test PRIVATE src)
-target_link_libraries(hstx_test dvt_screen)
+target_link_libraries(hstx_test dvt_board dvt_screen)
 set_source_files_properties(src/hstx_test.c src/hstx_dvi.c PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 target_compile_definitions(hstx_test PRIVATE HSTX_MODE=${HSTX_MODE})
 target_link_libraries(hstx_test pico_stdlib hardware_dma hardware_vreg)
