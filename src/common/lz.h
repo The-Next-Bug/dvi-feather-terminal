@@ -2,7 +2,7 @@
 #define LZ_H
 
 // Decompressor for the disk images embedded in flash (diskimg.h). Portable
-// C, host-tested; src/diskimg_gen.py is the compressor.
+// C, host-tested; src/disks/diskimg_gen.py is the compressor.
 //
 // The data is an LZ4 block: sequences of a token (high nibble literal count,
 // low nibble match length - 4, 15 meaning more length bytes follow, each

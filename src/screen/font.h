@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// Font tables generated at build time by src/font_gen.py, all in flash
+// Font tables generated at build time by src/render/font_gen.py, all in flash
 // (FONT_FLASH_DATA): raster.c copies the active layout's pair into SRAM
 // when the layout changes, so rendering never waits on XIP.
 //   font_10x20, font_10x20_bold  Terminus 10x20 and its bold face, for 80

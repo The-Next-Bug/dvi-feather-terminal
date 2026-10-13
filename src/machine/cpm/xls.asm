@@ -8,7 +8,7 @@
 ;	like); a PC's long names show as their short forms (LONGFI~1.TXT).
 ;	It stops after every PAGE lines until a key: Q, ESC or ^C end it.
 ;
-;	Uses the file transfer device (port 10, src/machine.h) through
+;	Uses the file transfer device (port 10, src/machine/machine.h) through
 ;	xfer.inc. Assembled with z80pack's z80asm by build.sh, put on the
 ;	CPM22 disk by diskimg_gen.py.
 

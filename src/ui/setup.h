@@ -2,8 +2,8 @@
 #define SETUP_H
 
 // SET-UP: a panel over the bottom text rows for editing the settings kept
-// in flash. Portable C (no pico-sdk), host-tested; main.c opens it, feeds it
-// key bytes and saves.
+// in flash. Portable C (no pico-sdk), host-tested; the terminal (apps/terminal/setup_glue.c) opens it,
+// feeds it key bytes and saves.
 //
 // Keys arrive as the bytes a VT100 keyboard sends (from the USB keyboard or
 // from the host): Up/Down (ESC [ A/B or ESC O A/B) select a setting,

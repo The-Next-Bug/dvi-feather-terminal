@@ -4,7 +4,7 @@
 // DVI output from the RP2350 HSTX: its command expander and TMDS encoder
 // turn RGB565 scanlines into the three TMDS lanes, so the CPU only supplies
 // pixels. The pins are GP12-19 (the only HSTX pins), in the order and
-// polarity the board header gives (boards/, src/board.h).
+// polarity the board header gives (boards/, src/board/board.h).
 //
 // Two DMA channels take turns (each chains to the other); the DMA interrupt
 // reloads the one that just finished with the next piece of the frame: a

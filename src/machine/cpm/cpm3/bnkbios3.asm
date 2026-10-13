@@ -6,7 +6,7 @@
 ;	The dvi-feather-terminal's version (bd f8w.4): eight drives A-H,
 ;	each of the formats the disk controller's port 8 reports for the
 ;	image mounted on it (8" floppy, 4 MB or 8 MB hard disk), as our
-;	CP/M 2.2 BIOS (src/cpm/bios.asm) does. Assembled with RMAC, linked
+;	CP/M 2.2 BIOS (src/machine/cpm/bios.asm) does. Assembled with RMAC, linked
 ;	and made into CPM3.SYS by GENCPM at build time (build.sh).
 ;
 ;	GENCPM sizes each drive's allocation and checksum vectors from the
@@ -136,7 +136,7 @@ DRIVES:	DW	DPH0
 	DW	0
 	DW	0
 ;
-;	disk parameter blocks, as src/cpm/bios.asm's, plus CP/M 3's
+;	disk parameter blocks, as src/machine/cpm/bios.asm's, plus CP/M 3's
 ;	physical sector size and shift (128 bytes: 0, 0). Hard disks have no
 ;	directory checksums, but are not marked permanent (8000H): the BDOS
 ;	ignores a media change (READ's 0FFH) on a permanent drive, and an

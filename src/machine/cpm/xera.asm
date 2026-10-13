@@ -10,7 +10,7 @@
 ;
 ;	The names are collected before any is erased, so erasing does not
 ;	disturb the listing. Uses the file transfer device (port 10,
-;	src/machine.h) through xfer.inc. Assembled with z80pack's z80asm by
+;	src/machine/machine.h) through xfer.inc. Assembled with z80pack's z80asm by
 ;	build.sh, put on the CPM22 disk by diskimg_gen.py.
 
 	ORG	100H

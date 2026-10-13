@@ -4,7 +4,7 @@
 ;
 ;	The CP/M version; the TPA, the room programs get (0100H up to the
 ;	BDOS entry at 0006H, which an RSX such as CP/M 3's VT100DYN moves
-;	down); and the memory, from the MMU (port 64, src/machine.h: the
+;	down); and the memory, from the MMU (port 64, src/machine/machine.h: the
 ;	number of 48 KB banks besides bank 0 in the high nibble, the
 ;	selected bank in the low). Bank 0 is 64 KB; selecting another
 ;	replaces 0000H-BFFFH, and C000H-FFFFH is common to all. The bank

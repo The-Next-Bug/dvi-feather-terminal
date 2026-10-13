@@ -3,7 +3,8 @@
 
 // The Drives panel of SET-UP in CP/M mode: what is mounted on drives A-H,
 // and a way to change it while CP/M runs. Portable C (FatFs, drives.h),
-// host-tested; main.c opens it from SET-UP (D) over the same rows.
+// host-tested; the terminal (apps/terminal/setup_glue.c) opens it from
+// SET-UP (D) over the same rows.
 //
 // Up/Down select a drive, Left/Right or Space step through the disk images
 // on the card (and "none"), Return mounts the choices and saves them,

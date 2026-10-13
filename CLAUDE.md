@@ -81,7 +81,7 @@ BOARD_UART_{TX,RX,CTS,RTS}_PIN (terminal UART, also VIDEO_DIAG; CTS/RTS
 optional; the header points PICO_DEFAULT_UART* at them for hstx_test's
 stdio, before including an SDK board), BOARD_SD_SPI + BOARD_SD_{MISO,CS,SCK,MOSI}_PIN,
 optional BOARD_USB_VBUS_EN_PIN / _LEVEL, optional PICO_DEFAULT_LED_PIN
-(src/led.[ch], bd 1ls.8: off while the screen is on; flashes on/off
+(src/platform/led.[ch], bd 1ls.8: off while the screen is on; flashes on/off
 >= 40 ms each on disk_read/disk_write and serial_read/serial_write data;
 with the screen blanked a 100 ms heartbeat each second from led_poll in
 the main loop and cpm_idle, so a hang shows as steady on or off; no-op
@@ -89,7 +89,7 @@ without the pin or with VIDEO_DIAG, which owns it),
 optional BOARD_PSRAM_CS_PIN (XIP_CS1: GP0/8/19/47; main() drives it high
 first thing so the PSRAM stays off the shared QSPI bus; nothing uses the
 PSRAM yet, bd g31).
-`src/board.h` (RP2350 code only) #errors on missing settings, wrong
+`src/board/board.h` (RP2350 code only) #errors on missing settings, wrong
 function pins, pins used twice or off the chip; test/test_board.sh (ctest
 `board`) runs it on every board header and on broken variants. Pin values
 must be plain numbers (they are stringified into on-screen messages).
@@ -136,7 +136,39 @@ SRAM, and the USB keyboard crashed it (dmt.20); CMake rejects non-RP2350
 boards. 800x600p60 (400 MHz, 1.3 V); 80 or 132 columns x 24 rows plus a
 status line (row 24); UART0 on GP0/GP1.
 
-- `src/screen.[ch]` (portable): cell buffer: glyph code, fg/bg palette
+Source layout (bd gr1, after github.com/arlaneenalra/CGA_LCD_Capture):
+libraries under `src/<name>/`, each a static `dvt_<name>` with its own
+CMakeLists.txt (`src/CMakeLists.txt` lists them); public headers next to
+the sources (the directory is the PUBLIC include path), a header only the
+library's own files share is `<name>_internal.h` (term_internal.h).
+Portable (host-tested): common, screen, term, render, input, settings,
+machine (+ dvt_z80pack, cpm/), disks, ui; RP2350, added only with
+DVT_FIRMWARE: board (header only), platform, usb, storage, video. The
+host tests add the same `src/` without DVT_FIRMWARE, so a pico-sdk
+include in a portable library fails test.sh. RP2350 libraries link the
+SDK's `*_headers` targets (TinyUSB has none: usb/'s dvt_tinyusb_headers
+copies its include dirs and definitions); only the programs link SDK
+libraries, so no SDK source is built into an archive. Libraries get
+DVT_C_OPTIONS (firmware: pico_standard_link's -ffunction-sections
+-fdata-sections, without which --gc-sections keeps unused functions in
+SRAM, and -fno-math-errno; tests: sanitisers) and our warnings plus
+DVT_WARNING_OPTIONS (tests: -Werror) via `cmake/dvt.cmake`
+dvt_compile_options (THIRD_PARTY: not the warnings); dvt_rebuild builds
+libraries' sources into another target (test_cpu's -O2 copies). The
+firmware's options reach libraries from the top CMakeLists
+(FONT_FLASH, LOGO_IN_FLASH, DISKIMG_IN_FLASH, MACHINE_BANKS on
+dvt_z80pack, SERIAL_FLOW_CONTROL on dvt_board, VIDEO_DIAG on
+dvt_platform, HSTX_MODE on dvt_video). FatFs is the `fatfs` target
+(lib/fatfs.cmake), linking dvt_storage for disk_* (a cycle CMake repeats
+on the link line; tests add diskio_ram.c to the tests that need it).
+Programs: `apps/terminal/` (main.c: state, settings, startup, main loop;
+setup_glue.c: SET-UP and its panels and demo; cpm_glue.c: CP/M mode's
+platforms; status.c: the status line; input_glue.c: keys; terminal.h
+shares them) and `apps/hstx_test/`; both write their outputs to
+build/<target>/ (RUNTIME_ and ARCHIVE_OUTPUT_DIRECTORY: picotool puts the
+UF2 in the latter).
+
+- `src/screen/screen.[ch]` (portable): cell buffer: glyph code, fg/bg palette
   indices and attribute bits per cell; `row_map` (display row -> line slot) so
   scrolling rotates indices; `dirty` bit per slot; `reverse_rows` mask.
   A scroll clears the recycled slot's cells, then calls the screen's
@@ -149,46 +181,46 @@ status line (row 24); UART0 on GP0/GP1.
   holds the alternate screen's main screen (24 rows x 132) or that plus
   SET-UP's rows at 80 columns; at 132, SET-UP over the alternate screen
   has no room and its rows come back blank.
-- `src/vtparse.[ch]` (portable): Paul Williams' DEC parser. C1 (0x80-0x9F)
+- `src/term/vtparse.[ch]` (portable): Paul Williams' DEC parser. C1 (0x80-0x9F)
   ignored unless `c1_controls` (keeps UTF-8 safe); OSC/DCS/APC discarded,
   and ended by any C0 but NUL (BEL in OSC is the terminator), which then
   executes, or after VTPARSE_MAX_STRING (1024) bytes (dmt.36, xterm
   brokenStringTerm: an Alt+] sends ESC ]).
-- `src/term.[ch]` (portable): the terminal, split by personality (bd
+- `src/term/term.[ch]` (portable): the terminal, split by personality (bd
   dmt.37) so each terminal type's meaning of a byte stays in its own file:
   term.c is the cell-level core and the public API (cursor, print with
   charsets and deferred wrap, scroll region, erase, IL/DL, tabs, reverse
-  screen, 80/132, replies), its helpers in `src/term_core.h` (for
+  screen, 80/132, replies), its helpers in `src/term/term_internal.h` (for
   personalities only); term_write/term_reset dispatch on term_t.personality.
-  `src/vt100.[ch]`: the VT100/VT102 personality (vtparse, C0/ESC/CSI, modes,
+  `src/term/vt100.c`: the VT100/VT102 personality (vtparse, C0/ESC/CSI, modes,
   SGR; its state in term_t.vt100: parser, DECSC, DECCKM/DECKPAM, REP;
   CSI ? 47/1047/1049 h/l via term.c term_set_alt_screen (bd dmt.15): the
   main screen goes into term_set_stash's stash (tag TERM_STASH_TAG), the
   alternate starts blank, 1049 adds DECSC/DECRC; RIS drops the entry);
-  replies (DA, DSR/CPR, DECREQTPARM) through a callback. `src/vt52.c`
+  replies (DA, DSR/CPR, DECREQTPARM) through a callback. `src/term/vt52.c`
   (dmt.16): the VT100's VT52 mode (CSI ? 2 l in, ESC < out; own small
   parser for ESC Y row col; ESC Z -> ESC / Z; ANSI G0/G1 put aside),
   keyboard.c sends ESC x / ESC ? x when kbd_modes_t.vt52 (keys a VT52
-  lacks, Home to Page Down and F5-F11, send nothing). `src/adm3a.[ch]`
+  lacks, Home to Page Down and F5-F11, send nothing). `src/term/adm3a.c`
   (dmt.28): the ADM-3A personality per terminfo adm3a (^H ^J ^K ^L moves
   stopping at edges, ^Z clear, ^^ home, ESC = row+32 col+32 clamped,
   immediate wrap, 8th bit stripped, no replies, 80 columns only) plus the
   Kaypro's ^X/^W clear EOL/EOS and ESC E/R insert/delete line; keys
   ^K ^J ^L ^H, Home ^^ (kbd_modes_t.adm3a). Changing personality
   (term_set_defaults) resets the terminal. SET-UP and the CP/M monitor
-  always get VT100 ANSI-mode keys (main.c keyboard_poll), whatever the
+  always get VT100 ANSI-mode keys (input_glue.c keyboard_poll), whatever the
   host's modes; the host cannot open SET-UP (CSI ? 999 ~) from the ADM-3A.
   Writes palette indices
   only (nothing depends on the palette): default fg 7, bold default 15, bg
   0; bold brightens 0-7 to 8-15; 38;5;n as is; 24-bit -> palette_nearest.
-- `src/palette.[ch]` (portable, bd pb2): the xterm-256 palette as RGB565
+- `src/screen/palette.[ch]` (portable, bd pb2): the xterm-256 palette as RGB565
   from Colors (hue) x Palette (mono): white/colour = our ANSI set + xterm
   16-255; phosphor/colour = 0-15 a ramp in the hue by bands (7 at 2/3, 15
   full) + xterm 16-255; mono = all 256 as a ramp by luma (floor 35%).
   main.c show_palette() -> video_set_palette (two 256-word tables, core 1
   switches at frame start). A palette change re-renders nothing. While
   SET-UP is open the edited palette is shown (restored on cancel).
-- `src/raster.[ch]` (portable): two layouts (raster_layout_t: 80 cols
+- `src/render/raster.[ch]` (portable): two layouts (raster_layout_t: 80 cols
   10x20 at the full width, 132 cols 6x12 doubled; the 8x16 centred layout
   and its setting were dropped in qur.20). `raster_render_line` (core 0)
   turns a screen line into, per stored row, a bit string of the cells'
@@ -208,7 +240,7 @@ status line (row 24); UART0 on GP0/GP1.
   cursor cell; every cell is exact in every layout. 132 cols centred at
   x = 4. Core 1's helpers are ternaries, no tables (GCC's CSWTCH tables
   land in RAM, but check the .dis when changing them).
-- `src/hstx_dvi.[ch]` (RP2350): DVI from the HSTX on the DVI Sock pins
+- `src/video/hstx_dvi.[ch]` (RP2350): DVI from the HSTX on the DVI Sock pins
   (GP12-19 = HSTX bits 0-7; the Sock: D0 0/1, CK 2/3, D2 4/5, D1 6/7;
   per-pin from the board header, - = + inverted). clk_sys = 10 x
   pixel clock, clk_hstx = clk_sys / 2 (set explicitly: the SDK leaves it
@@ -216,28 +248,28 @@ status line (row 24); UART0 on GP0/GP1.
   DMA channels, reloaded by DMA_IRQ_0 with blanking command lists and
   per-line pixels from a callback. `HSTX_MODE` 0 = 800x600@60 with libdvi's
   timing (clk_hstx 200 MHz, above the 150 MHz rating: dmt.8.1), 1 = @56,
-  2 = CVT-RB. `src/hstx_test.c` -> `hstx_test.uf2`: test pattern.
-- `src/video.[ch]` (RP2350): core 1 composes scanlines (raster_compose or
+  2 = CVT-RB. `apps/hstx_test/hstx_test.c` -> `hstx_test.uf2`: test pattern.
+- `src/video/video.[ch]` (RP2350): core 1 composes scanlines (raster_compose or
   splash_compose) into a ring of 4 line buffers, at most 2 lines ahead of
   the DMA interrupt (also on core 1), latching mode/cursor/splash per
   frame; counts late lines. `video_update()` on core 0 rasterises dirty
   slots and the blink phase.
-- `src/keyboard.[ch]` (portable): HID boot keyboard reports -> VT100 key
+- `src/input/keyboard.[ch]` (portable): HID boot keyboard reports -> VT100 key
   codes (DECCKM, DECKPAM, LNM, Num/Caps Lock, autorepeat via kbd_tick).
-- `src/usbkbd.[ch]` + `src/tusb_config.h` (always built): TinyUSB host on the native USB port, boot keyboards (and USB
+- `src/usb/usbkbd.[ch]` + `src/usb/tusb_config.h` (always built): TinyUSB host on the native USB port, boot keyboards (and USB
   sticks, usbmsc.c); keys
   go to the serial TX queue. The board does not power VBUS in host mode
   (5 V fed into the VBUS pin).
-- `src/settings.[ch]` (portable): settings record (magic, seq, CRC-32,
+- `src/settings/settings.[ch]` (portable): settings record (magic, seq, CRC-32,
   one byte per setting, append-only) in two flash sectors used in turn.
   Settings (settings_fields[] drives the record, validation and SET-UP
   labels; append only): columns, backspace (DECBKM RIS value), local_echo,
   baud, framing, newline (LNM RIS value), colours (hue), palette (mono),
-  mode (terminal / CP/M machine), status_line (hidden: main.c
-  status_shown() leaves row 24 blank; debug: main.c debug_status_* shows
+  mode (terminal / CP/M machine), status_line (hidden: status.c
+  status_shown() leaves row 24 blank; debug: status.c debug_status_* shows
   video_stats() (late lines, compose cycles as % of the line, fps) and
   core 0's longest main-loop pass and line render, qur.21; debug usb:
-  uptime and the last four USB host events from usbkbd_log, qur.3), blank_after (minutes; `src/blank.[ch]`
+  uptime and the last four USB host events from usbkbd_log, qur.3), blank_after (minutes; `src/input/blank.[ch]`
   portable idle timer, keys only, the waking key dropped; video_set_blank
   makes core 1 stop the DVI signal: hstx_dvi_stop (DMA aborted, FIFO
   drained, HSTX off), frame time kept on the timer (diag_frames,
@@ -249,57 +281,57 @@ status line (row 24); UART0 on GP0/GP1.
   ADM-3A: SET-UP skips it and shows "80 (ADM-3A)", dmt.39);
   settings_colours() gives the status
   line's indices and the logo's tint. CRC-32 in
-  `src/crc32.[ch]` (shared with the disk images). main.c apply_settings()
+  `src/common/crc32.[ch]` (shared with the disk images). main.c apply_settings()
   -> serial_configure, term_set_defaults, show_palette.
-  `src/setup.[ch]` (portable): SET-UP panel over the bottom text rows,
+  `src/ui/setup.[ch]` (portable): SET-UP panel over the bottom text rows,
   in a box (screen_frame: DEC line glyphs in the status bg colour, text
   in the default colours; also the Drives panel) (one row per setting, plus two preview rows under Palette: ANSI colours
   as fg and as bg, spaced so no 8-px group held two samples in 132 cols
   under the old PicoDVI encoder)
-  (key bytes in, save/cancel out); main.c saves/restores those rows in
+  (key bytes in, save/cancel out); setup_glue.c saves/restores those rows in
   the stash (tag 'S'; the demo drops them, the screen is cleared). Opened
   by F12 or Pause (keyboard.c SET-UP callback) or host `CSI ? 999 ~` (term.c bumps
   `setup_requests` and term_write stops after it; later bytes are keys).
-- `src/keyname.[ch]` (portable): key bytes -> "ESC [A", "^C", ... for the
+- `src/input/keyname.[ch]` (portable): key bytes -> "ESC [A", "^C", ... for the
   status line's last-key field (which replaced the rx/tx/err counters).
-- `src/nvflash.[ch]`: the 2 flash sectors before the last (UF2 files' E10
+- `src/platform/nvflash.[ch]`: the 2 flash sectors before the last (UF2 files' E10
   workaround block at 0x10ffff00 wraps to the last sector and erases it). Read at boot before
   video_init; `nvflash_retime()` after the clock change. SDK
   flash_range_* (ROM uses QMI clkdiv 12) + `rom_flash_select_xip_read_mode`
   03h at <=50 MHz afterwards (the boot XIP stub the SDK replays assumes
   <=150 MHz). No flash_safe_execute (core 1 in RAM).
-- `src/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
-  RTS/CTS. `src/demo.[ch]`: opt-in startup demo. `src/diag.[ch]`: VIDEO_DIAG.
-- `src/logo_gen.py` + `cmake/logo.cmake`: PNG -> run-length encoded 2-bit
+- `src/platform/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
+  RTS/CTS. `src/ui/demo.[ch]`: opt-in startup demo. `src/platform/diag.[ch]`: VIDEO_DIAG.
+- `src/render/logo_gen.py` + `src/render/logo.cmake`: PNG -> run-length encoded 2-bit
   levels (one hue; still <=2 levels per 8-px group, no longer needed).
-  `src/splash.[ch]` (portable): `splash_check`, and `splash_compose`
+  `src/render/splash.[ch]` (portable): `splash_check`, and `splash_compose`
   decodes the runs a scanline at a time (in order from the frame start; runs
   cross row ends) through 4 level colours (`splash_tint` +
   `splash_tint_colour`). `video_splash()` copies the data into the text
   slots' raster memory (core 1 must not read flash) and core 1 shows it for
   scanlines 0-575 (status line from its slot); power-on/reset only, never
   on RIS.
-- `src/font_gen.py` + `cmake/fonts.cmake`: 256-glyph tables (Terminus
+- `src/render/font_gen.py` + `src/render/fonts.cmake`: 256-glyph tables (Terminus
   10x20 (16-bit rows) and its bold face, misc-fixed 6x12 shown doubled)
-  generated at build time, glyph-major; glyph codes in `src/font.h`. All
+  generated at build time, glyph-major; glyph codes in `src/screen/font.h`. All
   in flash (FONT_FLASH_DATA, `.flashdata.font`), read through XIP by core
   0 only, when raster_select_font copies them; without a bold face (132
   cols) bold is only the brighter colour (a smear closed the gaps of m, w,
   #: qur.9).
 - Z80 CP/M machine (Mode setting "CP/M machine", bd lpt): the screen and
   keyboard become the console of a z80pack picosim-compatible machine on
-  core 0 (`main.c` cpm_*: 10 ms CPU slices between keyboard, disks, screen).
-  `src/machine.[ch]` (portable): z80pack's Z80 core (`lib/z80pack`,
+  core 0 (`apps/terminal/cpm_glue.c` cpm_*: 10 ms CPU slices between keyboard, disks, screen).
+  `src/machine/machine.[ch]` (portable): z80pack's Z80 core (`lib/z80pack`,
   vendored, MIT: UPSTREAM.md has the commit and our local changes; only
-  z80core + iodevices/sd-fdc.c, built by `cmake/z80pack.cmake`) configured
-  by `src/z80pack/{sim,simmem,simio,simport}.h`; picosim's port map (SIO1
+  z80core + iodevices/sd-fdc.c, built as dvt_z80pack by `src/machine/CMakeLists.txt`) configured
+  by `src/machine/z80pack/{sim,simmem,simio,simport}.h`; picosim's port map (SIO1
   0/1 console, SIO2 2/3 = UART0, FDC 4, MMU 64, clock 65/66 without
   localtime, 60 Hz timer 67, hwctl 160) and boot ROM; bank 0 64 KB +
   MACHINE_BANKS x 48 KB. Slices end from
   `machine_clock_us` (z80pack reads the clock every 20000 T-states and
   around port I/O); HALT waits call the platform idle hook and, at a slice
   end, stop with PC back on the HALT. z80pack's CPU state is globals (A, B,
-  PC, T, ...): only machine.c includes its headers. `src/drives.[ch]`
+  PC, T, ...): only machine.c includes its headers. `src/disks/drives.[ch]`
   (portable): 8 drives A-H; .DSK images in /DISKS80 via FatFs, format by
   size (8" FD 77x26, z80pack 4 MB HD 255x128, 8 MB HD 256x255; 128-byte
   sectors), kept open, flushed 250 ms after writes, DRIVES.CFG, blank image
@@ -308,24 +340,24 @@ status line (row 24); UART0 on GP0/GP1.
   Port 10 (ours, bd qur.2; protocol in machine.h): the file transfer
   device, FDC-style (SETDMA + commands moving 11-byte FCB names, 15-byte
   listing entries or 128-byte records by DMA), through the platform's
-  xfer hook to `src/xfer.[ch]` (portable, FatFs): /XFER per volume (0 SD,
+  xfer hook to `src/disks/xfer.[ch]` (portable, FatFs): /XFER per volume (0 SD,
   1 USB later), one FIL + one DIR, names CP/M can take only; RESET on
   machine_reset, the monitor's card re-check and the firmware commit.
   xfer.c is built -Os and xfer_out is cold (all code is SRAM: ~2.3 KB).
-  CP/M side (bd qur.26, qur.28): src/cpm/xls.asm, xpip.asm, xera.asm
+  CP/M side (bd qur.26, qur.28): src/machine/cpm/xls.asm, xpip.asm, xera.asm
   (erase; collects names, asks Y/N on wildcards) + xfer.inc (shared
   parser for d:/SD:/USB: specs, port helpers, 32-bit decimal), assembled
-  by build.sh from src/cpm (INCLUDE is cwd-relative) and put on CPM22 by
+  by build.sh from src/machine/cpm (INCLUDE is cwd-relative) and put on CPM22 by
   diskimg_gen.py --file; --delete CPM22 XDIR.COM removes z80pack's XDIR.
   test_machine's test_xfer_tools runs them under CP/M.
-  src/cpm/termtest.asm (bd dmt.38) -> TERMTEST.COM on Z80TESTS (--file
+  src/machine/cpm/termtest.asm (bd dmt.38) -> TERMTEST.COM on Z80TESTS (--file
   Z80TESTS): a page each for addressing, moves, erasing, IL/DL, scrolling,
   wrap, line graphics, replies and key codes, per personality (VT100,
   VT52 via CSI ? 2 l / ESC <, ADM-3A) from one table of sequences (OPS);
   test_machine's test_termtest runs it with the console fed into a real
   term_t (machine_host's host_console_hook; replies typed back) and checks
   every page's screen for all three.
-  src/cpm/altscr.asm (bd dmt.15) -> ALTSCR.COM on Z80TESTS: the main
+  src/machine/cpm/altscr.asm (bd dmt.15) -> ALTSCR.COM on Z80TESTS: the main
   screen in four styles with an X, then ?1049 / ?1047 / ?47 in turn (the
   alternate screen scrolled, back on a key; ?1049 writes <1049 at the
   restored cursor in its bold red) and a step asking for SET-UP over it;
@@ -335,11 +367,11 @@ status line (row 24); UART0 on GP0/GP1.
   diskimg_gen.py --convert HD8; our WORMS/XLS/XPIP/XERA/MEM added) and
   CPM3GEN. Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
   default, A:, B:; order COM,SUB; temporary drive B:; no display: f8w.9),
-  so PROFILE.SUB (src/cpm/cpm3/profile.sub) only loads VT100DYN, whose
-  help text build.sh patches away; README.TXT (src/cpm/cpm3/readme.txt)
+  so PROFILE.SUB (src/machine/cpm/cpm3/profile.sub) only loads VT100DYN, whose
+  help text build.sh patches away; README.TXT (src/machine/cpm/cpm3/readme.txt)
   on CPM31 tells how to change them;
   booted by mounting them on A:/B:, no OS setting. CPM31's CPM3.SYS is ours
-  (f8w.3/.4, src/cpm/README.md): src/cpm/cpm3/bnkbios3.asm (picosim's,
+  (f8w.3/.4, src/machine/cpm/README.md): src/machine/cpm/cpm3/bnkbios3.asm (picosim's,
   8080/RMAC, drives A-H of any format via port 8; DPBs in common memory,
   DPHs banked, GENCPM sized by DPBMAX; READ/WRITE return 0FFH media
   changed when port 8's format or mount count differs from the log-in's;
@@ -352,60 +384,60 @@ status line (row 24); UART0 on GP0/GP1.
   FDC I/O to a 4/8 MB image on a drive port 8 was not asked about since
   the reset (FDC_STAT_NODISK; f8w.7), for BIOSes that never ask (MP/M's,
   picosim's), so they cannot read an HD as a floppy and write over it.
-  src/cpm/mem.asm (f8w.8) -> MEM.COM on CPM22 and CPM32: version, TPA,
+  src/machine/cpm/mem.asm (f8w.8) -> MEM.COM on CPM22 and CPM32: version, TPA,
   banks from IN 64. test_machine: test_boot_cpm3, test_cpm3_tools,
   test_cpm3_drives, test_hd_guard (raw Z80 bytes in the ROM page, as
   test_xfer_port).
   USB sticks (bd qur.3): FatFs volume 1 ("1:", USB: to the tools; ffconf
-  FF_VOLUMES 2). `src/diskio.c` (RP2350) dispatches FatFs drives: 0
-  sdcard_disk_*, 1 usbmsc_disk_*. `src/usbmsc.[ch]`:
+  FF_VOLUMES 2). `src/storage/diskio.c` (RP2350) dispatches FatFs drives: 0
+  sdcard_disk_*, 1 usbmsc_disk_*. `src/storage/usbmsc.[ch]`:
   TinyUSB MSC host (CFG_TUH_MSC, LUN 0 only, 512-byte sectors; no exFAT),
   blocking I/O by running tuh_task until the transfer's callback (3 s
   timeout; gives up at once if the stick is detached). TinyUSB callbacks
   only note attach/detach; usbmsc_poll (main loop) mounts/unmounts.
-  `src/usbvol.[ch]` (portable, test_usbvol): which stick is volume 1:
+  `src/disks/usbvol.[ch]` (portable, test_usbvol): which stick is volume 1:
   the first mounted; others wait in order; when it goes, the volume is
   unmounted (xfer_volume_gone(1)) before the next takes over, so nothing
   open reaches another stick; unmountable sticks are skipped until
   replugged. Status line: USB / +n / ? (lit like the drive letters).
   test/diskio_ram.c has drives 0 and 1. ~4.4 KB of SRAM (msc_host.c,
   usbmsc.c, usbvol.c built -Os).
-  `src/cpm/`: our 62K CP/M 2.2 (bios.asm 8-drive BIOS picking the DPB per
+  `src/machine/cpm/`: our 62K CP/M 2.2 (bios.asm 8-drive BIOS picking the DPB per
   drive at SELDSK, boot.asm), assembled at build time by build.sh with
   z80pack's z80asm built by the host cc; CCP+BDOS = picosim's 64K cpm.bin
   relocated with ccpbdos.rel (from MOVCPM 62 *); diskimg_gen.py --system
   writes the system tracks of CPM22 (README there); worms.asm (Z80
   mnemonics) -> WORMS.COM, put on CPM22 by diskimg_gen.py --file (writes
   into the 8" CP/M directory); host tests in test_machine (machine_host
-  answers ESC [ 6 n through host_cpr_reply). `src/monitor.[ch]`
+  answers ESC [ 6 n through host_cpr_reply). `src/ui/monitor.[ch]`
   (portable): menu (boot, mount, list, new blank disk, install, speed
-  test, rescan), 3 s autoboot. `src/drivepanel.[ch]` (portable): SET-UP's
-  Drives panel (D in CP/M mode); main.c defers its FatFs work (mount,
+  test, rescan), 3 s autoboot. `src/ui/drivepanel.[ch]` (portable): SET-UP's
+  Drives panel (D in CP/M mode); setup_glue.c defers its FatFs work (mount,
   save/remove a set: drives_work) to the main loop (setup_feed runs inside
   the USB stack). Named drive sets (bd f8w.6): /DISKS80/SETS/NAME.SET in
   DRIVES.CFG's form (A=NAME lines, hand-editable), at most 16; the panel's
   Set row picks one (fills the choices; Return mounts), S saves the
   choices (name prompt), R/Delete removes (Y/N); the monitor knows only the
   current mounts (its install, I, writes the starter sets CPM22 and CPM3
-  when missing). `src/drivecfg.c` (cold, in flash): the image list,
+  when missing). `src/disks/drivecfg.c` (cold, in flash): the image list,
   DRIVES.CFG and the sets, split from drives.c (sector I/O, SRAM). Status line: drive letters
-  only, reverse while accessed. `src/diskimg.[ch]` + `src/lz.[ch]` (portable)
-  + `src/diskimg_gen.py` (`cmake/diskimg.cmake`): CPM22, Z80TESTS, EMPTY
+  only, reverse while accessed. `src/disks/diskimg.[ch]` + `src/common/lz.[ch]` (portable)
+  + `src/disks/diskimg_gen.py` (`src/disks/diskimg.cmake`): CPM22, Z80TESTS, EMPTY
   from z80pack as LZ4-format blocks (offsets < 4 KB, streamed through a
-  4 KB window: `src/scratch.[ch]`'s buffer) in `.flashdata.diskimg`, written to the card by the
-  monitor. `src/sdcard.[ch]` (RP2350): polled SPI0 SD driver = FatFs
+  4 KB window: `src/common/scratch.[ch]`'s buffer) in `.flashdata.diskimg`, written to the card by the
+  monitor. `src/storage/sdcard.[ch]` (RP2350): polled SPI0 SD driver = FatFs
   diskio (GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI; 400 kHz init, 25 MHz).
   `lib/fatfs`: ChaN FatFs R0.15a vendored (ffconf: FIND, MKFS, CP437,
   NORTC, TINY (files share the volume's sector buffer), no LFN; ffconf.h
   has CRLF line endings, edit it byte-wise). Host tests use `test/diskio_ram.c`. Changing Mode
   saves and reboots (watchdog). In SET-UP, M leaves for the monitor.
-  SET-UP's T (both modes) shows the demo until a key (main.c
+  SET-UP's T (both modes) shows the demo until a key (setup_glue.c
   setup_demo_*; status line draws skip it), then term_set_columns clears
   the screen (no 13 KB copy) and SET-UP is redrawn over it. F11
   is the machine's reset key in CP/M mode (kbd_set_reset_key; terminal
   mode keeps ESC [ 23 ~).
-  Firmware update (bd n3k): SET-UP's U in either mode (`src/fwpanel.[ch]`,
-  portable, over SET-UP's rows; main.c fw_* platform: in terminal mode it
+  Firmware update (bd n3k): SET-UP's U in either mode (`src/ui/fwpanel.[ch]`,
+  portable, over SET-UP's rows; setup_glue.c fw_* platform: in terminal mode it
   f_mounts the card only while open, with the monitor's FATFS
   (monitor_card_fs, qur.15: the monitor never runs in terminal mode), in
   CP/M mode it uses the monitor's mount; stubbed in test_machine). It looks for FIRMWARE.UF2 on the card
@@ -413,16 +445,16 @@ status line (row 24); UART0 on GP0/GP1.
   qur.27): one is checked, both ask S or U; renamed on its own volume. The
   stick needs nothing at the commit (the rename synced it, xfer_reset
   closes its files). The monitor's U was removed (qur.10):
-  SET-UP's is the only way. `src/uf2.[ch]` (portable; test_uf2 also checks
+  SET-UP's is the only way. `src/settings/uf2.[ch]` (portable; test_uf2 also checks
   build/pico2-dvi-sock/dvi_terminal.uf2 when built): skips other families
   (the E10 block numbers its own sequence); ours in order, ascending
   addresses, PICOBIN marker in the first 4 KB; CRC of the image as flashed
-  (gaps 0xff). `src/fwupdate.[ch]` (RP2350): stage = check again while
+  (gaps 0xff). `src/platform/fwupdate.[ch]` (RP2350): stage = check again while
   programming the staging area (flash offset 2 MB; images up to
   NVFLASH_OFFSET - 2 MB), verify by CRC; fwpanel then renames the file
   to FIRMWARE.OLD and unmounts; the commit (fwupdate_commit_image,
   interrupts off for good) copies sector by sector through the 4 KB
-  scratch buffer (`src/scratch.[ch]`, portable: one holder at a time; also
+  scratch buffer (`src/common/scratch.[ch]`, portable: one holder at a time; also
   the monitor's LZ window and blank-disk chunks, and fwupdate's UF2 block), skipping equal sectors, then watchdog_reboot. It must read
   nothing from the old image (.rodata is in flash):
   `scripts/check_sram_only.py` (run by build.sh; was check_fwupdate.py)
@@ -462,7 +494,10 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   0x2007a2b8 (v0.7.0), ~23.8 KB free; dmt.36/39 to 0x2007a4d0; the
   alternate screen with SET-UP's rows in one 13.4 KB stash (qur.15/16,
   dmt.15: +4.4 KB) to 0x2007b640, ~18.4 KB free; cold code in flash
-  (qur.24, -48.5 KB) to 0x2006f458, ~67 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  (qur.24, -48.5 KB) to 0x2006f458, ~67 KB free; status LED, Feather
+  board (1ls.8, 1ls.14.1) to 0x2006f6b0; the library restructure (gr1:
+  libraries identical, main.c's split outlines what was inlined into
+  main(), -648 bytes) to 0x2006f428. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, stash_buf 13.4 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit.
@@ -480,14 +515,17 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   (12 SMs), UART1, SPI1, I2C0/1, PWM, ADC, TIMER1, TRNG, SHA-256, QMI CS1
   (PSRAM; GP8 can carry its select; spike bd g31).
 - GPIO: GP0/1 UART0, GP2/3 CTS/RTS (only with SERIAL_FLOW_CONTROL), GP4-7
-  SD, GP12-19 DVI Sock, GP25 LED (status, src/led.c), GP23/24/29 board
+  SD, GP12-19 DVI Sock, GP25 LED (status, src/platform/led.c), GP23/24/29 board
   internal. Free: GP8-11, GP20-22, GP26-28 (ADC capable), and GP2/3 when
   flow control is off.
 
 ## Conventions & Patterns
 
 - Style: C11, tabs, K&R braces, comments explain why; match surrounding
-  code. Portable modules must not include pico-sdk headers (host-tested).
+  code. Portable libraries must not include pico-sdk headers (host-tested;
+  the host build fails if one does). A new source goes into its
+  library's CMakeLists.txt; a new library into src/CMakeLists.txt (RP2350
+  ones under DVT_FIRMWARE) and the programs' target_link_libraries.
 - Hardware constraints learned the hard way:
   - Code runs from SRAM (`COPY_TO_RAM`): the boot XIP setup assumes
     clk_sys <= 150 MHz (on the RP2040, flash execution hung above ~252 MHz:
@@ -502,7 +540,11 @@ SRAM is the tight resource; peripherals and pins are mostly free.
     printf for panic) stay in SRAM. Nothing may run from flash on core 1,
     between video_init and nvflash_retime, while flash is written, or in
     the update's commit: check_sram_only.py. Adding an object there: check
-    it is none of those.
+    it is none of those. Objects in our libraries are named
+    *libdvt_<name>.a:<file>.c.o (or *libdvt_<name>.a:* for a whole
+    library: ui); a pattern that places nothing (renamed, moved) would
+    leave its code in SRAM silently, so check_sram_only.py fails the
+    build on one.
   - Core 1 must never touch flash or `const` data (which lands in flash):
     keep its data non-const/static and its code `__not_in_flash_func`.
   - The HSTX DMA reads line buffers in SRAM at high bus priority; a line

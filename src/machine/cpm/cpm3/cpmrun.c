@@ -1,6 +1,6 @@
-// cpmrun: run CP/M on the Z80 machine (src/machine.c) on the build host,
+// cpmrun: run CP/M on the Z80 machine (src/machine/machine.c) on the build host,
 // with plain 8" floppy images as the drives and a script at the console.
-// src/cpm/cpm3/build.sh uses it to run RMAC, LINK and GENCPM, which make
+// src/machine/cpm/cpm3/build.sh uses it to run RMAC, LINK and GENCPM, which make
 // CPM3.SYS; built there with the host C compiler.
 //
 //   cpmrun SCRIPT A.DSK [B.DSK ...]

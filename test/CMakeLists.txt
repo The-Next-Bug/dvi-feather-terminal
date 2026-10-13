@@ -37,7 +37,7 @@ function(unit_test name)
   add_test(NAME ${name} COMMAND test_${name})
 endfunction()
 
-# src/board.h's pin checks against every boards/*.h and some mistakes.
+# src/board/board.h's pin checks against every boards/*.h and some mistakes.
 add_test(NAME board COMMAND ${CMAKE_CURRENT_LIST_DIR}/test_board.sh)
 set_tests_properties(board PROPERTIES ENVIRONMENT "CC=${CMAKE_C_COMPILER}")
 

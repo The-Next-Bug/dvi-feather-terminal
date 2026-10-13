@@ -1,7 +1,7 @@
 #ifndef SPLASH_H
 #define SPLASH_H
 
-// The startup logo: an image made by src/logo_gen.py, decoded a scanline at
+// The startup logo: an image made by src/render/logo_gen.py, decoded a scanline at
 // a time into the renderer's pixels (video.c shows it in place of the text
 // rows). Portable C (no pico-sdk), host-tested.
 //

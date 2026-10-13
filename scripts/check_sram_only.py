@@ -4,7 +4,7 @@
 Most code runs from SRAM (COPY_TO_RAM), but cold code and constant data
 stay in flash and are read through XIP (ld/section_copy_to_ram_rodata.incl,
 bd qur.24). These must never read the flash:
-- the firmware update's commit (src/fwupdate.c), which rewrites it;
+- the firmware update's commit (src/platform/fwupdate.c), which rewrites it;
 - core 1 (video) and its DMA interrupt, which must not wait on XIP;
 - video_init, which changes clk_sys, and whatever main() calls after it
   until nvflash_retime sets XIP up for the new clock;

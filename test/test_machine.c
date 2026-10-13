@@ -399,7 +399,7 @@ static void test_benchmark(void) {
 	CHECK(strstr(screen, "PIP") != NULL);
 }
 
-// WORMS (src/cpm/worms.asm) on the CPM22 disk: colour worms, the options,
+// WORMS (src/machine/cpm/worms.asm) on the CPM22 disk: colour worms, the options,
 // the screen size from a cursor position report, any key back to CP/M.
 static void test_worms(void) {
 	// No size report from this console: 24 x 80; a worm per colour.
@@ -1075,7 +1075,7 @@ static bool cpm(const char *line, const char *want) {
 	return found;
 }
 
-// XLS and XPIP (src/cpm) under CP/M, against /XFER on the volume.
+// XLS and XPIP (src/machine/cpm) under CP/M, against /XFER on the volume.
 static void test_xfer_tools(void) {
 	static char text[300];
 	static uint8_t binary[1000];
@@ -1337,7 +1337,7 @@ static void test_cpm3_tools(void) {
 	drives_unmount_all();
 }
 
-// Our banked BIOS (src/cpm/cpm3, bd f8w.4): drives A-H, each of the
+// Our banked BIOS (src/machine/cpm/cpm3, bd f8w.4): drives A-H, each of the
 // formats port 8 reports; what it writes, CP/M 2.2 reads (the same file
 // system layout).
 static void test_cpm3_drives(void) {
@@ -1482,7 +1482,7 @@ static void test_hd_guard(void) {
 	drives_unmount_all();
 }
 
-// ---- TERMTEST (src/cpm/termtest.asm on Z80TESTS) through the terminal ----
+// ---- TERMTEST (src/machine/cpm/termtest.asm on Z80TESTS) through the terminal ----
 
 static screen_t tscreen;
 static term_t tterm;
@@ -1695,7 +1695,7 @@ static void test_termtest(void) {
 	host_console_hook = NULL;
 }
 
-// ---- ALTSCR (src/cpm/altscr.asm on Z80TESTS): the alternate screen ----
+// ---- ALTSCR (src/machine/cpm/altscr.asm on Z80TESTS): the alternate screen ----
 
 // As main.c's: the main screen at up to 132 columns, or it and SET-UP's
 // rows at 80.
@@ -1777,7 +1777,7 @@ static void test_altscr(void) {
 		TROW_HAS(22, text);
 	}
 
-	// SET-UP over the alternate screen at 80 columns, as main.c does it:
+	// SET-UP over the alternate screen at 80 columns, as the terminal does it:
 	// its rows fit beside the main screen and come back.
 	CHECK(type(" "));
 	CHECK_EQ(run_until("Then any key", 30), MACHINE_RUNNING);

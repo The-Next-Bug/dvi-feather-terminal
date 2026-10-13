@@ -7,7 +7,7 @@
 ;	Derived from z80pack's picosim CBIOS for SD-FDC machines,
 ;	Copyright (C) 2024 by Udo Munk (MIT licence).
 ;
-;	Assembled by src/cpm/build.sh with z80pack's z80asm, which also
+;	Assembled by src/machine/cpm/build.sh with z80pack's z80asm, which also
 ;	checks that the data area (ENDDAT) ends below the boot ROM at FF00H.
 ;
 MSIZE	EQU	62		;CP/M memory size in kilobytes

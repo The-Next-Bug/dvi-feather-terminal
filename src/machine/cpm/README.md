@@ -2,8 +2,8 @@
 
 The built-in `CPM22` disk is z80pack's picosim `cpm22.dsk` with its system
 tracks replaced by a 62K CP/M 2.2 with eight drives (A-H), each of which can
-hold an 8" floppy, a 4 MB or an 8 MB hard disk image (`src/drives.h`).
-`cmake/diskimg.cmake` builds it on every build:
+hold an 8" floppy, a 4 MB or an 8 MB hard disk image (`src/disks/drives.h`).
+`src/disks/diskimg.cmake` builds it on every build:
 
 1. `build.sh` compiles z80pack's `z80asm` (`lib/z80pack/z80asm`) with the
    host C compiler and assembles `boot.asm` (the boot loader, track 0
@@ -11,7 +11,7 @@ hold an 8" floppy, a 4 MB or an 8 MB hard disk image (`src/drives.h`).
    tables fit the 7 sectors left on the two system tracks and that its data
    area (8 x 255-byte allocation vectors, 8 x 16-byte check vectors) ends
    below the boot ROM page at FF00H.
-2. `src/diskimg_gen.py --system` takes the CCP and BDOS from z80pack's 64K
+2. `src/disks/diskimg_gen.py --system` takes the CCP and BDOS from z80pack's 64K
    `picosim/srccpm2/cpm.bin`, moves them down to 62K with the relocation
    bitmap `ccpbdos.rel`, and writes loader, CCP, BDOS and BIOS to the system
    tracks before compressing the image.
@@ -33,7 +33,7 @@ byte is the high byte of an address inside them. It was made once by running
 (memory 0980H, as `SAVE 34 CPM62.COM` would store them) with the 64K ones:
 the 1072 bytes that differ all differ by exactly 8 pages, the 2 KB the system
 moved. Any other size could be made the same way; `MSIZE` in `boot.asm` and
-`bios.asm` and the 62 in `cmake/diskimg.cmake` must agree.
+`bios.asm` and the 62 in `src/disks/diskimg.cmake` must agree.
 
 The BIOS asks the machine's port 8 for the format of the image on a drive
 when CP/M selects it (`machine.h`) and fills in that drive's disk parameter
@@ -79,8 +79,8 @@ default, A:, B:; COM before SUB; temporary files on B:; bd f8w.9).
 - `cpm3/gencpm.dat`: picosim's, with 16 directory buffers for E-H too and
   bank 0's segment cut to 0000H-76FFH (the BIOS's vectors and buffers grew
   into the rest). The TPA is 61K, a page more than picosim's.
-- `cpm3/build.sh` (from `cmake/diskimg.cmake`): builds `cpm3/cpmrun.c`, a
-  host program that runs `src/machine.c` on plain 8" images with a script
+- `cpm3/build.sh` (from `src/disks/diskimg.cmake`): builds `cpm3/cpmrun.c`, a
+  host program that runs `src/machine/machine.c` on plain 8" images with a script
   at the console, and runs `cpm3/sysgen.run`: picosim's `SYSGEN.SUB` steps
   (`RMAC`, `LINK`, `GENCPM AUTO`) with `CPM31` on A:, a copy of `CPM3GEN`
   holding our sources on B: and `CPM32` (RMAC, LINK) on C:. RMAC's error

@@ -12,7 +12,7 @@
 // bank), 65/66 clock, 67 60 Hz timer (RST 38H), 160 hardware control
 // (after 0xAA: bit 7 halt, bit 6 reset), 254/255 front panel switches;
 // and our own 8: the format of a drive (OUT the drive, IN its format, IN
-// again its mount count), for our 8-drive BIOSes in src/cpm; and 10: the
+// again its mount count), for our 8-drive BIOSes in src/machine/cpm; and 10: the
 // file transfer device (below).
 //
 // The CPU runs in slices (machine_run) from the platform's main loop;

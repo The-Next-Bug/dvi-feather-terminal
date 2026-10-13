@@ -8,7 +8,7 @@
 //   DRIVES_HD4     4 MB, 255 tracks x 128 sectors     4177920 bytes (z80pack's)
 //   DRIVES_HD8     8 MB, 256 tracks x 255 sectors     8355840 bytes
 //
-// all of 128-byte sectors, stored track by track. The BIOS (src/cpm) reads
+// all of 128-byte sectors, stored track by track. The BIOS (src/machine/cpm) reads
 // a drive's format from the controller to pick its disk parameters.
 //
 // The image files stay open while mounted; drives_poll flushes written

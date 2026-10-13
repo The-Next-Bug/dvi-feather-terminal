@@ -1,5 +1,5 @@
 ;	XFER.INC: shared by XLS and XPIP (included at their end): the file
-;	transfer device (port 10, src/machine.h) and a command-tail parser
+;	transfer device (port 10, src/machine/machine.h) and a command-tail parser
 ;	for file specs that may name SD: or USB: (the /XFER folder of the SD
 ;	card or a USB stick), which the CCP's FCBs cannot hold.
 

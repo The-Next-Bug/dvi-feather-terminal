@@ -4,8 +4,9 @@
 // The Z80 machine's monitor: the menu shown in CP/M mode before booting and
 // when the CPU stops. It mounts the SD card, keeps the drive assignments
 // (/DISKS80/DRIVES.CFG), installs the built-in disk images, boots and runs
-// the speed test. Portable C (FatFs, machine.h), host-tested; main.c feeds
-// it keys and runs the CPU when it says so.
+// the speed test. Portable C (FatFs, machine.h), host-tested; the terminal
+// (apps/terminal/cpm_glue.c) feeds it keys and runs the CPU when it says
+// so.
 //
 // Keys are the bytes a VT100 keyboard sends; escape sequences are ignored.
 

@@ -18,7 +18,7 @@
 ;	kept, and [T] cuts the file at the first ^Z of its last record
 ;	(text). Any key stops it between files.
 ;
-;	Uses the file transfer device (port 10, src/machine.h) through
+;	Uses the file transfer device (port 10, src/machine/machine.h) through
 ;	xfer.inc. Assembled with z80pack's z80asm by build.sh, put on the
 ;	CPM22 disk by diskimg_gen.py.
 

@@ -3,9 +3,10 @@
 
 // SET-UP's firmware update panel (U, in either mode): install
 // /FIRMWARE.UF2 from the SD card or the USB stick (FatFs volumes 0 and 1).
-// Portable C (FatFs), host-tested; main.c opens it over
-// SET-UP's rows, feeds it keys and lets it do the work from its main loop
-// (fwpanel_run), never from inside the USB stack.
+// Portable C (FatFs), host-tested; the terminal
+// (apps/terminal/setup_glue.c) opens it over SET-UP's rows, feeds it keys
+// and lets it do the work from its main loop (fwpanel_run), never from
+// inside the USB stack.
 //
 // Opened, it looks for the file on both (with it on both, S or U picks
 // one), checks it (fwupdate_check) and asks; Y writes it to the
