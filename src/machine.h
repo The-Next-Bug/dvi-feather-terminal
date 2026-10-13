@@ -35,7 +35,10 @@ typedef struct {
 	uint8_t (*disk_read)(unsigned drive, unsigned track, unsigned sector, uint8_t *buf);
 	uint8_t (*disk_write)(unsigned drive, unsigned track, unsigned sector, const uint8_t *buf);
 	// The format of the disk in a drive (port 8): 0 none, 1 8" floppy,
-	// 2 4 MB, 3 8 MB hard disk (drives.h). May be NULL: always 0.
+	// 2 4 MB, 3 8 MB hard disk (drives.h). May be NULL: always 0. Until
+	// the running system has asked port 8 about a drive (since the last
+	// reset), the disk controller refuses hard-disk images on it (status 2,
+	// no disk): BIOSes that never ask treat every disk as a floppy.
 	uint8_t (*disk_format)(unsigned drive);
 	// The file transfer device (port 10, xfer.h): run command cmd
 	// (XFER_*) on volume, with buf holding its input and taking its output

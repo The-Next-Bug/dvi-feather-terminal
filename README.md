@@ -46,7 +46,7 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
   first byte on UART0 or a key press ends it early. See
   [Startup logo](#startup-logo).
 - **Z80 CP/M machine** (SET-UP Mode): a built-in Z80 computer running CP/M
-  2.2 (and z80pack's picosim CP/M 3 images) from a microSD card, on
+  2.2 or banked CP/M 3 (both built in) from a microSD card, on
   [z80pack](https://github.com/udo-munk/z80pack)'s CPU core. See
   [Z80 CP/M machine](#z80-cpm-machine).
 - **Demo**: a test screen of colors, fonts and line drawing that alternates
@@ -380,21 +380,28 @@ BIOS for the eight drives and the three formats (`src/cpm`).
 ### Other operating systems
 
 The machine has picosim's hardware, so the disk images for z80pack's
-picosim run as they are, with their own BIOSes. They are not built in: copy
-them from z80pack's
-[`picosim/disks`](https://github.com/udo-munk/z80pack/tree/master/picosim/disks)
-into `/DISKS80` and mount them from the monitor. Their BIOSes know only
-four 8" floppy drives, A-D.
+picosim run as they are, with their own BIOSes. Their BIOSes know only
+four 8" floppy drives, A-D, and never ask the machine what a drive holds,
+so the disk controller refuses them 4 MB and 8 MB images (a disk error
+instead of reading a hard disk as a floppy and writing over it).
 
-- **CP/M 3**: `cpm3-1.dsk` (boots) and `cpm3-2.dsk`. The banked system uses
-  bank 1 only, so the default build runs it.
-- **MP/M II**: `mpm-1.dsk` (boots) and `mpm-2.dsk`. Its `MPM.SYS` is
+- **CP/M 3** (built in): mount `CPM31` on A: and `CPM32` on B: in the
+  monitor and boot (Return); mount `CPM22` on A: again to go back. The
+  banked system uses bank 1, so the default build runs it. Its
+  `PROFILE.SUB` puts A: and B: on the search path (`SETDEF`), so `XLS`,
+  `XPIP`, `XERA` and `WORMS` on `CPM32` run from any drive. `CPM3GEN`
+  holds picosim's BIOS sources and `GENCPM`, to rebuild the system.
+  CP/M 3 shows the user number in its prompt (`3A>`), finds system files
+  in user 0 from any user area, and keeps the date (`DATE`).
+- **MP/M II** (copy `mpm-1.dsk` and `mpm-2.dsk` from z80pack's
+  [`picosim/disks`](https://github.com/udo-munk/z80pack/tree/master/picosim/disks)
+  into `/DISKS80`): `mpm-1.dsk` (boots) and `mpm-2.dsk`. Its `MPM.SYS` is
   generated for picosim's six user banks, but this machine has two
   (`MACHINE_BANKS`), and the machine stops (`MMU: no bank 3`) when MP/M
   selects a bank it does not have. Regenerate `MPM.SYS` for two banks with
   `GENSYS` from `mpm-2.dsk` first.
 
-These images have not been tested on this board yet.
+MP/M II has not been tested on this board yet.
 
 ### WORMS
 
@@ -441,7 +448,7 @@ Any key goes on; Ctrl-C leaves at once.
 
 ### Moving files
 
-`CPM22` carries three tools (`src/cpm/xls.asm`, `xpip.asm`, `xera.asm`)
+`CPM22` (and `CPM32` for CP/M 3) carries three tools (`src/cpm/xls.asm`, `xpip.asm`, `xera.asm`)
 that move files between CP/M disks and the folder `/XFER` on the SD card
 (`SD:`) or on a USB stick (`USB:`): `XLS` lists the folder, `XPIP` copies,
 `XERA` erases. Files go in and out without image tools on a PC. A
@@ -519,8 +526,10 @@ A after 3 seconds (any key stops that), or shows its menu:
   `EXZ80DOC` and `EXZ80ALL`, about 10 minutes each at full speed, and the
   `CPUTEST` diagnostics; `PRELIM` needs an emulator that runs block moves
   in one go, as z80pack's cpmsim does, and wrecks CP/M here: reset after
-  it) and `EMPTY` (a blank disk). They are kept compressed in flash (about
-  240 KB) to start a blank card with; existing files are only replaced if
+  it), `EMPTY` (a blank disk), and CP/M 3's `CPM31` (boots), `CPM32` and
+  `CPM3GEN` (see [Other operating systems](#other-operating-systems)).
+  They are kept compressed in flash (about 610 KB) to start a blank card
+  with; existing files are only replaced if
   you say so.
 - **S**: CPU speed test (a JP loop for a second, in Z80 MHz).
 - **C**: check the card again (after changing it).
@@ -827,7 +836,7 @@ z80pack is © Udo Munk and others under the MIT license (`lib/z80pack/LICENSE`);
 `src/machine.c` and `src/z80pack/` follow its picosim, and its CPU core
 includes `log.h` (Apache-2.0). FatFs is © ChaN under a 1-clause BSD license
 (`lib/fatfs/LICENSE.txt`). The built-in disk images come from z80pack: CP/M
-2.2 is Digital Research's, redistributed under the permission Lineo
+2.2 and CP/M 3 are Digital Research's, redistributed under the permission Lineo
 (Caldera) gave in 2001 for the CP/M material of "The Unofficial CP/M Web
 Site"; the Z80 exercisers are Frank D. Cringle's, GPL-2.0 or later (their sources are
 on the same disk image).

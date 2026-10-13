@@ -216,8 +216,9 @@ static drivepanel_action_t panel_keys(drivepanel_t *p, const char *keys) {
 static void test_drive_panel(void) {
 	static drivepanel_t p;
 	drivepanel_open(&p);
-	// On the card: CPM22 EMPTY HD4 HD8 SHORT Z80TESTS (sorted).
-	CHECK_EQ(p.n_images, 6);
+	// On the card: CPM22 CPM31 CPM32 CPM3GEN EMPTY HD4 HD8 SHORT Z80TESTS
+	// (sorted).
+	CHECK_EQ(p.n_images, 9);
 	CHECK(strcmp(p.images[p.choice[0]], "CPM22") == 0);
 	CHECK(strcmp(p.images[p.choice[4]], "HD8") == 0);
 	CHECK_EQ(p.choice[2], -1);
@@ -231,17 +232,17 @@ static void test_drive_panel(void) {
 		row[c] = (char)screen_glyph(&s, c, 5);
 	CHECK(strstr(row, "E:") && strstr(row, "HD8") && strstr(row, "8 MB disk"));
 
-	// C: none -> CPM22 is on A, EMPTY is free: the first step takes EMPTY.
+	// C: none -> CPM22 is on A, CPM31 is free: the first step takes it.
 	CHECK_EQ(panel_keys(&p, "\x1b[B\x1b[B"), DRIVEPANEL_REDRAW);
 	CHECK_EQ(p.drive, 2);
 	CHECK_EQ(panel_keys(&p, " "), DRIVEPANEL_REDRAW);
-	CHECK(p.choice[2] >= 0 && strcmp(p.images[p.choice[2]], "EMPTY") == 0);
-	// B: Z80TESTS -> back one: SHORT; back again skips HD8 (E), HD4 (F),
-	// EMPTY (C, just chosen) and CPM22 (A): none. Forward twice: Z80TESTS.
+	CHECK(p.choice[2] >= 0 && strcmp(p.images[p.choice[2]], "CPM31") == 0);
+	// B: Z80TESTS -> back one: SHORT; back again skips HD8 (E) and HD4
+	// (F): EMPTY. Forward twice: Z80TESTS.
 	CHECK_EQ(panel_keys(&p, "\x1b[A\x1b[D"), DRIVEPANEL_REDRAW);
 	CHECK(strcmp(p.images[p.choice[1]], "SHORT") == 0);
 	CHECK_EQ(panel_keys(&p, "\x1b[D"), DRIVEPANEL_REDRAW);
-	CHECK_EQ(p.choice[1], -1);
+	CHECK(p.choice[1] >= 0 && strcmp(p.images[p.choice[1]], "EMPTY") == 0);
 	CHECK_EQ(panel_keys(&p, "\x1b[C\x1b[C"), DRIVEPANEL_REDRAW);
 	CHECK(p.choice[1] >= 0 && strcmp(p.images[p.choice[1]], "Z80TESTS") == 0);
 
@@ -249,17 +250,17 @@ static void test_drive_panel(void) {
 	bool failed;
 	CHECK_EQ(drivepanel_apply(&p, &failed), 1);
 	CHECK(!failed);
-	CHECK(strcmp(drives_name(2), "EMPTY") == 0);
+	CHECK(strcmp(drives_name(2), "CPM31") == 0);
 
 	// Saved: a reload gives the same.
 	CHECK(drives_load_config());
-	CHECK(strcmp(drives_name(2), "EMPTY") == 0);
+	CHECK(strcmp(drives_name(2), "CPM31") == 0);
 	CHECK(strcmp(drives_name(4), "HD8") == 0);
 
 	// A bad image fails to mount.
 	drivepanel_open(&p);
 	p.drive = 7;
-	p.choice[7] = 4; // SHORT
+	p.choice[7] = 7; // SHORT
 	CHECK_EQ(drivepanel_apply(&p, &failed), 1);
 	CHECK(failed);
 	CHECK(drives_name(7) == NULL);
@@ -911,7 +912,7 @@ static void put_fat_file(const char *path, const void *data, unsigned size) {
 // The FAT file at path, if it holds exactly size bytes equal to data
 // (then 0x1A padding up to pad_to, if larger).
 static bool fat_file_is(const char *path, const void *data, unsigned size, unsigned pad_to) {
-	static uint8_t got[4096];
+	static uint8_t got[32768];
 	FIL f;
 	UINT n;
 	if (f_open(&f, path, FA_READ) != FR_OK)
@@ -1087,6 +1088,128 @@ static void test_xfer_tools(void) {
 	diskio_ram_free_drive(1);
 	CHECK(cpm("XLS USB:", "no USB stick"));
 	CHECK(cpm("XLS HELLO.TXT", "HELLO.TXT")); // the card is as it was
+	drives_unmount_all();
+}
+
+// ---- CP/M 3 (picosim's banked system: CPM31, CPM32; bd f8w) ----
+
+// Booted by mounting its disks on A: and B:, no setting: the boot ROM
+// loads whatever A: holds. Its PROFILE.SUB ends with VT100DYN's banner.
+static void cpm3_boot(void) {
+	clear_screen();
+	machine_reset();
+	CHECK_EQ(run_until("to see if it works", 30), MACHINE_RUNNING);
+	const char *banner = strstr(screen, "to see if it works");
+	if (!banner || !strstr(banner, "A>")) // the prompt may have come with it
+		CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+}
+
+static void test_boot_cpm3(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM31"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("CPM32"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM31"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "CPM32"), DRIVES_OK);
+	cpm3_boot();
+	CHECK(strstr(screen, "CP/M V3.0 Loader") != NULL);
+	CHECK(strstr(screen, "61K TPA") != NULL);
+	CHECK(strstr(screen, "Banked BIOS") != NULL);
+	CHECK(cpm("SETDEF", "2nd Drive            - A:"));
+	CHECK(cpm("DATE", "/20"));
+	CHECK(cpm("DIR B:X*.COM", "XPIP     COM"));
+	// The user number shows in the prompt.
+	clear_screen();
+	CHECK(type("USER 3\r"));
+	CHECK_EQ(run_until("3A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("USER 0", "")); // back to A>
+	// ^C: a warm boot reloads CCP.COM.
+	clear_screen();
+	CHECK(type("\x03"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("DIRSYS CCP.COM", "CCP      COM")); // a system file
+}
+
+// XLS, XPIP and XERA under CP/M 3, run from B: through its search path;
+// a file over 16 KB (several extents) in and out.
+static void test_cpm3_tools(void) {
+	static uint8_t big[20000];
+	for (unsigned i = 0; i < sizeof big; ++i)
+		big[i] = (uint8_t)(i * 7 + i / 251);
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("EMPTY"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM31"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "CPM32"), DRIVES_OK);
+	CHECK_EQ(drives_mount(2, "EMPTY"), DRIVES_OK);
+	put_fat_file("/XFER/BIG.BIN", big, sizeof big);
+	cpm3_boot();
+	CHECK(cpm("XLS BIG.BIN", "BIG.BIN           20000"));
+	CHECK(cpm("XPIP C:=SD:BIG.BIN", "1 copied"));
+	CHECK(cpm("DIR C:", "BIG      BIN"));
+	CHECK(cpm("XPIP SD:BACK3.BIN=C:BIG.BIN", "1 copied"));
+	CHECK(fat_file_is("/XFER/BACK3.BIN", big, sizeof big, 157 * 128));
+	CHECK(cpm("XERA SD:BACK3.BIN", "1 erased"));
+	CHECK(!fat_file_exists("/XFER/BACK3.BIN"));
+	f_unlink("/XFER/BIG.BIN");
+	drives_unmount_all();
+}
+
+// The disk controller refuses a hard-disk image to a system that has not
+// asked port 8 about the drive since the reset (bd f8w.7); floppies are
+// always served.
+static void test_hd_guard(void) {
+	extern uint8_t bnk0[65536];
+	const uint16_t cmd = 0x8000, dma = 0x8100, st = 0xf000;
+	drives_unmount_all();
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	drives_result_t made = drives_create("GUARD", DRIVES_HD8, window, sizeof window, NULL, NULL);
+	CHECK(made == DRIVES_OK || made == DRIVES_EXISTS);
+	CHECK_EQ(drives_mount(2, "GUARD"), DRIVES_OK);
+	uint8_t before[DRIVES_SECTOR], after[DRIVES_SECTOR];
+	CHECK_EQ(drives_read(2, 1, 1, before), 0);
+	machine_init(&host_platform);
+	z80.n = 0;
+	emit(1, 0xf3);                                     // DI
+	emit(4, 0x3e, 0x10, 0xd3, 4);                      // LD A,10H; OUT (4),A: the command block
+	emit(4, 0x3e, cmd & 0xff, 0xd3, 4);                // at cmd
+	emit(4, 0x3e, cmd >> 8, 0xd3, 4);
+	static const uint8_t steps[][2] = {
+		{0x22, 0}, {0x42, 1}, // read, write C: (not asked about)
+		{0x20, 2},            // read A: (a floppy)
+		{0x00, 3},            // ask port 8 about C:
+		{0x22, 4}, {0x42, 5}, // read, write C:
+	};
+	for (unsigned i = 0; i < sizeof steps / sizeof steps[0]; ++i) {
+		if (steps[i][0])
+			emit(4, 0x3e, steps[i][0], 0xd3, 4); // LD A,cmd; OUT (4),A
+		else
+			emit(4, 0x3e, 2, 0xd3, 8); // LD A,2; OUT (8),A
+		emit(2, 0xdb, steps[i][0] ? 4 : 8);   // IN A,(4) or (8)
+		uint16_t at = (uint16_t)(st + steps[i][1]);
+		emit(3, 0x32, at & 0xff, at >> 8);    // LD (at),A
+	}
+	emit(1, 0x76); // HALT
+	CHECK(z80.n <= sizeof z80.code);
+	for (int run = 0; run < 2; ++run) { // the second after a reset: asked again
+		memcpy(bnk0 + 0xff00, z80.code, z80.n);
+		const uint8_t block[4] = {1, 1, dma & 0xff, dma >> 8}; // track 1, sector 1
+		memcpy(bnk0 + cmd, block, sizeof block);
+		memset(bnk0 + dma, 0x5a, DRIVES_SECTOR);
+		memset(bnk0 + st, 0xff, 16);
+		machine_reset();
+		unsigned slices = 0;
+		while (machine_run(10000) == MACHINE_RUNNING && ++slices < 100)
+			;
+		CHECK(strstr(machine_stop_reason(), "HALT with interrupts off") != NULL);
+		CHECK_EQ(bnk0[st + 0], 2); // refused: no disk
+		CHECK_EQ(bnk0[st + 1], 2);
+		CHECK_EQ(bnk0[st + 2], 0); // the floppy is read
+		CHECK_EQ(bnk0[st + 3], 3); // C: is an 8 MB hard disk
+		CHECK_EQ(bnk0[st + 4], 0); // now served
+		CHECK_EQ(bnk0[st + 5], 0);
+		CHECK_EQ(drives_read(2, 1, 1, after), 0);
+		CHECK(memcmp(before, after, sizeof before) == 0);
+		CHECK(memcmp(bnk0 + dma, before, sizeof before) == 0);
+	}
 	drives_unmount_all();
 }
 
@@ -1438,6 +1561,9 @@ int main(void) {
 	RUN(test_blank_disk_chunks);
 	RUN(test_xfer_port);
 	RUN(test_xfer_tools);
+	RUN(test_boot_cpm3);
+	RUN(test_cpm3_tools);
+	RUN(test_hd_guard);
 	RUN(test_termtest);
 	RUN(test_altscr);
 	drives_unmount_all();

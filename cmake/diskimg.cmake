@@ -11,7 +11,12 @@ set(DISKIMG_GEN "${CMAKE_CURRENT_LIST_DIR}/../src/diskimg_gen.py")
 set(DISKIMG_IMAGES
   "CPM22=${Z80PACK_DIR}/picosim/disks/cpm22.dsk"
   "Z80TESTS=${Z80PACK_DIR}/cpmsim/disks/library/z80tests.dsk"
-  "EMPTY=${Z80PACK_DIR}/picosim/disks/empty.dsk")
+  "EMPTY=${Z80PACK_DIR}/picosim/disks/empty.dsk"
+  "CPM31=${Z80PACK_DIR}/picosim/disks/cpm3-1.dsk"
+  "CPM32=${Z80PACK_DIR}/picosim/disks/cpm3-2.dsk"
+  "CPM3GEN=${Z80PACK_DIR}/picosim/disks/cpm3gen.dsk")
+# CPM31 (boot disk) and CPM32 are picosim's banked CP/M 3: mount them on A:
+# and B: and boot (bd f8w). CPM3GEN holds its BIOS sources and GENCPM.
 set(DISKIMG_SOURCES "${GENERATED}/diskimg_data.c")
 
 # CPM22 gets our CP/M 2.2 system (src/cpm): 62K, eight drives of any of the
@@ -36,14 +41,19 @@ set(DISKIMG_SYSTEM --system CPM22 ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin
 # Our programs on the CPM22 disk; z80pack's XDIR.COM comes off it (it
 # refuses drives other than A and B; DIR and STAT cover all eight).
 # TERMTEST (the terminal's personalities) and ALTSCR (the alternate
-# screen) go with the test programs.
+# screen) go with the test programs. Our tools go on CPM32 too (CPM31 is
+# nearly full; its PROFILE.SUB puts B: on the search path).
 set(DISKIMG_FILES --delete CPM22 XDIR.COM
   --file CPM22 WORMS.COM ${CPM_OUT}/worms.com
   --file CPM22 XLS.COM ${CPM_OUT}/xls.com
   --file CPM22 XPIP.COM ${CPM_OUT}/xpip.com
   --file CPM22 XERA.COM ${CPM_OUT}/xera.com
   --file Z80TESTS TERMTEST.COM ${CPM_OUT}/termtest.com
-  --file Z80TESTS ALTSCR.COM ${CPM_OUT}/altscr.com)
+  --file Z80TESTS ALTSCR.COM ${CPM_OUT}/altscr.com
+  --file CPM32 WORMS.COM ${CPM_OUT}/worms.com
+  --file CPM32 XLS.COM ${CPM_OUT}/xls.com
+  --file CPM32 XPIP.COM ${CPM_OUT}/xpip.com
+  --file CPM32 XERA.COM ${CPM_OUT}/xera.com)
 
 set(_diskimg_files)
 foreach(_image IN LISTS DISKIMG_IMAGES)

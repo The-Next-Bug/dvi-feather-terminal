@@ -21,6 +21,7 @@ The directory layout is upstream's, so paths match the upstream tree.
 | `z80asm/` | The assembler, built for the host to assemble `src/cpm` (`src/cpm/build.sh`) |
 | `picosim/srccpm2/cpm.bin` | picosim's 64K CCP+BDOS, relocated to 62K (`src/cpm`) |
 | `picosim/disks/cpm22.dsk`, `picosim/disks/empty.dsk`, `cpmsim/disks/library/z80tests.dsk` | The built-in disk images (`cmake/diskimg.cmake`); z80tests.dsk changed, see below |
+| `picosim/disks/cpm3-1.dsk`, `cpm3-2.dsk`, `cpm3gen.dsk` | Banked CP/M 3 (picosim's BNKBIOS3, DRI's BDOS and utilities): the built-in CPM31, CPM32 and CPM3GEN disks (bd f8w.1) |
 
 Everything else upstream (the other machines, the 8080 core, the
 alternative `ALT_Z80` core, the front panel, other disks) is left out.
