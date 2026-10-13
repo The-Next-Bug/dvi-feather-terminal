@@ -6,4 +6,4 @@ add_library(dvt_common STATIC
   scratch.c
 )
 target_include_directories(dvt_common PUBLIC ${CMAKE_CURRENT_LIST_DIR})
-dvt_warnings(dvt_common)
+dvt_compile_options(dvt_common)

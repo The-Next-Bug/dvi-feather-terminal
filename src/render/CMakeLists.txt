@@ -13,4 +13,4 @@ add_library(dvt_render STATIC
 )
 target_include_directories(dvt_render PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(dvt_render PUBLIC dvt_screen)
-dvt_warnings(dvt_render)
+dvt_compile_options(dvt_render)

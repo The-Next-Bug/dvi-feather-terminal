@@ -1,12 +1,12 @@
-# The CP/M disk images built into the firmware (src/diskimg.h), compressed by
-# src/diskimg_gen.py from z80pack's images. Include with GENERATED set to the
-# output directory; sets DISKIMG_SOURCES. Shared by the firmware and the host
-# tests.
+# The CP/M disk images built into the firmware (diskimg.h), compressed by
+# diskimg_gen.py from z80pack's images, for dvt_disks (CMakeLists.txt here:
+# GENERATED is the output directory). Sets DISKIMG_SOURCES and the target
+# diskimg_data.
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-set(Z80PACK_DIR "${CMAKE_CURRENT_LIST_DIR}/../lib/z80pack")
-set(DISKIMG_GEN "${CMAKE_CURRENT_LIST_DIR}/../src/diskimg_gen.py")
+set(Z80PACK_DIR "${CMAKE_CURRENT_LIST_DIR}/../../lib/z80pack")
+set(DISKIMG_GEN "${CMAKE_CURRENT_LIST_DIR}/diskimg_gen.py")
 # NAME=file: written to the SD card as /DISKS80/NAME.DSK.
 set(DISKIMG_IMAGES
   "CPM22=${Z80PACK_DIR}/picosim/disks/cpm22.dsk"
@@ -30,10 +30,11 @@ add_custom_command(
   COMMENT "Copying CP/M 3's second disk onto an 8 MB disk (CPM32)"
   VERBATIM)
 
-# CPM22 gets our CP/M 2.2 system (src/cpm): 62K, eight drives of any of the
-# image formats. The boot loader and BIOS are assembled by src/cpm/build.sh
-# with z80pack's z80asm, built with the host C compiler.
-set(CPM_DIR "${CMAKE_CURRENT_LIST_DIR}/../src/cpm")
+# CPM22 gets our CP/M 2.2 system (src/machine/cpm): 62K, eight drives of
+# any of the image formats. The boot loader and BIOS are assembled by
+# src/machine/cpm/build.sh with z80pack's z80asm, built with the host C
+# compiler.
+set(CPM_DIR "${CMAKE_CURRENT_LIST_DIR}/../machine/cpm")
 set(CPM_OUT "${GENERATED}/cpm")
 find_program(HOST_CC NAMES cc gcc clang REQUIRED)
 file(GLOB _z80asm_sources "${Z80PACK_DIR}/z80asm/*.[ch]")
@@ -49,18 +50,18 @@ add_custom_command(
   VERBATIM)
 # CP/M 3's CPM3.SYS with our banked BIOS (drives A-H, hard disks: bd
 # f8w.4), made by DRI's RMAC, LINK and GENCPM running on the Z80 machine on
-# the build host (src/cpm/cpm3/build.sh, bd f8w.3).
+# the build host (src/machine/cpm/cpm3/build.sh, bd f8w.3).
 set(CPM3_DIR "${CPM_DIR}/cpm3")
 set(CPM3_OUT "${GENERATED}/cpm3")
 file(GLOB _machine_sources "${Z80PACK_DIR}/z80core/*.[ch]" "${Z80PACK_DIR}/iodevices/sd-fdc.[ch]"
-  "${CMAKE_CURRENT_LIST_DIR}/../src/z80pack/*.h")
+  "${CMAKE_CURRENT_LIST_DIR}/../machine/z80pack/*.h")
 add_custom_command(
   OUTPUT ${CPM3_OUT}/cpm3.sys ${CPM3_OUT}/vt100dyn.com ${CPM3_OUT}/profile.sub ${CPM3_OUT}/readme.txt
     ${CPM3_OUT}/cpm3gen.dsk
   COMMAND ${CMAKE_COMMAND} -E env CC=${HOST_CC} PYTHON=${Python3_EXECUTABLE} ${CPM3_DIR}/build.sh ${CPM3_OUT}
   DEPENDS ${CPM3_DIR}/build.sh ${CPM3_DIR}/cpmrun.c ${CPM3_DIR}/sysgen.run ${CPM3_DIR}/bnkbios3.asm
-    ${CPM3_DIR}/gencpm.dat ${CPM3_DIR}/profile.sub ${CPM3_DIR}/readme.txt ${DISKIMG_GEN} ${CMAKE_CURRENT_LIST_DIR}/../src/machine.c
-    ${CMAKE_CURRENT_LIST_DIR}/../src/machine.h ${_machine_sources}
+    ${CPM3_DIR}/gencpm.dat ${CPM3_DIR}/profile.sub ${CPM3_DIR}/readme.txt ${DISKIMG_GEN} ${CMAKE_CURRENT_LIST_DIR}/../machine/machine.c
+    ${CMAKE_CURRENT_LIST_DIR}/../machine/machine.h ${_machine_sources}
     ${Z80PACK_DIR}/picosim/disks/cpm3-1.dsk ${Z80PACK_DIR}/picosim/disks/cpm3-2.dsk
     ${Z80PACK_DIR}/picosim/disks/cpm3gen.dsk
   COMMENT "Making CP/M 3's CPM3.SYS (RMAC, LINK, GENCPM on the Z80 machine)"

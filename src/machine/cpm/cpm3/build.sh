@@ -2,7 +2,7 @@
 # Make CP/M 3's CPM3.SYS with our banked BIOS (bnkbios3.asm, gencpm.dat)
 # the way picosim's SYSGEN.SUB does, by running DRI's RMAC, LINK and
 # GENCPM under CP/M 3 on the Z80 machine: cpmrun (cpmrun.c with
-# src/machine.c and z80pack's CPU, built here with the host C compiler,
+# src/machine/machine.c and z80pack's CPU, built here with the host C compiler,
 # CC, default cc) boots picosim's cpm3-1.dsk and types sysgen.run.
 #
 #   build.sh OUTDIR
@@ -14,20 +14,20 @@
 # SYSGEN.SUB run on the machine makes the same system), and the console
 # log OUTDIR/sysgen.log. Fails if a step reports an error or the
 # common part of the system grows (the TPA must stay 61K). Run by
-# cmake/diskimg.cmake (PYTHON: the interpreter for diskimg_gen.py).
+# src/disks/diskimg.cmake (PYTHON: the interpreter for diskimg_gen.py).
 set -euo pipefail
 
 out="$1"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-root="$here/../../.."
+root="$here/../../../.."
 z80pack="$root/lib/z80pack"
 disks="$z80pack/picosim/disks"
-edit() { "${PYTHON:-python3}" "$root/src/diskimg_gen.py" --edit "$@"; }
+edit() { "${PYTHON:-python3}" "$root/src/disks/diskimg_gen.py" --edit "$@"; }
 work="$out/cpm3work"
 mkdir -p "$work"
 
-"${CC:-cc}" -O2 -w -o "$out/cpmrun" -I"$root/src" -I"$root/src/z80pack" \
-  -I"$z80pack/z80core" -I"$z80pack/iodevices" "$here/cpmrun.c" "$root/src/machine.c" \
+"${CC:-cc}" -O2 -w -o "$out/cpmrun" -I"$root/src/machine" -I"$root/src/machine/z80pack" \
+  -I"$z80pack/z80core" -I"$z80pack/iodevices" "$here/cpmrun.c" "$root/src/machine/machine.c" \
   "$z80pack"/z80core/sim{glb,core,z80,z80-cb,z80-dd,z80-ddcb,z80-ed,z80-fd,z80-fdcb}.c \
   "$z80pack/iodevices/sd-fdc.c"
 

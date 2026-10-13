@@ -56,8 +56,6 @@ if(NOT PICO_PLATFORM MATCHES "^rp2350")
 endif()
 
 set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
-include(cmake/diskimg.cmake)
-include(cmake/z80pack.cmake)
 include(cmake/dvt.cmake)
 
 # The libraries (src/<name>, bd gr1), the RP2350 ones too. They do not
@@ -74,6 +72,10 @@ add_subdirectory(src)
 # stay in flash (read through XIP by core 0).
 target_compile_definitions(dvt_screen PUBLIC FONT_FLASH=1)
 target_compile_definitions(dvt_render PRIVATE LOGO_IN_FLASH=$<BOOL:${LOGO_IN_FLASH}>)
+# The built-in disk images stay in flash too (read by core 0 when
+# installed); the Z80 machine's banks.
+target_compile_definitions(dvt_disks PUBLIC DISKIMG_IN_FLASH=1)
+target_compile_definitions(dvt_z80pack PUBLIC MACHINE_BANKS=${MACHINE_BANKS})
 
 # Runs on every build; rewrites term_build.h only when git state changes.
 add_custom_target(build_info
@@ -87,47 +89,34 @@ add_executable(dvi_terminal
   src/demo.c
   src/diag.c
   src/led.c
-  src/diskimg.c
   src/drivepanel.c
-  src/drives.c
-  src/drivecfg.c
   src/fwpanel.c
   src/fwupdate.c
   src/hstx_dvi.c
-  src/machine.c
   src/main.c
   src/monitor.c
   src/nvflash.c
   src/diskio.c
   src/sdcard.c
-  src/settings.c
   src/setup.c
   src/serial.c
-  src/uf2.c
   src/video.c
-  src/usbvol.c
-  src/xfer.c
-  ${DISKIMG_SOURCES}
-  ${Z80PACK_SOURCES}
-  ${FATFS_SOURCES}
 )
-add_dependencies(dvi_terminal build_info diskimg_data)
+add_dependencies(dvi_terminal build_info)
 
 target_include_directories(dvi_terminal PRIVATE
   src
   ${GENERATED}
-  ${Z80PACK_INCLUDE_DIRS}
-  ${FATFS_INCLUDE_DIR}
 )
 
 # Warnings for our sources only, not the SDK's.
-set_source_files_properties(src/demo.c src/diag.c src/diskimg.c src/drivepanel.c src/diskio.c src/drives.c src/drivecfg.c src/fwpanel.c src/fwupdate.c src/hstx_dvi.c src/led.c
-  src/machine.c src/main.c src/monitor.c src/nvflash.c src/sdcard.c
-  src/settings.c src/setup.c src/serial.c src/uf2.c src/usbkbd.c src/usbmsc.c src/usbvol.c src/video.c src/xfer.c
+set_source_files_properties(src/demo.c src/diag.c src/drivepanel.c src/diskio.c src/fwpanel.c src/fwupdate.c src/hstx_dvi.c src/led.c
+  src/main.c src/monitor.c src/nvflash.c src/sdcard.c
+  src/setup.c src/serial.c src/usbkbd.c src/usbmsc.c src/video.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 # Cold code (it runs only while files move, or a USB stick comes or goes):
 # small rather than fast, as all code takes SRAM.
-set_property(SOURCE src/xfer.c src/usbvol.c src/usbmsc.c
+set_property(SOURCE src/usbmsc.c
   ${PICO_TINYUSB_PATH}/src/class/msc/msc_host.c APPEND PROPERTY COMPILE_OPTIONS "-Os")
 
 target_compile_definitions(dvi_terminal PRIVATE
@@ -138,9 +127,6 @@ target_compile_definitions(dvi_terminal PRIVATE
   STARTUP_DEMO=$<BOOL:${STARTUP_DEMO}>
   VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>
   SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>
-  MACHINE_BANKS=${MACHINE_BANKS}
-  # The built-in disk images stay in flash (read by core 0 when installed).
-  DISKIMG_IN_FLASH=1
   # The compose loop needs very little stack.
   PICO_CORE1_STACK_SIZE=0x200
   # Nothing prints floating point: its printf code (and the soft-float it
@@ -151,6 +137,9 @@ target_compile_definitions(dvi_terminal PRIVATE
 
 target_link_libraries(dvi_terminal
   dvt_common
+  dvt_disks
+  dvt_machine
+  dvt_settings
   dvt_input
   dvt_render
   dvt_screen

@@ -4,4 +4,4 @@ add_library(dvt_screen STATIC
   screen.c
 )
 target_include_directories(dvt_screen PUBLIC ${CMAKE_CURRENT_LIST_DIR})
-dvt_warnings(dvt_screen)
+dvt_compile_options(dvt_screen)

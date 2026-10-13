@@ -6,12 +6,12 @@
 # lib/z80pack/z80asm with the host C compiler (CC, default cc). Checks that
 # they fit the system tracks: the loader one sector, the BIOS's code and
 # tables the 7 sectors after CCP and BDOS, its data area below the boot ROM
-# page (FF00H). Run by cmake/diskimg.cmake.
+# page (FF00H). Run by src/disks/diskimg.cmake.
 set -euo pipefail
 
 out="$1"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-z80asm_src="$here/../../lib/z80pack/z80asm"
+z80asm_src="$here/../../../lib/z80pack/z80asm"
 mkdir -p "$out"
 
 if [[ ! -x "$out/z80asm" || "$out/z80asm" -ot "$z80asm_src/z80asm.c" ]]; then
