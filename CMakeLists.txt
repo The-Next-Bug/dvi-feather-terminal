@@ -74,6 +74,7 @@ add_executable(dvi_terminal
   src/blank.c
   src/demo.c
   src/diag.c
+  src/led.c
   src/diskimg.c
   src/drivepanel.c
   src/drives.c
@@ -121,7 +122,7 @@ target_include_directories(dvi_terminal PRIVATE
 )
 
 # Warnings for our sources only, not the SDK's.
-set_source_files_properties(src/blank.c src/crc32.c src/demo.c src/diag.c src/diskimg.c src/drivepanel.c src/diskio.c src/drives.c src/drivecfg.c src/fwpanel.c src/fwupdate.c src/hstx_dvi.c src/keyboard.c
+set_source_files_properties(src/blank.c src/crc32.c src/demo.c src/diag.c src/diskimg.c src/drivepanel.c src/diskio.c src/drives.c src/drivecfg.c src/fwpanel.c src/fwupdate.c src/hstx_dvi.c src/keyboard.c src/led.c
   src/keyname.c src/lz.c src/machine.c src/main.c src/monitor.c src/nvflash.c src/palette.c src/raster.c src/scratch.c src/screen.c src/sdcard.c
   src/settings.c src/setup.c src/splash.c src/term.c src/vt100.c src/vt52.c src/adm3a.c src/serial.c src/uf2.c src/usbkbd.c src/usbmsc.c src/usbvol.c src/video.c src/vtparse.c src/xfer.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")

@@ -80,7 +80,12 @@ GP12-19), optional BOARD_DVI_DRIVE_MA / _SLEW_FAST, BOARD_UART (0/1) +
 BOARD_UART_{TX,RX,CTS,RTS}_PIN (terminal UART, also VIDEO_DIAG; CTS/RTS
 optional; the header points PICO_DEFAULT_UART* at them for hstx_test's
 stdio, before including an SDK board), BOARD_SD_SPI + BOARD_SD_{MISO,CS,SCK,MOSI}_PIN,
-optional BOARD_USB_VBUS_EN_PIN / _LEVEL, optional PICO_DEFAULT_LED_PIN,
+optional BOARD_USB_VBUS_EN_PIN / _LEVEL, optional PICO_DEFAULT_LED_PIN
+(src/led.[ch], bd 1ls.8: off while the screen is on; flashes on/off
+>= 40 ms each on disk_read/disk_write and serial_read/serial_write data;
+with the screen blanked a 100 ms heartbeat each second from led_poll in
+the main loop and cpm_idle, so a hang shows as steady on or off; no-op
+without the pin or with VIDEO_DIAG, which owns it),
 optional BOARD_PSRAM_CS_PIN (XIP_CS1: GP0/8/19/47; main() drives it high
 first thing so the PSRAM stays off the shared QSPI bus; nothing uses the
 PSRAM yet, bd g31).
@@ -99,6 +104,12 @@ SCK 2 / MOSI 3, APS6404L PSRAM CS on GP0, LED GP9; DS3231M RTC on I2C1
 GP10/11 with its 1 Hz on GP8 (unused so far). Slide switch S1 puts the USB
 on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
 CI builds it.
+`boards/feather-rp2350-hstx.h` (bd 1ls.14.1): Adafruit Feather RP2350 with
+HSTX Port on the SDK's adafruit_feather_rp2350.h (8 MB flash, LED GP7,
+PSRAM CS GP8 on some), DVI from the 22-pin FPC per Adafruit's
+CircuitPython pins.c (CLK 14/15, D0 18/19, D1 16/17, D2 12/13, + even),
+UART0 GP0/1 (CTS/RTS GP2/3 = STEMMA QT SDA/SCL), SD SPI0 MISO 20 / SCK 22 /
+MOSI 23 / CS 10 (Adalogger FeatherWing); untested on hardware; CI builds it.
 
 The USB host (keyboards, sticks) is always built in (USB_KEYBOARD=OFF
 was removed: bd s0i). Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
@@ -469,7 +480,7 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   (12 SMs), UART1, SPI1, I2C0/1, PWM, ADC, TIMER1, TRNG, SHA-256, QMI CS1
   (PSRAM; GP8 can carry its select; spike bd g31).
 - GPIO: GP0/1 UART0, GP2/3 CTS/RTS (only with SERIAL_FLOW_CONTROL), GP4-7
-  SD, GP12-19 DVI Sock, GP25 LED (VIDEO_DIAG only), GP23/24/29 board
+  SD, GP12-19 DVI Sock, GP25 LED (status, src/led.c), GP23/24/29 board
   internal. Free: GP8-11, GP20-22, GP26-28 (ADC capable), and GP2/3 when
   flow control is off.
 

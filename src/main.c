@@ -43,6 +43,7 @@
 #include "fwpanel.h"
 #include "fwupdate.h"
 #include "keyname.h"
+#include "led.h"
 #include "machine.h"
 #include "monitor.h"
 #include "nvflash.h"
@@ -110,6 +111,7 @@ static settings_target_t save_target;
 static settings_colours_t colours;   // in use: the status line's
 static unsigned default_columns;     // the SET-UP width in use: what F11 goes back to
 static blank_t blank;                // the Blank after setting: keys keep the screen lit
+static bool screen_blanked;          // blank_tick's answer: the LED's heartbeat runs then
 // The palette shown (built from the Colors and Palette settings).
 static struct {
 	uint16_t table[PALETTE_SIZE];
@@ -774,6 +776,7 @@ static void cpm_feed_keys(uint32_t now_ms) {
 static void cpm_idle(void) {
 	keyboard_poll();
 	serial_poll();
+	led_poll(screen_blanked);
 	if (cpm.running)
 		cpm_feed_keys(to_ms_since_boot(get_absolute_time()));
 	video_update(&screen);
@@ -1098,6 +1101,7 @@ int main(void) {
 #endif
 	apply_line(&settings);
 	diag_mark("serial_init done");
+	led_init();
 	usbkbd_init(send_key, setup_key, NULL);
 	diag_mark("usbkbd_init done");
 
@@ -1191,11 +1195,13 @@ int main(void) {
 		if (setup.active)
 			setup_service();
 		serial_poll();
+		led_poll(screen_blanked);
 
 		uint32_t now = to_ms_since_boot(get_absolute_time());
 		if (setup.active)
 			blank_activity(&blank, now); // not idle while SET-UP is open
-		video_set_blank(blank_tick(&blank, now));
+		screen_blanked = blank_tick(&blank, now);
+		video_set_blank(screen_blanked);
 
 		// DECCOLM re-initialises the whole screen, status line included,
 		// whether or not the width changes.
