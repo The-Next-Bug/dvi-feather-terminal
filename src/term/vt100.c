@@ -1,9 +1,8 @@
-#include "vt100.h"
+#include "term_internal.h"
 
 #include <string.h>
 
 #include "palette.h"
-#include "term_core.h"
 
 #define BS 0x08
 #define HT 0x09

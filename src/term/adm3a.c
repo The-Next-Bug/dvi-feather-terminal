@@ -1,6 +1,5 @@
-#include "adm3a.h"
+#include "term_internal.h"
 
-#include "term_core.h"
 
 #define BS 0x08
 #define HT 0x09

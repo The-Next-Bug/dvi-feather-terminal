@@ -9,11 +9,11 @@
 // - term.c (this API): the cell-level terminal any personality drives:
 //   the cursor, printing with DEC-style deferred autowrap, scrolling (with
 //   a scrolling region), erasing, tab stops, character sets, reverse screen,
-//   80/132 columns and replies to the host. term_core.h has its helpers.
-// - vt100.c (vt100.h): the VT100/VT102 personality, the only one so far:
+//   80/132 columns and replies to the host. term_internal.h has its helpers.
+// - vt100.c: the VT100/VT102 personality, the only one so far:
 //   escape sequences through vtparse, C0 controls, modes, SGR, device
 //   reports, and its VT52 mode (vt52.c).
-// - adm3a.c (adm3a.h): the Lear Siegler ADM-3A, with the Kaypro II's
+// - adm3a.c: the Lear Siegler ADM-3A, with the Kaypro II's
 //   additions (clear to end of line/screen, insert/delete line): 80
 //   columns, no attributes, no replies.
 // term_write and term_reset dispatch on term_t.personality; the SET-UP

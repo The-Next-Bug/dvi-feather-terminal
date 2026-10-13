@@ -6,9 +6,7 @@
 
 #include "font.h"
 #include "palette.h"
-#include "adm3a.h"
-#include "term_core.h"
-#include "vt100.h"
+#include "term_internal.h"
 
 // ---------------------------------------------------------------------------
 // Helpers

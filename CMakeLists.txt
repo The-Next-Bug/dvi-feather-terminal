@@ -56,15 +56,24 @@ if(NOT PICO_PLATFORM MATCHES "^rp2350")
 endif()
 
 set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
-include(cmake/fonts.cmake)
-include(cmake/logo.cmake)
 include(cmake/diskimg.cmake)
 include(cmake/z80pack.cmake)
 include(cmake/dvt.cmake)
 
-# The libraries (src/<name>, bd gr1), the RP2350 ones too.
+# The libraries (src/<name>, bd gr1), the RP2350 ones too. They do not
+# link the SDK's libraries, so they get here the code generation options
+# those give the code that does: pico_standard_link's -ffunction-sections
+# -fdata-sections (without them --gc-sections cannot drop unused functions,
+# which then take SRAM) and pico_float's -fno-math-errno.
 set(DVT_FIRMWARE ON)
+set(DVT_C_OPTIONS
+  $<TARGET_PROPERTY:pico_standard_link,INTERFACE_COMPILE_OPTIONS>
+  -fno-math-errno)
 add_subdirectory(src)
+# Firmware-only settings of portable libraries: the fonts and the logo
+# stay in flash (read through XIP by core 0).
+target_compile_definitions(dvt_screen PUBLIC FONT_FLASH=1)
+target_compile_definitions(dvt_render PRIVATE LOGO_IN_FLASH=$<BOOL:${LOGO_IN_FLASH}>)
 
 # Runs on every build; rewrites term_build.h only when git state changes.
 add_custom_target(build_info
@@ -75,7 +84,6 @@ add_custom_target(build_info
   VERBATIM)
 
 add_executable(dvi_terminal
-  src/blank.c
   src/demo.c
   src/diag.c
   src/led.c
@@ -86,30 +94,19 @@ add_executable(dvi_terminal
   src/fwpanel.c
   src/fwupdate.c
   src/hstx_dvi.c
-  src/keyname.c
   src/machine.c
   src/main.c
   src/monitor.c
   src/nvflash.c
-  src/palette.c
-  src/raster.c
-  src/screen.c
   src/diskio.c
   src/sdcard.c
   src/settings.c
   src/setup.c
-  src/term.c
-  src/vt100.c
-  src/vt52.c
-  src/adm3a.c
   src/serial.c
-  src/splash.c
   src/uf2.c
   src/video.c
   src/usbvol.c
-  src/vtparse.c
   src/xfer.c
-  ${FONT_SOURCES}
   ${DISKIMG_SOURCES}
   ${Z80PACK_SOURCES}
   ${FATFS_SOURCES}
@@ -124,9 +121,9 @@ target_include_directories(dvi_terminal PRIVATE
 )
 
 # Warnings for our sources only, not the SDK's.
-set_source_files_properties(src/blank.c src/demo.c src/diag.c src/diskimg.c src/drivepanel.c src/diskio.c src/drives.c src/drivecfg.c src/fwpanel.c src/fwupdate.c src/hstx_dvi.c src/keyboard.c src/led.c
-  src/keyname.c src/machine.c src/main.c src/monitor.c src/nvflash.c src/palette.c src/raster.c src/screen.c src/sdcard.c
-  src/settings.c src/setup.c src/splash.c src/term.c src/vt100.c src/vt52.c src/adm3a.c src/serial.c src/uf2.c src/usbkbd.c src/usbmsc.c src/usbvol.c src/video.c src/vtparse.c src/xfer.c
+set_source_files_properties(src/demo.c src/diag.c src/diskimg.c src/drivepanel.c src/diskio.c src/drives.c src/drivecfg.c src/fwpanel.c src/fwupdate.c src/hstx_dvi.c src/led.c
+  src/machine.c src/main.c src/monitor.c src/nvflash.c src/sdcard.c
+  src/settings.c src/setup.c src/serial.c src/uf2.c src/usbkbd.c src/usbmsc.c src/usbvol.c src/video.c src/xfer.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 # Cold code (it runs only while files move, or a USB stick comes or goes):
 # small rather than fast, as all code takes SRAM.
@@ -138,7 +135,6 @@ target_compile_definitions(dvi_terminal PRIVATE
   STARTUP_LOGO=$<BOOL:${STARTUP_LOGO}>
   LOGO_MS=${LOGO_MS}
   LOGO_IN_FLASH=$<BOOL:${LOGO_IN_FLASH}>
-  FONT_FLASH=1
   STARTUP_DEMO=$<BOOL:${STARTUP_DEMO}>
   VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>
   SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>
@@ -155,6 +151,10 @@ target_compile_definitions(dvi_terminal PRIVATE
 
 target_link_libraries(dvi_terminal
   dvt_common
+  dvt_input
+  dvt_render
+  dvt_screen
+  dvt_term
   pico_stdlib
   pico_multicore
   hardware_flash
@@ -165,13 +165,9 @@ target_link_libraries(dvi_terminal
   hardware_watchdog
 )
 
-if(STARTUP_LOGO)
-  target_sources(dvi_terminal PRIVATE ${LOGO_SOURCES})
-endif()
-
 # The USB host: keyboards and sticks on the native USB port (tusb_config.h
 # is in src/).
-target_sources(dvi_terminal PRIVATE src/keyboard.c src/usbkbd.c src/usbmsc.c)
+target_sources(dvi_terminal PRIVATE src/usbkbd.c src/usbmsc.c)
 target_link_libraries(dvi_terminal tinyusb_host)
 
 # UART0 belongs to the terminal (serial.c): no stdio on it or on USB.
@@ -193,6 +189,7 @@ pico_add_extra_outputs(dvi_terminal)
 # terminal. HSTX_MODE picks the timing (see src/hstx_dvi.h).
 add_executable(hstx_test src/hstx_test.c src/hstx_dvi.c)
 target_include_directories(hstx_test PRIVATE src)
+target_link_libraries(hstx_test dvt_screen)
 set_source_files_properties(src/hstx_test.c src/hstx_dvi.c PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 target_compile_definitions(hstx_test PRIVATE HSTX_MODE=${HSTX_MODE})
 target_link_libraries(hstx_test pico_stdlib hardware_dma hardware_vreg)

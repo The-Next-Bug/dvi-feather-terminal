@@ -3,8 +3,7 @@
 // ESC Y takes two raw bytes, so it has this small parser instead of
 // vtparse. C0 controls act as in ANSI mode (vt100_execute).
 
-#include "term_core.h"
-#include "vt100.h"
+#include "term_internal.h"
 
 #define ESC 0x1b
 #define CAN 0x18
