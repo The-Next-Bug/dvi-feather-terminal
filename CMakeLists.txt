@@ -60,6 +60,11 @@ include(cmake/fonts.cmake)
 include(cmake/logo.cmake)
 include(cmake/diskimg.cmake)
 include(cmake/z80pack.cmake)
+include(cmake/dvt.cmake)
+
+# The libraries (src/<name>, bd gr1), the RP2350 ones too.
+set(DVT_FIRMWARE ON)
+add_subdirectory(src)
 
 # Runs on every build; rewrites term_build.h only when git state changes.
 add_custom_target(build_info
@@ -70,7 +75,6 @@ add_custom_target(build_info
   VERBATIM)
 
 add_executable(dvi_terminal
-  src/crc32.c
   src/blank.c
   src/demo.c
   src/diag.c
@@ -83,7 +87,6 @@ add_executable(dvi_terminal
   src/fwupdate.c
   src/hstx_dvi.c
   src/keyname.c
-  src/lz.c
   src/machine.c
   src/main.c
   src/monitor.c
@@ -93,7 +96,6 @@ add_executable(dvi_terminal
   src/screen.c
   src/diskio.c
   src/sdcard.c
-  src/scratch.c
   src/settings.c
   src/setup.c
   src/term.c
@@ -122,8 +124,8 @@ target_include_directories(dvi_terminal PRIVATE
 )
 
 # Warnings for our sources only, not the SDK's.
-set_source_files_properties(src/blank.c src/crc32.c src/demo.c src/diag.c src/diskimg.c src/drivepanel.c src/diskio.c src/drives.c src/drivecfg.c src/fwpanel.c src/fwupdate.c src/hstx_dvi.c src/keyboard.c src/led.c
-  src/keyname.c src/lz.c src/machine.c src/main.c src/monitor.c src/nvflash.c src/palette.c src/raster.c src/scratch.c src/screen.c src/sdcard.c
+set_source_files_properties(src/blank.c src/demo.c src/diag.c src/diskimg.c src/drivepanel.c src/diskio.c src/drives.c src/drivecfg.c src/fwpanel.c src/fwupdate.c src/hstx_dvi.c src/keyboard.c src/led.c
+  src/keyname.c src/machine.c src/main.c src/monitor.c src/nvflash.c src/palette.c src/raster.c src/screen.c src/sdcard.c
   src/settings.c src/setup.c src/splash.c src/term.c src/vt100.c src/vt52.c src/adm3a.c src/serial.c src/uf2.c src/usbkbd.c src/usbmsc.c src/usbvol.c src/video.c src/vtparse.c src/xfer.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
 # Cold code (it runs only while files move, or a USB stick comes or goes):
@@ -152,6 +154,7 @@ target_compile_definitions(dvi_terminal PRIVATE
 )
 
 target_link_libraries(dvi_terminal
+  dvt_common
   pico_stdlib
   pico_multicore
   hardware_flash

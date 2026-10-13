@@ -32,7 +32,7 @@ SECTIONS
         *src/palette.c.o(.text* .rodata*)
         *src/xfer.c.o(.text* .rodata*)
         *src/usbmsc.c.o(.text* .rodata*)
-        *src/lz.c.o(.text* .rodata*)
+        *libdvt_common.a:lz.c.o(.text* .rodata*)
         *src/diskimg.c.o(.text* .rodata*)
         *src/keyname.c.o(.text* .rodata*)
         *src/settings.c.o(.text* .rodata*)
