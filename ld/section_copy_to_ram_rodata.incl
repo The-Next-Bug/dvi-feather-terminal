@@ -27,7 +27,7 @@ SECTIONS
         *libdvt_disks.a:drivecfg.c.o(.text* .rodata*)
         *libdvt_screen.a:palette.c.o(.text* .rodata*)
         *libdvt_disks.a:xfer.c.o(.text* .rodata*)
-        *src/usbmsc.c.o(.text* .rodata*)
+        *libdvt_storage.a:usbmsc.c.o(.text* .rodata*)
         *libdvt_common.a:lz.c.o(.text* .rodata*)
         *libdvt_disks.a:diskimg.c.o(.text* .rodata*)
         *libdvt_input.a:keyname.c.o(.text* .rodata*)

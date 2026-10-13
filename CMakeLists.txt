@@ -90,8 +90,6 @@ add_custom_target(build_info
 add_executable(dvi_terminal
   src/hstx_dvi.c
   src/main.c
-  src/diskio.c
-  src/sdcard.c
   src/video.c
 )
 add_dependencies(dvi_terminal build_info)
@@ -102,13 +100,13 @@ target_include_directories(dvi_terminal PRIVATE
 )
 
 # Warnings for our sources only, not the SDK's.
-set_source_files_properties(src/diskio.c src/hstx_dvi.c
-  src/main.c src/sdcard.c
-  src/usbkbd.c src/usbmsc.c src/video.c
+set_source_files_properties(src/hstx_dvi.c
+  src/main.c
+  src/video.c
   PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
-# Cold code (it runs only while files move, or a USB stick comes or goes):
-# small rather than fast, as all code takes SRAM.
-set_property(SOURCE src/usbmsc.c
+# TinyUSB's MSC host is cold code (it runs only while a USB stick comes or
+# goes, or files move): small rather than fast, as all code takes SRAM.
+set_property(SOURCE
   ${PICO_TINYUSB_PATH}/src/class/msc/msc_host.c APPEND PROPERTY COMPILE_OPTIONS "-Os")
 
 target_compile_definitions(dvi_terminal PRIVATE
@@ -134,6 +132,8 @@ target_link_libraries(dvi_terminal
   dvt_machine
   dvt_platform
   dvt_settings
+  dvt_storage
+  dvt_usb
   dvt_input
   dvt_render
   dvt_screen
@@ -149,9 +149,8 @@ target_link_libraries(dvi_terminal
   hardware_watchdog
 )
 
-# The USB host: keyboards and sticks on the native USB port (tusb_config.h
-# is in src/).
-target_sources(dvi_terminal PRIVATE src/usbkbd.c src/usbmsc.c)
+# The USB host: keyboards and sticks on the native USB port (TinyUSB's
+# sources, built here, find tusb_config.h through dvt_usb).
 target_link_libraries(dvi_terminal tinyusb_host)
 
 # UART0 belongs to the terminal (serial.c): no stdio on it or on USB.
