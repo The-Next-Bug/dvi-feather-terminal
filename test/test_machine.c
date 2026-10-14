@@ -399,7 +399,7 @@ static void test_benchmark(void) {
 	CHECK(strstr(screen, "PIP") != NULL);
 }
 
-// WORMS (src/cpm/worms.asm) on the CPM22 disk: colour worms, the options,
+// WORMS (src/machine/cpm/worms.asm) on the CPM22 disk: colour worms, the options,
 // the screen size from a cursor position report, any key back to CP/M.
 static void test_worms(void) {
 	// No size report from this console: 24 x 80; a worm per colour.
@@ -819,7 +819,7 @@ static void test_firmware_panel(void) {
 	CHECK(panel_shows > 10 && panel_shows < 60); // 257 progress calls
 	// Last shown before the commit:
 	CHECK(shown_row(2, "Installing the new firmware: do not power off."));
-	CHECK(shown_row(4, "[##################################################] 100%"));
+	CHECK(shown_row(4, "Afterwards, if USB devices do not work, power the board off and on."));
 	CHECK_EQ(commits, 1);
 	CHECK_EQ(panel_commit_unmounts, 1);
 	CHECK_EQ(f_stat(FWPANEL_FILE, &info), FR_NO_FILE);
@@ -984,7 +984,7 @@ static void command(uint8_t cmd, uint16_t status_at) {
 }
 
 static void test_xfer_port(void) {
-	extern uint8_t bnk0[65536], bnks[][48 * 1024];
+	extern uint8_t bnk0[65536];
 	const uint16_t name = 0x8000, rec = 0x8100, back = 0x8200, banked = 0x8300, st = 0xf000;
 	machine_init(&host_platform);
 	z80.n = 0;
@@ -1026,7 +1026,7 @@ static void test_xfer_port(void) {
 	for (unsigned i = 0; i < sizeof want; ++i)
 		CHECK_EQ(bnk0[st + i], want[i]);
 	CHECK(memcmp(bnk0 + back, bnk0 + rec, XFER_RECORD) == 0);
-	CHECK(memcmp(bnks[0] + banked, bnk0 + rec, XFER_RECORD) == 0);
+	CHECK(memcmp(machine_bank(1) + banked, bnk0 + rec, XFER_RECORD) == 0);
 	// The listing entry: the name and the size (128).
 	CHECK(memcmp(bnk0 + name, "PORT    BIN", XFER_NAME) == 0);
 	CHECK(bnk0[name + 11] == 128 && bnk0[name + 12] == 0 && bnk0[name + 13] == 0 && bnk0[name + 14] == 0);
@@ -1075,7 +1075,7 @@ static bool cpm(const char *line, const char *want) {
 	return found;
 }
 
-// XLS and XPIP (src/cpm) under CP/M, against /XFER on the volume.
+// XLS and XPIP (src/machine/cpm) under CP/M, against /XFER on the volume.
 static void test_xfer_tools(void) {
 	static char text[300];
 	static uint8_t binary[1000];
@@ -1287,6 +1287,9 @@ static void test_boot_cpm3(void) {
 	CHECK(strstr(screen, "Bank 0  the system: banked BDOS and BIOS, disk buffers") != NULL);
 	CHECK(strstr(screen, "Bank 1  the TPA (programs)") != NULL);
 	CHECK(strstr(screen, "Bank 2  not used by CP/M") != NULL);
+	// MEM T tests only bank 2: 0 and 1 are CP/M 3's.
+	CHECK(cpm("MEM T", "Bank 2  ok"));
+	CHECK(strstr(screen, "Bank 1  ok") == NULL);
 
 	// README.TXT's way of changing a default: a SETDEF line put in
 	// PROFILE.SUB with ED, run at the next cold boot.
@@ -1337,7 +1340,7 @@ static void test_cpm3_tools(void) {
 	drives_unmount_all();
 }
 
-// Our banked BIOS (src/cpm/cpm3, bd f8w.4): drives A-H, each of the
+// Our banked BIOS (src/machine/cpm/cpm3, bd f8w.4): drives A-H, each of the
 // formats port 8 reports; what it writes, CP/M 2.2 reads (the same file
 // system layout).
 static void test_cpm3_drives(void) {
@@ -1411,9 +1414,44 @@ static void test_cpm3_drives(void) {
 	CHECK(strstr(screen, "TPA     0100H-E405H: 58118 bytes (56K)") != NULL);
 	CHECK(strstr(screen, "Bank 0  the TPA (programs)") != NULL);
 	CHECK(strstr(screen, "Bank 1  not used by CP/M") != NULL);
+	CHECK(cpm("MEM T", "Bank 1  ok"));
+	CHECK(strstr(screen, "Bank 2  ok") != NULL);
 	drives_unmount_all();
 	CHECK_EQ(f_unlink("/DISKS80/C3HD8.DSK"), FR_OK);
 	CHECK_EQ(f_unlink("/DISKS80/C3HD4.DSK"), FR_OK);
+}
+
+// Banks given to the machine (as the PSRAM build's, machine_set_banks):
+// MEM sees 15, MEM T fills and checks them all, and its last pass (the
+// complement of the address and bank pattern) is in that memory.
+static void test_mem_banks(void) {
+	static uint8_t psram[MACHINE_MAX_BANKS * MACHINE_BANK_SIZE];
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	machine_set_banks(psram, 99); // at most 15
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(machine_banks(), MACHINE_MAX_BANKS);
+	CHECK(machine_bank(1) == psram && machine_bank(15) == psram + 14 * MACHINE_BANK_SIZE);
+	CHECK(machine_bank(0) == NULL && machine_bank(16) == NULL);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("MEM", "Memory  784K: bank 0 64K, banks 1-15 48K each"));
+	CHECK(strstr(screen, "Bank 15  not used by CP/M") != NULL);
+	CHECK(cpm("MEM T", "Bank 15  ok"));
+	CHECK(strstr(screen, "Testing the free banks") != NULL);
+	CHECK(strstr(screen, "Bank 1  ok") != NULL);
+	CHECK(strstr(screen, "wrong") == NULL);
+	bool pattern = true;
+	for (unsigned b = 1; b <= MACHINE_MAX_BANKS; ++b)
+		for (unsigned a = 0; a < MACHINE_BANK_SIZE; a += 97)
+			pattern &= machine_bank(b)[a] == (uint8_t)~((a & 0xff) ^ (a >> 8) ^ b);
+	CHECK(pattern);
+	// Back to the SRAM banks for the tests after this one.
+	machine_set_banks(NULL, 0);
+	machine_init(&host_platform);
+	CHECK_EQ(machine_banks(), 2);
+	drives_unmount_all();
 }
 
 // The disk controller refuses a hard-disk image to a system that has not
@@ -1482,7 +1520,7 @@ static void test_hd_guard(void) {
 	drives_unmount_all();
 }
 
-// ---- TERMTEST (src/cpm/termtest.asm on Z80TESTS) through the terminal ----
+// ---- TERMTEST (src/machine/cpm/termtest.asm on Z80TESTS) through the terminal ----
 
 static screen_t tscreen;
 static term_t tterm;
@@ -1695,7 +1733,7 @@ static void test_termtest(void) {
 	host_console_hook = NULL;
 }
 
-// ---- ALTSCR (src/cpm/altscr.asm on Z80TESTS): the alternate screen ----
+// ---- ALTSCR (src/machine/cpm/altscr.asm on Z80TESTS): the alternate screen ----
 
 // As main.c's: the main screen at up to 132 columns, or it and SET-UP's
 // rows at 80.
@@ -1777,7 +1815,7 @@ static void test_altscr(void) {
 		TROW_HAS(22, text);
 	}
 
-	// SET-UP over the alternate screen at 80 columns, as main.c does it:
+	// SET-UP over the alternate screen at 80 columns, as the terminal does it:
 	// its rows fit beside the main screen and come back.
 	CHECK(type(" "));
 	CHECK_EQ(run_until("Then any key", 30), MACHINE_RUNNING);
@@ -1835,6 +1873,7 @@ int main(void) {
 	RUN(test_cpm3_tools);
 	RUN(test_cpm3_drives);
 	RUN(test_hd_guard);
+	RUN(test_mem_banks);
 	RUN(test_termtest);
 	RUN(test_altscr);
 	drives_unmount_all();

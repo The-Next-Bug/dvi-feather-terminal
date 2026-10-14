@@ -55,7 +55,7 @@ build:
   needs: []
   parallel:
     matrix:
-      - TARGET: [pico2-dvi-sock, frankless, feather-rp2350-hstx]
+      - TARGET: [pico2-dvi-sock, frankless, feather-rp2350-hstx, feather-rp2350-hstx-psram]
   script:
     - git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb
     - scripts/setup-toolchain.sh

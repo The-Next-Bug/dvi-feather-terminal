@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# src/board.h's compile-time checks: every boards/*.h passes them, and pin
-# mistakes stop the build with the right message. board.h only needs
-# pico.h for the board header, so a stub stands in for the SDK.
+# src/board/board.h's compile-time checks: every boards/*.h passes them,
+# and pin mistakes stop the build with the right message. board.h only
+# needs pico.h for the board header, so a stub stands in for the SDK.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,7 +26,7 @@ check() {
     echo '#endif'
   } > "$work/pico.h"
   if out="$("$CC" -fsyntax-only -I"$work" -I"$ROOT/lib/pico-sdk/src/boards/include" \
-      -x c "$ROOT/src/board.h" 2>&1)"; then
+      -x c "$ROOT/src/board/board.h" 2>&1)"; then
     [[ -z "$expect" ]] && return
     echo "FAIL $name: built, expected: $expect"
   else

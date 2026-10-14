@@ -7,10 +7,10 @@ used). The project's own code is under the MIT licence, in `LICENSE`.
 
 | Component | Used for | Licence | Text |
 |---|---|---|---|
-| [Raspberry Pi pico-sdk](https://github.com/raspberrypi/pico-sdk) 2.3.1 | Runtime, hardware drivers; `src/hstx_dvi.c` follows its pico-examples HSTX DVI example (same licence) | BSD-3-Clause | `licenses/pico-sdk-BSD-3-Clause.txt` |
+| [Raspberry Pi pico-sdk](https://github.com/raspberrypi/pico-sdk) 2.3.1 | Runtime, hardware drivers; `src/video/hstx_dvi.c` follows its pico-examples HSTX DVI example (same licence) | BSD-3-Clause | `licenses/pico-sdk-BSD-3-Clause.txt` |
 | CMSIS headers (in pico-sdk) | Cortex-M33 core definitions | Apache-2.0 | `licenses/Apache-2.0.txt` |
 | [TinyUSB](https://github.com/hathach/tinyusb) (in pico-sdk) | USB keyboard (host) | MIT | `licenses/tinyusb-MIT.txt` |
-| [z80pack](https://github.com/udo-munk/z80pack) | Z80 CPU core, disk controller, assembler, CP/M and disk images, vendored (`lib/z80pack`, see its `UPSTREAM.md`); `src/machine.c` and `src/z80pack/` follow its picosim | MIT | `licenses/z80pack-MIT.txt` |
+| [z80pack](https://github.com/udo-munk/z80pack) | Z80 CPU core, disk controller, assembler, CP/M and disk images, vendored (`lib/z80pack`, see its `UPSTREAM.md`); `src/machine/machine.c` and `src/machine/z80pack/` follow its picosim | MIT | `licenses/z80pack-MIT.txt` |
 | z80pack `z80core/log.h` (David McNaughton, from ESP-IDF) | Logging macros compiled into the CPU core | Apache-2.0 | `licenses/Apache-2.0.txt` |
 | [FatFs](http://elm-chan.org/fsw/ff/) R0.15a (ChaN) | FAT file system on the SD card (`lib/fatfs`) | 1-clause BSD | `licenses/FatFs-BSD-1-Clause.txt` |
 | [Terminus Font](https://terminus-font.sourceforge.net/) 8x16 (Dimitar Toshkov Zhekov) | 80-column glyphs (the generated table is a derivative) | SIL OFL 1.1 | `licenses/Terminus-OFL-1.1.txt` |
@@ -24,7 +24,7 @@ Z80 machine's monitor can write to an SD card:
 
 - `CPM22` (z80pack `picosim/disks/cpm22.dsk`): Digital Research CP/M 2.2
   and its utilities, with z80pack's tools; its system tracks hold CP/M's
-  CCP and BDOS moved to 62K and our BIOS and boot loader (`src/cpm`,
+  CCP and BDOS moved to 62K and our BIOS and boot loader (`src/machine/cpm`,
   derived from z80pack picosim's, MIT). CP/M is © Digital
   Research / Caldera. In 2001 Lineo (Caldera's successor) granted the right
   to use, distribute and modify the CP/M material made available by "The

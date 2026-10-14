@@ -28,7 +28,7 @@ copies or reuses his code.
 Every portable, host-tested module: screen, vtparse, term with the VT100 /
 VT52 / ADM-3A personalities, keyboard, keyname, blank, settings, setup,
 drivepanel, fwpanel's UI, machine.c with the z80pack core, drives, xfer,
-monitor, usbvol, lz, diskimg, crc32, and all of src/cpm (BIOSes, tools,
+monitor, usbvol, lz, diskimg, crc32, and all of src/machine/cpm (BIOSes, tools,
 built-in disks). That is most of the logic: the "no pico-sdk headers in
 portable modules" rule is what makes a port thinkable.
 
@@ -86,11 +86,13 @@ Most of it lands on tickets that already exist:
   as a second machine personality, written fresh from its port
   documentation, after settling the licence question (the fZ80 code is
   personal-use only and cannot be copied). Do (a); keep (b) as research.
-- **Platform split.** main.c (~1200 lines) calls pico-sdk directly (time,
-  GPIO, watchdog, multicore). A port first needs a thin `platform.h` (time,
-  reboot, LED, idle) with `src/rp2350/` and `src/teensy41/` behind it, and
-  the video, serial, USB and flash drivers moved there. Worth doing on its
-  own before any second architecture.
+- **Platform split.** Partly done by the library restructure (bd gr1):
+  the RP2350 code is in its own libraries (src/board, platform, usb,
+  storage, video), apart from the portable ones, and the program is
+  apps/terminal. Its files still call pico-sdk directly (time, GPIO,
+  watchdog, multicore). A port needs a thin `platform.h` (time, reboot,
+  LED, idle) for apps/terminal, and Teensy 4.1 counterparts of the RP2350
+  libraries. Worth doing on its own before any second architecture.
 - **Windows and H19.** The fZ80 has four VGA windows with H19/H89 escapes.
   An H19 personality fits the term personality split (vt52.c is close: the
   H19 is a VT52 plus extensions). Windows would be new screen-level work.

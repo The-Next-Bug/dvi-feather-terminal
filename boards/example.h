@@ -4,7 +4,7 @@
 //
 // The file is a pico-sdk board header (the SDK's CMake finds it through
 // PICO_BOARD_HEADER_DIRS and reads its pico_board_cmake_set lines) with the
-// terminal's pins added. src/board.h checks the pins at compile time: wrong
+// terminal's pins added. src/board/board.h checks the pins at compile time: wrong
 // GPIOs for a peripheral, a pin used twice, or a missing setting stop the
 // build with an #error that names the setting. Give pins as plain decimal
 // numbers: some are also shown on screen (e.g. "none found (SPI0: GP4 ...").
@@ -29,14 +29,14 @@ pico_board_cmake_set(PICO_PLATFORM, rp2350)
 
 // The QSPI flash chip. The W25Q080 boot stage 2 suits most Winbond-like
 // parts; the firmware switches flash reads to the plain 03h command after
-// raising the clock anyway (src/nvflash.c).
+// raising the clock anyway (src/platform/nvflash.c).
 #define PICO_BOOT_STAGE2_CHOOSE_W25Q080 1
 #ifndef PICO_FLASH_SPI_CLKDIV
 #define PICO_FLASH_SPI_CLKDIV 2
 #endif
 
 // Flash size. The firmware puts the update staging area at half of it and
-// the settings at the end (src/fwupdate.h, src/nvflash.h), so the largest
+// the settings at the end (src/platform/fwupdate.h, src/platform/nvflash.h), so the largest
 // firmware image is a little under half the flash: about 1 MB with 2 MB of
 // flash, against an image of about 0.5 MB today.
 pico_board_cmake_set_default(PICO_FLASH_SIZE_BYTES, (4 * 1024 * 1024))
@@ -133,7 +133,7 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 // --- LED ---
 //
 // Flashes on SD card, USB stick and serial activity, and once a second
-// while the screen is blanked (src/led.c); VIDEO_DIAG builds and hstx_test
+// while the screen is blanked (src/platform/led.c); VIDEO_DIAG builds and hstx_test
 // blink it their own way. Leave it out if the board has none.
 #define PICO_DEFAULT_LED_PIN 25
 

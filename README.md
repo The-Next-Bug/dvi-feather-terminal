@@ -128,8 +128,9 @@ Board headers so far (only the DVI Sock is checked on hardware):
 | `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default) |
 | `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS |
 | `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing) |
+| `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
 
-`src/board.h` checks the header when it compiles. A missing setting, a pin
+`src/board/board.h` checks the header when it compiles. A missing setting, a pin
 that cannot carry its signal, or a pin used twice stops the build with an
 error that names the setting (`test/test_board.sh` covers the checks). The
 messages that show pins on screen use the header's pins.
@@ -387,7 +388,7 @@ add it to cpmtools' `diskdefs` file, then e.g. `cpmls -f dvi-hd8 DISK.DSK`
 
 Drive A must hold a bootable 8" floppy: CP/M reloads itself from its system
 tracks on every warm boot. The built-in `CPM22` is a 62K CP/M 2.2 with a
-BIOS for the eight drives and the three formats (`src/cpm`).
+BIOS for the eight drives and the three formats (`src/machine/cpm`).
 
 ### Other operating systems
 
@@ -400,7 +401,7 @@ instead of reading a hard disk as a floppy and writing over it).
 - **CP/M 3** (built in): mount `CPM31` on A: and `CPM32` on B: in the
   monitor and boot (Return); mount `CPM22` on A: again to go back. The
   banked system uses bank 1, so the default build runs it. Its BIOS is
-  ours (`src/cpm/cpm3`): eight drives, A-H, each any of the image
+  ours (`src/machine/cpm/cpm3`): eight drives, A-H, each any of the image
   formats, as under CP/M 2.2, with a 61K TPA. Mounting another image on a
   drive while CP/M 3 runs needs no `^C`: the BIOS tells the BDOS the
   media changed (port 8 gives each drive's format and a count of the
@@ -422,13 +423,14 @@ instead of reading a hard disk as a floppy and writing over it).
   generated for picosim's six user banks, but this machine has two
   (`MACHINE_BANKS`), and the machine stops (`MMU: no bank 3`) when MP/M
   selects a bank it does not have. Regenerate `MPM.SYS` for two banks with
-  `GENSYS` from `mpm-2.dsk` first.
+  `GENSYS` from `mpm-2.dsk` first. The `feather-rp2350-hstx-psram` build
+  has 15 banks, enough for picosim's `MPM.SYS` as it is (not tried yet).
 
 MP/M II has not been tested on this board yet.
 
 ### MEM
 
-`CPM22` and `CPM32` carry `MEM` (`src/cpm/mem.asm`): the CP/M version,
+`CPM22` and `CPM32` carry `MEM` (`src/machine/cpm/mem.asm`): the CP/M version,
 the TPA (the room programs get, up to the BDOS or an RSX below it), the
 machine's memory from the MMU, and what each bank holds:
 
@@ -441,9 +443,28 @@ Bank 1  the TPA (programs)
 Bank 2  not used by CP/M
 ```
 
+`MEM T` then tests the banks CP/M does not use (all but bank 0 and the
+TPA's; not under MP/M), for instance the PSRAM of the
+`feather-rp2350-hstx-psram` build: every free bank is filled with a
+pattern made from the address and the bank number, then each is read
+back, and again with the complement, so every bit is written both ways
+and two banks that land on the same memory show up as errors. It changes
+those banks' contents, and runs with interrupts off while another bank is
+selected (from C000H, in common memory). Under CP/M 2.2 on that build:
+
+```
+Testing the free banks (two passes)...
+Bank 1  ok
+...
+Bank 15  ok
+```
+
+A bank with errors shows how many bytes were wrong (`Bank 3  12 bytes
+wrong`).
+
 ### WORMS
 
-`CPM22` also carries `WORMS` (`src/cpm/worms.asm`): worms wandering about
+`CPM22` also carries `WORMS` (`src/machine/cpm/worms.asm`): worms wandering about
 the screen after BSD worms(6), each in its own color and glyph. It asks the
 terminal for the screen size, so it fills 132 columns too. Any key ends it.
 
@@ -461,7 +482,7 @@ For example `WORMS -N 10 -L 30 -F` or `WORMS -C -N 6 -L 40`.
 
 ### TERMTEST
 
-`Z80TESTS` carries `TERMTEST` (`src/cpm/termtest.asm`), a check of the
+`Z80TESTS` carries `TERMTEST` (`src/machine/cpm/termtest.asm`), a check of the
 [terminal types](#terminal-types): run `B:TERMTEST` with `Z80TESTS` on B:,
 pick the type the terminal is set to (for VT52, leave it on VT100:
 TERMTEST switches it with `CSI ? 2 l` and back with `ESC <`), then any
@@ -474,7 +495,7 @@ again from the monitor to get it onto a card that already has the disk.
 
 ### ALTSCR
 
-`Z80TESTS` also carries `ALTSCR` (`src/cpm/altscr.asm`), a check of the
+`Z80TESTS` also carries `ALTSCR` (`src/machine/cpm/altscr.asm`), a check of the
 alternate screen with the VT100 terminal type: run `B:ALTSCR`. It fills the
 main screen with numbered rows in bold, underlined yellow and reverse, with
 an X in the middle, then goes to the alternate screen with `?1049`, `?1047`
@@ -486,7 +507,7 @@ Any key goes on; Ctrl-C leaves at once.
 
 ### Moving files
 
-`CPM22` (and `CPM32` for CP/M 3) carries three tools (`src/cpm/xls.asm`, `xpip.asm`, `xera.asm`)
+`CPM22` (and `CPM32` for CP/M 3) carries three tools (`src/machine/cpm/xls.asm`, `xpip.asm`, `xera.asm`)
 that move files between CP/M disks and the folder `/XFER` on the SD card
 (`SD:`) or on a USB stick (`USB:`): `XLS` lists the folder, `XPIP` copies,
 `XERA` erases. Files go in and out without image tools on a PC. A
@@ -635,8 +656,8 @@ The machine is picosim's:
 | 4 | disk controller |
 | 5/6 | printer (none) |
 | 8 | the disk in a drive, for our BIOSes (ours, not picosim's): OUT the drive, IN its format (0 none, 1 8" floppy, 2 4 MB, 3 8 MB), IN again the count of images mounted on it. A hard-disk image is refused to a system that has not asked about its drive since the reset |
-| 10 | file transfer: files in the `/XFER` folder of the SD card or a USB stick, a 128-byte record at a time by DMA, for `XLS`, `XPIP` and `XERA` (ours; `src/machine.h` has the commands) |
-| 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II uses as many as it was generated for, see [Other operating systems](#other-operating-systems)) |
+| 10 | file transfer: files in the `/XFER` folder of the SD card or a USB stick, a 128-byte record at a time by DMA, for `XLS`, `XPIP` and `XERA` (ours; `src/machine/machine.h` has the commands) |
+| 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II uses as many as it was generated for, see [Other operating systems](#other-operating-systems)), or with `PSRAM_BANKS` up to 15 in the PSRAM; reads the number of banks in the high nibble (so 15 at most) and the selected one in the low |
 | 65/66 | clock (no RTC: it starts at 1 Jan 2026 at power-on) |
 | 67 | 60 Hz timer interrupt |
 | 160 | hardware control |
@@ -666,6 +687,11 @@ fits), shows its size and asks; **Y** then:
    from), so it is not installed twice, and closes the disks;
 3. copies the image over the running firmware (a few seconds; the screen
    says not to power off) and restarts with it. The settings are kept.
+
+A full power cycle after an update (unplug the board, plug it back in) is
+recommended: the USB host (keyboard, sticks) has been seen not working
+after the update's restart until the power was cycled. The panel says so
+while it installs.
 
 If the power fails during step 3 the board will not start: flash it over
 USB with BOOTSEL as in `docs/FLASHING.txt`, which always works.
@@ -715,6 +741,7 @@ every job). pico-sdk is upgraded by moving its submodule (and the image's
 | `LOGO_IN_FLASH` | ON | experimental: keep the logo data in flash, copied out only while it shows (saves about 19 KB of SRAM); OFF copies it into SRAM with the program |
 | `STARTUP_DEMO` | OFF | run the demo after the logo |
 | `MACHINE_BANKS` | 2 | Z80 machine: 48 KB banks besides bank 0 (each costs 48 KB of SRAM; a third does not fit) |
+| `PSRAM_BANKS` | OFF | Z80 machine: the banks in the board's QSPI PSRAM (QMI chip select 1) instead, as many as fit up to 15, none in SRAM; set by `boards/feather-rp2350-hstx-psram.h`. Without a PSRAM chip at boot the machine has no banks |
 | `HSTX_MODE` | 0 | 0: 800x600 at 60 Hz; 1: at 56 Hz (clk_hstx 180 MHz); 2: 60 Hz reduced blanking (177 MHz). 1 and 2 are slower fallbacks |
 | `VIDEO_DIAG` | OFF | bring-up diagnostics on UART0 TX: boot markers, core 1 scanline timing, fault reports |
 | `COPY_TO_RAM` | ON | run from SRAM; must stay ON (see [How it works](#how-it-works)) |
@@ -722,7 +749,7 @@ every job). pico-sdk is upgraded by moving its submodule (and the image's
 ## How it works
 
 Video comes from the RP2350's HSTX, whose TMDS encoder turns RGB565 pixels
-into DVI (`src/hstx_dvi.c`, after Raspberry Pi's
+into DVI (`src/video/hstx_dvi.c`, after Raspberry Pi's
 `pico-examples/hstx/dvi_out_hstx_encoder`): 800x600 at 60 Hz, a 40 MHz pixel
 clock, so clk_hstx 200 MHz and clk_sys 400 MHz (1.3 V). Two DMA channels
 feed it blanking command lists and scanlines in turn. `hstx_test.uf2`,
@@ -730,18 +757,18 @@ built alongside, shows a test pattern for checking a monitor and the
 clocks.
 
 - **Core 0** runs the terminal: UART0 receive interrupt into a ring buffer
-  (`src/serial.c`), the escape sequence parser (`src/vtparse.c`, Paul
-  Williams' DEC state machine), the terminal (`src/term.c` with the
-  personalities `src/vt100.c`, `vt52.c` and `adm3a.c`) on a cell
-  buffer (`src/screen.c`), rasterization of changed lines (glyph bits per
+  (`src/platform/serial.c`), the escape sequence parser (`src/term/vtparse.c`, Paul
+  Williams' DEC state machine), the terminal (`src/term/term.c` with the
+  personalities `src/term/vt100.c`, `vt52.c` and `adm3a.c`) on a cell
+  buffer (`src/screen/screen.c`), rasterization of changed lines (glyph bits per
   cell with the attributes applied, and each cell's colors:
-  `src/raster.c`, driven by `video_update` in `src/video.c`), and the USB
-  keyboard: TinyUSB host (`src/usbkbd.c`) with boot protocol reports turned
-  into VT100 key codes (`src/keyboard.c`). In CP/M mode it also runs the
+  `src/render/raster.c`, driven by `video_update` in `src/video/video.c`), and the USB
+  keyboard: TinyUSB host (`src/usb/usbkbd.c`) with boot protocol reports turned
+  into VT100 key codes (`src/input/keyboard.c`). In CP/M mode it also runs the
   Z80.
 - **Core 1** composes each scanline from those into RGB565 pixels a couple
   of lines ahead of the DMA, inverts the cursor cell in the blink-on phase,
-  and decodes the startup logo (`src/video.c`, `raster_compose`); the DMA
+  and decodes the startup logo (`src/video/video.c`, `raster_compose`); the DMA
   interrupt runs on core 1 too.
 
 The firmware runs entirely from SRAM (`COPY_TO_RAM`): the boot-time flash
@@ -750,7 +777,7 @@ clock.
 
 ### Fonts and glyph codes
 
-The screen buffer stores one-byte glyph codes (see `src/font.h`): ASCII at
+The screen buffer stores one-byte glyph codes (see `src/screen/font.h`): ASCII at
 0x20-0x7E, Latin-1 at 0xA0-0xFF, DEC Special Graphics (line drawing) at
 0x01-0x1F, and shades/blocks/double-line box drawing at 0x80-0x9F. The
 tables are generated at build time: Terminus 10x20 for 80 columns (bold
@@ -762,7 +789,7 @@ scan lines, half blocks) are drawn by `font_gen.py`.
 
 ### Startup logo
 
-`LOGO_IMAGE` is converted at build time by `src/logo_gen.py` (Python
+`LOGO_IMAGE` is converted at build time by `src/render/logo_gen.py` (Python
 standard library only). It must be a non-interlaced 8-bit PNG, at most
 800x576 (576 is the 24 text rows; the status line stays below) and a
 multiple of 8 pixels wide; alpha is composited over black, and it is shown
@@ -789,7 +816,7 @@ terminal for the erase (typically 30-50 ms); the picture stays up, as the
 program runs from RAM. The flash is written with the 400 MHz DVI clock
 running: the ROM's erase/program routines run its serial clock at
 clk_sys / 12, and reads are set back to at most 50 MHz afterwards (see
-`src/nvflash.c`).
+`src/platform/nvflash.c`).
 
 ### Resources used
 
@@ -807,7 +834,9 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 
 | Path | Contents |
 |---|---|
-| `src/` | Firmware; see below |
+| `src/` | The firmware's libraries; see below |
+| `apps/` | The programs: `terminal/` (the firmware) and `hstx_test/` (HSTX test pattern) |
+| `ld/` | Linker script override: the cold code that stays in flash |
 | `boards/` | Board headers: pins, flash, crystal per build target; `example.h` is the template (see [Other boards](#other-boards)) |
 | `test/` | Host unit tests (plain CMake + gcc with ASan/UBSan, no pico-sdk) |
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see [Trying it from a PC](#trying-it-from-a-pc)) |
@@ -817,7 +846,7 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | `assets/logo/` | The startup logo (PNG used by the build, JPEG original) |
 | `assets/fonts/` | Terminus Font 10x20 and its bold face (SIL OFL 1.1) and misc-fixed 6x12 (public domain); see its README |
 | `cmake/build_info.cmake` | Generates `term_build.h` (git describe, commit, date) on every build |
-| `cmake/fonts.cmake` | Font table generation, shared by the firmware and host tests |
+| `cmake/dvt.cmake` | Helpers for the libraries, shared by the firmware and host tests |
 | `scripts/` | `setup-toolchain.sh`, `build.sh`, `test.sh`, `package.sh`, `changelog.sh` |
 | `LICENSE` | The project's MIT license |
 | `toolchain.env` | Pinned CMake, Arm GNU Toolchain and picotool versions |
@@ -825,38 +854,36 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | `docs/cpmtools-diskdefs` | cpmtools definition of the 8 MB disk format |
 | `docs/THIRD-PARTY.md`, `docs/licenses/` | Third-party components and licenses (shipped, with the texts from the submodules, in `licenses/`) |
 
-In `src/`:
+The code is in libraries, one directory each under `src/` (static
+libraries `dvt_<name>`, after
+[CGA_LCD_Capture](https://github.com/arlaneenalra/CGA_LCD_Capture)): a
+library's public headers sit next to its sources, and a header only its
+own files share is named `<name>_internal.h`. A library is either portable
+(no pico-sdk; the host tests build it) or RP2350-only. `cmake/dvt.cmake`
+has the helpers; `src/CMakeLists.txt` lists the libraries.
 
-- **Terminal, portable and host-tested**: `screen.[ch]` (cell buffer),
-  `vtparse.[ch]` (escape sequence parser), `term.[ch]` (the terminal; its
-  personalities `vt100.[ch]` with `vt52.c`, and `adm3a.[ch]`),
-  `palette.[ch]` (the 256-color palette per Colors/Palette setting),
-  `raster.[ch]` (cells to pixels), `keyboard.[ch]` (HID keys to VT100
-  codes), `keyname.[ch]` (key names for the status line), `splash.[ch]`
-  (startup logo decoding), `settings.[ch]` (settings records),
-  `setup.[ch]` (SET-UP panel), `blank.[ch]` (screen blanking timer),
-  `demo.[ch]`, `crc32.[ch]`, `uf2.[ch]` (UF2 file checks for the firmware
-  update).
-- **Z80 machine, portable**: `machine.[ch]` (z80pack glue; `z80pack/`
-  holds its configuration headers), `monitor.[ch]`, `drives.[ch]` (disk
-  images on FatFs), `drivecfg.c` (`DRIVES.CFG`, the image list and the drive sets),
-  `drivepanel.[ch]` (SET-UP's Drives panel),
-  `fwpanel.[ch]` (SET-UP's firmware update), `xfer.[ch]` (port 10's
-  files: `/XFER`), `usbvol.[ch]` (which USB stick is `USB:`), `cpm/` (the
-  CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA, TERMTEST, ALTSCR and MEM, and in `cpm3/` CP/M 3's
-  banked BIOS, made into `CPM3.SYS` at build time; see its README), `diskimg.[ch]` and `lz.[ch]` (the built-in
-  images).
-- **RP2350**: `main.c`, `board.h` (the board header's pins, checked),
-  `hstx_dvi.[ch]` (HSTX DVI output), `video.[ch]`
-  (scanlines on core 1), `hstx_test.c` (test pattern), `serial.[ch]` (UART
-  with optional RTS/CTS and a TX queue), `nvflash.[ch]` (settings sectors,
-  written at the DVI clock), `sdcard.[ch]` (SPI SD card for FatFs),
-  `diskio.c` (FatFs drives: 0 the SD card, 1 a USB stick),
-  `fwupdate.[ch]` (firmware update from the SD card), `usbkbd.[ch]`,
-  `usbmsc.[ch]` (USB sticks), `tusb_config.h` (TinyUSB host) and
-  `diag.[ch]` (`VIDEO_DIAG`).
-- **Build-time generators**: `font_gen.py` (font tables), `logo_gen.py`
-  (the logo), `diskimg_gen.py` (the compressed disk images).
+| Library | | |
+|---|---|---|
+| `common` | portable | `crc32`, `lz` (LZ4-format decoder), `scratch` (the shared 4 KB buffer) |
+| `screen` | portable | `screen` (cell buffer, saved rows), `palette` (the 256-color palette per Colors/Palette setting), `font.h` (glyph codes) |
+| `term` | portable | `term.[ch]` (the terminal) with its personalities `vt100.c`, `vt52.c` and `adm3a.c` (sharing `term_internal.h`), `vtparse` (escape sequence parser) |
+| `render` | portable | `raster` (cells to pixels), `splash` (startup logo); generated font tables and logo (`font_gen.py`, `logo_gen.py`) |
+| `input` | portable | `keyboard` (HID keys to VT100 codes), `keyname` (key names for the status line), `blank` (screen blanking timer) |
+| `settings` | portable | `settings` (settings records), `uf2` (UF2 file checks for the firmware update) |
+| `machine` | portable | `machine` (the Z80 machine: z80pack glue; `z80pack/` holds its configuration headers), `cpm/` (the CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA, TERMTEST, ALTSCR and MEM, and in `cpm3/` CP/M 3's banked BIOS, made into `CPM3.SYS` at build time; see its README) |
+| `disks` | portable | `drives` (disk images on FatFs), `drivecfg.c` (`DRIVES.CFG`, the image list and the drive sets), `diskimg` (the built-in images; `diskimg_gen.py` compresses them), `xfer` (port 10's files: `/XFER`), `usbvol` (which USB stick is `USB:`) |
+| `ui` | portable | `setup` (SET-UP panel), `drivepanel` (SET-UP's Drives panel), `fwpanel` (SET-UP's firmware update), `monitor` (the CP/M machine's monitor), `demo` |
+| `board` | RP2350 | `board.h` (the board header's pins, checked) |
+| `platform` | RP2350 | `serial` (UART with optional RTS/CTS and a TX queue), `led`, `nvflash` (settings sectors, written at the DVI clock), `fwupdate` (firmware update), `diag` (`VIDEO_DIAG`) |
+| `usb` | RP2350 | `usbkbd` (USB keyboards), `tusb_config.h` (TinyUSB host) |
+| `storage` | RP2350 | `diskio.c` (FatFs drives: 0 the SD card, 1 a USB stick), `sdcard` (SPI SD card), `usbmsc` (USB sticks) |
+| `video` | RP2350 | `hstx_dvi` (HSTX DVI output), `video` (scanlines on core 1) |
+
+The programs are in `apps/`: `apps/terminal/` (`dvi_terminal.uf2`:
+`main.c` with `setup_glue.c`, `cpm_glue.c`, `status.c` and
+`input_glue.c`, sharing `terminal.h`) and `apps/hstx_test/` (the HSTX
+test pattern). FatFs (`lib/fatfs`, `lib/fatfs.cmake`) and z80pack's CPU
+(`lib/z80pack`, built by `src/machine`) are vendored.
 
 ## CI and releasing
 
@@ -885,18 +912,18 @@ Planned work and known issues are tracked with `bd` (beads): `bd ready`,
 
 This project's own code and documentation are under the MIT license; see
 `LICENSE`. Files derived from other projects keep their original notices
-(`src/hstx_dvi.c` from pico-examples; `src/machine.c`, `src/z80pack/` and
-`src/cpm/` from z80pack's picosim, also MIT). The third-party parts:
+(`src/video/hstx_dvi.c` from pico-examples; `src/machine/machine.c`, `src/machine/z80pack/` and
+`src/machine/cpm/` from z80pack's picosim, also MIT). The third-party parts:
 
 Terminus Font is © Dimitar Toshkov Zhekov under the SIL Open Font License
 1.1; see `assets/fonts/Terminus-OFL.txt`. The tables generated from it
 are derivatives and stays under that license. The misc-fixed 6x12 font is
 public domain. pico-sdk is BSD-3-Clause, as is the pico-examples HSTX DVI
-example `src/hstx_dvi.c` follows.
+example `src/video/hstx_dvi.c` follows.
 
 TinyUSB (in pico-sdk) is MIT; pico-sdk's CMSIS headers are Apache-2.0.
 z80pack is © Udo Munk and others under the MIT license (`lib/z80pack/LICENSE`);
-`src/machine.c` and `src/z80pack/` follow its picosim, and its CPU core
+`src/machine/machine.c` and `src/machine/z80pack/` follow its picosim, and its CPU core
 includes `log.h` (Apache-2.0). FatFs is © ChaN under a 1-clause BSD license
 (`lib/fatfs/LICENSE.txt`). The built-in disk images come from z80pack: CP/M
 2.2 and CP/M 3 are Digital Research's, redistributed under the permission Lineo

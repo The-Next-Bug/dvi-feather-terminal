@@ -44,6 +44,11 @@ set(HSTX_MODE 0 CACHE STRING "HSTX video mode: 0 800x600@60, 1 800x600@56, 2 800
 # bank 0. CP/M 2.2 needs none, CP/M 3 one; MP/M wants as many as it was
 # generated for.
 set(MACHINE_BANKS 2 CACHE STRING "Z80 machine: number of 48 KB banks (MMU port 64)")
+# Or the banks in a QSPI PSRAM on the QMI's second chip select (as many as
+# fit, up to 15; none in SRAM): src/platform/extram.c. A board header turns
+# it on with pico_board_cmake_set(PSRAM_BANKS, 1)
+# (boards/feather-rp2350-hstx-psram.h).
+option(PSRAM_BANKS "Z80 machine: banks in the board's PSRAM instead of SRAM" OFF)
 
 include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
@@ -54,146 +59,35 @@ pico_sdk_init()
 if(NOT PICO_PLATFORM MATCHES "^rp2350")
   message(FATAL_ERROR "PICO_BOARD ${PICO_BOARD} is ${PICO_PLATFORM}: only RP2350 boards are supported")
 endif()
-
-set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
-include(cmake/fonts.cmake)
-include(cmake/logo.cmake)
-include(cmake/diskimg.cmake)
-include(cmake/z80pack.cmake)
-
-# Runs on every build; rewrites term_build.h only when git state changes.
-add_custom_target(build_info
-  COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_CURRENT_LIST_DIR}
-          -DOUTPUT=${GENERATED}/term_build.h
-          -P ${CMAKE_CURRENT_LIST_DIR}/cmake/build_info.cmake
-  BYPRODUCTS ${GENERATED}/term_build.h
-  VERBATIM)
-
-add_executable(dvi_terminal
-  src/crc32.c
-  src/blank.c
-  src/demo.c
-  src/diag.c
-  src/led.c
-  src/diskimg.c
-  src/drivepanel.c
-  src/drives.c
-  src/drivecfg.c
-  src/fwpanel.c
-  src/fwupdate.c
-  src/hstx_dvi.c
-  src/keyname.c
-  src/lz.c
-  src/machine.c
-  src/main.c
-  src/monitor.c
-  src/nvflash.c
-  src/palette.c
-  src/raster.c
-  src/screen.c
-  src/diskio.c
-  src/sdcard.c
-  src/scratch.c
-  src/settings.c
-  src/setup.c
-  src/term.c
-  src/vt100.c
-  src/vt52.c
-  src/adm3a.c
-  src/serial.c
-  src/splash.c
-  src/uf2.c
-  src/video.c
-  src/usbvol.c
-  src/vtparse.c
-  src/xfer.c
-  ${FONT_SOURCES}
-  ${DISKIMG_SOURCES}
-  ${Z80PACK_SOURCES}
-  ${FATFS_SOURCES}
-)
-add_dependencies(dvi_terminal build_info diskimg_data)
-
-target_include_directories(dvi_terminal PRIVATE
-  src
-  ${GENERATED}
-  ${Z80PACK_INCLUDE_DIRS}
-  ${FATFS_INCLUDE_DIR}
-)
-
-# Warnings for our sources only, not the SDK's.
-set_source_files_properties(src/blank.c src/crc32.c src/demo.c src/diag.c src/diskimg.c src/drivepanel.c src/diskio.c src/drives.c src/drivecfg.c src/fwpanel.c src/fwupdate.c src/hstx_dvi.c src/keyboard.c src/led.c
-  src/keyname.c src/lz.c src/machine.c src/main.c src/monitor.c src/nvflash.c src/palette.c src/raster.c src/scratch.c src/screen.c src/sdcard.c
-  src/settings.c src/setup.c src/splash.c src/term.c src/vt100.c src/vt52.c src/adm3a.c src/serial.c src/uf2.c src/usbkbd.c src/usbmsc.c src/usbvol.c src/video.c src/vtparse.c src/xfer.c
-  PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
-# Cold code (it runs only while files move, or a USB stick comes or goes):
-# small rather than fast, as all code takes SRAM.
-set_property(SOURCE src/xfer.c src/usbvol.c src/usbmsc.c
-  ${PICO_TINYUSB_PATH}/src/class/msc/msc_host.c APPEND PROPERTY COMPILE_OPTIONS "-Os")
-
-target_compile_definitions(dvi_terminal PRIVATE
-  HSTX_MODE=${HSTX_MODE}
-  STARTUP_LOGO=$<BOOL:${STARTUP_LOGO}>
-  LOGO_MS=${LOGO_MS}
-  LOGO_IN_FLASH=$<BOOL:${LOGO_IN_FLASH}>
-  FONT_FLASH=1
-  STARTUP_DEMO=$<BOOL:${STARTUP_DEMO}>
-  VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>
-  SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>
-  MACHINE_BANKS=${MACHINE_BANKS}
-  # The built-in disk images stay in flash (read by core 0 when installed).
-  DISKIMG_IN_FLASH=1
-  # The compose loop needs very little stack.
-  PICO_CORE1_STACK_SIZE=0x200
-  # Nothing prints floating point: its printf code (and the soft-float it
-  # pulls in) would only take SRAM.
-  PICO_PRINTF_SUPPORT_FLOAT=0
-  PICO_PRINTF_SUPPORT_EXPONENTIAL=0
-)
-
-target_link_libraries(dvi_terminal
-  pico_stdlib
-  pico_multicore
-  hardware_flash
-  hardware_uart
-  hardware_dma
-  hardware_spi
-  hardware_vreg
-  hardware_watchdog
-)
-
-if(STARTUP_LOGO)
-  target_sources(dvi_terminal PRIVATE ${LOGO_SOURCES})
+if(PSRAM_BANKS)
+  set(MACHINE_BANKS 0) # all of them in the PSRAM: 96 KB of SRAM free
+  message(STATUS "Z80 banks in PSRAM (PSRAM_BANKS)")
 endif()
 
-# The USB host: keyboards and sticks on the native USB port (tusb_config.h
-# is in src/).
-target_sources(dvi_terminal PRIVATE src/keyboard.c src/usbkbd.c src/usbmsc.c)
-target_link_libraries(dvi_terminal tinyusb_host)
+include(cmake/dvt.cmake)
 
-# UART0 belongs to the terminal (serial.c): no stdio on it or on USB.
-if(VIDEO_DIAG)
-  # Stack overflows fault (and are reported) instead of corrupting memory.
-  target_compile_definitions(dvi_terminal PRIVATE PICO_USE_STACK_GUARDS=1)
-endif()
-if(COPY_TO_RAM)
-  pico_set_binary_type(dvi_terminal copy_to_ram)
-  # Cold code runs from flash (XIP) to save SRAM: ld/ (bd qur.24).
-  pico_add_linker_script_override_path(dvi_terminal ${CMAKE_CURRENT_LIST_DIR}/ld GLOB_FILES)
-endif()
+# The libraries (src/<name>, bd gr1), the RP2350 ones too. They do not
+# link the SDK's libraries, so they get here the code generation options
+# those give the code that does: pico_standard_link's -ffunction-sections
+# -fdata-sections (without them --gc-sections cannot drop unused functions,
+# which then take SRAM) and pico_float's -fno-math-errno.
+set(DVT_FIRMWARE ON)
+set(DVT_C_OPTIONS
+  $<TARGET_PROPERTY:pico_standard_link,INTERFACE_COMPILE_OPTIONS>
+  -fno-math-errno)
+add_subdirectory(src)
+# Firmware-only settings of portable libraries: the fonts and the logo
+# stay in flash (read through XIP by core 0).
+target_compile_definitions(dvt_screen PUBLIC FONT_FLASH=1)
+target_compile_definitions(dvt_render PRIVATE LOGO_IN_FLASH=$<BOOL:${LOGO_IN_FLASH}>)
+# The built-in disk images stay in flash too (read by core 0 when
+# installed); the Z80 machine's banks.
+target_compile_definitions(dvt_disks PUBLIC DISKIMG_IN_FLASH=1)
+target_compile_definitions(dvt_z80pack PUBLIC MACHINE_BANKS=${MACHINE_BANKS})
+target_compile_definitions(dvt_board INTERFACE SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>)
+target_compile_definitions(dvt_platform PUBLIC VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}> PSRAM_BANKS=$<BOOL:${PSRAM_BANKS}>)
+target_compile_definitions(dvt_video PUBLIC HSTX_MODE=${HSTX_MODE})
 
-pico_enable_stdio_uart(dvi_terminal 0)
-pico_enable_stdio_usb(dvi_terminal 0)
-pico_add_extra_outputs(dvi_terminal)
-
-# HSTX DVI bring-up test pattern (bd dmt.8.1): hstx_test.uf2 next to the
-# terminal. HSTX_MODE picks the timing (see src/hstx_dvi.h).
-add_executable(hstx_test src/hstx_test.c src/hstx_dvi.c)
-target_include_directories(hstx_test PRIVATE src)
-set_source_files_properties(src/hstx_test.c src/hstx_dvi.c PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra")
-target_compile_definitions(hstx_test PRIVATE HSTX_MODE=${HSTX_MODE})
-target_link_libraries(hstx_test pico_stdlib hardware_dma hardware_vreg)
-pico_set_binary_type(hstx_test copy_to_ram)
-pico_enable_stdio_uart(hstx_test 1)
-pico_enable_stdio_usb(hstx_test 0)
-pico_add_extra_outputs(hstx_test)
+# The programs: the terminal and the HSTX test pattern.
+add_subdirectory(apps/terminal)
+add_subdirectory(apps/hstx_test)
