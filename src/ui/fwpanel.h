@@ -77,6 +77,7 @@ struct fwpanel {
 	char info[FWPANEL_INFO]; // the file, or what went wrong
 	const char *step;        // what is going on, NULL: nothing
 	uint32_t done, total;    // staging progress, in bytes of the file
+	const char *note;        // while installing, in the progress bar's place
 	bool mounted;            // the card, by plat->mount
 	fwpanel_source_t source; // the file being checked or installed
 };

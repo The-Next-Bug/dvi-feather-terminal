@@ -819,7 +819,7 @@ static void test_firmware_panel(void) {
 	CHECK(panel_shows > 10 && panel_shows < 60); // 257 progress calls
 	// Last shown before the commit:
 	CHECK(shown_row(2, "Installing the new firmware: do not power off."));
-	CHECK(shown_row(4, "[##################################################] 100%"));
+	CHECK(shown_row(4, "Afterwards, if USB devices do not work, power the board off and on."));
 	CHECK_EQ(commits, 1);
 	CHECK_EQ(panel_commit_unmounts, 1);
 	CHECK_EQ(f_stat(FWPANEL_FILE, &info), FR_NO_FILE);

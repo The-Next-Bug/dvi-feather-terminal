@@ -136,6 +136,10 @@ fwpanel_action_t fwpanel_run(fwpanel_t *p, const fwpanel_platform_t *plat) {
 	snprintf(p->info, sizeof p->info, "The board restarts with it in a few seconds.%s",
 		renamed ? "" : " (FIRMWARE.UF2 not renamed)");
 	p->step = "Installing the new firmware: do not power off.";
+	// The USB host has been seen not working after this restart until a
+	// power cycle (cause not known yet; the restart is a watchdog reboot,
+	// not a power-on).
+	p->note = "Afterwards, if USB devices do not work, power the board off and on.";
 	plat->show(p);
 	plat->commit();
 	// Only on the host: as after a failure.
@@ -155,7 +159,9 @@ void fwpanel_draw(const fwpanel_t *p, screen_t *s, unsigned top, uint8_t fg, uin
 		screen_puts(s, LEFT + 2, top + 2, p->step, fg, bg);
 	if (p->state != FWPANEL_SEARCH && p->state != FWPANEL_CHECK)
 		screen_puts(s, LEFT + 2, top + 3, p->info, fg, bg);
-	if (p->state == FWPANEL_STAGE && p->total) {
+	if (p->state == FWPANEL_STAGE && p->note) {
+		screen_puts(s, LEFT + 2, top + 4, p->note, fg, bg);
+	} else if (p->state == FWPANEL_STAGE && p->total) {
 		char bar[BAR_WIDTH + 16];
 		unsigned n = (unsigned)((uint64_t)p->done * BAR_WIDTH / p->total);
 		bar[0] = '[';

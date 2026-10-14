@@ -667,6 +667,11 @@ fits), shows its size and asks; **Y** then:
 3. copies the image over the running firmware (a few seconds; the screen
    says not to power off) and restarts with it. The settings are kept.
 
+A full power cycle after an update (unplug the board, plug it back in) is
+recommended: the USB host (keyboard, sticks) has been seen not working
+after the update's restart until the power was cycled. The panel says so
+while it installs.
+
 If the power fails during step 3 the board will not start: flash it over
 USB with BOOTSEL as in `docs/FLASHING.txt`, which always works.
 
