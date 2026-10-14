@@ -7,6 +7,7 @@
 #include "pico/bootrom.h"
 #include "hardware/clocks.h"
 #include "hardware/flash.h"
+#include "hardware/structs/qmi.h"
 #include "hardware/sync.h"
 
 // 03h reads (XIP after nvflash_retime) are rated to 50 MHz on the usual QSPI
@@ -37,8 +38,17 @@ void nvflash_init(void) {
 	usable = (uintptr_t)&__flash_binary_end - XIP_BASE <= NVFLASH_OFFSET;
 }
 
+// The ROM's read mode setup may configure the QMI's second chip select too:
+// a PSRAM there (extram.h) keeps its own timing and commands.
 void __no_inline_not_in_flash_func(nvflash_retime)(void) {
+	uint32_t timing = qmi_hw->m[1].timing, rfmt = qmi_hw->m[1].rfmt, rcmd = qmi_hw->m[1].rcmd;
+	uint32_t wfmt = qmi_hw->m[1].wfmt, wcmd = qmi_hw->m[1].wcmd;
 	rom_flash_select_xip_read_mode(BOOTROM_XIP_MODE_03H_SERIAL, (uint8_t)divisor(READ_SCK_MAX_HZ));
+	qmi_hw->m[1].timing = timing;
+	qmi_hw->m[1].rfmt = rfmt;
+	qmi_hw->m[1].rcmd = rcmd;
+	qmi_hw->m[1].wfmt = wfmt;
+	qmi_hw->m[1].wcmd = wcmd;
 }
 
 // Interrupts off throughout, as in nvflash_erase/program: XIP is off, and

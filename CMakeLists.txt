@@ -44,6 +44,11 @@ set(HSTX_MODE 0 CACHE STRING "HSTX video mode: 0 800x600@60, 1 800x600@56, 2 800
 # bank 0. CP/M 2.2 needs none, CP/M 3 one; MP/M wants as many as it was
 # generated for.
 set(MACHINE_BANKS 2 CACHE STRING "Z80 machine: number of 48 KB banks (MMU port 64)")
+# Or the banks in a QSPI PSRAM on the QMI's second chip select (as many as
+# fit, up to 15; none in SRAM): src/platform/extram.c. A board header turns
+# it on with pico_board_cmake_set(PSRAM_BANKS, 1)
+# (boards/feather-rp2350-hstx-psram.h).
+option(PSRAM_BANKS "Z80 machine: banks in the board's PSRAM instead of SRAM" OFF)
 
 include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
@@ -53,6 +58,10 @@ pico_sdk_init()
 
 if(NOT PICO_PLATFORM MATCHES "^rp2350")
   message(FATAL_ERROR "PICO_BOARD ${PICO_BOARD} is ${PICO_PLATFORM}: only RP2350 boards are supported")
+endif()
+if(PSRAM_BANKS)
+  set(MACHINE_BANKS 0) # all of them in the PSRAM: 96 KB of SRAM free
+  message(STATUS "Z80 banks in PSRAM (PSRAM_BANKS)")
 endif()
 
 include(cmake/dvt.cmake)
@@ -76,7 +85,7 @@ target_compile_definitions(dvt_render PRIVATE LOGO_IN_FLASH=$<BOOL:${LOGO_IN_FLA
 target_compile_definitions(dvt_disks PUBLIC DISKIMG_IN_FLASH=1)
 target_compile_definitions(dvt_z80pack PUBLIC MACHINE_BANKS=${MACHINE_BANKS})
 target_compile_definitions(dvt_board INTERFACE SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>)
-target_compile_definitions(dvt_platform PUBLIC VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}>)
+target_compile_definitions(dvt_platform PUBLIC VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}> PSRAM_BANKS=$<BOOL:${PSRAM_BANKS}>)
 target_compile_definitions(dvt_video PUBLIC HSTX_MODE=${HSTX_MODE})
 
 # The programs: the terminal and the HSTX test pattern.

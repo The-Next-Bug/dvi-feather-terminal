@@ -90,6 +90,17 @@ typedef enum {
 	MACHINE_STOPPED, // the CPU stopped: machine_stop_reason says why
 } machine_state_t;
 
+// The most banks besides bank 0: port 64 reports their number in 4 bits.
+#define MACHINE_MAX_BANKS 15
+#define MACHINE_BANK_SIZE 49152 // a bank replaces 0000H-BFFFH
+
+// Before machine_init: banks 1 .. count (at most MACHINE_MAX_BANKS) are
+// count x MACHINE_BANK_SIZE bytes at memory (e.g. in PSRAM) instead of
+// the MACHINE_BANKS built into SRAM; NULL goes back to those.
+void machine_set_banks(void *memory, unsigned count);
+unsigned machine_banks(void);         // as port 64 reports them
+uint8_t *machine_bank(unsigned bank); // bank 1 .. machine_banks(), else NULL
+
 // Power on: memory filled with noise, the boot ROM in the top page, the CPU
 // reset to the boot ROM (which loads track 0 sector 1 of drive A to 0 and
 // jumps there).

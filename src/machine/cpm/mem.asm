@@ -1,6 +1,7 @@
 ;	MEM: the machine's memory, and how CP/M uses it.
 ;
 ;	MEM
+;	MEM T
 ;
 ;	The CP/M version; the TPA, the room programs get (0100H up to the
 ;	BDOS entry at 0006H, which an RSX such as CP/M 3's VT100DYN moves
@@ -10,6 +11,15 @@
 ;	replaces 0000H-BFFFH, and C000H-FFFFH is common to all. The bank
 ;	MEM runs in is the TPA's: 0 under CP/M 2.2, 1 under banked CP/M 3,
 ;	whose bank 0 holds its banked BDOS and BIOS and the disk buffers.
+;
+;	MEM T then tests the banks CP/M does not use (all but bank 0 and the
+;	TPA's; not under MP/M), e.g. those in the PSRAM of the
+;	feather-rp2350-hstx-psram build: two passes, a pattern from the
+;	address and the bank and then its complement, every bank written
+;	before any is read back (two banks on the same memory show as
+;	errors). It runs at C000H, in common memory, with interrupts off
+;	while another bank is selected, and leaves those banks' contents
+;	changed.
 ;
 ;	Z80 mnemonics; assembled with z80pack's z80asm by build.sh, put on
 ;	the CPM22 and CPM32 disks by diskimg_gen.py.
@@ -28,6 +38,7 @@ START:	LD	SP,STACK
 	LD	(VERS),A
 	LD	A,H
 	AND	1
+	LD	(MPM),A
 	LD	HL,SCPM
 	JR	Z,V1
 	LD	HL,SMPM
@@ -140,7 +151,160 @@ B2:	CALL	PUTS
 	JR	Z,DONE
 	INC	B
 	JR	BANKS
-DONE:	JP	0
+DONE:	LD	HL,80H		;MEM T: the command tail's T
+	LD	B,(HL)
+	INC	B
+TAIL:	DEC	B
+	JP	Z,0
+	INC	HL
+	LD	A,(HL)
+	CP	'T'
+	JR	NZ,TAIL
+
+;	The test. Not under MP/M (its banks are its processes'); the code
+;	goes to C000H, which has to be below the BDOS (or an RSX).
+	LD	A,(MPM)
+	OR	A
+	LD	HL,SNMPM
+	JP	NZ,FAIL
+	LD	A,(BDOS+2)
+	CP	HIGH TEND + 1
+	LD	HL,STTPA
+	JP	C,FAIL
+	LD	HL,TCODE
+	LD	DE,TSTART
+	LD	BC,TEND-TSTART
+	LDIR
+	LD	A,(MMUV)	;the bank to go back to
+	AND	0FH
+	LD	(TORIG),A
+	LD	HL,ERRS		;no errors yet
+	LD	B,32
+CLR:	LD	(HL),0
+	INC	HL
+	DJNZ	CLR
+	CALL	FREE		;the first bank to test
+	LD	HL,SNONE
+	JP	Z,FAIL
+	LD	HL,STEST
+	CALL	PUTS
+	LD	A,I		;interrupts as they were: P/V from IFF2
+	PUSH	AF
+	XOR	A		;pass 1: the pattern
+	CALL	PASS
+	LD	A,0FFH		;pass 2: its complement
+	CALL	PASS
+	POP	AF
+	JP	PO,TDONE
+	EI
+TDONE:	LD	B,1		;the results
+RES:	LD	A,B
+	CALL	ISFREE
+	JR	Z,RES3
+	LD	HL,SBANK
+	CALL	PUTS
+	LD	A,B
+	CALL	PUTDA
+	LD	HL,SGAP
+	CALL	PUTS
+	LD	L,B		;its error count
+	LD	H,0
+	ADD	HL,HL
+	LD	DE,ERRS
+	ADD	HL,DE
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	LD	A,D
+	OR	E
+	LD	HL,SOK
+	JR	Z,RES2
+	EX	DE,HL
+	CALL	PUTDEC
+	LD	HL,SERRS
+RES2:	CALL	PUTS
+	CALL	CRLF
+RES3:	LD	A,(NBANK)
+	CP	B
+	JP	Z,0
+	INC	B
+	JR	RES
+
+FAIL:	CALL	PUTS
+	JP	0
+
+;	One pass with the mask in A: every free bank filled, then every one
+;	checked, its errors added to ERRS. Interrupts off.
+PASS:	LD	(TMASK),A
+	DI
+	LD	B,1
+PF:	LD	A,B
+	CALL	ISFREE
+	JR	Z,PF2
+	LD	A,B
+	PUSH	BC
+	CALL	TFILL
+	POP	BC
+PF2:	LD	A,(NBANK)
+	CP	B
+	JR	Z,PC0
+	INC	B
+	JR	PF
+PC0:	LD	B,1
+PC:	LD	A,B
+	CALL	ISFREE
+	JR	Z,PC2
+	LD	A,B
+	PUSH	BC
+	CALL	TCHECK		;HL errors
+	POP	BC
+	EX	DE,HL
+	LD	L,B
+	LD	H,0
+	ADD	HL,HL
+	PUSH	BC
+	LD	BC,ERRS
+	ADD	HL,BC
+	POP	BC
+	LD	A,(HL)		;add, at most 65535
+	ADD	A,E
+	LD	(HL),A
+	INC	HL
+	LD	A,(HL)
+	ADC	A,D
+	LD	(HL),A
+	JR	NC,PC2
+	LD	(HL),0FFH
+	DEC	HL
+	LD	(HL),0FFH
+PC2:	LD	A,(NBANK)
+	CP	B
+	RET	Z
+	INC	B
+	JR	PC
+
+;	Z: no bank to test; else A the first.
+FREE:	LD	B,1
+FR1:	LD	A,(NBANK)
+	CP	B
+	JR	C,FR2
+	LD	A,B
+	CALL	ISFREE
+	LD	A,B
+	RET	NZ
+	INC	B
+	JR	FR1
+FR2:	XOR	A
+	RET
+
+;	NZ if bank A (1-15) is not CP/M's: not the TPA's.
+ISFREE:	PUSH	BC
+	LD	B,A
+	LD	A,(MMUV)
+	AND	0FH
+	CP	B
+	POP	BC
+	RET
 
 ;	A (0-255) in decimal; keeps BC.
 PUTDA:	LD	L,A
@@ -240,10 +404,73 @@ STPAB:	DB	'the TPA (programs)',0
 SSYS:	DB	'the system',0
 SSYS3:	DB	'the system: banked BDOS and BIOS, disk buffers',0
 SFREE:	DB	'not used by CP/M',0
+SNMPM:	DB	'MEM T: not under MP/M',CR,LF,0
+STTPA:	DB	'MEM T: the TPA ends below C100H',CR,LF,0
+SNONE:	DB	'MEM T: no bank free to test',CR,LF,0
+STEST:	DB	'Testing the free banks (two passes)...',CR,LF,0
+SOK:	DB	'ok',0
+SERRS:	DB	' bytes wrong',0
+
+;	The test's code, run at C000H (common to all banks): no stack while
+;	another bank is selected. TFILL: bank A filled with the pattern
+;	(the address's low and high bytes and the bank XORed, then with
+;	TMASK). TCHECK: bank A compared, HL the bytes wrong (at most 65535).
+;	Both select the bank, and TORIG again before they return.
+TCODE:
+	.PHASE	0C000H
+TSTART:
+TFILL:	OUT	(MMU),A
+	LD	C,A
+	LD	HL,0
+TF1:	LD	A,L
+	XOR	H
+	XOR	C
+	LD	B,A
+	LD	A,(TMASK)
+	XOR	B
+	LD	(HL),A
+	INC	HL
+	LD	A,H
+	CP	0C0H
+	JR	NZ,TF1
+	LD	A,(TORIG)
+	OUT	(MMU),A
+	RET
+TCHECK:	OUT	(MMU),A
+	LD	C,A
+	LD	HL,0
+	LD	DE,0
+TC1:	LD	A,L
+	XOR	H
+	XOR	C
+	LD	B,A
+	LD	A,(TMASK)
+	XOR	B
+	CP	(HL)
+	JR	Z,TC2
+	INC	DE
+	LD	A,D
+	OR	E
+	JR	NZ,TC2
+	DEC	DE		;65535 at most
+TC2:	INC	HL
+	LD	A,H
+	CP	0C0H
+	JR	NZ,TC1
+	LD	A,(TORIG)
+	OUT	(MMU),A
+	EX	DE,HL
+	RET
+TMASK:	DB	0
+TORIG:	DB	0
+TEND:
+	.DEPHASE
 
 VERS:	DB	0
 MMUV:	DB	0
 NBANK:	DB	0
+MPM:	DB	0
+ERRS:	DS	32		;bytes wrong per bank
 	DS	64
 STACK:
 

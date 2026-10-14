@@ -7,6 +7,7 @@
 
 #include "machine.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,8 +32,14 @@
 #endif
 
 BYTE __attribute__((aligned(4))) bnk0[65536];
-BYTE __attribute__((aligned(4))) bnks[NUMSEG][SEGSIZ];
+#if NUMSEG > 0
+static BYTE __attribute__((aligned(4))) sram_banks[NUMSEG][SEGSIZ];
+#endif
 BYTE selbnk, *curbnk;
+static_assert(SEGSIZ == MACHINE_BANK_SIZE, "a bank replaces 0000H-BFFFH");
+// Banks 1 .. nbanks: the SRAM ones, or machine_set_banks's.
+static BYTE (*bnks)[SEGSIZ];
+static unsigned nbanks;
 
 static const machine_platform_t *plat;
 
@@ -188,12 +195,12 @@ static void led_out(BYTE data) {
 
 // Banks available in the high nibble, the selected one in the low.
 static BYTE mmu_in(void) {
-	return (BYTE)(NUMSEG << 4 | selbnk);
+	return (BYTE)(nbanks << 4 | selbnk);
 }
 
 static void mmu_out(BYTE data) {
-	if (data > NUMSEG) {
-		snprintf(m.reason, sizeof m.reason, "MMU: no bank %u (%u fitted) at 0x%04x", data, NUMSEG, PC);
+	if (data > nbanks) {
+		snprintf(m.reason, sizeof m.reason, "MMU: no bank %u (%u fitted) at 0x%04x", data, nbanks, PC);
 		cpu_error = IOERROR;
 		cpu_state = ST_STOPPED;
 		return;
@@ -469,13 +476,32 @@ void machine_reset(void) {
 	PC = ROM_PAGE;
 }
 
+void machine_set_banks(void *memory, unsigned count) {
+	if (count > MACHINE_MAX_BANKS)
+		count = MACHINE_MAX_BANKS;
+	bnks = memory;
+	nbanks = memory ? count : 0;
+}
+
+uint8_t *machine_bank(unsigned bank) {
+	return bank >= 1 && bank <= nbanks ? bnks[bank - 1] : NULL;
+}
+
+unsigned machine_banks(void) {
+	return nbanks;
+}
+
 void machine_init(const machine_platform_t *platform) {
 	plat = platform;
 	memset(&m, 0, sizeof m);
+#if NUMSEG > 0
+	if (!bnks)
+		machine_set_banks(sram_banks, NUMSEG);
+#endif
 	// Noise, as in a real machine after power on.
 	for (size_t i = 0; i < ROM_PAGE; ++i)
 		bnk0[i] = (BYTE)rand();
-	for (unsigned b = 0; b < NUMSEG; ++b)
+	for (unsigned b = 0; b < nbanks; ++b)
 		for (size_t i = 0; i < SEGSIZ; ++i)
 			bnks[b][i] = (BYTE)rand();
 	memset(bnk0 + ROM_PAGE, 0xff, 0x10000 - ROM_PAGE);

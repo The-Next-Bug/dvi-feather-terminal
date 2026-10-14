@@ -128,6 +128,7 @@ Board headers so far (only the DVI Sock is checked on hardware):
 | `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default) |
 | `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS |
 | `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing) |
+| `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
 
 `src/board/board.h` checks the header when it compiles. A missing setting, a pin
 that cannot carry its signal, or a pin used twice stops the build with an
@@ -422,7 +423,8 @@ instead of reading a hard disk as a floppy and writing over it).
   generated for picosim's six user banks, but this machine has two
   (`MACHINE_BANKS`), and the machine stops (`MMU: no bank 3`) when MP/M
   selects a bank it does not have. Regenerate `MPM.SYS` for two banks with
-  `GENSYS` from `mpm-2.dsk` first.
+  `GENSYS` from `mpm-2.dsk` first. The `feather-rp2350-hstx-psram` build
+  has 15 banks, enough for picosim's `MPM.SYS` as it is (not tried yet).
 
 MP/M II has not been tested on this board yet.
 
@@ -440,6 +442,25 @@ Bank 0  the system: banked BDOS and BIOS, disk buffers
 Bank 1  the TPA (programs)
 Bank 2  not used by CP/M
 ```
+
+`MEM T` then tests the banks CP/M does not use (all but bank 0 and the
+TPA's; not under MP/M), for instance the PSRAM of the
+`feather-rp2350-hstx-psram` build: every free bank is filled with a
+pattern made from the address and the bank number, then each is read
+back, and again with the complement, so every bit is written both ways
+and two banks that land on the same memory show up as errors. It changes
+those banks' contents, and runs with interrupts off while another bank is
+selected (from C000H, in common memory). Under CP/M 2.2 on that build:
+
+```
+Testing the free banks (two passes)...
+Bank 1  ok
+...
+Bank 15  ok
+```
+
+A bank with errors shows how many bytes were wrong (`Bank 3  12 bytes
+wrong`).
 
 ### WORMS
 
@@ -636,7 +657,7 @@ The machine is picosim's:
 | 5/6 | printer (none) |
 | 8 | the disk in a drive, for our BIOSes (ours, not picosim's): OUT the drive, IN its format (0 none, 1 8" floppy, 2 4 MB, 3 8 MB), IN again the count of images mounted on it. A hard-disk image is refused to a system that has not asked about its drive since the reset |
 | 10 | file transfer: files in the `/XFER` folder of the SD card or a USB stick, a 128-byte record at a time by DMA, for `XLS`, `XPIP` and `XERA` (ours; `src/machine/machine.h` has the commands) |
-| 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II uses as many as it was generated for, see [Other operating systems](#other-operating-systems)) |
+| 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II uses as many as it was generated for, see [Other operating systems](#other-operating-systems)), or with `PSRAM_BANKS` up to 15 in the PSRAM; reads the number of banks in the high nibble (so 15 at most) and the selected one in the low |
 | 65/66 | clock (no RTC: it starts at 1 Jan 2026 at power-on) |
 | 67 | 60 Hz timer interrupt |
 | 160 | hardware control |
@@ -720,6 +741,7 @@ every job). pico-sdk is upgraded by moving its submodule (and the image's
 | `LOGO_IN_FLASH` | ON | experimental: keep the logo data in flash, copied out only while it shows (saves about 19 KB of SRAM); OFF copies it into SRAM with the program |
 | `STARTUP_DEMO` | OFF | run the demo after the logo |
 | `MACHINE_BANKS` | 2 | Z80 machine: 48 KB banks besides bank 0 (each costs 48 KB of SRAM; a third does not fit) |
+| `PSRAM_BANKS` | OFF | Z80 machine: the banks in the board's QSPI PSRAM (QMI chip select 1) instead, as many as fit up to 15, none in SRAM; set by `boards/feather-rp2350-hstx-psram.h`. Without a PSRAM chip at boot the machine has no banks |
 | `HSTX_MODE` | 0 | 0: 800x600 at 60 Hz; 1: at 56 Hz (clk_hstx 180 MHz); 2: 60 Hz reduced blanking (177 MHz). 1 and 2 are slower fallbacks |
 | `VIDEO_DIAG` | OFF | bring-up diagnostics on UART0 TX: boot markers, core 1 scanline timing, fault reports |
 | `COPY_TO_RAM` | ON | run from SRAM; must stay ON (see [How it works](#how-it-works)) |

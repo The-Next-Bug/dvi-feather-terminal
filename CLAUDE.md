@@ -110,6 +110,22 @@ PSRAM CS GP8 on some), DVI from the 22-pin FPC per Adafruit's
 CircuitPython pins.c (CLK 14/15, D0 18/19, D1 16/17, D2 12/13, + even),
 UART0 GP0/1 (CTS/RTS GP2/3 = STEMMA QT SDA/SCL), SD SPI0 MISO 20 / SCK 22 /
 MOSI 23 / CS 10 (Adalogger FeatherWing); untested on hardware; CI builds it.
+`boards/feather-rp2350-hstx-psram.h` (bd 1ls.17): the user's Feather with
+an APS6404L 8 MB PSRAM on CS1 GP8; `pico_board_cmake_set(PSRAM_BANKS, 1)`
+plus the SDK header's three CMake lines restated (CMake follows only
+`#include "boards/..."`, which the compiler cannot find from boards/; the
+base header is included relatively). PSRAM_BANKS: MACHINE_BANKS 0 (96 KB
+of SRAM freed), the program links hardware_psram (runtime init finds and
+sets up the chip at boot, at the boot clock; main() then leaves GP8 alone),
+`src/platform/extram.[ch]`: extram_retime() after video_init and before
+nvflash_retime (psram_reinitialize goes through flash_start_xip, which
+leaves the flash's XIP set up for <= 150 MHz), divisor 4 at 400 MHz;
+cpm mode gives the machine extram_base() (0x11000000, cached, writable)
+as min(15, size / 48 KB) banks (machine_set_banks) and says so under the
+banner. nvflash_retime saves and restores QMI M1 around the ROM's
+flash_select_xip_read_mode; the SDK's flash_range_* clean the XIP cache
+(dirty PSRAM lines) and re-run the PSRAM setup themselves. Core 1 never
+touches the PSRAM. Untested on hardware; CI builds it.
 
 The USB host (keyboards, sticks) is always built in (USB_KEYBOARD=OFF
 was removed: bd s0i). Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
@@ -327,7 +343,10 @@ UF2 in the latter).
   by `src/machine/z80pack/{sim,simmem,simio,simport}.h`; picosim's port map (SIO1
   0/1 console, SIO2 2/3 = UART0, FDC 4, MMU 64, clock 65/66 without
   localtime, 60 Hz timer 67, hwctl 160) and boot ROM; bank 0 64 KB +
-  MACHINE_BANKS x 48 KB. Slices end from
+  MACHINE_BANKS x 48 KB in SRAM, or machine_set_banks's memory (before
+  machine_init; NULL: back to the SRAM ones) of up to MACHINE_MAX_BANKS
+  (15: IN 64 reports the count in its high nibble) x MACHINE_BANK_SIZE;
+  machine_banks()/machine_bank(n) for the tests. Slices end from
   `machine_clock_us` (z80pack reads the clock every 20000 T-states and
   around port I/O); HALT waits call the platform idle hook and, at a slice
   end, stop with PC back on the HALT. z80pack's CPU state is globals (A, B,
@@ -385,9 +404,15 @@ UF2 in the latter).
   the reset (FDC_STAT_NODISK; f8w.7), for BIOSes that never ask (MP/M's,
   picosim's), so they cannot read an HD as a floppy and write over it.
   src/machine/cpm/mem.asm (f8w.8) -> MEM.COM on CPM22 and CPM32: version, TPA,
-  banks from IN 64. test_machine: test_boot_cpm3, test_cpm3_tools,
+  banks from IN 64; MEM T (1ls.17) fills every free bank (not 0, not the
+  TPA's; refused under MP/M) with (L ^ H ^ bank) ^ mask, then checks
+  them, mask 0 then FFh, errors per bank; its TFILL/TCHECK run at C000H
+  (.PHASE, copied there; refused if the BDOS/RSX is below C100H), no stack
+  while switched, interrupts off over the passes and restored from IFF2
+  (LD A,I). test_machine: test_boot_cpm3, test_cpm3_tools,
   test_cpm3_drives, test_hd_guard (raw Z80 bytes in the ROM page, as
-  test_xfer_port).
+  test_xfer_port), test_mem_banks (15 banks in a host buffer: MEM, MEM T,
+  the last pass's bytes).
   USB sticks (bd qur.3): FatFs volume 1 ("1:", USB: to the tools; ffconf
   FF_VOLUMES 2). `src/storage/diskio.c` (RP2350) dispatches FatFs drives: 0
   sdcard_disk_*, 1 usbmsc_disk_*. `src/storage/usbmsc.[ch]`:
@@ -500,7 +525,8 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   main(), -648 bytes) to 0x2006f428. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, stash_buf 13.4 KB, line_buf 6.4 KB,
-  scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit.
+  scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit
+  (the PSRAM build has none in SRAM: __end__ 0x20057b88).
 - Flash (4 MB): image 0-0x7e108 (504 KB at v0.6.1; the 4 KB LZ window costs 32 KB;
   ~875 KB with the CP/M 3 disks, f8w.1: ~610 KB of compressed images in all); free to 2 MB (image growth;
   fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used

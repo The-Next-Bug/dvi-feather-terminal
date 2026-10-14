@@ -74,6 +74,12 @@ target_link_libraries(dvi_terminal
   tinyusb_host
 )
 
+# The SDK's PSRAM support: found and set up at boot (runtime init), the
+# timing set again after the clock change (extram_retime).
+if(PSRAM_BANKS)
+  target_link_libraries(dvi_terminal hardware_psram)
+endif()
+
 # UART0 belongs to the terminal (serial.c): no stdio on it or on USB.
 if(VIDEO_DIAG)
   # Stack overflows fault (and are reported) instead of corrupting memory.

@@ -36,6 +36,7 @@
 
 #include "board.h"
 #include "diag.h"
+#include "extram.h"
 #include "led.h"
 #include "nvflash.h"
 #include "palette.h"
@@ -206,10 +207,11 @@ static void send_reply(void *ctx, const uint8_t *data, size_t len) {
 }
 
 int main(void) {
-#ifdef BOARD_PSRAM_CS_PIN
+#if defined(BOARD_PSRAM_CS_PIN) && !PSRAM_BANKS
 	// The PSRAM shares the QSPI bus with the flash. Its CE pull-up against
 	// the pad's reset pull-down leaves CE barely above its input-high level,
-	// so drive it high: nothing uses the PSRAM yet.
+	// so drive it high: nothing uses the PSRAM in this build (PSRAM_BANKS
+	// builds leave the pin to the SDK's PSRAM setup, XIP_CS1).
 	gpio_init(BOARD_PSRAM_CS_PIN);
 	gpio_put(BOARD_PSRAM_CS_PIN, 1);
 	gpio_set_dir(BOARD_PSRAM_CS_PIN, GPIO_OUT);
@@ -224,6 +226,9 @@ int main(void) {
 	colours = settings_colours(&settings); // the status line under the logo uses them
 
 	video_init();
+	// The PSRAM's timing for the new clock; it leaves the flash's XIP set
+	// up for the boot clock, so first.
+	size_t psram = extram_retime();
 	// Before anything reads flash at the new clock: the settings saves,
 	// with LOGO_IN_FLASH the logo, and the cold code left in flash
 	// (ld/section_copy_to_ram_rodata.incl), palette.c's included.
@@ -281,6 +286,20 @@ int main(void) {
 		// UART input before now was for the terminal, not the Z80.
 		term_puts(&term, "Z80 CP/M machine: " BOARD_UART_NAME " (GP" BOARD_STR(BOARD_UART_TX_PIN) "/GP" BOARD_STR(
 			BOARD_UART_RX_PIN) ") is its second serial port\r\n");
+#if PSRAM_BANKS
+		// The banks in the PSRAM: as many as fit, at most 15.
+		unsigned banks = (unsigned)(psram / MACHINE_BANK_SIZE);
+		machine_set_banks(extram_base(), banks);
+		if (psram) {
+			snprintf(banner, sizeof banner, "Z80 banks: %u x 48K in PSRAM (%u KB found)\r\n", machine_banks(),
+				(unsigned)(psram / 1024));
+			term_puts(&term, banner);
+		} else {
+			term_puts(&term, "No PSRAM found: the Z80 has no banks (CP/M 3 needs one)\r\n");
+		}
+#else
+		(void)psram;
+#endif
 		machine_init(&cpm_platform);
 		usbkbd_set_reset_key(reset_key);
 		monitor_start(&cpm_monitor, true, to_ms_since_boot(get_absolute_time()));
