@@ -12,6 +12,7 @@
 #include "board.h"
 #include "extram.h"
 #include "hstx_dvi.h"
+#include "nvflash.h"
 #include "sdcard.h"
 #include "terminal.h"
 #include "term_build.h"
@@ -31,8 +32,10 @@
 static size_t cpu_record(uint8_t *buf) {
 	char text[64];
 	// SYSINFO's PACKAGE_SEL: 1 = QFN60 (RP2350A), 0 = QFN80 (RP2350B).
-	snprintf(text, sizeof text, "RP2350%c at %lu MHz, %lu MB flash", sysinfo_hw->package_sel & 1 ? 'A' : 'B',
-		(unsigned long)(clock_get_hz(clk_sys) / 1000000), (unsigned long)(PICO_FLASH_SIZE_BYTES >> 20));
+	snprintf(text, sizeof text, "RP2350%c at %lu MHz, %lu MB flash, %s reads at %lu MHz",
+		sysinfo_hw->package_sel & 1 ? 'A' : 'B', (unsigned long)(clock_get_hz(clk_sys) / 1000000),
+		(unsigned long)(PICO_FLASH_SIZE_BYTES >> 20), nvflash_quad() ? "quad" : "serial",
+		(unsigned long)(nvflash_read_hz() / 1000000));
 	return hwinfo_record(buf, HWINFO_ST_PRESENT, "CPU", text);
 }
 

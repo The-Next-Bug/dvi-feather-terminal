@@ -325,7 +325,13 @@ UF2 in the latter).
   video_init; `nvflash_retime()` after the clock change. SDK
   flash_range_* (ROM uses QMI clkdiv 12) + `rom_flash_select_xip_read_mode`
   03h at <=50 MHz afterwards (the boot XIP stub the SDK replays assumes
-  <=150 MHz). No flash_safe_execute (core 1 in RAM).
+  <=150 MHz). No flash_safe_execute (core 1 in RAM). Quad reads (bd cpx.2,
+  BOARD_FLASH_QUAD, default 1): nvflash_init sets the flash's QE bit
+  (35h, then volatile 50h + 31h); nvflash_retime reads 16 words at 03h,
+  switches to EBh (QUAD_SCK_MAX_HZ, 50 MHz to start) and keeps it only if
+  they read the same, else a status read via flash_do_cmd (exit sequence,
+  CS1 PSRAM restored) and back to 03h; nvflash_quad()/_read_hz() for
+  HWINFO's CPU line.
 - `src/platform/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
   RTS/CTS. `src/ui/demo.[ch]`: opt-in startup demo. `src/platform/diag.[ch]`: VIDEO_DIAG.
 - `src/render/logo_gen.py` + `src/render/logo.cmake`: PNG -> run-length encoded 2-bit

@@ -123,6 +123,13 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 // #define BOARD_USB_VBUS_EN_PIN 22
 // #define BOARD_USB_VBUS_EN_LEVEL 1
 
+// --- Flash ---
+//
+// The firmware's cold code runs from flash: in quad (EBh) mode if all four
+// QSPI data lines reach the flash and it reads back the same as in serial
+// (03h) mode, else serial. Set 0 to always stay serial.
+// #define BOARD_FLASH_QUAD 1
+
 // --- PSRAM (optional) ---
 //
 // A QSPI PSRAM sharing the flash's bus, on the QMI's second chip select

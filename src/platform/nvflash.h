@@ -22,11 +22,17 @@
 #define NVFLASH_OFFSET (PICO_FLASH_SIZE_BYTES - (NVFLASH_SECTORS + 1) * NVFLASH_SECTOR_SIZE)
 
 // At boot, while the boot-time flash setup is valid (before video_init
-// raises clk_sys).
+// raises clk_sys). Sets the flash's quad enable bit (volatile) for
+// BOARD_FLASH_QUAD.
 void nvflash_init(void);
 
-// After the system clock changes: slow the flash read clock down to suit it.
+// After the system clock changes: slow the flash read clock down to suit it,
+// in quad (EBh) mode if the board allows it (BOARD_FLASH_QUAD) and the flash
+// reads the same that way, else serial (03h).
 void nvflash_retime(void);
+// What nvflash_retime set: quad or serial, and the flash clock.
+bool nvflash_quad(void);
+uint32_t nvflash_read_hz(void);
 
 // Sector i's contents (the first page is enough for a settings record).
 const uint8_t *nvflash_sector(unsigned i);
