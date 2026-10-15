@@ -13,6 +13,7 @@ char screen[HOST_SCREEN_SIZE];
 size_t screen_len;
 bool host_echo;
 const char *host_cpr_reply;
+unsigned host_hwinfo_extra;
 void (*host_console_hook)(uint8_t c);
 char aux_sent[256];
 size_t aux_len;
@@ -79,6 +80,38 @@ static uint8_t disk_mounts(unsigned drive) {
 	return drives_mounts(drive);
 }
 
+// Port 12's items (machine.h) as a board might have them: one of each
+// status, a detail that wraps, and a record at a number HWINFO does not
+// know of (as newer firmware could add).
+static size_t hwinfo(uint8_t item, uint8_t *buf) {
+	switch (item) {
+	case HWINFO_FIRMWARE:
+		return hwinfo_text(buf, "Host test firmware");
+	case HWINFO_BOARD:
+		return hwinfo_text(buf, "host-board");
+	case HWINFO_CPU:
+		return hwinfo_record(buf, HWINFO_ST_PRESENT, "CPU", "RP2350A at 400 MHz, 4 MB flash");
+	case HWINFO_PSRAM:
+		return hwinfo_record(buf, HWINFO_ST_NOT_FOUND, "PSRAM", "none answered on CS1 (GP8)");
+	case HWINFO_SD_CARD:
+		return hwinfo_record(buf, HWINFO_ST_PRESENT, "SD card",
+			"SDHC/SDXC, 29.7 GB; SPI0: GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI");
+	case HWINFO_USB_STICK:
+		return hwinfo_record(buf, HWINFO_ST_ABSENT, "USB stick", "none");
+	case HWINFO_RTC:
+		return hwinfo_record(buf, HWINFO_ST_PLANNED, "Real-time clock", "not supported yet");
+	case 200:
+		return hwinfo_record(buf, 9, "Future thing", "a status HWINFO does not know");
+	default:
+		if (item >= 40 && item < 40 + host_hwinfo_extra) {
+			char name[16];
+			snprintf(name, sizeof name, "Extra %u", item - 40);
+			return hwinfo_record(buf, HWINFO_ST_PRESENT, name, "filler");
+		}
+		return 0;
+	}
+}
+
 const machine_platform_t host_platform = {
 	.clock_us = host_clock_us,
 	.idle = idle,
@@ -90,6 +123,7 @@ const machine_platform_t host_platform = {
 	.disk_format = disk_format,
 	.disk_mounts = disk_mounts,
 	.xfer = xfer_command,
+	.hwinfo = hwinfo,
 };
 
 void clear_screen(void) {

@@ -40,6 +40,7 @@ SECTIONS
         *libdvt_settings.a:settings.c.o(.text* .rodata*)
         *libdvt_settings.a:uf2.c.o(.text* .rodata*)
         *libdvt_machine.a:machine.c.o(.rodata*)
+        *dvi_terminal.dir/hwinfo_glue.c.o(.text* .rodata*)
         *libg.a:libc_a-qsort.o(.text* .rodata*)
         . = ALIGN(4);
         __cold_text_end__ = .;

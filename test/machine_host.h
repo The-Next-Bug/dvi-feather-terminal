@@ -24,6 +24,9 @@ extern bool host_echo;
 // When set, the console answers a cursor position request (ESC [ 6 n) with
 // this, as a terminal would.
 extern const char *host_cpr_reply;
+// Records 40 on ("Extra 0", ...) the port 12 device has besides its usual
+// ones, for HWINFO's paging.
+extern unsigned host_hwinfo_extra;
 // When set, every console byte also goes here (e.g. to a terminal, whose
 // replies the test types back with machine_key).
 extern void (*host_console_hook)(uint8_t c);

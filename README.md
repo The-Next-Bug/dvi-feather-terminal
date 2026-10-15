@@ -408,7 +408,7 @@ instead of reading a hard disk as a floppy and writing over it).
   images mounted on it). `CPM32` is an 8 MB disk (picosim's second
   floppy's files, with room to spare). The BIOS sets `SETDEF`'s defaults
   at every cold boot: programs are found on the default drive, then A:,
-  then B:, so `XLS`, `XPIP`, `XERA`, `MEM` and `WORMS` on `CPM32` run
+  then B:, so `XLS`, `XPIP`, `XERA`, `MEM`, `HWINFO` and `WORMS` on `CPM32` run
   from any drive; COM files before SUB files; temporary files on B:, not
   the nearly full A:. `README.TXT` on `CPM31` describes them and how to
   change them with a `SETDEF` line in `PROFILE.SUB`. CP/M 3 shows the
@@ -427,6 +427,50 @@ instead of reading a hard disk as a floppy and writing over it).
   has 15 banks, enough for picosim's `MPM.SYS` as it is (not tried yet).
 
 MP/M II has not been tested on this board yet.
+
+### HWINFO
+
+`CPM22`, `CPM31` and `CPM32` carry `HWINFO` (`src/machine/cpm/hwinfo.asm`):
+the firmware, the board, and a line for each piece of hardware: whether it
+is there (`yes`, `no`, `missing` when the board should have it but it did
+not answer, `planned` when the firmware does not support it yet) and what
+it is, a screen at a time (`-- More --`: any key for the next page, `Q`,
+`Esc` or `^C` to stop). On a Pico 2 with the DVI Sock:
+
+```
+Firmware         DVI Feather Terminal v0.9.0 (2026-10-15)
+Board            pico2-dvi-sock
+
+CPU              yes      RP2350A at 400 MHz, 4 MB flash
+Z80 memory       yes      64 KB + 2 x 48 KB banks in SRAM
+PSRAM            no       none on this board
+Video            yes      DVI 800x600 at 60 Hz, 80 x 24 text + status line
+Serial port      yes      UART0 TX GP0 / RX GP1, 115200 8N1 (SIO2)
+Flow control     no       off (build option SERIAL_FLOW_CONTROL)
+SD card          yes      SDHC/SDXC, 29.7 GB; SPI0: GP4 MISO, GP5 CS, GP6 SCK,
+                          GP7 MOSI
+USB host         yes      native USB port, 1 keyboard
+USB stick        no       none
+Status LED       yes      GP25: disks, serial, heartbeat
+Real-time clock  planned  not supported yet: the clock starts at a fixed date
+                          at power-on
+Bell             planned  not supported yet: BEL is silent
+RGB status LED   planned  not supported yet
+SD card detect   planned  not supported yet
+User button      planned  not supported yet
+Battery          planned  not supported yet
+Disk drives      yes      A: CPM22, B: Z80TESTS
+```
+
+It reads them from the hardware information device on port 12, which
+programs can use too (the protocol is in `src/machine/machine.h`): `OUT`
+an item number, then `IN` its bytes, and 0 after its end. Item 0 reads
+`H`, `W` and the protocol version; on older firmware or z80pack's picosim,
+port 12 reads `0FFH` and `HWINFO` says there is no information. Items 1
+and 2 are the firmware and the board as text; from 16 on, each item is one
+piece of hardware at a fixed number (16 the CPU, 18 the PSRAM, 26 the
+real-time clock, ...): a status byte (1 yes, 2 no, 3 missing, 4 planned;
+0 no such item), then its name and its description, each ending in 0.
 
 ### MEM
 
@@ -581,7 +625,7 @@ A after 3 seconds (any key stops that), or shows its menu:
 - **N**: make a new blank disk: name, then 8" floppy, 4 MB or 8 MB
   (an 8 MB one takes a few seconds to write).
 - **I**: install the built-in disk images onto the card: `CPM22` (CP/M 2.2
-  with its tools and `MEM`: boots), `Z80TESTS` (`TERMTEST`, `ALTSCR`, and the Z80 instruction exercisers
+  with its tools, `MEM` and `HWINFO`: boots), `Z80TESTS` (`TERMTEST`, `ALTSCR`, and the Z80 instruction exercisers
   `EXZ80DOC` and `EXZ80ALL`, about 10 minutes each at full speed, and the
   `CPUTEST` diagnostics; `PRELIM` needs an emulator that runs block moves
   in one go, as z80pack's cpmsim does, and wrecks CP/M here: reset after
@@ -877,7 +921,7 @@ has the helpers; `src/CMakeLists.txt` lists the libraries.
 | `render` | portable | `raster` (cells to pixels), `splash` (startup logo); generated font tables and logo (`font_gen.py`, `logo_gen.py`) |
 | `input` | portable | `keyboard` (HID keys to VT100 codes), `keyname` (key names for the status line), `blank` (screen blanking timer) |
 | `settings` | portable | `settings` (settings records), `uf2` (UF2 file checks for the firmware update) |
-| `machine` | portable | `machine` (the Z80 machine: z80pack glue; `z80pack/` holds its configuration headers), `cpm/` (the CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA, TERMTEST, ALTSCR and MEM, and in `cpm3/` CP/M 3's banked BIOS, made into `CPM3.SYS` at build time; see its README) |
+| `machine` | portable | `machine` (the Z80 machine: z80pack glue; `z80pack/` holds its configuration headers), `cpm/` (the CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA, TERMTEST, ALTSCR, MEM and HWINFO, and in `cpm3/` CP/M 3's banked BIOS, made into `CPM3.SYS` at build time; see its README) |
 | `disks` | portable | `drives` (disk images on FatFs), `drivecfg.c` (`DRIVES.CFG`, the image list and the drive sets), `diskimg` (the built-in images; `diskimg_gen.py` compresses them), `xfer` (port 10's files: `/XFER`), `usbvol` (which USB stick is `USB:`) |
 | `ui` | portable | `setup` (SET-UP panel), `drivepanel` (SET-UP's Drives panel), `fwpanel` (SET-UP's firmware update), `monitor` (the CP/M machine's monitor), `demo` |
 | `board` | RP2350 | `board.h` (the board header's pins, checked) |
