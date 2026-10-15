@@ -21,7 +21,7 @@
 //
 // The terminal owns a band of screen rows (top .. top + rows - 1); rows
 // outside it (e.g. a status line) are left alone. Its width is the screen's
-// (80 or 132); DECCOLM (CSI ? 3 h/l) switches it, which re-initialises the
+// (80 or 132); DECCOLM (CSI ? 3 h/l) switches it, which re-initializes the
 // whole screen (even when the width stays the same) and bumps
 // screen_resets, so the owner of the other rows knows to redraw them.
 //
@@ -42,7 +42,7 @@
 #include "screen.h"
 #include "vtparse.h"
 
-#define TERM_DEFAULT_COLOUR 0x100 // SGR 39 / 49: the terminal's default fg/bg
+#define TERM_DEFAULT_COLOR 0x100 // SGR 39 / 49: the terminal's default fg/bg
 #define TERM_SETUP_PARAM 999     // CSI ? 999 ~: open SET-UP
 #define TERM_STASH_TAG 'A'       // the alternate screen's entry in the saved rows
 
@@ -62,7 +62,7 @@ typedef struct {
 } term_defaults_t;
 
 typedef struct {
-	uint16_t fg, bg; // palette index 0-255, or TERM_DEFAULT_COLOUR
+	uint16_t fg, bg; // palette index 0-255, or TERM_DEFAULT_COLOR
 	bool bold, underline, blink, reverse;
 } term_attr_t;
 
@@ -123,8 +123,8 @@ typedef struct {
 
 // Reset the terminal (as RIS), clear its rows, home the cursor and show it.
 // Cells get palette indices: default text PALETTE_TEXT (bold:
-// PALETTE_BOLD_TEXT) on PALETTE_BACKGROUND, ANSI colours 0-15 (bold brightens
-// 0-7 to 8-15), 256-colour ones as they are and direct ones the nearest
+// PALETTE_BOLD_TEXT) on PALETTE_BACKGROUND, ANSI colors 0-15 (bold brightens
+// 0-7 to 8-15), 256-color ones as they are and direct ones the nearest
 // xterm entry; reverse swaps fg and bg.
 void term_init(term_t *t, screen_t *screen, unsigned top, unsigned rows);
 

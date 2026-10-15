@@ -16,10 +16,12 @@ enum { GROUND, ESCAPE, ROW, COLUMN }; // term_vt100_t.vt52_state
 // its row; a column out of range puts it in the last column.
 static void address(term_t *t, uint8_t row_byte, uint8_t col_byte) {
 	unsigned row = (unsigned)row_byte - 32, col = (unsigned)col_byte - 32;
-	if (row_byte >= 32 && row < t->rows)
+	if (row_byte >= 32 && row < t->rows) {
 		t->cur.row = row;
-	if (col_byte >= 32)
+	}
+	if (col_byte >= 32) {
 		t->cur.col = col < term_cols(t) ? col : term_cols(t) - 1;
+	}
 	t->cur.wrap_pending = false;
 }
 
@@ -29,13 +31,15 @@ static void escape(term_t *t, uint8_t final) {
 	case 'A': term_cursor_up(t, 1); break;
 	case 'B': term_cursor_down(t, 1); break;
 	case 'C':
-		if (t->cur.col + 1 < term_cols(t))
+		if (t->cur.col + 1 < term_cols(t)) {
 			++t->cur.col;
+		}
 		t->cur.wrap_pending = false;
 		break;
 	case 'D':
-		if (t->cur.col > 0)
+		if (t->cur.col > 0) {
 			--t->cur.col;
+		}
 		t->cur.wrap_pending = false;
 		break;
 	case 'F': t->cur.charset[t->cur.gl] = '0'; break; // graphics: DEC Special Graphics

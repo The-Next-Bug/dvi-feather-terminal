@@ -72,11 +72,11 @@ static uint8_t *const splash_data = (uint8_t *)(void *)raster;
 #define SPLASH_DATA_MAX (SPLASH_SLOTS * sizeof(raster_line_t))
 // Core 1 shows the splash for the text rows unless SPLASH_OFF: black while
 // SPLASH_BLACK (the data is being written), the image while SPLASH_SHOW,
-// decoded from splash_start with splash_colours per level.
+// decoded from splash_start with splash_colors per level.
 enum { SPLASH_OFF, SPLASH_BLACK, SPLASH_SHOW };
 static volatile uint8_t splash_state;
 static splash_decoder_t splash_start;
-static uint16_t splash_colours[4];
+static uint16_t splash_colors[4];
 // Core 0: the splash owns those slots (video_update leaves them alone).
 static bool splash_holds_raster;
 
@@ -90,7 +90,7 @@ static struct {
 	uint cursor_row;
 	int cursor_col; // -1: not shown this frame
 	splash_decoder_t decoder;
-	uint16_t colours[4];
+	uint16_t colors[4];
 	const uint32_t *palette;
 } frame;
 
@@ -108,26 +108,31 @@ static void __not_in_flash_func(start_frame)(uint32_t n) {
 	frame.palette = palette_words[p];
 	if (frame.splash == SPLASH_SHOW) {
 		frame.decoder = splash_start;
-		for (int i = 0; i < 4; ++i)
-			frame.colours[i] = splash_colours[i];
+		for (int i = 0; i < 4; ++i) {
+			frame.colors[i] = splash_colors[i];
+		}
 	}
 }
 
 static void __not_in_flash_func(compose_line)(uint32_t seq, uint y) {
-	if (y == 0)
+	if (y == 0) {
 		start_frame(frame_no);
+	}
 	uint32_t *px = line_buf[seq % LINE_BUFS];
 	if (frame.blank) {
-		for (uint i = 0; i < RASTER_LINE_WORDS; ++i)
+		for (uint i = 0; i < RASTER_LINE_WORDS; ++i) {
 			px[i] = 0;
+		}
 		return;
 	}
 	if (frame.splash != SPLASH_OFF && y < SPLASH_HEIGHT) {
-		if (frame.splash == SPLASH_SHOW)
-			splash_compose((uint16_t *)px, &frame.decoder, y, frame.colours);
-		else
-			for (uint i = 0; i < RASTER_LINE_WORDS; ++i)
+		if (frame.splash == SPLASH_SHOW) {
+			splash_compose((uint16_t *)px, &frame.decoder, y, frame.colors);
+		} else {
+			for (uint i = 0; i < RASTER_LINE_WORDS; ++i) {
 				px[i] = 0;
+			}
+		}
 		return;
 	}
 	uint row = y / RASTER_ROW_HEIGHT;
@@ -161,8 +166,9 @@ static const uint32_t *__not_in_flash_func(next_line)(unsigned y) {
 	(void)y;
 	uint32_t seq = requested + 1;
 	requested = seq;
-	if ((int32_t)(composed - seq) <= 0)
+	if ((int32_t)(composed - seq) <= 0) {
 		++late_lines; // shows whatever the buffer holds
+	}
 	return line_buf[seq % LINE_BUFS];
 }
 
@@ -215,16 +221,19 @@ static void __not_in_flash_func(core1_main)(void) {
 
 	for (;;) {
 		diag_core1_stage = 4;
-		if (blank_next)
+		if (blank_next) {
 			next = signal_off(next);
-		while ((int32_t)(next - requested) > AHEAD)
+		}
+		while ((int32_t)(next - requested) > AHEAD) {
 			tight_loop_contents();
+		}
 		// Includes the DMA interrupts taken meanwhile: they share core 1.
 		uint32_t start = systick_hw->cvr;
 		compose(next);
 		uint32_t cycles = (start - systick_hw->cvr) & 0xffffff;
-		if (cycles > diag_max_cycles)
+		if (cycles > diag_max_cycles) {
 			diag_max_cycles = cycles;
+		}
 		composed = ++next;
 	}
 }
@@ -235,17 +244,19 @@ void video_init(void) {
 	diag_mark("clocks and HSTX set up");
 }
 
-void video_set_palette(const uint16_t colours[PALETTE_SIZE]) {
+void video_set_palette(const uint16_t colors[PALETTE_SIZE]) {
 	uint8_t t = palette_next;
 	if (core1_launched) {
 		// Until core 1 has taken the last table, the other may still be
 		// in use.
-		while (palette_used != t)
+		while (palette_used != t) {
 			tight_loop_contents();
+		}
 		t ^= 1;
 	}
-	for (uint c = 0; c < PALETTE_SIZE; ++c)
-		palette_words[t][c] = colours[c] | (uint32_t)colours[c] << 16;
+	for (uint c = 0; c < PALETTE_SIZE; ++c) {
+		palette_words[t][c] = colors[c] | (uint32_t)colors[c] << 16;
+	}
 	__dmb(); // the table before core 1 can pick it
 	palette_next = t;
 }
@@ -268,8 +279,9 @@ void video_update(screen_t *screen) {
 
 	// Display row of each slot, for reverse video (DECSCNM) by row.
 	uint8_t slot_row[SCREEN_ROWS];
-	for (uint row = 0; row < SCREEN_ROWS; ++row)
+	for (uint row = 0; row < SCREEN_ROWS; ++row) {
 		slot_row[screen->row_map[row]] = (uint8_t)row;
+	}
 
 	uint32_t dirty = screen->dirty;
 	screen->dirty = 0;
@@ -282,22 +294,26 @@ void video_update(screen_t *screen) {
 	// A new layout's fonts are copied in before any line is timed (a
 	// layout change re-renders every line anyway).
 	raster_layout_t layout = raster_layout(screen->cols);
-	if (dirty)
+	if (dirty) {
 		raster_select_font(layout);
+	}
 	for (int slot = 0; dirty; ++slot, dirty >>= 1) {
-		if (!(dirty & 1))
+		if (!(dirty & 1)) {
 			continue;
+		}
 		unsigned flags = (blink_off ? RASTER_BLINK_OFF : 0) |
 			(screen->reverse_rows >> slot_row[slot] & 1 ? RASTER_REVERSE : 0);
 		uint32_t start = time_us_32();
 		bool blinks = raster_render_line(&raster[slot], &screen->lines[slot], layout, flags);
 		uint32_t us = time_us_32() - start;
-		if (us > diag_max_render_us)
+		if (us > diag_max_render_us) {
 			diag_max_render_us = us;
-		if (blinks)
+		}
+		if (blinks) {
 			blink_slots |= 1u << slot;
-		else
+		} else {
 			blink_slots &= ~(1u << slot);
+		}
 	}
 }
 
@@ -318,13 +334,14 @@ video_stats_t video_stats(void) {
 }
 
 // A scroll reuses slot as display row `row` (screen recycle hook): blank its
-// pixels now, in the colour the row shows (its fg in reverse video), so the
+// pixels now, in the color the row shows (its fg in reverse video), so the
 // line that left does not show in its new place until video_update renders
 // the slot. Not while the splash keeps its data in the text slots.
 static void recycle_slot(void *ctx, unsigned slot, unsigned row, uint8_t fg, uint8_t bg) {
 	const screen_t *s = ctx;
-	if (splash_holds_raster && slot < SPLASH_SLOTS)
+	if (splash_holds_raster && slot < SPLASH_SLOTS) {
 		return;
+	}
 	raster_blank_line(&raster[slot], s->reverse_rows >> row & 1 ? fg : bg);
 }
 
@@ -332,7 +349,7 @@ void video_start(screen_t *screen) {
 	video_screen = screen;
 	screen_set_recycle(screen, recycle_slot, screen);
 	video_update(screen);
-	diag_mark("screen rasterised; launching core 1");
+	diag_mark("screen rasterized; launching core 1");
 	core1_launched = true;
 	multicore_launch_core1(core1_main);
 }
@@ -341,13 +358,15 @@ void video_start(screen_t *screen) {
 // composes next latched the current state.
 static void wait_frame(void) {
 	uint32_t frame = diag_frames;
-	while (diag_frames == frame)
+	while (diag_frames == frame) {
 		tight_loop_contents();
+	}
 }
 
 bool video_splash(const splash_image_t *img, const splash_tint_t *tint) {
-	if (!splash_check(img) || img->size > SPLASH_DATA_MAX)
+	if (!splash_check(img) || img->size > SPLASH_DATA_MAX) {
 		return false;
+	}
 	// Black while the data is copied, so no half-written logo shows.
 	splash_state = SPLASH_BLACK;
 	wait_frame();
@@ -355,8 +374,9 @@ bool video_splash(const splash_image_t *img, const splash_tint_t *tint) {
 	// With LOGO_IN_FLASH this reads flash: after nvflash_retime (main.c).
 	memcpy(splash_data, img->data, img->size);
 	splash_start = splash_decoder_init(img, splash_data);
-	for (unsigned l = 0; l < 4; ++l)
-		splash_colours[l] = hstx_rgb565(splash_tint_colour(tint, l));
+	for (unsigned l = 0; l < 4; ++l) {
+		splash_colors[l] = hstx_rgb565(splash_tint_color(tint, l));
+	}
 	__dmb(); // all of that before core 1 can see SPLASH_SHOW
 	splash_state = SPLASH_SHOW;
 	return true;

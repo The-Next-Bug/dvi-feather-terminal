@@ -1,7 +1,7 @@
 /*
  * z80pack I/O port tables for the terminal's Z80 machine (machine.c).
  * From picosim (z80pack, Copyright (C) 2024-2025 by Udo Munk & Thomas
- * Eberhardt, MIT licence).
+ * Eberhardt, MIT license).
  */
 
 #ifndef SIMIO_INC

@@ -2,7 +2,7 @@
 # Package finished builds into a release ZIP: for every target built under
 # BUILD_DIR, its UF2, BIN and build-info, and the UF2 again as
 # sdcard-<target>/FIRMWARE.UF2 (for the CP/M monitor's update from the
-# card); plus flashing instructions, the third-party notices and licence texts, CHANGES.md (from the git history since the previous tag), SHA256SUMS and the
+# card); plus flashing instructions, the third-party notices and license texts, CHANGES.md (from the git history since the previous tag), SHA256SUMS and the
 # source of the built commit. CHANGES.md is also written next to the ZIP for
 # use as release notes.
 #
@@ -46,21 +46,21 @@ for f in "${infos[@]}"; do
 done
 cp LICENSE docs/FLASHING.txt docs/THIRD-PARTY.md "$stage/"
 
-# Licence texts of the third-party code and data in the firmware
+# License texts of the third-party code and data in the firmware
 # (docs/THIRD-PARTY.md lists them), from the sources the build used. TinyUSB
 # is pico-sdk's submodule: lib/pico-sdk/lib/tinyusb must be checked out.
 mkdir -p "$stage/licenses"
-licence() {
-  [[ -f "$1" ]] || { echo "error: licence text $1 missing (submodules checked out?)" >&2; exit 1; }
+license() {
+  [[ -f "$1" ]] || { echo "error: license text $1 missing (submodules checked out?)" >&2; exit 1; }
   cp "$1" "$stage/licenses/$2"
 }
-licence lib/pico-sdk/LICENSE.TXT pico-sdk-BSD-3-Clause.txt
-licence lib/pico-sdk/src/rp2_common/cmsis/stub/CMSIS/LICENSE.txt Apache-2.0.txt
-licence lib/pico-sdk/lib/tinyusb/LICENSE tinyusb-MIT.txt
-licence lib/z80pack/LICENSE z80pack-MIT.txt
-licence lib/fatfs/LICENSE.txt FatFs-BSD-1-Clause.txt
-licence assets/fonts/Terminus-OFL.txt Terminus-OFL-1.1.txt
-licence docs/licenses/GPL-2.0.txt GPL-2.0.txt
+license lib/pico-sdk/LICENSE.TXT pico-sdk-BSD-3-Clause.txt
+license lib/pico-sdk/src/rp2_common/cmsis/stub/CMSIS/LICENSE.txt Apache-2.0.txt
+license lib/pico-sdk/lib/tinyusb/LICENSE tinyusb-MIT.txt
+license lib/z80pack/LICENSE z80pack-MIT.txt
+license lib/fatfs/LICENSE.txt FatFs-BSD-1-Clause.txt
+license assets/fonts/Terminus-OFL.txt Terminus-OFL-1.1.txt
+license docs/licenses/GPL-2.0.txt GPL-2.0.txt
 scripts/changelog.sh "$sha" | tee "$stage/CHANGES.md" > "$DIST_DIR/CHANGES.md"
 (cd "$stage" && sha256sum -- *.uf2 *.bin sdcard-*/FIRMWARE.UF2 > SHA256SUMS)
 

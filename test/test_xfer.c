@@ -31,8 +31,9 @@ static void fresh_volume(void) {
 // An xfer command on volume 0, with name (11 bytes, FCB form) as its
 // input if given.
 static uint8_t cmd(uint8_t c, const char *name) {
-	if (name)
+	if (name) {
 		memcpy(buf, name, XFER_NAME);
+	}
 	return xfer_command(c, 0, buf);
 }
 
@@ -74,8 +75,9 @@ static const char *listing(const char *pattern) {
 	size_t n = 0;
 	out[0] = '\0';
 	for (uint8_t st = cmd(XFER_FIND_FIRST, pattern); st == XFER_ST_OK; st = cmd(XFER_FIND_NEXT, NULL)) {
-		if (n)
+		if (n) {
 			out[n++] = ',';
+		}
 		memcpy(out + n, buf, XFER_NAME);
 		n += XFER_NAME;
 		out[n] = '\0';
@@ -104,8 +106,9 @@ static void test_round_trip(void) {
 	// Binary: whole records, ^Z bytes and all.
 	CHECK_EQ(cmd(XFER_CREATE, "DATA    BIN"), XFER_ST_OK);
 	for (unsigned r = 0; r < 3; ++r) {
-		for (unsigned i = 0; i < XFER_RECORD; ++i)
+		for (unsigned i = 0; i < XFER_RECORD; ++i) {
 			buf[i] = binary_byte(r * XFER_RECORD + i);
+		}
 		CHECK_EQ(cmd(XFER_WRITE, NULL), XFER_ST_OK);
 	}
 	CHECK_EQ(cmd(XFER_CLOSE, NULL), XFER_ST_OK);
@@ -123,8 +126,9 @@ static void test_round_trip(void) {
 	unsigned bad = 0;
 	for (unsigned r = 0; r < 3; ++r) {
 		CHECK_EQ(cmd(XFER_READ, NULL), XFER_ST_OK);
-		for (unsigned i = 0; i < XFER_RECORD; ++i)
+		for (unsigned i = 0; i < XFER_RECORD; ++i) {
 			bad += buf[i] != binary_byte(r * XFER_RECORD + i);
+		}
 	}
 	CHECK_EQ(bad, 0);
 	CHECK_EQ(cmd(XFER_READ, NULL), XFER_ST_EOF);
@@ -311,8 +315,9 @@ static void test_volume_full(void) {
 	memset(buf, 'z', XFER_RECORD);
 	unsigned records = 0;
 	uint8_t st;
-	while ((st = cmd(XFER_WRITE, NULL)) == XFER_ST_OK && records < 2 * VOLUME_SECTORS * 4)
+	while ((st = cmd(XFER_WRITE, NULL)) == XFER_ST_OK && records < 2 * VOLUME_SECTORS * 4) {
 		++records;
+	}
 	CHECK_EQ(st, XFER_ST_IO_ERROR);
 	CHECK(records > VOLUME_SECTORS * 4 / 2); // most of 1 MB
 	CHECK_EQ(cmd(XFER_CLOSE, NULL), XFER_ST_OK);

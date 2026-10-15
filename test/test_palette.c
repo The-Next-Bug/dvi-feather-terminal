@@ -32,8 +32,8 @@ static void test_xterm_rgb(void) {
 	CHECK(c[0] == 238 && c[1] == 238 && c[2] == 238);
 }
 
-// White in colour: our ANSI colours (the old RGB222 levels), then xterm's.
-static void test_white_colour(void) {
+// White in color: our ANSI colors (the old RGB222 levels), then xterm's.
+static void test_white_color(void) {
 	uint16_t t[PALETTE_SIZE];
 	palette_build(t, PALETTE_HUE_WHITE, false);
 	CHECK_EQ(t[PALETTE_BLACK], 0);
@@ -50,28 +50,31 @@ static void test_white_colour(void) {
 	// Out-of-range hues are white.
 	uint16_t u[PALETTE_SIZE];
 	palette_build(u, 99, false);
-	for (unsigned i = 0; i < PALETTE_SIZE; ++i)
+	for (unsigned i = 0; i < PALETTE_SIZE; ++i) {
 		CHECK_EQ(u[i], t[i]);
+	}
 }
 
-// A phosphor in colour: the ANSI colours are a ramp in its hue, by band;
-// the rest are xterm's colours.
-static void test_phosphor_colour(void) {
+// A phosphor in color: the ANSI colors are a ramp in its hue, by band;
+// the rest are xterm's colors.
+static void test_phosphor_color(void) {
 	uint16_t t[PALETTE_SIZE], white[PALETTE_SIZE];
 	palette_build(t, PALETTE_HUE_GREEN, false);
 	palette_build(white, PALETTE_HUE_WHITE, false);
 	CHECK_EQ(t[PALETTE_BLACK], 0);
 	CHECK_EQ(t[PALETTE_TEXT], ramp(0x33, 0xff, 0x33, 170));
 	CHECK_EQ(t[PALETTE_BOLD_TEXT], rgb565(0x33, 0xff, 0x33));
-	// Bands: 0 < 8 < normal colours (blue dimmest, yellow brightest) < 7 <
-	// bright colours (12 dimmest, 11 brightest) < 15.
+	// Bands: 0 < 8 < normal colors (blue dimmest, yellow brightest) < 7 <
+	// bright colors (12 dimmest, 11 brightest) < 15.
 	static const unsigned order[16] = {0, 8, 4, 1, 5, 2, 6, 3, 7, 12, 9, 13, 10, 14, 11, 15};
-	for (unsigned i = 1; i < 16; ++i)
+	for (unsigned i = 1; i < 16; ++i) {
 		CHECK(green_of(t[order[i]]) > green_of(t[order[i - 1]]));
+	}
 	// Nothing but black is darker than a third.
 	CHECK(green_of(t[PALETTE_BLUE]) > 63 / 3);
-	for (unsigned i = 16; i < PALETTE_SIZE; ++i)
+	for (unsigned i = 16; i < PALETTE_SIZE; ++i) {
 		CHECK_EQ(t[i], white[i]);
+	}
 
 	palette_build(t, PALETTE_HUE_AMBER, false);
 	CHECK_EQ(t[PALETTE_BOLD_TEXT], rgb565(0xff, 0xb0, 0x00));
@@ -79,13 +82,13 @@ static void test_phosphor_colour(void) {
 }
 
 // Mono: every entry is a level of the hue; the ANSI ones as in the phosphor
-// colour palettes.
+// color palettes.
 static void test_mono(void) {
 	uint16_t t[PALETTE_SIZE], phosphor[PALETTE_SIZE];
 	palette_build(t, PALETTE_HUE_WHITE, true);
 	for (unsigned i = 0; i < PALETTE_SIZE; ++i) {
 		unsigned r = t[i] >> 11, g = t[i] >> 5 & 63, b = t[i] & 31;
-		CHECK(r == b && g >> 1 == r); // grey
+		CHECK(r == b && g >> 1 == r); // gray
 	}
 	CHECK_EQ(t[PALETTE_TEXT], ramp(255, 255, 255, 170));
 	CHECK_EQ(t[PALETTE_BOLD_TEXT], 0xffff);
@@ -96,8 +99,9 @@ static void test_mono(void) {
 
 	palette_build(t, PALETTE_HUE_BLUE, true);
 	palette_build(phosphor, PALETTE_HUE_BLUE, false);
-	for (unsigned i = 0; i < 16; ++i)
+	for (unsigned i = 0; i < 16; ++i) {
 		CHECK_EQ(t[i], phosphor[i]);
+	}
 	CHECK_EQ(t[231], rgb565(0x33, 0x99, 0xff));
 }
 
@@ -110,7 +114,7 @@ static void test_nearest(void) {
 	CHECK_EQ(palette_nearest(128, 128, 128), 244);
 	CHECK_EQ(palette_nearest(10, 10, 10), 232);
 	CHECK_EQ(palette_nearest(240, 240, 240), 255);
-	// Every xterm colour above the ANSI ones maps to itself.
+	// Every xterm color above the ANSI ones maps to itself.
 	for (unsigned i = 16; i < PALETTE_SIZE; ++i) {
 		uint8_t c[3];
 		palette_xterm_rgb(i, c);
@@ -123,8 +127,8 @@ static void test_nearest(void) {
 
 int main(void) {
 	RUN(test_xterm_rgb);
-	RUN(test_white_colour);
-	RUN(test_phosphor_colour);
+	RUN(test_white_color);
+	RUN(test_phosphor_color);
 	RUN(test_mono);
 	RUN(test_nearest);
 	return tests_done();

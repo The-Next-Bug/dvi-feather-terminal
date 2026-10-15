@@ -1,5 +1,5 @@
 # DVI out: the HSTX driver (hstx_dvi.c: timing, TMDS, DMA, the blanking
-# command lists) and core 1's scanline composer (video.c: rasterises dirty
+# command lists) and core 1's scanline composer (video.c: rasterizes dirty
 # lines on core 0, composes scanlines on core 1 from SRAM only).
 add_library(dvt_video STATIC
   hstx_dvi.c

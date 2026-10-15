@@ -34,15 +34,17 @@ void led_init(void) {
 // disk install, a firmware update) that does not return to the main loop.
 void led_activity(void) {
 	uint32_t now = time_us_32();
-	if (now - led_changed_us >= LED_FLASH_US)
+	if (now - led_changed_us >= LED_FLASH_US) {
 		led_set(!led_on, now);
+	}
 }
 
 void led_poll(bool blanked) {
 	uint32_t now = time_us_32();
 	bool rest = blanked && now % LED_BEAT_PERIOD_US < LED_BEAT_ON_US;
-	if (led_on != rest && now - led_changed_us >= LED_FLASH_US)
+	if (led_on != rest && now - led_changed_us >= LED_FLASH_US) {
 		led_set(rest, now);
+	}
 }
 
 #else

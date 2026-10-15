@@ -61,8 +61,9 @@ static void progress(void *ctx, uint32_t done, uint32_t total) {
 	unsigned before = c->p->total ? (unsigned)((uint64_t)c->p->done * BAR_WIDTH / c->p->total) : 0;
 	c->p->done = done;
 	c->p->total = total;
-	if (!total || (unsigned)((uint64_t)done * BAR_WIDTH / total) != before)
+	if (!total || (unsigned)((uint64_t)done * BAR_WIDTH / total) != before) {
 		c->plat->show(c->p);
+	}
 }
 
 bool fwpanel_retire_file(fwpanel_source_t source) {
@@ -115,14 +116,16 @@ static void search(fwpanel_t *p, const fwpanel_platform_t *plat) {
 fwpanel_action_t fwpanel_run(fwpanel_t *p, const fwpanel_platform_t *plat) {
 	if (p->state == FWPANEL_SEARCH || p->state == FWPANEL_CHECK) {
 		plat->show(p);
-		if (p->state == FWPANEL_SEARCH)
+		if (p->state == FWPANEL_SEARCH) {
 			search(p, plat);
-		else
+		} else {
 			check(p, plat);
+		}
 		return FWPANEL_REDRAW;
 	}
-	if (p->state != FWPANEL_STAGE)
+	if (p->state != FWPANEL_STAGE) {
 		return FWPANEL_NONE;
+	}
 	plat->show(p);
 	progress_ctx_t ctx = {p, plat};
 	if (!plat->stage(paths[p->source], progress, &ctx, p->info, sizeof p->info)) {
@@ -148,25 +151,29 @@ fwpanel_action_t fwpanel_run(fwpanel_t *p, const fwpanel_platform_t *plat) {
 }
 
 void fwpanel_close(fwpanel_t *p, const fwpanel_platform_t *plat) {
-	if (p->mounted)
+	if (p->mounted) {
 		plat->unmount(false);
+	}
 	p->mounted = false;
 }
 
 void fwpanel_draw(const fwpanel_t *p, screen_t *s, unsigned top, uint8_t fg, uint8_t bg, uint8_t border) {
 	screen_frame(s, top, FWPANEL_ROWS, "SET-UP  Firmware update", fg, bg, border);
-	if (p->step)
+	if (p->step) {
 		screen_puts(s, LEFT + 2, top + 2, p->step, fg, bg);
-	if (p->state != FWPANEL_SEARCH && p->state != FWPANEL_CHECK)
+	}
+	if (p->state != FWPANEL_SEARCH && p->state != FWPANEL_CHECK) {
 		screen_puts(s, LEFT + 2, top + 3, p->info, fg, bg);
+	}
 	if (p->state == FWPANEL_STAGE && p->note) {
 		screen_puts(s, LEFT + 2, top + 4, p->note, fg, bg);
 	} else if (p->state == FWPANEL_STAGE && p->total) {
 		char bar[BAR_WIDTH + 16];
 		unsigned n = (unsigned)((uint64_t)p->done * BAR_WIDTH / p->total);
 		bar[0] = '[';
-		for (unsigned i = 0; i < BAR_WIDTH; ++i)
+		for (unsigned i = 0; i < BAR_WIDTH; ++i) {
 			bar[1 + i] = i < n ? '#' : '.';
+		}
 		snprintf(bar + 1 + BAR_WIDTH, sizeof bar - 1 - BAR_WIDTH, "] %3u%%",
 			(unsigned)((uint64_t)p->done * 100 / p->total));
 		screen_puts(s, LEFT + 2, top + 4, bar, fg, bg);

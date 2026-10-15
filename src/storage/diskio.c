@@ -10,43 +10,53 @@
 #include "usbmsc.h"
 
 DSTATUS disk_status(BYTE pdrv) {
-	if (pdrv == 0)
+	if (pdrv == 0) {
 		return sdcard_disk_status();
-	if (pdrv == 1)
+	}
+	if (pdrv == 1) {
 		return usbmsc_disk_status();
+	}
 	return STA_NOINIT;
 }
 
 DSTATUS disk_initialize(BYTE pdrv) {
-	if (pdrv == 0)
+	if (pdrv == 0) {
 		return sdcard_disk_initialize();
-	if (pdrv == 1)
+	}
+	if (pdrv == 1) {
 		return usbmsc_disk_initialize();
+	}
 	return STA_NOINIT;
 }
 
 DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
 	led_activity();
-	if (pdrv == 0)
+	if (pdrv == 0) {
 		return sdcard_disk_read(buff, sector, count);
-	if (pdrv == 1)
+	}
+	if (pdrv == 1) {
 		return usbmsc_disk_read(buff, sector, count);
+	}
 	return RES_NOTRDY;
 }
 
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
 	led_activity();
-	if (pdrv == 0)
+	if (pdrv == 0) {
 		return sdcard_disk_write(buff, sector, count);
-	if (pdrv == 1)
+	}
+	if (pdrv == 1) {
 		return usbmsc_disk_write(buff, sector, count);
+	}
 	return RES_NOTRDY;
 }
 
 DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
-	if (pdrv == 0)
+	if (pdrv == 0) {
 		return sdcard_disk_ioctl(cmd, buff);
-	if (pdrv == 1)
+	}
+	if (pdrv == 1) {
 		return usbmsc_disk_ioctl(cmd, buff);
+	}
 	return RES_NOTRDY;
 }

@@ -30,7 +30,7 @@ static const struct {
 	{7, 'E', 1}, {7, 'O', 1}, {7, 'N', 1}, {7, 'N', 2},
 };
 
-// The text colour of each hue, for the logo's tint.
+// The text color of each hue, for the logo's tint.
 static const uint8_t logo_fgs[PALETTE_HUES] = {
 	RGB222(2, 2, 2), RGB222(0, 2, 0), RGB222(2, 1, 0), RGB222(0, 1, 3),
 };
@@ -63,8 +63,9 @@ unsigned settings_columns(const settings_t *s) {
 }
 
 const char *settings_field_fixed(const settings_t *s, unsigned i) {
-	if (i == offsetof(settings_t, columns) && s->term_type == SETTINGS_TERM_ADM3A)
+	if (i == offsetof(settings_t, columns) && s->term_type == SETTINGS_TERM_ADM3A) {
 		return "ADM-3A";
+	}
 	return NULL;
 }
 
@@ -75,10 +76,10 @@ void settings_framing(const settings_t *s, unsigned *data_bits, char *parity, un
 	*stop_bits = framings[i].stop_bits;
 }
 
-settings_colours_t settings_colours(const settings_t *s) {
-	unsigned hue = s->colours < PALETTE_HUES ? s->colours : PALETTE_HUE_WHITE;
+settings_colors_t settings_colors(const settings_t *s) {
+	unsigned hue = s->colors < PALETTE_HUES ? s->colors : PALETTE_HUE_WHITE;
 	bool blue_bar = hue == PALETTE_HUE_WHITE && !s->palette;
-	return (settings_colours_t){
+	return (settings_colors_t){
 		.status_fg = blue_bar ? PALETTE_BOLD_TEXT : PALETTE_BACKGROUND,
 		.status_bg = blue_bar ? PALETTE_BLUE : PALETTE_TEXT,
 		.logo_fg = logo_fgs[hue],
@@ -102,7 +103,7 @@ static uint32_t record_crc(const uint8_t *rec, unsigned len) {
 
 void settings_defaults(settings_t *s) {
 	*s = (settings_t){.columns = 80, .backspace = 0x7f, .local_echo = 0, .baud = BAUD_DEFAULT,
-		.framing = 0, .newline = 0, .colours = 0, .palette = 0, .mode = SETTINGS_MODE_TERMINAL,
+		.framing = 0, .newline = 0, .colors = 0, .palette = 0, .mode = SETTINGS_MODE_TERMINAL,
 		.status_line = 1, .blank_after = 0, .term_type = SETTINGS_TERM_VT100};
 }
 
@@ -120,15 +121,19 @@ void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_REC
 bool settings_decode(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s, uint32_t *seq) {
 	unsigned len = rec[5];
 	if (memcmp(rec, MAGIC, 4) != 0 || rec[4] != VERSION || len > PAYLOAD_MAX ||
-		get32(rec + CRC_OFFSET) != record_crc(rec, len))
+		get32(rec + CRC_OFFSET) != record_crc(rec, len)) {
 		return false;
+	}
 	const uint8_t *payload = rec + HEADER_SIZE;
 	settings_defaults(s);
 	uint8_t *fields = (uint8_t *)s;
-	for (unsigned i = 0; i < FIELD_COUNT && i < len; ++i)
-		for (unsigned v = 0; v < settings_fields[i].n_choices; ++v)
-			if (payload[i] == settings_fields[i].values[v])
+	for (unsigned i = 0; i < FIELD_COUNT && i < len; ++i) {
+		for (unsigned v = 0; v < settings_fields[i].n_choices; ++v) {
+			if (payload[i] == settings_fields[i].values[v]) {
 				fields[i] = payload[i];
+			}
+		}
+	}
 	*seq = get32(rec + 8);
 	return true;
 }

@@ -46,24 +46,28 @@ void vtparse_reset(vtparse_t *p) {
 }
 
 static void collect(vtparse_t *p, uint8_t ch) {
-	if (p->n_intermediates < VTPARSE_MAX_INTERMEDIATES)
+	if (p->n_intermediates < VTPARSE_MAX_INTERMEDIATES) {
 		p->intermediates[p->n_intermediates++] = ch;
-	else
+	} else {
 		p->ignoring = true;
+	}
 }
 
 static void param(vtparse_t *p, uint8_t ch) {
-	if (p->n_params == 0)
+	if (p->n_params == 0) {
 		p->n_params = 1;
+	}
 	if (ch == ';') {
-		if (p->n_params < VTPARSE_MAX_PARAMS)
+		if (p->n_params < VTPARSE_MAX_PARAMS) {
 			++p->n_params;
-		else
+		} else {
 			p->params_full = true; // as Williams: extra parameters are dropped
+		}
 		return;
 	}
-	if (p->params_full)
+	if (p->params_full) {
 		return;
+	}
 	uint16_t *v = &p->params[p->n_params - 1];
 	unsigned next = *v * 10u + (unsigned)(ch - '0');
 	*v = next > 0xffff ? 0xffff : (uint16_t)next;
@@ -90,8 +94,9 @@ void vtparse_byte(vtparse_t *p, uint8_t ch) {
 		return;
 	}
 	if (ch >= 0x80 && ch <= 0x9f) {
-		if (!p->c1_controls)
+		if (!p->c1_controls) {
 			return;
+		}
 		clear(p);
 		switch (ch) {
 		case 0x90: case 0x98: case 0x9e: case 0x9f: // DCS SOS PM APC
@@ -124,9 +129,9 @@ void vtparse_byte(vtparse_t *p, uint8_t ch) {
 
 	switch (p->state) {
 	case ESCAPE:
-		if (is_c0(c))
+		if (is_c0(c)) {
 			dispatch(p, VTPARSE_EXECUTE, c);
-		else if (c >= 0x20 && c <= 0x2f) {
+		} else if (c >= 0x20 && c <= 0x2f) {
 			collect(p, c);
 			p->state = ESCAPE_INTERMEDIATE;
 		} else if (c == '[') {
@@ -143,22 +148,23 @@ void vtparse_byte(vtparse_t *p, uint8_t ch) {
 		break;
 
 	case ESCAPE_INTERMEDIATE:
-		if (is_c0(c))
+		if (is_c0(c)) {
 			dispatch(p, VTPARSE_EXECUTE, c);
-		else if (c >= 0x20 && c <= 0x2f)
+		} else if (c >= 0x20 && c <= 0x2f) {
 			collect(p, c);
-		else if (c != DEL) {
-			if (!p->ignoring)
+		} else if (c != DEL) {
+			if (!p->ignoring) {
 				dispatch(p, VTPARSE_ESC_DISPATCH, c);
+			}
 			p->state = GROUND;
 		}
 		break;
 
 	case CSI_ENTRY:
 	case CSI_PARAM:
-		if (is_c0(c))
+		if (is_c0(c)) {
 			dispatch(p, VTPARSE_EXECUTE, c);
-		else if ((c >= '0' && c <= '9') || c == ';') {
+		} else if ((c >= '0' && c <= '9') || c == ';') {
 			param(p, c);
 			p->state = CSI_PARAM;
 		} else if (c >= 0x3c && c <= 0x3f && p->state == CSI_ENTRY) {
@@ -176,24 +182,26 @@ void vtparse_byte(vtparse_t *p, uint8_t ch) {
 		break;
 
 	case CSI_INTERMEDIATE:
-		if (is_c0(c))
+		if (is_c0(c)) {
 			dispatch(p, VTPARSE_EXECUTE, c);
-		else if (c >= 0x20 && c <= 0x2f)
+		} else if (c >= 0x20 && c <= 0x2f) {
 			collect(p, c);
-		else if (c >= 0x30 && c <= 0x3f)
+		} else if (c >= 0x30 && c <= 0x3f) {
 			p->state = CSI_IGNORE;
-		else if (c >= 0x40 && c <= 0x7e) {
-			if (!p->ignoring)
+		} else if (c >= 0x40 && c <= 0x7e) {
+			if (!p->ignoring) {
 				dispatch(p, VTPARSE_CSI_DISPATCH, c);
+			}
 			p->state = GROUND;
 		}
 		break;
 
 	case CSI_IGNORE:
-		if (is_c0(c))
+		if (is_c0(c)) {
 			dispatch(p, VTPARSE_EXECUTE, c);
-		else if (c >= 0x40 && c <= 0x7e)
+		} else if (c >= 0x40 && c <= 0x7e) {
 			p->state = GROUND;
+		}
 		break;
 
 	case OSC_STRING:
@@ -201,13 +209,14 @@ void vtparse_byte(vtparse_t *p, uint8_t ch) {
 		// Ended by ST, ESC, CAN or SUB (above), BEL in OSC, and, for hosts
 		// that never end their strings, by any other C0 control but NUL
 		// (padding), which then acts, or by the length limit.
-		if (c == BEL && p->state == OSC_STRING)
+		if (c == BEL && p->state == OSC_STRING) {
 			p->state = GROUND;
-		else if (is_c0(c) && c != 0) {
+		} else if (is_c0(c) && c != 0) {
 			p->state = GROUND;
 			dispatch(p, VTPARSE_EXECUTE, c);
-		} else if (++p->string_len >= VTPARSE_MAX_STRING)
+		} else if (++p->string_len >= VTPARSE_MAX_STRING) {
 			p->state = GROUND;
+		}
 		break;
 	}
 }

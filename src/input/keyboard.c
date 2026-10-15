@@ -81,16 +81,18 @@ typedef struct {
 } seq_t;
 
 static void seq_add(seq_t *s, uint8_t c) {
-	if (s->len < sizeof s->data)
+	if (s->len < sizeof s->data) {
 		s->data[s->len++] = c;
+	}
 }
 
 // ESC [ x, or ESC O x in the given application mode; ESC x in VT52 mode
 // (cursor and PF keys).
 static void seq_ss3(seq_t *s, const kbd_modes_t *modes, bool app, char final) {
 	seq_add(s, 0x1b);
-	if (!modes->vt52)
+	if (!modes->vt52) {
 		seq_add(s, app ? 'O' : '[');
+	}
 	seq_add(s, (uint8_t)final);
 }
 
@@ -105,23 +107,26 @@ static void seq_keypad(seq_t *s, const kbd_modes_t *modes, char final) {
 static void seq_tilde(seq_t *s, unsigned n) {
 	seq_add(s, 0x1b);
 	seq_add(s, '[');
-	if (n >= 10)
+	if (n >= 10) {
 		seq_add(s, (uint8_t)('0' + n / 10));
+	}
 	seq_add(s, (uint8_t)('0' + n % 10));
 	seq_add(s, '~');
 }
 
 static void seq_return(seq_t *s, const kbd_modes_t *modes) {
 	seq_add(s, '\r');
-	if (modes->newline_mode)
+	if (modes->newline_mode) {
 		seq_add(s, '\n');
+	}
 }
 
 // Ctrl with a character: the control code it makes, as on a VT100 (and
 // xterm for the digits).
 static uint8_t control(uint8_t c) {
-	if (c >= 0x40 && c <= 0x7e)
+	if (c >= 0x40 && c <= 0x7e) {
 		return c & 0x1f;
+	}
 	switch (c) {
 	case ' ':
 	case '2':
@@ -157,13 +162,15 @@ static bool adm3a_editing_key(seq_t *s, uint8_t key) {
 
 // Editing and cursor keys (also the keypad with Num Lock off).
 static bool editing_key(seq_t *s, uint8_t key, const kbd_modes_t *modes) {
-	if (modes->adm3a)
+	if (modes->adm3a) {
 		return adm3a_editing_key(s, key);
+	}
 	// A VT52 has the four cursor keys only: the rest send nothing in VT52
 	// mode (their ESC [ n ~ would reach a VT52 program as garbage).
-	if (modes->vt52 && key != KEY_UP && key != KEY_DOWN && key != KEY_RIGHT && key != KEY_LEFT)
+	if (modes->vt52 && key != KEY_UP && key != KEY_DOWN && key != KEY_RIGHT && key != KEY_LEFT) {
 		return key == KEY_HOME || key == KEY_END || key == KEY_INSERT || key == KEY_DELETE ||
 			key == KEY_PAGE_UP || key == KEY_PAGE_DOWN;
+	}
 	switch (key) {
 	case KEY_UP:
 		seq_ss3(s, modes, modes->cursor_keys_app, 'A');
@@ -202,10 +209,11 @@ static bool editing_key(seq_t *s, uint8_t key, const kbd_modes_t *modes) {
 
 // A keypad key in numeric or application mode: the character, or ESC O x.
 static void keypad_key(seq_t *s, const kbd_modes_t *modes, char numeric, char app) {
-	if (modes->keypad_app)
+	if (modes->keypad_app) {
 		seq_keypad(s, modes, app);
-	else
+	} else {
 		seq_add(s, (uint8_t)numeric);
+	}
 }
 
 // What key sends with these modifiers; empty for keys that send nothing.
@@ -215,8 +223,9 @@ static void translate(const kbd_t *k, uint8_t key, uint8_t modifiers, const kbd_
 
 	if (key >= KEY_A && key <= KEY_Z) {
 		c = 'a' + (key - KEY_A);
-		if (shift != k->caps_lock)
+		if (shift != k->caps_lock) {
 			c -= 'a' - 'A';
+		}
 	} else if (key >= KEY_1 && key <= KEY_SLASH && plain_keys[key - KEY_1][0]) {
 		c = plain_keys[key - KEY_1][shift];
 	} else if (key == KEY_NON_US_BACKSLASH) {
@@ -242,15 +251,17 @@ static void translate(const kbd_t *k, uint8_t key, uint8_t modifiers, const kbd_
 		seq_tilde(s, function_keys[key - KEY_F1 - 4]);
 	} else if (key >= KEY_KP_1 && key <= KEY_KP_DOT) {
 		unsigned i = key - KEY_KP_1;
-		if (k->num_lock)
+		if (k->num_lock) {
 			keypad_key(s, modes, keypad[i].numeric, keypad[i].app);
-		else if (keypad[i].nav)
+		} else if (keypad[i].nav) {
 			editing_key(s, keypad[i].nav, modes);
+		}
 	} else if (key == KEY_KP_ENTER) {
-		if (modes->keypad_app)
+		if (modes->keypad_app) {
 			seq_keypad(s, modes, 'M');
-		else
+		} else {
 			seq_return(s, modes);
+		}
 	} else if (key == KEY_KP_MINUS) {
 		keypad_key(s, modes, '-', 'm');
 	} else if (key == KEY_KP_PLUS || key == KEY_KP_COMMA) {
@@ -267,8 +278,9 @@ static void translate(const kbd_t *k, uint8_t key, uint8_t modifiers, const kbd_
 	}
 
 	if (c >= 0) {
-		if (modifiers & MOD_ALT)
+		if (modifiers & MOD_ALT) {
 			seq_add(s, 0x1b);
+		}
 		seq_add(s, ctrl ? control((uint8_t)c) : (uint8_t)c);
 	}
 }
@@ -276,14 +288,17 @@ static void translate(const kbd_t *k, uint8_t key, uint8_t modifiers, const kbd_
 static void send(kbd_t *k, uint8_t key, const kbd_modes_t *modes) {
 	seq_t s = {.len = 0};
 	translate(k, key, k->modifiers, modes, &s);
-	if (s.len && k->output)
+	if (s.len && k->output) {
 		k->output(k->output_ctx, s.data, s.len);
+	}
 }
 
 static bool in_report(const uint8_t *keys, uint8_t key) {
-	for (int i = 0; i < KBD_REPORT_KEYS; ++i)
-		if (keys[i] == key)
+	for (int i = 0; i < KBD_REPORT_KEYS; ++i) {
+		if (keys[i] == key) {
 			return true;
+		}
+	}
 	return false;
 }
 
@@ -306,15 +321,17 @@ bool kbd_report(kbd_t *k, const uint8_t report[8], const kbd_modes_t *modes, uin
 	const uint8_t *keys = report + 2;
 	// Too many keys down: the keyboard reports ErrorRollOver in every slot
 	// and the previous state stands.
-	if (keys[0] == KEY_ERROR_ROLLOVER)
+	if (keys[0] == KEY_ERROR_ROLLOVER) {
 		return false;
+	}
 
 	k->modifiers = report[0];
 	bool leds_changed = false;
 	for (int i = 0; i < KBD_REPORT_KEYS; ++i) {
 		uint8_t key = keys[i];
-		if (key < KEY_A || in_report(k->keys, key))
+		if (key < KEY_A || in_report(k->keys, key)) {
 			continue; // empty slot, error code or still held
+		}
 		if (key == KEY_CAPS_LOCK) {
 			k->caps_lock = !k->caps_lock;
 			leds_changed = true;
@@ -322,8 +339,9 @@ bool kbd_report(kbd_t *k, const uint8_t report[8], const kbd_modes_t *modes, uin
 			k->num_lock = !k->num_lock;
 			leds_changed = true;
 		} else if (key == KEY_F12 || key == KEY_PAUSE) {
-			if (k->setup)
+			if (k->setup) {
 				k->setup(k->output_ctx);
+			}
 		} else if (key == KEY_F11 && k->reset) {
 			k->reset(k->output_ctx); // no repeat
 		} else {
@@ -333,20 +351,23 @@ bool kbd_report(kbd_t *k, const uint8_t report[8], const kbd_modes_t *modes, uin
 		}
 	}
 	memcpy(k->keys, keys, KBD_REPORT_KEYS);
-	if (k->repeat_key && !in_report(keys, k->repeat_key))
+	if (k->repeat_key && !in_report(keys, k->repeat_key)) {
 		k->repeat_key = 0;
+	}
 	return leds_changed;
 }
 
 void kbd_tick(kbd_t *k, const kbd_modes_t *modes, uint32_t now_ms) {
-	if (!k->repeat_key || (int32_t)(now_ms - k->repeat_at) < 0)
+	if (!k->repeat_key || (int32_t)(now_ms - k->repeat_at) < 0) {
 		return;
+	}
 	send(k, k->repeat_key, modes);
 	// If the caller was late, carry on from now rather than catching up
 	// with a burst.
 	k->repeat_at += KBD_REPEAT_INTERVAL_MS;
-	if ((int32_t)(now_ms - k->repeat_at) >= 0)
+	if ((int32_t)(now_ms - k->repeat_at) >= 0) {
 		k->repeat_at = now_ms + KBD_REPEAT_INTERVAL_MS;
+	}
 }
 
 void kbd_release_all(kbd_t *k) {

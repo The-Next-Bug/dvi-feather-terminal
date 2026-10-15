@@ -10,10 +10,13 @@
 #define NAME_COL (LEFT + 6)
 
 static int index_of(const drivepanel_t *p, const char *name) {
-	if (name)
-		for (unsigned i = 0; i < p->n_images; ++i)
-			if (strcmp(p->images[i], name) == 0)
+	if (name) {
+		for (unsigned i = 0; i < p->n_images; ++i) {
+			if (strcmp(p->images[i], name) == 0) {
 				return (int)i;
+			}
+		}
+	}
 	return -1;
 }
 
@@ -23,8 +26,9 @@ static void match_set(drivepanel_t *p) {
 	p->set = -1;
 	for (unsigned i = 0; i < p->n_sets; ++i) {
 		unsigned d = 0;
-		while (d < DRIVES && p->set_choice[i][d] == p->choice[d])
+		while (d < DRIVES && p->set_choice[i][d] == p->choice[d]) {
 			++d;
+		}
 		if (d == DRIVES) {
 			p->set = (int)i;
 			return;
@@ -38,16 +42,20 @@ static void read_sets(drivepanel_t *p) {
 	p->n_sets = drives_sets(p->sets, DRIVES_SETS_MAX);
 	for (unsigned i = 0; i < p->n_sets; ++i) {
 		char images[DRIVES][DRIVES_NAME_MAX + 1];
-		if (!drives_set_read(p->sets[i], images))
+		if (!drives_set_read(p->sets[i], images)) {
 			memset(images, 0, sizeof images);
+		}
 		p->set_missing[i] = 0;
 		for (unsigned d = 0; d < DRIVES; ++d) {
 			int at = images[d][0] ? index_of(p, images[d]) : -1;
-			for (unsigned e = 0; at >= 0 && e < d; ++e)
-				if (p->set_choice[i][e] == at)
+			for (unsigned e = 0; at >= 0 && e < d; ++e) {
+				if (p->set_choice[i][e] == at) {
 					at = -1;
-			if (images[d][0] && at < 0)
+				}
+			}
+			if (images[d][0] && at < 0) {
 				++p->set_missing[i];
+			}
 			p->set_choice[i][d] = (int8_t)at;
 		}
 	}
@@ -57,15 +65,18 @@ static void read_sets(drivepanel_t *p) {
 void drivepanel_open(drivepanel_t *p) {
 	memset(p, 0, sizeof *p);
 	p->n_images = drives_list(p->images, DRIVES_LIST_MAX);
-	for (unsigned d = 0; d < DRIVES; ++d)
+	for (unsigned d = 0; d < DRIVES; ++d) {
 		p->choice[d] = p->mounted[d] = index_of(p, drives_name(d));
+	}
 	read_sets(p);
 }
 
 static bool chosen_elsewhere(const drivepanel_t *p, unsigned drive, int image) {
-	for (unsigned d = 0; d < DRIVES; ++d)
-		if (d != drive && p->choice[d] == image)
+	for (unsigned d = 0; d < DRIVES; ++d) {
+		if (d != drive && p->choice[d] == image) {
 			return true;
+		}
+	}
 	return false;
 }
 
@@ -76,8 +87,9 @@ static void step(drivepanel_t *p, int dir) {
 	int at = p->choice[p->drive] + 1;
 	for (int tries = 0; tries < n; ++tries) {
 		at = (at + dir + n) % n;
-		if (at == 0 || !chosen_elsewhere(p, p->drive, at - 1))
+		if (at == 0 || !chosen_elsewhere(p, p->drive, at - 1)) {
 			break;
+		}
 	}
 	p->choice[p->drive] = at - 1;
 	match_set(p);
@@ -91,8 +103,9 @@ static void step_set(drivepanel_t *p, int dir) {
 	}
 	int n = (int)p->n_sets;
 	int at = p->set < 0 ? (dir > 0 ? 0 : n - 1) : (p->set + dir + n) % n;
-	for (unsigned d = 0; d < DRIVES; ++d)
+	for (unsigned d = 0; d < DRIVES; ++d) {
 		p->choice[d] = p->set_choice[at][d];
+	}
 	p->set = at;
 	if (p->set_missing[at]) {
 		snprintf(p->message_buf, sizeof p->message_buf, "%u of %s's disks %s not on the card", p->set_missing[at],
@@ -133,14 +146,16 @@ static drivepanel_action_t cursor_key(drivepanel_t *p, uint8_t final, uint8_t pa
 		return DRIVEPANEL_REDRAW;
 	case 'C':
 	case 'D':
-		if (p->on_set)
+		if (p->on_set) {
 			step_set(p, final == 'C' ? 1 : -1);
-		else
+		} else {
 			step(p, final == 'C' ? 1 : -1);
+		}
 		return DRIVEPANEL_REDRAW;
 	case '~':
-		if (param != 3) // Delete: ESC [ 3 ~
+		if (param != 3) { // Delete: ESC [ 3 ~
 			return DRIVEPANEL_NONE;
+		}
 		start_remove(p);
 		return DRIVEPANEL_REDRAW;
 	default:
@@ -174,8 +189,9 @@ static drivepanel_action_t prompt_key(drivepanel_t *p, uint8_t c) {
 
 // Escape: closes a prompt, else the panel.
 static drivepanel_action_t escape(drivepanel_t *p) {
-	if (p->prompt == DRIVEPANEL_PROMPT_NONE)
+	if (p->prompt == DRIVEPANEL_PROMPT_NONE) {
 		return DRIVEPANEL_CANCEL;
+	}
 	p->prompt = DRIVEPANEL_PROMPT_NONE;
 	return DRIVEPANEL_REDRAW;
 }
@@ -208,10 +224,11 @@ drivepanel_action_t drivepanel_input(drivepanel_t *p, uint8_t c, uint32_t now_ms
 	} else if (p->prompt) {
 		action = prompt_key(p, c);
 	} else if (c == ' ') {
-		if (p->on_set)
+		if (p->on_set) {
 			step_set(p, 1);
-		else
+		} else {
 			step(p, 1);
+		}
 		action = DRIVEPANEL_REDRAW;
 	} else if (c == 's' || c == 'S') {
 		p->prompt = DRIVEPANEL_PROMPT_NAME;
@@ -239,28 +256,35 @@ unsigned drivepanel_apply(drivepanel_t *p, bool *failed) {
 	*failed = false;
 	drives_flush();
 	// Unmount first: an image may move from one drive to another.
-	for (unsigned d = 0; d < DRIVES; ++d)
-		if (p->choice[d] != p->mounted[d])
-			drives_unmount(d);
 	for (unsigned d = 0; d < DRIVES; ++d) {
-		if (p->choice[d] == p->mounted[d])
-			continue;
-		++changed;
-		if (p->choice[d] >= 0 && drives_mount(d, p->images[p->choice[d]]) != DRIVES_OK)
-			*failed = true;
+		if (p->choice[d] != p->mounted[d]) {
+			drives_unmount(d);
+		}
 	}
-	if (changed)
+	for (unsigned d = 0; d < DRIVES; ++d) {
+		if (p->choice[d] == p->mounted[d]) {
+			continue;
+		}
+		++changed;
+		if (p->choice[d] >= 0 && drives_mount(d, p->images[p->choice[d]]) != DRIVES_OK) {
+			*failed = true;
+		}
+	}
+	if (changed) {
 		drives_save_config();
+	}
 	return changed;
 }
 
 void drivepanel_save_set(drivepanel_t *p) {
 	char images[DRIVES][DRIVES_NAME_MAX + 1];
-	for (unsigned d = 0; d < DRIVES; ++d)
+	for (unsigned d = 0; d < DRIVES; ++d) {
 		strcpy(images[d], p->choice[d] >= 0 ? p->images[p->choice[d]] : "");
+	}
 	bool replaced = false;
-	for (unsigned i = 0; i < p->n_sets; ++i)
+	for (unsigned i = 0; i < p->n_sets; ++i) {
 		replaced |= strcmp(p->sets[i], p->name) == 0;
+	}
 	if (!replaced && p->n_sets == DRIVES_SETS_MAX) {
 		snprintf(p->message_buf, sizeof p->message_buf, "No room: %u sets at most (R removes one)",
 			DRIVES_SETS_MAX);
@@ -274,8 +298,9 @@ void drivepanel_save_set(drivepanel_t *p) {
 }
 
 void drivepanel_remove_set(drivepanel_t *p) {
-	if (p->set < 0)
+	if (p->set < 0) {
 		return;
+	}
 	char name[DRIVES_NAME_MAX + 1];
 	strcpy(name, p->sets[p->set]);
 	snprintf(p->message_buf, sizeof p->message_buf,
@@ -289,8 +314,9 @@ static void draw_row(screen_t *s, unsigned row, const char *label, bool selected
 	const char *info, uint8_t fg, uint8_t bg) {
 	char text[SCREEN_MAX_COLS + 1];
 	snprintf(text, sizeof text, " %c %s", selected ? '>' : ' ', label);
-	for (unsigned c = 0; text[c]; ++c)
+	for (unsigned c = 0; text[c]; ++c) {
 		screen_put_attr(s, LEFT + c, row, (uint8_t)text[c], fg, bg, selected ? SCREEN_ATTR_BOLD : 0);
+	}
 	snprintf(text, sizeof text, "< %-8s >", choice);
 	screen_puts(s, NAME_COL, row, text, bg, fg);
 	snprintf(text, sizeof text, " %s", info);

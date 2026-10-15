@@ -127,7 +127,7 @@ PADDR1:	LD	E,10
 	LD	A,B
 	JR	C,PADDR1
 	LD	DE,0B1CH	;row 11, column 28
-	LD	HL,SCENTRE
+	LD	HL,SCENTER
 	CALL	ATS
 	LD	DE,0100H
 	LD	HL,STOPL
@@ -908,8 +908,8 @@ SESC:	DB	'ESC',0
 SNONE:	DB	'(nothing)',0
 SEQUALS: DB	'  = ',0
 
-TADDR:	DB	'Cursor addressing: a box, its centre, two corners',0
-SCENTRE: DB	'centre (row 12, col 29)',0
+TADDR:	DB	'Cursor addressing: a box, its center, two corners',0
+SCENTER: DB	'center (row 12, col 29)',0
 STOPL:	DB	'top left (row 2)',0
 SBOTR:	DB	'bottom right',0
 

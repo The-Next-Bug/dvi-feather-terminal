@@ -1,7 +1,7 @@
 /*
  * z80pack memory for the terminal's Z80 machine (machine.c): picosim's
  * banked memory (z80pack, Copyright (C) 2024 by Udo Munk, Copyright (C)
- * 2024-2025 by Thomas Eberhardt, MIT licence). Bank 0 is 64 KB; the
+ * 2024-2025 by Thomas Eberhardt, MIT license). Bank 0 is 64 KB; the
  * other banks (machine.c: MACHINE_BANKS in SRAM, or machine_set_banks's,
  * e.g. in PSRAM) replace its lower SEGSIZ bytes when selected (MMU port
  * 64), the rest is common. The top page holds the boot ROM and ignores
@@ -27,8 +27,9 @@ extern BYTE selbnk, *curbnk;
 static inline void memwrt(WORD addr, BYTE data)
 {
 	if ((selbnk == 0) || (addr >= SEGSIZ)) {
-		if (addr < ROM_PAGE)
+		if (addr < ROM_PAGE) {
 			bnk0[addr] = data;
+		}
 	} else {
 		curbnk[addr] = data;
 	}
@@ -36,10 +37,11 @@ static inline void memwrt(WORD addr, BYTE data)
 
 static inline BYTE memrdr(WORD addr)
 {
-	if ((selbnk == 0) || (addr >= SEGSIZ))
+	if ((selbnk == 0) || (addr >= SEGSIZ)) {
 		return bnk0[addr];
-	else
+	} else {
 		return curbnk[addr];
+	}
 }
 
 /* DMA devices and the simulation frame see the same memory. */

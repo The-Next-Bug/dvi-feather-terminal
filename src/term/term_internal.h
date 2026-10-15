@@ -17,9 +17,9 @@
 unsigned term_cols(const term_t *t);
 unsigned term_abs_row(const term_t *t, unsigned row);
 
-// Colours for erased cells: the current background (as xterm's "background
-// colour erase"), default foreground.
-void term_erase_colours(const term_t *t, uint8_t *fg, uint8_t *bg);
+// Colors for erased cells: the current background (as xterm's "background
+// color erase"), default foreground.
+void term_erase_colors(const term_t *t, uint8_t *fg, uint8_t *bg);
 
 // printf-style reply to the host (at most 39 bytes); dropped without a
 // reply callback.
@@ -68,7 +68,7 @@ void term_delete_lines(term_t *t, unsigned n);
 // the cell-level terminal above: printing, C0 controls, cursor movement,
 // scrolling regions, erasing, line and character insert/delete (VT102), tab stops, character
 // sets (G0/G1: ASCII, UK, DEC Special Graphics), modes (including DECSCNM
-// reverse screen and DECCOLM), save/restore cursor, SGR colours (as palette
+// reverse screen and DECCOLM), save/restore cursor, SGR colors (as palette
 // indices: palette.h), underline and blink, DECBKM (what Backspace sends,
 // for the keyboard), replies to device attribute and status requests, and
 // REP (repeat character, which ncurses uses under TERM=xterm-16color).
@@ -93,10 +93,11 @@ void vt100_execute(term_t *t, uint8_t ch);
 void vt52_byte(term_t *t, uint8_t ch); // vt52.c
 
 static inline void vt100_byte(term_t *t, uint8_t ch) {
-	if (t->vt100.vt52)
+	if (t->vt100.vt52) {
 		vt52_byte(t, ch);
-	else
+	} else {
 		vtparse_byte(&t->vt100.parser, ch);
+	}
 }
 
 // ---- adm3a.c ----

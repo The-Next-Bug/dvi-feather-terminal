@@ -1,7 +1,7 @@
 ;
 ;	CP/M 2.2 boot-loader for z80pack machines using SD-FDC
 ;
-;	Copyright (C) 2024 by Udo Munk (z80pack picosim, MIT licence);
+;	Copyright (C) 2024 by Udo Munk (z80pack picosim, MIT license);
 ;	for the DVI terminal's 62K system (bios.asm).
 ;
 	ORG	0		;mem base of boot

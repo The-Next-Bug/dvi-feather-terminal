@@ -24,45 +24,51 @@ static bool key_wakes(void) {
 void send_key(void *ctx, const uint8_t *data, size_t len) {
 	(void)ctx;
 	key_pressed = true;
-	if (key_wakes())
+	if (key_wakes()) {
 		return;
+	}
 	if (setup.active) {
 		setup_feed(data, len);
 		return;
 	}
 	if (cpm.on) {
-		for (size_t i = 0; i < len && cpm.key_head - cpm.key_tail < CPM_KEY_QUEUE; ++i)
+		for (size_t i = 0; i < len && cpm.key_head - cpm.key_tail < CPM_KEY_QUEUE; ++i) {
 			cpm.keys[cpm.key_head++ % CPM_KEY_QUEUE] = data[i];
+		}
 	} else {
 		serial_write(data, len);
 	}
 	last_key.len = (uint8_t)(len < sizeof last_key.data ? len : sizeof last_key.data);
 	memcpy(last_key.data, data, last_key.len);
 	++last_key.count;
-	if (term_started && settings.local_echo && !cpm.on)
+	if (term_started && settings.local_echo && !cpm.on) {
 		term_write(&term, data, len);
+	}
 }
 
 // The SET-UP key opens SET-UP, or leaves it without saving.
 void setup_key(void *ctx) {
 	(void)ctx;
 	key_pressed = true;
-	if (!term_started || key_wakes())
+	if (!term_started || key_wakes()) {
 		return;
-	if (setup.demo)
+	}
+	if (setup.demo) {
 		setup.demo_end = true; // back to SET-UP, like any key
-	else if (setup.active)
+	} else if (setup.active) {
 		setup.action = SETUP_CANCEL;
-	else
+	} else {
 		setup.open_requested = true;
+	}
 }
 
 // F11 in CP/M mode: the Z80 machine's reset button (cpm_step acts on it).
 void reset_key(void *ctx) {
 	(void)ctx;
 	key_pressed = true;
-	if (term_started && !key_wakes() && !setup.active)
+	if (term_started && !key_wakes() && !setup.active) {
 		cpm.reset_requested = true;
+	}
 }
 
 // The terminal modes that change what keys send (none before it starts).

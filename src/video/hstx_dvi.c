@@ -109,14 +109,16 @@ static void __not_in_flash_func(dma_irq)(void) {
 		return;
 	} else {
 		uint y = line - v_active_start;
-		if (y == 0)
+		if (y == 0) {
 			++hstx_dvi_frames;
+		}
 		c->read_addr = (uintptr_t)line_fn(y);
 		c->transfer_count = pixel_words;
 		pixels_next = false;
 	}
-	if (++line == v_total)
+	if (++line == v_total) {
 		line = 0;
+	}
 }
 
 // Channel i starts on blanking line i (0 or 1) and chains to the other; the
@@ -193,8 +195,9 @@ void hstx_dvi_init(void) {
 			PADS_BANK0_GPIO0_DRIVE_BITS | PADS_BANK0_GPIO0_SLEWFAST_BITS | PADS_BANK0_GPIO0_IE_BITS);
 	}
 
-	for (int i = 0; i < 2; ++i)
+	for (int i = 0; i < 2; ++i) {
 		dma_ch[i] = (uint)dma_claim_unused_channel(true);
+	}
 	setup_dma();
 }
 
@@ -204,8 +207,9 @@ void hstx_dvi_start(hstx_line_fn fn) {
 	bus_ctrl_hw->priority = BUSCTRL_BUS_PRIORITY_DMA_W_BITS | BUSCTRL_BUS_PRIORITY_DMA_R_BITS;
 	irq_set_exclusive_handler(DMA_IRQ_0, dma_irq);
 	irq_set_priority(DMA_IRQ_0, PICO_HIGHEST_IRQ_PRIORITY);
-	for (int i = 0; i < 2; ++i)
+	for (int i = 0; i < 2; ++i) {
 		dma_channel_set_irq0_enabled(dma_ch[i], true);
+	}
 	irq_set_enabled(DMA_IRQ_0, true);
 	dma_channel_start(dma_ch[0]);
 }
@@ -214,17 +218,20 @@ void __not_in_flash_func(hstx_dvi_stop)(void) {
 	uint32_t mask = 1u << dma_ch[0] | 1u << dma_ch[1];
 	irq_set_enabled(DMA_IRQ_0, false);
 	// Disabled first, so aborting one does not start the other (chain).
-	for (int i = 0; i < 2; ++i)
+	for (int i = 0; i < 2; ++i) {
 		hw_clear_bits(&dma_hw->ch[dma_ch[i]].al1_ctrl, DMA_CH0_CTRL_TRIG_EN_BITS);
+	}
 	dma_hw->abort = mask;
-	while (dma_hw->abort & mask)
+	while (dma_hw->abort & mask) {
 		tight_loop_contents();
+	}
 	dma_hw->intr = mask;
 	// What is in the FIFO goes out (the HSTX does not pop it while off):
 	// a few lines' time at most, as one word can repeat a symbol a line long.
 	uint64_t until = time_us_64() + 200;
-	while (!(hstx_fifo_hw->stat & HSTX_FIFO_STAT_EMPTY_BITS) && time_us_64() < until)
+	while (!(hstx_fifo_hw->stat & HSTX_FIFO_STAT_EMPTY_BITS) && time_us_64() < until) {
 		tight_loop_contents();
+	}
 	// No clock on the clock lane: the monitor sees no signal.
 	hstx_ctrl_hw->csr = 0;
 }

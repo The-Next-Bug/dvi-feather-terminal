@@ -4,7 +4,7 @@
 // USB HID keyboard (boot protocol reports) to VT100 key codes. Portable C
 // (no pico-sdk, no TinyUSB), host-tested; usbkbd.c feeds it from TinyUSB.
 //
-// US layout. Letters honour Caps Lock, Ctrl makes control characters, Alt
+// US layout. Letters honor Caps Lock, Ctrl makes control characters, Alt
 // prefixes ESC (meta). Cursor keys follow DECCKM (ESC [ A or ESC O A), the
 // keypad follows DECKPAM/DECKPNM while Num Lock is on (it is navigation
 // otherwise, as on a PC), F1-F4 are PF1-PF4 (ESC O P..S), and Return sends

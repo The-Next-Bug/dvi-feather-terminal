@@ -19,7 +19,7 @@ static void test_init_fills_blanks(void) {
 			CHECK_EQ(s.row_map[row], row);
 			for (unsigned col = 0; col < cols; ++col) {
 				uint8_t fg, bg;
-				screen_colours(&s, col, row, &fg, &bg);
+				screen_colors(&s, col, row, &fg, &bg);
 				CHECK_EQ(screen_glyph(&s, col, row), ' ');
 				CHECK_EQ(fg, FG);
 				CHECK_EQ(bg, BG);
@@ -35,11 +35,12 @@ static void test_bad_width_means_80(void) {
 
 static void test_put_round_trips(void) {
 	screen_init(&s, 132, FG, BG);
-	for (unsigned c = 0; c < 64; ++c)
+	for (unsigned c = 0; c < 64; ++c) {
 		screen_put(&s, c * 2, 3, (uint8_t)(0x80 + c), (uint8_t)c, (uint8_t)(63 - c));
+	}
 	for (unsigned c = 0; c < 64; ++c) {
 		uint8_t fg, bg;
-		screen_colours(&s, c * 2, 3, &fg, &bg);
+		screen_colors(&s, c * 2, 3, &fg, &bg);
 		CHECK_EQ(screen_glyph(&s, c * 2, 3), 0x80 + c);
 		CHECK_EQ(fg, c);
 		CHECK_EQ(bg, 63 - c);
@@ -57,8 +58,9 @@ static void test_out_of_range_is_ignored(void) {
 	CHECK_EQ(screen_glyph(&s, 79, 1), 'b');
 	CHECK_EQ(screen_glyph(&s, 80, 1), 0);
 	CHECK_EQ(s.lines[1].glyph[80], ' '); // storage past the width untouched
-	for (unsigned col = 0; col < 80; ++col)
+	for (unsigned col = 0; col < 80; ++col) {
 		CHECK_EQ(screen_glyph(&s, col, 0), screen_glyph(&before, col, 0));
+	}
 }
 
 static void test_dirty_tracks_slots(void) {
@@ -83,32 +85,37 @@ static void test_dirty_tracks_slots(void) {
 
 static void test_scroll_region(void) {
 	screen_init(&s, 80, FG, BG);
-	for (unsigned row = 0; row < SCREEN_ROWS; ++row)
+	for (unsigned row = 0; row < SCREEN_ROWS; ++row) {
 		screen_put(&s, 0, row, (uint8_t)('A' + row), FG, BG);
+	}
 
 	screen_scroll_up(&s, 5, 10, RGB222(1, 1, 1), RGB222(0, 1, 0));
 
-	for (unsigned row = 0; row < 5; ++row)
+	for (unsigned row = 0; row < 5; ++row) {
 		CHECK_EQ(screen_glyph(&s, 0, row), 'A' + row);
-	for (unsigned row = 5; row < 10; ++row)
+	}
+	for (unsigned row = 5; row < 10; ++row) {
 		CHECK_EQ(screen_glyph(&s, 0, row), 'A' + row + 1);
+	}
 	uint8_t fg, bg;
-	screen_colours(&s, 0, 10, &fg, &bg);
+	screen_colors(&s, 0, 10, &fg, &bg);
 	CHECK_EQ(screen_glyph(&s, 0, 10), ' ');
 	CHECK_EQ(fg, RGB222(1, 1, 1));
 	CHECK_EQ(bg, RGB222(0, 1, 0));
-	for (unsigned row = 11; row < SCREEN_ROWS; ++row)
+	for (unsigned row = 11; row < SCREEN_ROWS; ++row) {
 		CHECK_EQ(screen_glyph(&s, 0, row), 'A' + row);
+	}
 
 	// row_map must stay a permutation.
 	unsigned seen = 0;
-	for (unsigned row = 0; row < SCREEN_ROWS; ++row)
+	for (unsigned row = 0; row < SCREEN_ROWS; ++row) {
 		seen |= 1u << s.row_map[row];
+	}
 	CHECK_EQ(seen, ALL_SLOTS);
 }
 
 // The recycle hook: called for the slot a scroll reuses, with the row it
-// becomes and the fill colours, after its cells are cleared and before
+// becomes and the fill colors, after its cells are cleared and before
 // row_map moves it (so the renderer can blank it before it shows there).
 static struct {
 	unsigned calls, slot, row;
@@ -131,8 +138,9 @@ static void recycle(void *ctx, unsigned slot, unsigned row, uint8_t fg, uint8_t 
 static void test_scroll_recycle_hook(void) {
 	screen_set_recycle(&s, recycle, &hook);
 	screen_init(&s, 80, FG, BG); // keeps the hook
-	for (unsigned row = 0; row < SCREEN_ROWS; ++row)
+	for (unsigned row = 0; row < SCREEN_ROWS; ++row) {
 		screen_put(&s, 0, row, (uint8_t)('A' + row), FG, BG);
+	}
 	// Up: the top row's slot becomes the bottom row.
 	unsigned slot = s.row_map[3];
 	hook.calls = 0;
@@ -169,8 +177,9 @@ static void test_scroll_many_times(void) {
 		screen_scroll_up(&s, 0, bottom, FG, BG);
 		screen_put(&s, 131, bottom, (uint8_t)(n & 0xff), FG, BG);
 	}
-	for (unsigned row = 0; row <= bottom; ++row)
+	for (unsigned row = 0; row <= bottom; ++row) {
 		CHECK_EQ(screen_glyph(&s, 131, row), (1000 - (bottom + 1) + row) & 0xff);
+	}
 }
 
 static void test_scroll_rejects_bad_regions(void) {
@@ -180,8 +189,9 @@ static void test_scroll_rejects_bad_regions(void) {
 	screen_scroll_up(&s, 3, 3, FG, BG);
 	screen_scroll_up(&s, 4, 2, FG, BG);
 	screen_scroll_up(&s, 0, SCREEN_ROWS, FG, BG);
-	for (unsigned row = 0; row < SCREEN_ROWS; ++row)
+	for (unsigned row = 0; row < SCREEN_ROWS; ++row) {
 		CHECK_EQ(s.row_map[row], before.row_map[row]);
+	}
 	CHECK_EQ(screen_glyph(&s, 0, 3), 'x');
 }
 
@@ -219,7 +229,7 @@ static void test_reverse_rows_mark_dirty(void) {
 }
 
 // Saved rows come back in whichever slot now holds the row, marked dirty,
-// with their colours and attributes.
+// with their colors and attributes.
 static void test_stash_round_trip(void) {
 	static uint8_t buf[SCREEN_STASH_BYTES(SCREEN_ROWS, 132)];
 	screen_stash_t st;
@@ -238,7 +248,7 @@ static void test_stash_round_trip(void) {
 	CHECK_EQ(screen_glyph(&s, 0, 20), 'k');
 	CHECK_EQ(screen_glyph(&s, 79, 21), 'z');
 	uint8_t fg, bg;
-	screen_colours(&s, 79, 21, &fg, &bg);
+	screen_colors(&s, 79, 21, &fg, &bg);
 	CHECK(fg == 5 && bg == 6);
 	CHECK_EQ(screen_attr(&s, 79, 21), SCREEN_ATTR_BOLD);
 	CHECK_EQ(s.dirty, 1u << s.row_map[20] | 1u << s.row_map[21]);
@@ -254,8 +264,9 @@ static void test_stash_entries(void) {
 	screen_stash_t st;
 	screen_stash_init(&st, buf, sizeof buf);
 	screen_init(&s, 80, FG, BG);
-	for (unsigned r = 0; r < SCREEN_ROWS; ++r)
+	for (unsigned r = 0; r < SCREEN_ROWS; ++r) {
 		screen_put(&s, 0, r, (uint8_t)('A' + r), FG, BG);
+	}
 	CHECK(!screen_stash_push(&st, &s, 0, 0, 1)); // tag 0 is none
 	CHECK(screen_stash_push(&st, &s, 'm', 0, 24));
 	CHECK(screen_stash_holds(&st, 'm'));
@@ -263,14 +274,16 @@ static void test_stash_entries(void) {
 	CHECK(!screen_stash_push(&st, &s, 's', 10, 7));        // 24 + 7 rows > 30
 	CHECK(screen_stash_push(&st, &s, 's', 10, 6));
 	CHECK(!screen_stash_push(&st, &s, 't', 0, 0));         // only two entries
-	for (unsigned r = 0; r < SCREEN_ROWS; ++r)
+	for (unsigned r = 0; r < SCREEN_ROWS; ++r) {
 		screen_put(&s, 0, r, '.', FG, BG);
+	}
 	// The first goes: the second moves down and still comes back right.
 	screen_stash_drop(&st, 'm');
 	CHECK_EQ(st.used, SCREEN_STASH_BYTES(6, 80));
 	CHECK(screen_stash_pop(&st, &s, 's', FG, BG));
-	for (unsigned r = 10; r < 16; ++r)
+	for (unsigned r = 10; r < 16; ++r) {
 		CHECK_EQ(screen_glyph(&s, 0, r), 'A' + r);
+	}
 	CHECK_EQ(screen_glyph(&s, 0, 9), '.');
 	CHECK_EQ(screen_glyph(&s, 0, 16), '.');
 	screen_stash_drop(&st, 'x'); // no such entry: nothing happens
@@ -279,7 +292,7 @@ static void test_stash_entries(void) {
 }
 
 // Rows saved at 80 columns and put back at 132: the new columns are
-// cleared to the colours given; saved at 132 and put back at 80: cut.
+// cleared to the colors given; saved at 132 and put back at 80: cut.
 static void test_stash_width_change(void) {
 	static uint8_t buf[SCREEN_STASH_BYTES(SCREEN_ROWS, 132)];
 	screen_stash_t st;
@@ -293,7 +306,7 @@ static void test_stash_width_change(void) {
 	CHECK_EQ(screen_glyph(&s, 79, 3), 'x');
 	CHECK_EQ(screen_glyph(&s, 100, 3), ' ');
 	uint8_t fg, bg;
-	screen_colours(&s, 100, 3, &fg, &bg);
+	screen_colors(&s, 100, 3, &fg, &bg);
 	CHECK(fg == 7 && bg == 1);
 	screen_put(&s, 131, 3, 'w', FG, BG);
 	CHECK(screen_stash_push(&st, &s, 'a', 3, 1));

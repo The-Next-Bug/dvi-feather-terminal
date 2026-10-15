@@ -30,13 +30,13 @@ typedef struct {
 	uint8_t baud;       // index: see settings_baud_rate
 	uint8_t framing;    // index: see settings_framing
 	uint8_t newline;    // LNM at power-on/RIS: 1 on
-	uint8_t colours;    // hue: PALETTE_HUE_* (palette.h)
-	uint8_t palette;    // 1: mono, every colour a level of the hue (palette.h)
+	uint8_t colors;    // hue: PALETTE_HUE_* (palette.h)
+	uint8_t palette;    // 1: mono, every color a level of the hue (palette.h)
 	uint8_t mode;       // SETTINGS_MODE_*: what the screen and keyboard are for
 	uint8_t status_line; // 1: shown; 0: row 24 left blank (the text area stays 24 rows);
 	                     // SETTINGS_STATUS_DEBUG(_USB): video and main-loop timing (USB events) instead
 	uint8_t blank_after; // minutes without a key before the screen blanks; 0: never (blank.h)
-	// Payload byte 11 held the retired 80 columns layout (0 centred 8x16,
+	// Payload byte 11 held the retired 80 columns layout (0 centered 8x16,
 	// 1 full width), so term_type's values avoid 1: older records come back
 	// as VT100 (0, or 1 rejected as invalid).
 	uint8_t term_type; // SETTINGS_TERM_*: the personality and mode at power-on/RIS
@@ -86,15 +86,15 @@ const char *settings_field_fixed(const settings_t *s, unsigned i);
 void settings_framing(const settings_t *s, unsigned *data_bits, char *parity, unsigned *stop_bits);
 
 // What the Colors and Palette settings give besides the palette table
-// (palette_build(table, s->colours, s->palette)): the status line's palette
-// indices (white in colour: bright white on blue; otherwise the text
-// colours reversed) and the logo's hue.
+// (palette_build(table, s->colors, s->palette)): the status line's palette
+// indices (white in color: bright white on blue; otherwise the text
+// colors reversed) and the logo's hue.
 typedef struct {
 	uint8_t status_fg, status_bg; // palette indices: the status line and the SET-UP panel
-	uint8_t logo_fg;              // RGB222 text colour, for splash_tint
-} settings_colours_t;
+	uint8_t logo_fg;              // RGB222 text color, for splash_tint
+} settings_colors_t;
 
-settings_colours_t settings_colours(const settings_t *s);
+settings_colors_t settings_colors(const settings_t *s);
 
 // Where the next save goes and with which sequence number.
 typedef struct {

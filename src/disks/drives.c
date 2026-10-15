@@ -41,18 +41,22 @@ const drives_geometry_t *drives_geometry(drives_format_t f) {
 }
 
 drives_format_t drives_format_of_size(uint32_t size) {
-	for (drives_format_t f = DRIVES_FLOPPY; f < DRIVES_FORMATS; ++f)
-		if (geometries[f].size == size)
+	for (drives_format_t f = DRIVES_FLOPPY; f < DRIVES_FORMATS; ++f) {
+		if (geometries[f].size == size) {
 			return f;
+		}
+	}
 	return DRIVES_NONE;
 }
 
-bool drives_normalise(const char *in, char out[DRIVES_NAME_MAX + 1]) {
+bool drives_normalize(const char *in, char out[DRIVES_NAME_MAX + 1]) {
 	size_t n = strlen(in);
-	if (n == 0 || n > DRIVES_NAME_MAX)
+	if (n == 0 || n > DRIVES_NAME_MAX) {
 		return false;
-	for (size_t i = 0; i <= n; ++i)
+	}
+	for (size_t i = 0; i <= n; ++i) {
 		out[i] = (char)toupper((unsigned char)in[i]);
+	}
 	return strpbrk(out, "./\\:*? ") == NULL;
 }
 
@@ -62,22 +66,28 @@ static void image_path(char *path, size_t size, const char *upper) {
 
 drives_result_t drives_mount(unsigned d, const char *name) {
 	char upper[DRIVES_NAME_MAX + 1];
-	if (d >= DRIVES || !drives_normalise(name, upper))
+	if (d >= DRIVES || !drives_normalize(name, upper)) {
 		return DRIVES_NOT_FOUND;
-	for (unsigned i = 0; i < DRIVES; ++i)
-		if (i != d && drive[i].format && strcmp(drive[i].name, upper) == 0)
+	}
+	for (unsigned i = 0; i < DRIVES; ++i) {
+		if (i != d && drive[i].format && strcmp(drive[i].name, upper) == 0) {
 			return DRIVES_IN_USE;
+		}
+	}
 	drives_unmount(d);
 
 	char path[32];
 	image_path(path, sizeof path, upper);
 	FRESULT r = f_open(&drive[d].file, path, FA_READ | FA_WRITE);
-	if (r == FR_DENIED || r == FR_WRITE_PROTECTED) // read-only file or card
+	if (r == FR_DENIED || r == FR_WRITE_PROTECTED) { // read-only file or card
 		r = f_open(&drive[d].file, path, FA_READ);
-	if (r == FR_NO_FILE || r == FR_NO_PATH || r == FR_INVALID_NAME)
+	}
+	if (r == FR_NO_FILE || r == FR_NO_PATH || r == FR_INVALID_NAME) {
 		return DRIVES_NOT_FOUND;
-	if (r != FR_OK)
+	}
+	if (r != FR_OK) {
 		return DRIVES_IO_ERROR;
+	}
 	drives_format_t f = drives_format_of_size((uint32_t)f_size(&drive[d].file));
 	if (f == DRIVES_NONE) {
 		f_close(&drive[d].file);
@@ -91,16 +101,18 @@ drives_result_t drives_mount(unsigned d, const char *name) {
 }
 
 void drives_unmount(unsigned d) {
-	if (d >= DRIVES || !drive[d].format)
+	if (d >= DRIVES || !drive[d].format) {
 		return;
+	}
 	f_close(&drive[d].file); // flushes
 	drive[d].format = DRIVES_NONE;
 	drive[d].dirty = false;
 }
 
 void drives_unmount_all(void) {
-	for (unsigned d = 0; d < DRIVES; ++d)
+	for (unsigned d = 0; d < DRIVES; ++d) {
 		drives_unmount(d);
+	}
 }
 
 const char *drives_name(unsigned d) {
@@ -119,26 +131,31 @@ drives_result_t drives_create(const char *name, drives_format_t f, uint8_t *buf,
 	drives_progress_t progress, void *ctx) {
 	char upper[DRIVES_NAME_MAX + 1], path[32];
 	const drives_geometry_t *g = drives_geometry(f);
-	if (!g || !drives_normalise(name, upper))
+	if (!g || !drives_normalize(name, upper)) {
 		return DRIVES_NOT_FOUND;
+	}
 	FRESULT r = f_mkdir("/DISKS80");
-	if (r != FR_OK && r != FR_EXIST)
+	if (r != FR_OK && r != FR_EXIST) {
 		return DRIVES_IO_ERROR;
+	}
 	image_path(path, sizeof path, upper);
 	static FIL file; // FIL holds a sector buffer: not on the small stack
 	r = f_open(&file, path, FA_WRITE | FA_CREATE_NEW);
-	if (r == FR_EXIST)
+	if (r == FR_EXIST) {
 		return DRIVES_EXISTS;
-	if (r != FR_OK)
+	}
+	if (r != FR_OK) {
 		return DRIVES_IO_ERROR;
+	}
 	memset(buf, BLANK, buf_size);
 	bool ok = true;
 	for (uint32_t done = 0; ok && done < g->size;) {
 		UINT n = g->size - done < buf_size ? (UINT)(g->size - done) : (UINT)buf_size, written;
 		ok = f_write(&file, buf, n, &written) == FR_OK && written == n;
 		done += n;
-		if (progress)
+		if (progress) {
 			progress(ctx, done, g->size);
+		}
 	}
 	ok = f_close(&file) == FR_OK && ok;
 	if (!ok) {
@@ -151,23 +168,28 @@ drives_result_t drives_create(const char *name, drives_format_t f, uint8_t *buf,
 drives_format_t drives_image_format(const char *name) {
 	char upper[DRIVES_NAME_MAX + 1], path[32];
 	FILINFO info;
-	if (!drives_normalise(name, upper))
+	if (!drives_normalize(name, upper)) {
 		return DRIVES_NONE;
+	}
 	image_path(path, sizeof path, upper);
 	return f_stat(path, &info) == FR_OK ? drives_format_of_size((uint32_t)info.fsize) : DRIVES_NONE;
 }
 
 // Position drive d at the sector, or return why not.
 static uint8_t seek(unsigned d, unsigned track, unsigned sector) {
-	if (d >= DRIVES)
+	if (d >= DRIVES) {
 		return FDC_STAT_DISK;
-	if (!drive[d].format)
+	}
+	if (!drive[d].format) {
 		return FDC_STAT_NODISK;
+	}
 	const drives_geometry_t *g = &geometries[drive[d].format];
-	if (track >= g->tracks)
+	if (track >= g->tracks) {
 		return FDC_STAT_TRACK;
-	if (sector < 1 || sector > g->sectors)
+	}
+	if (sector < 1 || sector > g->sectors) {
 		return FDC_STAT_SEC;
+	}
 	activity |= (uint8_t)(1u << d);
 	FSIZE_t pos = ((FSIZE_t)track * g->sectors + sector - 1) * DRIVES_SECTOR;
 	return f_lseek(&drive[d].file, pos) == FR_OK ? FDC_STAT_OK : FDC_STAT_SEEK;
@@ -175,8 +197,9 @@ static uint8_t seek(unsigned d, unsigned track, unsigned sector) {
 
 uint8_t drives_read(unsigned d, unsigned track, unsigned sector, uint8_t buf[DRIVES_SECTOR]) {
 	uint8_t st = seek(d, track, sector);
-	if (st != FDC_STAT_OK)
+	if (st != FDC_STAT_OK) {
 		return st;
+	}
 	UINT n;
 	return f_read(&drive[d].file, buf, DRIVES_SECTOR, &n) == FR_OK && n == DRIVES_SECTOR ? FDC_STAT_OK
 		: FDC_STAT_READ;
@@ -184,23 +207,27 @@ uint8_t drives_read(unsigned d, unsigned track, unsigned sector, uint8_t buf[DRI
 
 uint8_t drives_write(unsigned d, unsigned track, unsigned sector, const uint8_t buf[DRIVES_SECTOR]) {
 	uint8_t st = seek(d, track, sector);
-	if (st != FDC_STAT_OK)
+	if (st != FDC_STAT_OK) {
 		return st;
+	}
 	UINT n;
-	if (f_write(&drive[d].file, buf, DRIVES_SECTOR, &n) != FR_OK || n != DRIVES_SECTOR)
+	if (f_write(&drive[d].file, buf, DRIVES_SECTOR, &n) != FR_OK || n != DRIVES_SECTOR) {
 		return FDC_STAT_WRITE;
+	}
 	drive[d].dirty = true;
 	return FDC_STAT_OK;
 }
 
 void drives_poll(uint32_t now_ms) {
 	bool dirty = false;
-	for (unsigned d = 0; d < DRIVES; ++d)
+	for (unsigned d = 0; d < DRIVES; ++d) {
 		dirty |= drive[d].dirty;
-	if (!dirty)
+	}
+	if (!dirty) {
 		last_write_ms = now_ms; // the delay counts from the first write seen
-	else if (now_ms - last_write_ms >= FLUSH_DELAY_MS)
+	} else if (now_ms - last_write_ms >= FLUSH_DELAY_MS) {
 		drives_flush();
+	}
 }
 
 bool drives_flush(void) {

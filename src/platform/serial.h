@@ -8,7 +8,7 @@
 // RTS/CTS, the UART asserts RTS by itself while its RX FIFO is below the
 // watermark; when the ring buffer is nearly full the interrupt stops draining
 // the FIFO, so the FIFO fills, RTS drops and the host pauses. Reading makes
-// room and resumes it. Nothing is lost as long as the host honours RTS.
+// room and resumes it. Nothing is lost as long as the host honors RTS.
 //
 // Transmit: replies (and later keystrokes) are queued and moved to the UART
 // by serial_poll as it has room, so a host holding CTS off (or an unwired

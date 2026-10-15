@@ -5,7 +5,8 @@ This project uses **bd** (beads) for issue tracking. Run `bd prime` for full wor
 **Project context** (build and test commands, architecture, hardware
 constraints, git and bd conventions) is in `CLAUDE.md` under "Build & Test",
 "Architecture Overview" and "Conventions & Patterns"; read those first.
-In short: `scripts/test.sh` (host tests), `scripts/build.sh`
+In short: `scripts/test.sh` (host tests), `scripts/lint.sh` (clang-tidy:
+braces on every body), `scripts/build.sh`
 (`TARGET=pico2-dvi-sock` by default; any `boards/<target>.h`, see
 "Boards" in CLAUDE.md; RP2040 was dropped), toolchain in `.toolchain/`
 via `scripts/setup-toolchain.sh`; firmware must run from SRAM

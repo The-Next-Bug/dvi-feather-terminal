@@ -6,8 +6,9 @@ uint32_t crc32_update(uint32_t crc, const uint8_t *data, size_t len) {
 	crc = ~crc;
 	while (len--) {
 		crc ^= *data++;
-		for (int i = 0; i < 8; ++i)
+		for (int i = 0; i < 8; ++i) {
 			crc = crc >> 1 ^ (0xedb88320u & -(crc & 1));
+		}
 	}
 	return ~crc;
 }

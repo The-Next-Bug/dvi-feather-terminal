@@ -4,7 +4,7 @@
 Usage: tools/hostbridge.py [--baud N] [--cols N] [--term NAME] [--rtscts] SERIAL_PORT [COMMAND ...]
 
 COMMAND (default: $SHELL) runs on a pseudo-terminal with TERM=xterm-color
-(8 colours, and nothing the terminal lacks; plain vt100 has no colour, so
+(8 colors, and nothing the terminal lacks; plain vt100 has no color, so
 programs would not use it). Its
 output goes to the terminal over SERIAL_PORT; what the terminal sends back
 (replies to device attribute and cursor position requests) and what you type
@@ -65,7 +65,7 @@ def main():
     ap.add_argument("--baud", type=int, default=115200, choices=sorted(BAUDS))
     ap.add_argument("--cols", type=int, default=80, choices=(80, 132))
     ap.add_argument("--term", default="xterm-color",
-                    help="TERM for the program (default: xterm-color; vt100 for no colour)")
+                    help="TERM for the program (default: xterm-color; vt100 for no color)")
     ap.add_argument("--rtscts", action="store_true",
                     help="use RTS/CTS flow control on the serial port")
     ap.add_argument("port")

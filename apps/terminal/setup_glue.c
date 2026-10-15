@@ -32,29 +32,31 @@ static_assert(DRIVEPANEL_ROWS <= SETUP_ROWS, "the Drives panel fits SET-UP's row
 static_assert(FWPANEL_ROWS <= SETUP_ROWS, "the firmware panel fits SET-UP's rows");
 
 // The panels are boxes on the default background, the box in the status
-// line's colour of the edited settings, like the preview (setup_service
+// line's color of the edited settings, like the preview (setup_service
 // shows their palette).
 static void setup_draw_panel(void) {
 	char title[SCREEN_MAX_COLS + 1];
 	snprintf(title, sizeof title, "DVI Terminal build %s", TERM_BUILD_ID);
-	settings_colours_t c = settings_colours(&setup.ui.values);
+	settings_colors_t c = settings_colors(&setup.ui.values);
 	setup_draw(&setup.ui, &screen, SETUP_TOP, title, PALETTE_TEXT, PALETTE_BACKGROUND, c.status_bg);
 }
 
 // At the bottom of SET-UP's rows, the rows above it blank.
 static void drives_draw_panel(void) {
-	settings_colours_t c = settings_colours(&setup.ui.values);
-	for (unsigned r = 0; r < SETUP_ROWS - DRIVEPANEL_ROWS; ++r)
+	settings_colors_t c = settings_colors(&setup.ui.values);
+	for (unsigned r = 0; r < SETUP_ROWS - DRIVEPANEL_ROWS; ++r) {
 		screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	}
 	drivepanel_draw(&setup.drives, &screen, SETUP_TOP + SETUP_ROWS - DRIVEPANEL_ROWS, PALETTE_TEXT,
 		PALETTE_BACKGROUND, c.status_bg);
 }
 
 // The firmware panel, at the bottom of SET-UP's rows like the Drives panel.
 static void fw_draw_panel(void) {
-	settings_colours_t c = settings_colours(&setup.ui.values);
-	for (unsigned r = 0; r < SETUP_ROWS - FWPANEL_ROWS; ++r)
+	settings_colors_t c = settings_colors(&setup.ui.values);
+	for (unsigned r = 0; r < SETUP_ROWS - FWPANEL_ROWS; ++r) {
 		screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	}
 	fwpanel_draw(&setup.fw, &screen, SETUP_TOP + SETUP_ROWS - FWPANEL_ROWS, PALETTE_TEXT, PALETTE_BACKGROUND,
 		c.status_bg);
 }
@@ -70,21 +72,25 @@ static bool fw_stick(void) {
 }
 
 static bool fw_mount(char *info, size_t n) {
-	if (cpm.on)
+	if (cpm.on) {
 		return true;
+	}
 	FRESULT r = f_mount(monitor_card_fs(), "", 1);
-	if (r == FR_OK)
+	if (r == FR_OK) {
 		return true;
-	if (sdcard_type() == SDCARD_NONE)
+	}
+	if (sdcard_type() == SDCARD_NONE) {
 		snprintf(info, n, "none found (" BOARD_SD_PINS_TEXT ")");
-	else
+	} else {
 		snprintf(info, n, "no FAT file system on it (error %d)", (int)r);
+	}
 	return false;
 }
 
 static void fw_unmount(bool commit) {
-	if (cpm.on && !commit)
+	if (cpm.on && !commit) {
 		return; // the monitor's
+	}
 	if (cpm.on) {
 		xfer_reset(); // also closes what XLS/XPIP had open on the stick
 		drives_flush();
@@ -114,18 +120,20 @@ static const fwpanel_platform_t fw_platform = {
 };
 
 static void fw_close(void) {
-	if (setup.fw_open)
+	if (setup.fw_open) {
 		fwpanel_close(&setup.fw, &fw_platform);
+	}
 	setup.fw_open = setup.fw_work = setup.fw_cancel = false;
 }
 
 // A key for the firmware panel. The work is left for the main loop.
 static void fw_feed(uint8_t c) {
 	fwpanel_action_t a = fwpanel_input(&setup.fw, c);
-	if (a == FWPANEL_WORK)
+	if (a == FWPANEL_WORK) {
 		setup.fw_work = true;
-	else if (a == FWPANEL_CANCEL)
+	} else if (a == FWPANEL_CANCEL) {
 		setup.fw_cancel = true;
+	}
 }
 
 // A key for the Drives panel. Mounting and the sets' files are left for
@@ -162,10 +170,11 @@ void setup_feed(const uint8_t *data, size_t len) {
 			continue;
 		}
 		setup_action_t a = setup_input(&setup.ui, data[i], now);
-		if (a == SETUP_REDRAW)
+		if (a == SETUP_REDRAW) {
 			setup_draw_panel();
-		else if (a != SETUP_NONE)
+		} else if (a != SETUP_NONE) {
 			setup.action = a;
+		}
 	}
 }
 
@@ -203,9 +212,11 @@ void setup_enter(bool from_host) {
 // Put the rows back; with apply, use the edited settings now, and the width
 // if it differs (which clears the screen, as DECCOLM does).
 static void setup_leave(bool apply) {
-	if (!screen_stash_pop(&stash, &screen, STASH_SETUP, PALETTE_TEXT, PALETTE_BACKGROUND))
-		for (unsigned r = 0; r < SETUP_ROWS; ++r) // not saved: no room
+	if (!screen_stash_pop(&stash, &screen, STASH_SETUP, PALETTE_TEXT, PALETTE_BACKGROUND)) {
+		for (unsigned r = 0; r < SETUP_ROWS; ++r) { // not saved: no room
 			screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
+		}
+	}
 	screen_set_reverse_rows(&screen, setup.saved_reverse);
 	screen.cursor_visible = setup.saved_cursor;
 	setup.active = false;
@@ -217,15 +228,17 @@ static void setup_leave(bool apply) {
 		return;
 	}
 	apply_settings(&setup.ui.values);
-	if (settings_columns(&setup.ui.values) != screen.cols)
+	if (settings_columns(&setup.ui.values) != screen.cols) {
 		term_set_columns(&term, settings_columns(&setup.ui.values));
+	}
 }
 
 static bool setup_save(void) {
 	static uint8_t page[SETTINGS_RECORD_SIZE]; // RAM, for the flash ROM routines
 	settings_encode(&setup.ui.values, save_target.seq, page);
-	if (!nvflash_write(save_target.slot, page))
+	if (!nvflash_write(save_target.slot, page)) {
 		return false;
+	}
 	settings = setup.ui.values;
 	save_target.slot = (save_target.slot + 1) % SETTINGS_SLOTS;
 	++save_target.seq;
@@ -237,10 +250,11 @@ static void drives_service(void) {
 	drivepanel_action_t work = setup.drives_work;
 	setup.drives_work = DRIVEPANEL_NONE;
 	if (work == DRIVEPANEL_SAVE_SET || work == DRIVEPANEL_REMOVE_SET) {
-		if (work == DRIVEPANEL_SAVE_SET)
+		if (work == DRIVEPANEL_SAVE_SET) {
 			drivepanel_save_set(&setup.drives);
-		else
+		} else {
 			drivepanel_remove_set(&setup.drives);
+		}
 		drives_draw_panel();
 	} else if (work == DRIVEPANEL_APPLY) {
 		bool failed;
@@ -295,11 +309,13 @@ static void restart(void) {
 	setup.ui.message = "Restarting...";
 	setup_draw_panel();
 	video_update(&screen);
-	if (cpm.on)
+	if (cpm.on) {
 		drives_flush();
+	}
 	watchdog_reboot(0, 0, 0);
-	while (true)
+	while (true) {
 		tight_loop_contents();
+	}
 }
 
 // Run SET-UP's pending save or cancel, the demo, the reboot, or the Escape
@@ -325,8 +341,9 @@ void setup_service(void) {
 		}
 		return;
 	}
-	if (setup.action == SETUP_NONE)
+	if (setup.action == SETUP_NONE) {
 		setup.action = setup_tick(&setup.ui, to_ms_since_boot(get_absolute_time()));
+	}
 	setup_action_t a = setup.action;
 	setup.action = SETUP_NONE;
 	if (a == SETUP_CANCEL) {
@@ -353,8 +370,9 @@ void setup_service(void) {
 		setup_draw_panel();
 		video_update(&screen);
 		if (setup_save()) {
-			if (settings.mode != (cpm.on ? SETTINGS_MODE_CPM : SETTINGS_MODE_TERMINAL))
+			if (settings.mode != (cpm.on ? SETTINGS_MODE_CPM : SETTINGS_MODE_TERMINAL)) {
 				restart(); // the other mode starts from a clean power-on
+			}
 			setup_leave(true);
 		} else {
 			setup.ui.message = "Saving to flash failed";

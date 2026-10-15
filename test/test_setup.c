@@ -23,8 +23,9 @@ static setup_action_t send(const char *keys, uint32_t now) {
 	setup_action_t last = SETUP_NONE;
 	for (const char *p = keys; *p; ++p) {
 		setup_action_t a = setup_input(&u, (uint8_t)*p, now);
-		if (a != SETUP_NONE)
+		if (a != SETUP_NONE) {
 			last = a;
+		}
 	}
 	return last;
 }
@@ -54,8 +55,9 @@ static void test_down_selects_next_setting(void) {
 	CHECK_EQ(u.values.columns, 80);
 	send("\x1b[B ", 0); // Local echo on
 	CHECK_EQ(u.values.local_echo, 1);
-	for (unsigned i = 2; i < SETUP_ITEMS; ++i)
+	for (unsigned i = 2; i < SETUP_ITEMS; ++i) {
 		send("\x1b[B", 0);
+	}
 	CHECK_EQ(u.item, 0); // round to Columns
 	send("\x1b[A", 0);
 	CHECK_EQ(u.item, SETUP_ITEMS - 1);
@@ -99,8 +101,9 @@ static void test_message_cleared_by_next_key(void) {
 
 static bool row_contains(const screen_t *s, unsigned row, const char *text) {
 	char line[SCREEN_MAX_COLS + 1];
-	for (unsigned c = 0; c < s->cols; ++c)
+	for (unsigned c = 0; c < s->cols; ++c) {
 		line[c] = (char)screen_glyph(s, c, row);
+	}
 	line[s->cols] = 0;
 	return strstr(line, text) != NULL;
 }
@@ -123,23 +126,24 @@ static void test_draw_marks_current_choice(void) {
 	CHECK(row_contains(&s, top + SETUP_ROWS - 3, "Return save"));
 	// " 132 " is drawn reversed, " 80 " normal.
 	char line[81];
-	for (unsigned c = 0; c < 80; ++c)
+	for (unsigned c = 0; c < 80; ++c) {
 		line[c] = (char)screen_glyph(&s, c, top + 1);
+	}
 	line[80] = 0;
 	unsigned at80 = (unsigned)(strstr(line, " 80 ") - line) + 1;
 	unsigned at132 = (unsigned)(strstr(line, " 132 ") - line) + 1;
 	uint8_t fg, bg;
-	screen_colours(&s, at80, top + 1, &fg, &bg);
+	screen_colors(&s, at80, top + 1, &fg, &bg);
 	CHECK_EQ(fg, FG);
-	screen_colours(&s, at132, top + 1, &fg, &bg);
+	screen_colors(&s, at132, top + 1, &fg, &bg);
 	CHECK_EQ(fg, BG);
 	CHECK_EQ(bg, FG);
 }
 
 // Under Colors and Palette, two rows preview the choice: default text,
-// bold, status line, and each ANSI colour as text (first row) and as a
+// bold, status line, and each ANSI color as text (first row) and as a
 // background (second row, same column).
-static void test_colours_preview(void) {
+static void test_colors_preview(void) {
 	static screen_t s;
 	screen_init(&s, 80, RGB222(2, 2, 2), 0);
 	open_with(80);
@@ -155,46 +159,49 @@ static void test_colours_preview(void) {
 
 	unsigned text_col = 0, digits = 0;
 	for (unsigned c = 0; c < 80; ++c) {
-		if (!text_col && screen_glyph(&s, c, preview) == 'T')
+		if (!text_col && screen_glyph(&s, c, preview) == 'T') {
 			text_col = c;
-		if (!digits && screen_glyph(&s, c, preview) == '0')
+		}
+		if (!digits && screen_glyph(&s, c, preview) == '0') {
 			digits = c;
+		}
 	}
 	// Palette indices: the palette on screen shows what they look like.
 	uint8_t fg, bg;
-	screen_colours(&s, text_col, preview, &fg, &bg);
+	screen_colors(&s, text_col, preview, &fg, &bg);
 	CHECK_EQ(fg, PALETTE_TEXT);
 	CHECK_EQ(bg, PALETTE_BACKGROUND);
-	screen_colours(&s, text_col + 5, preview, &fg, &bg); // "Bold"
+	screen_colors(&s, text_col + 5, preview, &fg, &bg); // "Bold"
 	CHECK_EQ(fg, PALETTE_BOLD_TEXT);
 	CHECK(screen_attr(&s, text_col + 5, preview) & SCREEN_ATTR_BOLD);
 	unsigned status_col = text_col + 12; // " Status "
-	screen_colours(&s, status_col, preview, &fg, &bg);
-	CHECK(fg == PALETTE_BOLD_TEXT && bg == PALETTE_BLUE); // white, colour
+	screen_colors(&s, status_col, preview, &fg, &bg);
+	CHECK(fg == PALETTE_BOLD_TEXT && bg == PALETTE_BLUE); // white, color
 	for (unsigned i = 0; i < 16; ++i) {
 		unsigned col = digits + 2 * i;
-		screen_colours(&s, col, preview, &fg, &bg);
+		screen_colors(&s, col, preview, &fg, &bg);
 		CHECK_EQ(fg, i); // as text
 		CHECK_EQ(bg, PALETTE_BACKGROUND);
-		screen_colours(&s, col, preview + 1, &fg, &bg);
+		screen_colors(&s, col, preview + 1, &fg, &bg);
 		CHECK_EQ(bg, i); // as background
 		CHECK(fg != bg);
-		screen_colours(&s, col + 1, preview + 1, &fg, &bg);
+		screen_colors(&s, col + 1, preview + 1, &fg, &bg);
 		CHECK_EQ(bg, PALETTE_BACKGROUND); // spaced out with the default background
 	}
 
 	// Colors -> blue and Palette -> mono: the samples keep their indices
 	// (the owner shows the edited palette); the status sample follows.
-	for (unsigned i = 0; i < 6; ++i)
+	for (unsigned i = 0; i < 6; ++i) {
 		send("\x1b[B", 0);
+	}
 	send("\x1b[D", 0); // white -> blue (wraps)
 	send("\x1b[B ", 0); // Palette: mono
-	CHECK_EQ(u.values.colours, 3);
+	CHECK_EQ(u.values.colors, 3);
 	CHECK_EQ(u.values.palette, 1);
 	setup_draw(&u, &s, top, "", FG, BG, BORDER);
-	screen_colours(&s, digits + 2, preview, &fg, &bg); // red as text
+	screen_colors(&s, digits + 2, preview, &fg, &bg); // red as text
 	CHECK(fg == 1 && bg == PALETTE_BACKGROUND);
-	screen_colours(&s, status_col, preview, &fg, &bg);
+	screen_colors(&s, status_col, preview, &fg, &bg);
 	CHECK(fg == PALETTE_BACKGROUND && bg == PALETTE_TEXT);
 }
 
@@ -210,8 +217,9 @@ static void test_machine_menu_key(void) {
 	screen_init(&s, 80, FG, BG);
 	setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG, BORDER);
 	char help[81] = "";
-	for (unsigned c = 0; c < 80; ++c)
+	for (unsigned c = 0; c < 80; ++c) {
 		help[c] = (char)screen_glyph(&s, c, SCREEN_ROWS - 3);
+	}
 	CHECK(strstr(help, "R reboot  D drives  M monitor") != NULL);
 }
 
@@ -265,8 +273,9 @@ static void test_firmware_key(void) {
 static void test_mode_setting(void) {
 	open_with(80);
 	CHECK_EQ(u.values.mode, SETTINGS_MODE_TERMINAL);
-	for (unsigned i = 0; i < offsetof(settings_t, mode); ++i)
+	for (unsigned i = 0; i < offsetof(settings_t, mode); ++i) {
 		send("\x1b[B", 0);
+	}
 	CHECK_EQ(send(" ", 0), SETUP_REDRAW);
 	CHECK_EQ(u.values.mode, SETTINGS_MODE_CPM);
 }
@@ -274,8 +283,9 @@ static void test_mode_setting(void) {
 static void test_status_line_setting(void) {
 	open_with(80);
 	CHECK_EQ(u.values.status_line, 1);
-	for (unsigned i = 0; i < offsetof(settings_t, status_line); ++i)
+	for (unsigned i = 0; i < offsetof(settings_t, status_line); ++i) {
 		send("\x1b[B", 0);
+	}
 	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
 	CHECK_EQ(u.values.status_line, 0);
 	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
@@ -289,8 +299,9 @@ static void test_status_line_setting(void) {
 static void test_blank_after_setting(void) {
 	open_with(80);
 	CHECK_EQ(u.values.blank_after, 0);
-	for (unsigned i = 0; i < offsetof(settings_t, blank_after); ++i)
+	for (unsigned i = 0; i < offsetof(settings_t, blank_after); ++i) {
 		send("\x1b[B", 0);
+	}
 	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
 	CHECK_EQ(u.values.blank_after, 1);
 	send("\x1b[D\x1b[D", 0); // wraps
@@ -332,12 +343,13 @@ static void test_columns_fixed_by_adm3a(void) {
 	CHECK(row_contains(&s, 1, " 80  (ADM-3A)")); // where 132 would be
 	CHECK(!row_contains(&s, 1, "132"));
 	char line[81];
-	for (unsigned c = 0; c < 80; ++c)
+	for (unsigned c = 0; c < 80; ++c) {
 		line[c] = (char)screen_glyph(&s, c, 1);
+	}
 	line[80] = 0;
 	unsigned at80 = (unsigned)(strstr(line, " 80 ") - line) + 1;
 	uint8_t fg, bg;
-	screen_colours(&s, at80, 1, &fg, &bg);
+	screen_colors(&s, at80, 1, &fg, &bg);
 	CHECK(fg == BG && bg == FG); // the value in use, reversed
 
 	// Live: Terminal type back to VT100 frees Columns with its 132.
@@ -360,7 +372,7 @@ static void test_columns_fixed_by_adm3a(void) {
 	CHECK_EQ(u.item, 1);
 }
 
-// The panel is a box in the border colour; the selected setting's name is
+// The panel is a box in the border color; the selected setting's name is
 // bold and its current choice reversed, so mono shows them too.
 static void test_box_and_selection(void) {
 	static screen_t s;
@@ -379,10 +391,10 @@ static void test_box_and_selection(void) {
 		CHECK_EQ(screen_glyph(&s, 79, r), GLYPH_DEC_GRAPHICS('x'));
 	}
 	uint8_t fg, bg;
-	screen_colours(&s, 0, top + 3, &fg, &bg);
+	screen_colors(&s, 0, top + 3, &fg, &bg);
 	CHECK(fg == BORDER && bg == BG);
 	CHECK(row_contains(&s, top, " SET-UP  build x "));
-	screen_colours(&s, 3, top, &fg, &bg); // the title: text colours
+	screen_colors(&s, 3, top, &fg, &bg); // the title: text colors
 	CHECK(fg == FG && bg == BG);
 	// "> Backspace sends" in bold; "Columns" not.
 	CHECK(row_contains(&s, top + 2, "> Backspace sends"));
@@ -408,7 +420,7 @@ int main(void) {
 	RUN(test_draw_marks_current_choice);
 	RUN(test_box_and_selection);
 	RUN(test_columns_fixed_by_adm3a);
-	RUN(test_colours_preview);
+	RUN(test_colors_preview);
 	RUN(test_machine_menu_key);
 	RUN(test_demo_key);
 	RUN(test_reboot_key);

@@ -46,24 +46,28 @@ static void print(term_t *t, uint8_t ch) {
 static void control(term_t *t, uint8_t ch) {
 	switch (ch) {
 	case BS:
-		if (t->cur.col > 0)
+		if (t->cur.col > 0) {
 			--t->cur.col;
+		}
 		break;
 	case HT:
 		term_tab(t);
 		break;
 	case LF:
 		term_index_down(t);
-		if (t->newline_mode)
+		if (t->newline_mode) {
 			t->cur.col = 0;
+		}
 		break;
 	case VT:
-		if (t->cur.row > 0)
+		if (t->cur.row > 0) {
 			--t->cur.row;
+		}
 		break;
 	case FF:
-		if (t->cur.col + 1 < term_cols(t))
+		if (t->cur.col + 1 < term_cols(t)) {
 			++t->cur.col;
+		}
 		break;
 	case CR:
 		t->cur.col = 0;
@@ -114,10 +118,11 @@ void adm3a_byte(term_t *t, uint8_t ch) {
 	default:
 		break;
 	}
-	if (ch == ESC)
+	if (ch == ESC) {
 		a->state = ESCAPE;
-	else if (ch < 0x20)
+	} else if (ch < 0x20) {
 		control(t, ch);
-	else if (ch < 0x7f)
+	} else if (ch < 0x7f) {
 		print(t, ch); // DEL: nothing
+	}
 }

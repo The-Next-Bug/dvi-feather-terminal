@@ -1,7 +1,7 @@
 ;
 ;	CP/M 3 banked BIOS for z80pack machines using SD-FDC
 ;
-;	Copyright (C) 2024 by Udo Munk (z80pack, MIT licence)
+;	Copyright (C) 2024 by Udo Munk (z80pack, MIT license)
 ;
 ;	The dvi-feather-terminal's version (bd f8w.4): eight drives A-H,
 ;	each of the formats the disk controller's port 8 reports for the

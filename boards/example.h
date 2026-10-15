@@ -63,7 +63,7 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 //
 // Each pin is set separately: a pair whose traces are swapped (+ routed to
 // the connector's - pin) is fixed here by swapping its P and N numbers, and
-// the two pins of a pair need not be neighbours. For example, the clock on
+// the two pins of a pair need not be neighbors. For example, the clock on
 // GP19/GP18 with + and - crossed is CLK_P 18, CLK_N 19.
 #define BOARD_DVI_D0_P_PIN 12
 #define BOARD_DVI_D0_N_PIN 13

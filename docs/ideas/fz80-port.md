@@ -5,7 +5,7 @@ Board designs epic). Written 2026-10-13 from a read of the sibling
 `fz80-firmware` repository (fZ80.7-27Jul2026, board v6b).
 
 The Friendly fZ80 is Tom Jennings' Z80 CP/M computer built around a Teensy
-4.1. Its firmware is his own (personal-use licence). This note sketches
+4.1. Its firmware is his own (personal-use license). This note sketches
 what running *this* firmware on that hardware would take. Nothing here
 copies or reuses his code.
 
@@ -14,7 +14,7 @@ copies or reuses his code.
 | | This firmware (RP2350) | Friendly fZ80 (Teensy 4.1, i.MX RT1062) |
 |---|---|---|
 | CPU / RAM | 2 x Cortex-M33 at 400 MHz, 520 KB SRAM | 1 x Cortex-M7 at 600 MHz, 1 MB (512 KB TCM + 512 KB OCRAM), optional 8-16 MB PSRAM |
-| Video | HSTX -> DVI 800x600, RGB565, scanlines composed on core 1 | FlexIO2 + DMA -> VGA, 4-bit RGBI (16 colours), up to 1024x768, framebuffer |
+| Video | HSTX -> DVI 800x600, RGB565, scanlines composed on core 1 | FlexIO2 + DMA -> VGA, 4-bit RGBI (16 colors), up to 1024x768, framebuffer |
 | Keyboard, sticks | TinyUSB host on the native USB | USB host port (fZ80 uses USBHost_t36) |
 | Storage | one SD card, SPI | internal microSD on 4-bit SDIO, plus two removable SD slots on SPI1 with card detect, write protect and red/green LEDs |
 | Serial | UART0/1, optional RTS/CTS | Serial2 on a DE-9: CTS and CD in; RTS/DTR only through an I2C expander |
@@ -39,7 +39,7 @@ portable modules" rule is what makes a port thinkable.
    scans out (the VGA_4BIT_T4 model; that library is wwatson's, separate from
    the fZ80 code). 800x600x4 bpp = 240 KB in OCRAM. raster.c's glyph and
    attribute logic stays; its output becomes 4-bit pixels. The palette drops
-   to 16 colours: 256-colour and 24-bit SGR go through `palette_nearest`;
+   to 16 colors: 256-color and 24-bit SGR go through `palette_nearest`;
    mono/phosphor become 16-level ramps at best.
 2. **USB host.** USBHost_t36 behind usbkbd/usbmsc, or TinyUSB, whose ChipIdea
    host driver covers the RT1062's second controller. TinyUSB keeps
@@ -84,7 +84,7 @@ Most of it lands on tickets that already exist:
   BIOS and EEPROM monitor. (a) Treat the fZ80 as another board for this
   system: picosim map, our disks. Cheapest. (b) An fZ80-compatible port map
   as a second machine personality, written fresh from its port
-  documentation, after settling the licence question (the fZ80 code is
+  documentation, after settling the license question (the fZ80 code is
   personal-use only and cannot be copied). Do (a); keep (b) as research.
 - **Platform split.** Partly done by the library restructure (bd gr1):
   the RP2350 code is in its own libraries (src/board, platform, usb,
@@ -99,7 +99,7 @@ Most of it lands on tickets that already exist:
 
 ## Rough order
 
-1. Platform split on the RP2350, no behaviour change.
+1. Platform split on the RP2350, no behavior change.
 2. Teensy build skeleton with the host tests; terminal only (VGA, serial,
    USB keyboard).
 3. FatFs on the internal SDIO card, then the CP/M machine.

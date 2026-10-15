@@ -27,10 +27,11 @@ static uint32_t tx_head, tx_tail;
 
 static void set_rx_irqs(bool on) {
 	uart_hw_t *hw = uart_get_hw(serial_uart);
-	if (on)
+	if (on) {
 		hw_set_bits(&hw->imsc, UART_UARTIMSC_RXIM_BITS | UART_UARTIMSC_RTIM_BITS);
-	else
+	} else {
 		hw_clear_bits(&hw->imsc, UART_UARTIMSC_RXIM_BITS | UART_UARTIMSC_RTIM_BITS);
+	}
 }
 
 static void __not_in_flash_func(serial_irq)(void) {
@@ -47,8 +48,9 @@ static void __not_in_flash_func(serial_irq)(void) {
 		uint32_t dr = hw->dr;
 		// An overrun flags the byte after the ones that were lost; that byte
 		// itself is good.
-		if (dr & UART_UARTDR_OE_BITS)
+		if (dr & UART_UARTDR_OE_BITS) {
 			++stats.overruns;
+		}
 		if (dr & (UART_UARTDR_BE_BITS | UART_UARTDR_PE_BITS | UART_UARTDR_FE_BITS)) {
 			++stats.errors;
 			continue;
@@ -71,10 +73,12 @@ void serial_init(uart_inst_t *uart, unsigned baud, unsigned tx_pin, unsigned rx_
 	// CTS/RTS are the plain UART function. (UART_FUNCSEL_NUM is for TX/RX:
 	// on RP2350 it picks the auxiliary function, UART TX/RX, for GPIOs 2
 	// and 3.)
-	if (cts_pin != SERIAL_NO_PIN)
+	if (cts_pin != SERIAL_NO_PIN) {
 		gpio_set_function((unsigned)cts_pin, GPIO_FUNC_UART);
-	if (rts_pin != SERIAL_NO_PIN)
+	}
+	if (rts_pin != SERIAL_NO_PIN) {
 		gpio_set_function((unsigned)rts_pin, GPIO_FUNC_UART);
+	}
 	uart_set_hw_flow(uart, cts_pin != SERIAL_NO_PIN, rts_pin != SERIAL_NO_PIN);
 
 	unsigned irq = UART_IRQ_NUM(uart);
@@ -97,13 +101,15 @@ void serial_configure(unsigned baud, unsigned data_bits, char parity, unsigned s
 size_t serial_read(uint8_t *buf, size_t max) {
 	uint32_t t = rx_tail, available = rx_head - t;
 	size_t n = available < max ? available : max;
-	for (size_t i = 0; i < n; ++i)
+	for (size_t i = 0; i < n; ++i) {
 		buf[i] = rx_buffer[(t + i) % SERIAL_RX_BUFFER_SIZE];
+	}
 	// Make sure the copy is done before the IRQ may reuse the space.
 	__compiler_memory_barrier();
 	rx_tail = t + (uint32_t)n;
-	if (n)
+	if (n) {
 		led_activity();
+	}
 	if (rx_paused && SERIAL_RX_BUFFER_SIZE - (rx_head - rx_tail) >= RX_RESUME_ROOM) {
 		rx_paused = false;
 		set_rx_irqs(true); // fires at once if the FIFO has data
@@ -113,10 +119,12 @@ size_t serial_read(uint8_t *buf, size_t max) {
 
 size_t serial_write(const uint8_t *data, size_t len) {
 	size_t n = 0;
-	for (; n < len && tx_head - tx_tail < SERIAL_TX_BUFFER_SIZE; ++n)
+	for (; n < len && tx_head - tx_tail < SERIAL_TX_BUFFER_SIZE; ++n) {
 		tx_buffer[tx_head++ % SERIAL_TX_BUFFER_SIZE] = data[n];
-	if (n)
+	}
+	if (n) {
 		led_activity();
+	}
 	if (n < len) {
 		uint32_t saved = save_and_disable_interrupts();
 		stats.tx_dropped += (uint32_t)(len - n);
@@ -127,8 +135,9 @@ size_t serial_write(const uint8_t *data, size_t len) {
 }
 
 void serial_poll(void) {
-	while (tx_tail != tx_head && uart_is_writable(serial_uart))
+	while (tx_tail != tx_head && uart_is_writable(serial_uart)) {
 		uart_get_hw(serial_uart)->dr = tx_buffer[tx_tail++ % SERIAL_TX_BUFFER_SIZE];
+	}
 }
 
 serial_stats_t serial_stats(void) {

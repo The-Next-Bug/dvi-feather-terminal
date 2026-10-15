@@ -3,8 +3,8 @@
 # builds; nothing is installed system-wide.
 #
 # Usage: scripts/setup-toolchain.sh [component...]
-#   components: cmake arm picotool (default: all). The host-test job only
-#   needs cmake.
+#   components: cmake arm picotool clang-tidy (default: all). The host-test
+#   job only needs cmake; scripts/lint.sh needs clang-tidy.
 #
 # Versions come from toolchain.env; any of its variables can be overridden
 # from the environment (e.g. ARM_GNU_VERSION=... ARM_GNU_SHA256=...).
@@ -18,7 +18,7 @@
 # /opt/pico-toolchain, so there this script only prints the versions.
 #
 # Host requirements: curl, tar, xz, sha256sum, git, a host C/C++ compiler and
-# make (picotool is built from source).
+# make (picotool is built from source), python3 (unpacks clang-tidy).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -31,7 +31,7 @@ done < "$ROOT/toolchain.env"
 TOOLCHAIN_DIR="${TOOLCHAIN_DIR:-$ROOT/.toolchain}"
 
 components=("$@")
-[[ ${#components[@]} -gt 0 ]] || components=(cmake arm picotool)
+[[ ${#components[@]} -gt 0 ]] || components=(cmake arm picotool clang-tidy)
 
 mkdir -p "$TOOLCHAIN_DIR"
 
@@ -111,11 +111,39 @@ install_picotool() {
   "$dir/picotool/picotool" version
 }
 
+# clang-tidy (scripts/lint.sh): the static binary in PyPI's clang-tidy wheel,
+# so no LLVM packages are needed on the host.
+install_clang_tidy() {
+  local dir="$TOOLCHAIN_DIR/clang-tidy"
+  if ! installed "$dir" "$CLANG_TIDY_VERSION"; then
+    local wheel
+    wheel="$(fetch "https://files.pythonhosted.org/packages/py2.py3/c/clang-tidy/clang_tidy-${CLANG_TIDY_VERSION}-py2.py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl" \
+      "$CLANG_TIDY_SHA256")"
+    rm -rf "$dir" && mkdir -p "$dir"
+    # The binary and clang's own headers (stddef.h, ...) beside it.
+    python3 - "$wheel" "$dir" <<'PY'
+import os, sys, zipfile
+prefix = 'clang_tidy/data/'
+with zipfile.ZipFile(sys.argv[1]) as z:
+    for name in z.namelist():
+        if name.startswith(prefix) and not name.endswith('/'):
+            dest = os.path.join(sys.argv[2], name[len(prefix):])
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, 'wb') as f:
+                f.write(z.read(name))
+os.chmod(os.path.join(sys.argv[2], 'bin', 'clang-tidy'), 0o755)
+PY
+    echo "$CLANG_TIDY_VERSION" > "$dir/.version"
+  fi
+  "$dir/bin/clang-tidy" --version | grep -i version | head -1
+}
+
 for c in "${components[@]}"; do
   case "$c" in
     cmake) install_cmake ;;
     arm) install_arm ;;
     picotool) install_picotool ;;
+    clang-tidy) install_clang_tidy ;;
     *) echo "error: unknown component '$c'" >&2; exit 1 ;;
   esac
 done

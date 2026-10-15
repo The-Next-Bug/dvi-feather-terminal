@@ -66,12 +66,22 @@ CMake or Arm GCC on the dev host. Use the scripts:
 ```bash
 git submodule update --init          # lib/pico-sdk (2.3.1), not its submodules (lib/z80pack is vendored)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
-scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool (toolchain.env)
+scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool, clang-tidy (toolchain.env)
 scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
-CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimised, no sanitisers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
+CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimized, no sanitizers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default; any boards/<target>.h) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
+scripts/lint.sh                      # clang-tidy (.clang-tidy) over build/test and build/$TARGET's compile_commands.json (build them first)
 ```
+
+Lint (bd 4rf): `.clang-tidy` enables readability-braces-around-statements
+as an error (every if/else/for/while/do body a { } block; else if
+allowed). clang-tidy is the static binary from PyPI's clang-tidy wheel
+(CLANG_TIDY_* in toolchain.env, installed with clang's headers into
+.toolchain/clang-tidy). It sees code under #if only as the build
+configures it; CI lints build/test in the test job and each target in its
+build job. Spelling is American (bd azw: color, gray, center, license,
+-ize), except in third-party texts (assets/fonts/Terminus-OFL.txt).
 
 Boards (bd axq): `boards/<target>.h` is a pico-sdk board header
 (PICO_BOARD = target, PICO_BOARD_HEADER_DIRS = boards/) plus every pin the
@@ -140,7 +150,7 @@ panic() text),
 `COPY_TO_RAM` (default ON; must stay ON, see below), `MACHINE_BANKS` (Z80
 machine: 48 KB banks besides bank 0, default 2; each costs 48 KB of SRAM).
 
-Always run `scripts/test.sh` and a firmware build before handing work
+Always run `scripts/test.sh`, a firmware build and `scripts/lint.sh` before handing work
 back. Hardware checks are done by the user (no board is attached to the
 dev host; Docker is not usable for CI simulation).
 
@@ -167,7 +177,7 @@ copies its include dirs and definitions); only the programs link SDK
 libraries, so no SDK source is built into an archive. Libraries get
 DVT_C_OPTIONS (firmware: pico_standard_link's -ffunction-sections
 -fdata-sections, without which --gc-sections keeps unused functions in
-SRAM, and -fno-math-errno; tests: sanitisers) and our warnings plus
+SRAM, and -fno-math-errno; tests: sanitizers) and our warnings plus
 DVT_WARNING_OPTIONS (tests: -Werror) via `cmake/dvt.cmake`
 dvt_compile_options (THIRD_PARTY: not the warnings); dvt_rebuild builds
 libraries' sources into another target (test_cpu's -O2 copies). The
@@ -189,7 +199,7 @@ UF2 in the latter).
   scrolling rotates indices; `dirty` bit per slot; `reverse_rows` mask.
   A scroll clears the recycled slot's cells, then calls the screen's
   recycle hook, then remaps it (bd ful): video.c's hook blanks that slot's
-  raster at once (raster_blank_line, the row's colour, reverse included),
+  raster at once (raster_blank_line, the row's color, reverse included),
   since core 1 draws raster[], which only catches up at video_update.
   screen_stash_t (bd qur.16): saved rows as tagged entries in one
   owner-provided buffer (4 bytes a cell at the width then; put back or
@@ -230,14 +240,14 @@ UF2 in the latter).
   only (nothing depends on the palette): default fg 7, bold default 15, bg
   0; bold brightens 0-7 to 8-15; 38;5;n as is; 24-bit -> palette_nearest.
 - `src/screen/palette.[ch]` (portable, bd pb2): the xterm-256 palette as RGB565
-  from Colors (hue) x Palette (mono): white/colour = our ANSI set + xterm
-  16-255; phosphor/colour = 0-15 a ramp in the hue by bands (7 at 2/3, 15
+  from Colors (hue) x Palette (mono): white/color = our ANSI set + xterm
+  16-255; phosphor/color = 0-15 a ramp in the hue by bands (7 at 2/3, 15
   full) + xterm 16-255; mono = all 256 as a ramp by luma (floor 35%).
   main.c show_palette() -> video_set_palette (two 256-word tables, core 1
   switches at frame start). A palette change re-renders nothing. While
   SET-UP is open the edited palette is shown (restored on cancel).
 - `src/render/raster.[ch]` (portable): two layouts (raster_layout_t: 80 cols
-  10x20 at the full width, 132 cols 6x12 doubled; the 8x16 centred layout
+  10x20 at the full width, 132 cols 6x12 doubled; the 8x16 centered layout
   and its setting were dropped in qur.20). `raster_render_line` (core 0)
   turns a screen line into, per stored row, a bit string of the cells'
   pixels (cell c from bit c * width, 100 bytes per row in both layouts;
@@ -250,10 +260,10 @@ UF2 in the latter).
   timing renders); raster_glyph_row reads the flash tables (tests).
   Stored rows per line = font rows + 2 padding rows; connectors (line
   drawing, blocks, shades) extend into the padding. Handles
-  underline, blink phase, bold (bold face; 132 cols: colour only),
+  underline, blink phase, bold (bold face; 132 cols: color only),
   reverse. `raster_compose` (core 1) makes a scanline of RGB565 pixel pairs
   from a stored row through the 256-entry palette table, inverting the
-  cursor cell; every cell is exact in every layout. 132 cols centred at
+  cursor cell; every cell is exact in every layout. 132 cols centered at
   x = 4. Core 1's helpers are ternaries, no tables (GCC's CSWTCH tables
   land in RAM, but check the .dis when changing them).
 - `src/video/hstx_dvi.[ch]` (RP2350): DVI from the HSTX on the DVI Sock pins
@@ -268,7 +278,7 @@ UF2 in the latter).
 - `src/video/video.[ch]` (RP2350): core 1 composes scanlines (raster_compose or
   splash_compose) into a ring of 4 line buffers, at most 2 lines ahead of
   the DMA interrupt (also on core 1), latching mode/cursor/splash per
-  frame; counts late lines. `video_update()` on core 0 rasterises dirty
+  frame; counts late lines. `video_update()` on core 0 rasterizes dirty
   slots and the blink phase.
 - `src/input/keyboard.[ch]` (portable): HID boot keyboard reports -> VT100 key
   codes (DECCKM, DECKPAM, LNM, Num/Caps Lock, autorepeat via kbd_tick).
@@ -280,7 +290,7 @@ UF2 in the latter).
   one byte per setting, append-only) in two flash sectors used in turn.
   Settings (settings_fields[] drives the record, validation and SET-UP
   labels; append only): columns, backspace (DECBKM RIS value), local_echo,
-  baud, framing, newline (LNM RIS value), colours (hue), palette (mono),
+  baud, framing, newline (LNM RIS value), colors (hue), palette (mono),
   mode (terminal / CP/M machine), status_line (hidden: status.c
   status_shown() leaves row 24 blank; debug: status.c debug_status_* shows
   video_stats() (late lines, compose cycles as % of the line, fps) and
@@ -295,13 +305,13 @@ UF2 in the latter).
   value; settings_columns() is 80 for the ADM-3A;
   settings_field_fixed() names what fixes a field, Columns under the
   ADM-3A: SET-UP skips it and shows "80 (ADM-3A)", dmt.39);
-  settings_colours() gives the status
+  settings_colors() gives the status
   line's indices and the logo's tint. CRC-32 in
   `src/common/crc32.[ch]` (shared with the disk images). main.c apply_settings()
   -> serial_configure, term_set_defaults, show_palette.
   `src/ui/setup.[ch]` (portable): SET-UP panel over the bottom text rows,
-  in a box (screen_frame: DEC line glyphs in the status bg colour, text
-  in the default colours; also the Drives panel) (one row per setting, plus two preview rows under Palette: ANSI colours
+  in a box (screen_frame: DEC line glyphs in the status bg color, text
+  in the default colors; also the Drives panel) (one row per setting, plus two preview rows under Palette: ANSI colors
   as fg and as bg, spaced so no 8-px group held two samples in 132 cols
   under the old PicoDVI encoder)
   (key bytes in, save/cancel out); setup_glue.c saves/restores those rows in
@@ -322,8 +332,8 @@ UF2 in the latter).
   levels (one hue; still <=2 levels per 8-px group, no longer needed).
   `src/render/splash.[ch]` (portable): `splash_check`, and `splash_compose`
   decodes the runs a scanline at a time (in order from the frame start; runs
-  cross row ends) through 4 level colours (`splash_tint` +
-  `splash_tint_colour`). `video_splash()` copies the data into the text
+  cross row ends) through 4 level colors (`splash_tint` +
+  `splash_tint_color`). `video_splash()` copies the data into the text
   slots' raster memory (core 1 must not read flash) and core 1 shows it for
   scanlines 0-575 (status line from its slot); power-on/reset only, never
   on RIS.
@@ -332,7 +342,7 @@ UF2 in the latter).
   generated at build time, glyph-major; glyph codes in `src/screen/font.h`. All
   in flash (FONT_FLASH_DATA, `.flashdata.font`), read through XIP by core
   0 only, when raster_select_font copies them; without a bold face (132
-  cols) bold is only the brighter colour (a smear closed the gaps of m, w,
+  cols) bold is only the brighter color (a smear closed the gaps of m, w,
   #: qur.9).
 - Z80 CP/M machine (Mode setting "CP/M machine", bd lpt): the screen and
   keyboard become the console of a z80pack picosim-compatible machine on
@@ -603,5 +613,5 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   otherwise they turn into raw control bytes in the file. Check with
   `grep -lP '[\x00-\x08\x0b-\x1f]' src/* test/*`.
 - User preferences: flow control off by default; 80 columns at the full
-  width (10x20) only, the centred 8x16 layout dropped (qur.20); smooth
+  width (10x20) only, the centered 8x16 layout dropped (qur.20); smooth
   scrolling, double-size lines and RP2350 HSTX are deferred nice-to-haves.

@@ -5,14 +5,16 @@
 #include "hardware/psram.h"
 
 size_t extram_retime(void) {
-	if (!psram_is_available())
+	if (!psram_is_available()) {
 		return 0;
+	}
 	// The SDK's defaults for its APS6404 (133 MHz, 8 us max select, 18 ns
 	// deselect), for the clock now: divisor 4 at 400 MHz.
 	if (psram_configure_params(PICO_DEFAULT_PSRAM_MAX_FREQ, PICO_DEFAULT_PSRAM_MAX_SELECT,
 			PICO_DEFAULT_PSRAM_MIN_DESELECT) != PICO_OK ||
-		psram_reinitialize() != PICO_OK)
+		psram_reinitialize() != PICO_OK) {
 		return 0;
+	}
 	return psram_get_size();
 }
 

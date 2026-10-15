@@ -10,8 +10,9 @@ static uint8_t buffer[SCRATCH_SIZE] __attribute__((aligned(4)));
 static bool held;
 
 uint8_t *scratch_acquire(void) {
-	if (held)
+	if (held) {
 		return NULL;
+	}
 	held = true;
 	return buffer;
 }

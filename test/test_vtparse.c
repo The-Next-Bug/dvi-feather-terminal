@@ -19,10 +19,11 @@ static void on_parse(vtparse_t *vp, vtparse_action_t action, uint8_t ch) {
 	char tok[128];
 	switch (action) {
 	case VTPARSE_PRINT:
-		if (ch > 0x20 && ch < 0x7f)
+		if (ch > 0x20 && ch < 0x7f) {
 			snprintf(tok, sizeof tok, "P(%c)", ch);
-		else
+		} else {
 			snprintf(tok, sizeof tok, "P(%02x)", ch);
+		}
 		break;
 	case VTPARSE_EXECUTE:
 		snprintf(tok, sizeof tok, "X(%02x)", ch);
@@ -47,8 +48,9 @@ static void on_parse(vtparse_t *vp, vtparse_action_t action, uint8_t ch) {
 
 static const char *feed(const char *bytes) {
 	got[0] = 0;
-	for (const char *b = bytes; *b; ++b)
+	for (const char *b = bytes; *b; ++b) {
 		vtparse_byte(&p, (uint8_t)*b);
+	}
 	return got;
 }
 
@@ -99,7 +101,7 @@ static void test_too_many_params(void) {
 
 static void test_c0_inside_sequences_executes(void) {
 	setup();
-	// VT100 behaviour: controls act immediately and the sequence continues.
+	// VT100 behavior: controls act immediately and the sequence continues.
 	EXPECT("\x1b[1\r2H", "X(0d)C[12H]");
 	EXPECT("\x1b\n" "D", "X(0a)E[D]");
 }
@@ -158,8 +160,9 @@ static void test_unterminated_strings(void) {
 	// NUL (padding) and DEL stay in the string.
 	static const uint8_t nul[] = { 0x1b, ']', '0', 0x00, 0x7f, 'x', 0x07, 'o' };
 	got[0] = 0;
-	for (unsigned i = 0; i < sizeof nul; ++i)
+	for (unsigned i = 0; i < sizeof nul; ++i) {
 		vtparse_byte(&p, nul[i]);
+	}
 	CHECK(strcmp(got, "P(o)") == 0);
 	// GR bytes in a string do not end it.
 	EXPECT("\x1b]0;\xe9\xff\x07ok", "P(o)P(k)");
@@ -170,8 +173,9 @@ static void test_unterminated_strings(void) {
 		got[0] = 0;
 		vtparse_byte(&p, 0x1b);
 		vtparse_byte(&p, kind ? 'P' : ']');
-		for (unsigned i = 0; i < VTPARSE_MAX_STRING - 1; ++i)
+		for (unsigned i = 0; i < VTPARSE_MAX_STRING - 1; ++i) {
 			vtparse_byte(&p, 'a');
+		}
 		CHECK(strcmp(got, "") == 0);
 		vtparse_byte(&p, 'b'); // the last one discarded
 		CHECK(strcmp(got, "") == 0);
@@ -182,16 +186,18 @@ static void test_unterminated_strings(void) {
 		got[0] = 0;
 		vtparse_byte(&p, 0x1b);
 		vtparse_byte(&p, ']');
-		for (unsigned i = 0; i < VTPARSE_MAX_STRING - 2; ++i)
+		for (unsigned i = 0; i < VTPARSE_MAX_STRING - 2; ++i) {
 			vtparse_byte(&p, 'a');
+		}
 		vtparse_byte(&p, 0x07);
 		CHECK(strcmp(got, "") == 0);
 	}
 	p.c1_controls = true;
 	got[0] = 0;
 	vtparse_byte(&p, 0x90);
-	for (unsigned i = 0; i < VTPARSE_MAX_STRING - 1; ++i)
+	for (unsigned i = 0; i < VTPARSE_MAX_STRING - 1; ++i) {
 		vtparse_byte(&p, 'a');
+	}
 	vtparse_byte(&p, 0x9c);
 	EXPECT("ok", "P(o)P(k)");
 }

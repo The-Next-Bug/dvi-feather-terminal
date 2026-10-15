@@ -17,15 +17,18 @@
 static unsigned choice_index(settings_t *v, unsigned item) {
 	const settings_field_t *it = &settings_fields[item];
 	uint8_t value = *settings_field(v, item);
-	for (unsigned i = 0; i < it->n_choices; ++i)
-		if (it->values[i] == value)
+	for (unsigned i = 0; i < it->n_choices; ++i) {
+		if (it->values[i] == value) {
 			return i;
+		}
+	}
 	return 0;
 }
 
 static void change(setup_t *u, int step) {
-	if (settings_field_fixed(&u->values, u->item))
+	if (settings_field_fixed(&u->values, u->item)) {
 		return;
+	}
 	const settings_field_t *it = &settings_fields[u->item];
 	unsigned i = (choice_index(&u->values, u->item) + it->n_choices + (unsigned)step) % it->n_choices;
 	*settings_field(&u->values, u->item) = it->values[i];
@@ -35,15 +38,17 @@ static void change(setup_t *u, int step) {
 static void select_next(setup_t *u, int step) {
 	for (unsigned n = 0; n < SETUP_ITEMS; ++n) {
 		u->item = (u->item + SETUP_ITEMS + (unsigned)step) % SETUP_ITEMS;
-		if (!settings_field_fixed(&u->values, u->item))
+		if (!settings_field_fixed(&u->values, u->item)) {
 			return;
+		}
 	}
 }
 
 void setup_open(setup_t *u, const settings_t *values) {
 	*u = (setup_t){.values = *values};
-	if (settings_field_fixed(&u->values, u->item))
+	if (settings_field_fixed(&u->values, u->item)) {
 		select_next(u, 1);
+	}
 }
 
 // The final byte of a cursor key sequence (ESC [ x or ESC O x).
@@ -103,13 +108,15 @@ setup_action_t setup_input(setup_t *u, uint8_t c, uint32_t now_ms) {
 		return SETUP_SAVE;
 	case 'm':
 	case 'M':
-		if (u->machine_menu)
+		if (u->machine_menu) {
 			return SETUP_MACHINE;
+		}
 		break;
 	case 'd':
 	case 'D':
-		if (u->machine_menu)
+		if (u->machine_menu) {
 			return SETUP_DRIVES;
+		}
 		break;
 	case 't':
 	case 'T':
@@ -135,14 +142,14 @@ setup_action_t setup_tick(setup_t *u, uint32_t now_ms) {
 }
 
 // The preview rows: samples of default text, bold and the status line,
-// then each ANSI colour as text on the default background and, under
+// then each ANSI color as text on the default background and, under
 // those, as a background. They are palette indices like everything else,
 // so they show the palette on screen: the owner shows values' palette
 // while SET-UP is open (only the status line's indices follow values
 // here). Spaced out (once so that no 8-pixel group at 132 columns held two
 // samples, for the PicoDVI encoder).
-static void draw_colours_preview(screen_t *s, unsigned row, const settings_t *values) {
-	settings_colours_t c = settings_colours(values);
+static void draw_colors_preview(screen_t *s, unsigned row, const settings_t *values) {
+	settings_colors_t c = settings_colors(values);
 	const uint8_t fg = PALETTE_TEXT, bg = PALETTE_BACKGROUND;
 	unsigned col = LEFT + 3 + NAME_WIDTH;
 	screen_puts(s, col, row, " Text ", fg, bg);
@@ -176,19 +183,21 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 	screen_frame(s, top, SETUP_ROWS, text, fg, bg, border);
 
 	settings_t values = u->values;
-	// The preview goes under the last colour setting.
+	// The preview goes under the last color setting.
 	const unsigned preview_after = offsetof(settings_t, palette);
 	unsigned row = top;
 	for (unsigned i = 0; i < SETUP_ITEMS; ++i) {
 		const settings_field_t *it = &settings_fields[i];
 		++row;
-		if (i == preview_after + 1)
+		if (i == preview_after + 1) {
 			row += 2; // below the preview
+		}
 		// The selected setting: marked, and its name in bold.
 		bool selected = i == u->item;
 		snprintf(text, sizeof text, " %c %s", selected ? '>' : ' ', it->name);
-		for (unsigned c = 0; text[c]; ++c)
+		for (unsigned c = 0; text[c]; ++c) {
 			screen_put_attr(s, LEFT + c, row, (uint8_t)text[c], fg, bg, selected ? SCREEN_ATTR_BOLD : 0);
+		}
 		unsigned col = LEFT + 3 + NAME_WIDTH;
 		const char *fixed = settings_field_fixed(&values, i);
 		if (fixed) {
@@ -217,10 +226,11 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 			col += (unsigned)strlen(it->labels[c]) + 3;
 		}
 	}
-	draw_colours_preview(s, top + 2 + preview_after, &values);
+	draw_colors_preview(s, top + 2 + preview_after, &values);
 
-	if (u->message)
+	if (u->message) {
 		screen_puts(s, LEFT + 3, top + SETUP_ROWS - 4, u->message, fg, bg);
+	}
 	screen_puts(s, LEFT, top + SETUP_ROWS - 3, " Up/Down select  Left/Right change  Return save  Esc cancel",
 		fg, bg);
 	screen_puts(s, LEFT, top + SETUP_ROWS - 2, u->machine_menu

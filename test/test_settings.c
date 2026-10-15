@@ -11,8 +11,9 @@ static uint32_t crc_of(const uint8_t *rec, unsigned len) {
 	uint32_t crc = 0xffffffff;
 	for (unsigned i = 0; i < 12 + len; ++i) {
 		crc ^= rec[i < 12 ? i : i + 4];
-		for (int b = 0; b < 8; ++b)
+		for (int b = 0; b < 8; ++b) {
 			crc = crc >> 1 ^ (0xedb88320u & -(crc & 1));
+		}
 	}
 	return ~crc;
 }
@@ -27,7 +28,7 @@ static void erase_all(void) {
 
 static void test_round_trip(void) {
 	settings_t in = {.columns = 132, .backspace = 0x08, .local_echo = 1, .baud = 4, .framing = 4,
-		.newline = 1, .colours = 2, .palette = 1, .mode = SETTINGS_MODE_CPM, .blank_after = 30}, out;
+		.newline = 1, .colors = 2, .palette = 1, .mode = SETTINGS_MODE_CPM, .blank_after = 30}, out;
 	uint8_t rec[SETTINGS_RECORD_SIZE];
 	uint32_t seq = 0;
 	settings_encode(&in, 0x12345678, rec);
@@ -38,7 +39,7 @@ static void test_round_trip(void) {
 	CHECK_EQ(out.baud, 4);
 	CHECK_EQ(out.framing, 4);
 	CHECK_EQ(out.newline, 1);
-	CHECK_EQ(out.colours, 2);
+	CHECK_EQ(out.colors, 2);
 	CHECK_EQ(out.palette, 1);
 	CHECK_EQ(out.mode, SETTINGS_MODE_CPM);
 	CHECK_EQ(out.status_line, 0); // hidden
@@ -145,7 +146,7 @@ static void test_older_record(void) {
 }
 
 // Records saved with the retired 80 columns setting in byte 11, where
-// term_type is now: 0 (centred) and 1 (full width) both come back as
+// term_type is now: 0 (centered) and 1 (full width) both come back as
 // VT100, the rest stand.
 static void test_retired_wide80(void) {
 	for (uint8_t old = 0; old <= 1; ++old) {
@@ -158,8 +159,9 @@ static void test_retired_wide80(void) {
 		CHECK_EQ(rec[5], 12);
 		rec[16 + 11] = old;
 		uint32_t crc = crc_of(rec, 12);
-		for (unsigned i = 0; i < 4; ++i)
+		for (unsigned i = 0; i < 4; ++i) {
 			rec[12 + i] = (uint8_t)(crc >> 8 * i);
+		}
 		settings_t out;
 		uint32_t seq;
 		CHECK(settings_decode(rec, &out, &seq));
@@ -195,16 +197,18 @@ static void test_columns_in_use(void) {
 	CHECK_EQ(settings_columns(&s), 132);
 	s.term_type = SETTINGS_TERM_VT52;
 	CHECK_EQ(settings_columns(&s), 132);
-	for (unsigned i = 0; i < SETTINGS_FIELDS; ++i)
+	for (unsigned i = 0; i < SETTINGS_FIELDS; ++i) {
 		CHECK(settings_field_fixed(&s, i) == NULL);
+	}
 	s.term_type = SETTINGS_TERM_ADM3A;
 	CHECK_EQ(settings_columns(&s), 80);
 	CHECK(strcmp(settings_field_fixed(&s, offsetof(settings_t, columns)), "ADM-3A") == 0);
-	for (unsigned i = 1; i < SETTINGS_FIELDS; ++i)
+	for (unsigned i = 1; i < SETTINGS_FIELDS; ++i) {
 		CHECK(settings_field_fixed(&s, i) == NULL);
+	}
 }
 
-static void test_line_and_colours(void) {
+static void test_line_and_colors(void) {
 	settings_t s;
 	settings_defaults(&s);
 	unsigned bits, stop;
@@ -217,24 +221,24 @@ static void test_line_and_colours(void) {
 	CHECK_EQ(settings_baud_rate(&s), 9600);
 	settings_framing(&s, &bits, &parity, &stop);
 	CHECK(bits == 7 && parity == 'E' && stop == 1);
-	settings_colours_t c = settings_colours(&s);
+	settings_colors_t c = settings_colors(&s);
 	CHECK_EQ(c.status_fg, PALETTE_BOLD_TEXT); // white: bright white on blue, as before
 	CHECK_EQ(c.status_bg, PALETTE_BLUE);
 	CHECK_EQ(c.logo_fg, RGB222(2, 2, 2));
-	s.colours = 2; // amber: the text colours reversed
-	c = settings_colours(&s);
+	s.colors = 2; // amber: the text colors reversed
+	c = settings_colors(&s);
 	CHECK_EQ(c.status_fg, PALETTE_BACKGROUND);
 	CHECK_EQ(c.status_bg, PALETTE_TEXT);
 	CHECK_EQ(c.logo_fg, RGB222(2, 1, 0));
-	// Mono: the text colours reversed, white's too.
+	// Mono: the text colors reversed, white's too.
 	s.palette = 1;
-	for (s.colours = 0; s.colours < 4; ++s.colours) {
-		c = settings_colours(&s);
+	for (s.colors = 0; s.colors < 4; ++s.colors) {
+		c = settings_colors(&s);
 		CHECK(c.status_fg == PALETTE_BACKGROUND && c.status_bg == PALETTE_TEXT);
 	}
-	s.colours = 9; // out of range: white
+	s.colors = 9; // out of range: white
 	s.palette = 0;
-	CHECK_EQ(settings_colours(&s).status_bg, PALETTE_BLUE);
+	CHECK_EQ(settings_colors(&s).status_bg, PALETTE_BLUE);
 	// Every field's labels and values line up and the defaults are choices.
 	settings_defaults(&s);
 	for (unsigned i = 0; i < SETTINGS_FIELDS; ++i) {
@@ -258,6 +262,6 @@ int main(void) {
 	RUN(test_retired_wide80);
 	RUN(test_term_type);
 	RUN(test_columns_in_use);
-	RUN(test_line_and_colours);
+	RUN(test_line_and_colors);
 	return tests_done();
 }

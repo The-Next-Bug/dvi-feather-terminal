@@ -205,8 +205,9 @@ static drivepanel_action_t panel_keys(drivepanel_t *p, const char *keys) {
 	drivepanel_action_t last = DRIVEPANEL_NONE;
 	for (; *keys; ++keys) {
 		drivepanel_action_t a = drivepanel_input(p, (uint8_t)*keys, 0);
-		if (a != DRIVEPANEL_NONE)
+		if (a != DRIVEPANEL_NONE) {
 			last = a;
+		}
 	}
 	return last;
 }
@@ -228,8 +229,9 @@ static void test_drive_panel(void) {
 	drivepanel_draw(&p, &s, 0, 0x3f, 0, 0x0c);
 	CHECK_EQ(screen_glyph(&s, 0, 0), GLYPH_DEC_GRAPHICS('l')); // in a box
 	char row[81] = "";
-	for (unsigned c = 0; c < 80; ++c)
+	for (unsigned c = 0; c < 80; ++c) {
 		row[c] = (char)screen_glyph(&s, c, 6); // under the title and the Set row
+	}
 	CHECK(strstr(row, "E:") && strstr(row, "HD8") && strstr(row, "8 MB disk"));
 
 	// C: none -> CPM22 is on A, CPM31 is free: the first step takes it.
@@ -276,11 +278,13 @@ static bool panel_row_has(const drivepanel_t *p, unsigned row, const char *text)
 	screen_init(&s, 80, 0x3f, 0);
 	drivepanel_draw(p, &s, 0, 0x3f, 0, 0x0c);
 	char line[81] = "";
-	for (unsigned c = 0; c < 80; ++c)
+	for (unsigned c = 0; c < 80; ++c) {
 		line[c] = (char)screen_glyph(&s, c, row);
+	}
 	bool found = strstr(line, text) != NULL;
-	if (!found)
+	if (!found) {
 		fprintf(stderr, "row %u: no \"%s\" in \"%s\"\n", row, text, line);
+	}
 	return found;
 }
 
@@ -291,8 +295,9 @@ static void write_file(const char *path, const char *text);
 static void test_drive_sets(void) {
 	static drivepanel_t p;
 	char before[DRIVES][DRIVES_NAME_MAX + 1];
-	for (unsigned d = 0; d < DRIVES; ++d)
+	for (unsigned d = 0; d < DRIVES; ++d) {
 		strcpy(before[d], drives_name(d) ? drives_name(d) : "");
+	}
 	drivepanel_open(&p);
 	CHECK_EQ(p.n_sets, 0);
 	CHECK(panel_row_has(&p, 1, "no sets on the card yet"));
@@ -315,8 +320,9 @@ static void test_drive_sets(void) {
 	CHECK(panel_row_has(&p, 1, "MY22"));
 	char images[DRIVES][DRIVES_NAME_MAX + 1];
 	CHECK(drives_set_read("MY22", images));
-	for (unsigned d = 0; d < DRIVES; ++d)
+	for (unsigned d = 0; d < DRIVES; ++d) {
 		CHECK(strcmp(images[d], before[d]) == 0);
+	}
 
 	// One written on a PC: any order, lower case, blanks, an image that is
 	// not on the card.
@@ -329,8 +335,9 @@ static void test_drive_sets(void) {
 	CHECK_EQ(p.set, 1);
 	CHECK(strcmp(p.images[p.choice[0]], "CPM31") == 0);
 	CHECK(strcmp(p.images[p.choice[1]], "CPM32") == 0);
-	for (unsigned d = 2; d < DRIVES; ++d)
+	for (unsigned d = 2; d < DRIVES; ++d) {
 		CHECK_EQ(p.choice[d], -1);
+	}
 	CHECK(p.message && strcmp(p.message, "1 of OTHER's disks is not on the card") == 0);
 	// Changing a drive leaves the set.
 	CHECK_EQ(panel_keys(&p, "\x1b[B\x1b[B\x1b[B "), DRIVEPANEL_REDRAW);
@@ -382,9 +389,11 @@ static void test_drive_sets(void) {
 	// Back as it was.
 	CHECK(drives_set_remove("MY22"));
 	drives_unmount_all();
-	for (unsigned d = 0; d < DRIVES; ++d)
-		if (before[d][0])
+	for (unsigned d = 0; d < DRIVES; ++d) {
+		if (before[d][0]) {
 			CHECK_EQ(drives_mount(d, before[d]), DRIVES_OK);
+		}
+	}
 	drives_save_config();
 }
 
@@ -399,10 +408,10 @@ static void test_benchmark(void) {
 	CHECK(strstr(screen, "PIP") != NULL);
 }
 
-// WORMS (src/machine/cpm/worms.asm) on the CPM22 disk: colour worms, the options,
+// WORMS (src/machine/cpm/worms.asm) on the CPM22 disk: color worms, the options,
 // the screen size from a cursor position report, any key back to CP/M.
 static void test_worms(void) {
-	// No size report from this console: 24 x 80; a worm per colour.
+	// No size report from this console: 24 x 80; a worm per color.
 	clear_screen();
 	CHECK(type("WORMS -D 0 -N 2\r"));
 	CHECK_EQ(run_until("\x1b[92m", 10), MACHINE_RUNNING);
@@ -418,25 +427,28 @@ static void test_worms(void) {
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "Usage: WORMS") != NULL);
 
-	// Monochrome: no colour codes.
+	// Monochrome: no color codes.
 	clear_screen();
 	CHECK(type("WORMS -D0 -M\r"));
 	CHECK_EQ(run_until("\x1b[23;", 10), MACHINE_RUNNING);
-	for (int i = 0; i < 20; ++i)
+	for (int i = 0; i < 20; ++i) {
 		machine_run(1000);
-	for (char sgr[] = "\x1b[91m"; sgr[3] <= '6'; ++sgr[3])
+	}
+	for (char sgr[] = "\x1b[91m"; sgr[3] <= '6'; ++sgr[3]) {
 		CHECK(strstr(screen, sgr) == NULL);
+	}
 	CHECK(type("x"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 
-	// -C: 256-colour rainbows, each worm from its own place on the wheel
+	// -C: 256-color rainbows, each worm from its own place on the wheel
 	// (worm 0 from red, worm 1 seven steps on), stepping on per head.
 	clear_screen();
 	CHECK(type("WORMS -D 0 -N 2 -C\r"));
 	CHECK_EQ(run_until("\x1b[38;5;154m", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "\x1b[38;5;202m") != NULL);
-	for (int i = 0; i < 20; ++i)
+	for (int i = 0; i < 20; ++i) {
 		machine_run(1000);
+	}
 	CHECK(strstr(screen, "\x1b[38;5;208m") != NULL);
 	CHECK(strstr(screen, "\x1b[91m") == NULL);
 	CHECK(type("x"));
@@ -444,8 +456,9 @@ static void test_worms(void) {
 	clear_screen();
 	CHECK(type("WORMS -D0 -C -M\r")); // -M still wins
 	CHECK_EQ(run_until("\x1b[23;", 10), MACHINE_RUNNING);
-	for (int i = 0; i < 20; ++i)
+	for (int i = 0; i < 20; ++i) {
 		machine_run(1000);
+	}
 	CHECK(strstr(screen, "38;5;") == NULL);
 	CHECK(type("x"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
@@ -483,8 +496,9 @@ static void test_no_disk_boot_rom(void) {
 }
 
 static void console_text(const char *text) {
-	while (*text)
+	while (*text) {
 		host_platform.console_out((uint8_t)*text++);
+	}
 }
 
 static const char *card_info(void) {
@@ -521,8 +535,9 @@ static bool firmware_check(const char *path, char *info, size_t n) {
 static bool firmware_stage(const char *path, void (*progress)(void *, uint32_t, uint32_t), void *ctx, char *info,
 	size_t n) {
 	++stages;
-	for (uint32_t done = 0; done <= 128 * 1024; done += 512)
+	for (uint32_t done = 0; done <= 128 * 1024; done += 512) {
 		progress(ctx, done, 128 * 1024);
+	}
 	bool ok = firmware_first(path) == 'S';
 	snprintf(info, n, "%s", ok ? "" : "flash verify failed");
 	return ok;
@@ -542,8 +557,9 @@ static bool menu_shown(void) {
 
 static monitor_action_t keys(const char *s) {
 	monitor_action_t a = MONITOR_NONE;
-	while (*s)
+	while (*s) {
 		a = monitor_key((uint8_t)*s++, 0);
+	}
 	return a;
 }
 
@@ -697,8 +713,9 @@ static bool panel_card, panel_stick;
 static unsigned panel_shows, panel_unmounts, panel_commit_unmounts;
 
 static bool panel_mount(char *info, size_t n) {
-	if (!panel_card)
+	if (!panel_card) {
 		snprintf(info, n, "no SD card found");
+	}
 	return panel_card;
 }
 
@@ -720,8 +737,9 @@ static void panel_show(const fwpanel_t *p) {
 
 static bool shown_row(unsigned row, const char *text) {
 	char line[81];
-	for (unsigned c = 0; c < 80; ++c)
+	for (unsigned c = 0; c < 80; ++c) {
 		line[c] = (char)screen_glyph(&panel_shown, c, row);
+	}
 	line[80] = 0;
 	return strstr(line, text) != NULL;
 }
@@ -735,8 +753,9 @@ static bool panel_row(const fwpanel_t *p, unsigned row, const char *text) {
 	screen_init(&s, 80, 7, 0);
 	fwpanel_draw(p, &s, 0, 7, 0, 4);
 	char line[81];
-	for (unsigned c = 0; c < 80; ++c)
+	for (unsigned c = 0; c < 80; ++c) {
 		line[c] = (char)screen_glyph(&s, c, row);
+	}
 	line[80] = 0;
 	return strstr(line, text) != NULL;
 }
@@ -943,8 +962,9 @@ static uint8_t xbuf[XFER_RECORD];
 // Run an xfer command on volume 0, with name (11 bytes, FCB form) as its
 // input if given.
 static uint8_t xcmd(uint8_t cmd, const char *name) {
-	if (name)
+	if (name) {
 		memcpy(xbuf, name, XFER_NAME);
+	}
 	return xfer_command(cmd, 0, xbuf);
 }
 
@@ -962,8 +982,9 @@ static struct {
 static void emit(unsigned n, ...) {
 	va_list ap;
 	va_start(ap, n);
-	for (unsigned i = 0; i < n; ++i)
+	for (unsigned i = 0; i < n; ++i) {
 		z80.code[z80.n++] = (uint8_t)va_arg(ap, int);
+	}
 	va_end(ap);
 }
 
@@ -1013,18 +1034,20 @@ static void test_xfer_port(void) {
 	CHECK(z80.n <= sizeof z80.code);
 	memcpy(bnk0 + 0xff00, z80.code, z80.n);
 	memcpy(bnk0 + name, "PORT    BIN", XFER_NAME);
-	for (unsigned i = 0; i < XFER_RECORD; ++i)
+	for (unsigned i = 0; i < XFER_RECORD; ++i) {
 		bnk0[rec + i] = (uint8_t)(i ^ 0x5a);
+	}
 	memset(bnk0 + st, 0xff, 16);
 	machine_reset(); // from the code above
 	unsigned slices = 0;
-	while (machine_run(10000) == MACHINE_RUNNING && ++slices < 100)
-		;
+	while (machine_run(10000) == MACHINE_RUNNING && ++slices < 100) {
+	}
 	CHECK(strstr(machine_stop_reason(), "HALT with interrupts off") != NULL);
 	static const uint8_t want[] = {XFER_ST_OK, XFER_ST_OK, XFER_ST_OK, XFER_ST_OK, XFER_ST_OK, XFER_ST_EOF,
 		XFER_ST_OK, XFER_ST_OK, XFER_ST_OK, XFER_ST_OK};
-	for (unsigned i = 0; i < sizeof want; ++i)
+	for (unsigned i = 0; i < sizeof want; ++i) {
 		CHECK_EQ(bnk0[st + i], want[i]);
+	}
 	CHECK(memcmp(bnk0 + back, bnk0 + rec, XFER_RECORD) == 0);
 	CHECK(memcmp(machine_bank(1) + banked, bnk0 + rec, XFER_RECORD) == 0);
 	// The listing entry: the name and the size (128).
@@ -1053,12 +1076,14 @@ static bool fat_file_is(const char *path, const void *data, unsigned size, unsig
 	static uint8_t got[32768];
 	FIL f;
 	UINT n;
-	if (f_open(&f, path, FA_READ) != FR_OK)
+	if (f_open(&f, path, FA_READ) != FR_OK) {
 		return false;
+	}
 	bool ok = f_read(&f, got, sizeof got, &n) == FR_OK && n == (pad_to > size ? pad_to : size) &&
 		memcmp(got, data, size) == 0;
-	for (unsigned i = size; ok && i < n; ++i)
+	for (unsigned i = size; ok && i < n; ++i) {
 		ok = got[i] == 0x1a;
+	}
 	f_close(&f);
 	return ok;
 }
@@ -1070,8 +1095,9 @@ static bool cpm(const char *line, const char *want) {
 	CHECK(type("\r"));
 	CHECK_EQ(run_until("\r\nA>", 30), MACHINE_RUNNING);
 	bool found = strstr(screen, want) != NULL;
-	if (!found)
+	if (!found) {
 		fprintf(stderr, "%s: no \"%s\" in:\n%s\n", line, want, screen);
+	}
 	return found;
 }
 
@@ -1079,10 +1105,12 @@ static bool cpm(const char *line, const char *want) {
 static void test_xfer_tools(void) {
 	static char text[300];
 	static uint8_t binary[1000];
-	for (unsigned i = 0; i < sizeof text; ++i)
+	for (unsigned i = 0; i < sizeof text; ++i) {
 		text[i] = i % 30 == 29 ? '\n' : i % 30 == 28 ? '\r' : (char)('a' + i % 26);
-	for (unsigned i = 0; i < sizeof binary; ++i)
+	}
+	for (unsigned i = 0; i < sizeof binary; ++i) {
 		binary[i] = (uint8_t)(i * 13 + i / 256); // 0x1A included
+	}
 	drives_unmount_all();
 	xfer_reset();
 	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
@@ -1238,8 +1266,9 @@ static void cpm3_boot(void) {
 	machine_reset();
 	CHECK_EQ(run_until("RSX loaded and initialized.", 30), MACHINE_RUNNING);
 	const char *banner = strstr(screen, "RSX loaded and initialized.");
-	if (!banner || !strstr(banner, "A>")) // the prompt may have come with it
+	if (!banner || !strstr(banner, "A>")) { // the prompt may have come with it
 		CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	}
 }
 
 static void test_boot_cpm3(void) {
@@ -1320,8 +1349,9 @@ static void test_boot_cpm3(void) {
 // a file over 16 KB (several extents) in and out.
 static void test_cpm3_tools(void) {
 	static uint8_t big[20000];
-	for (unsigned i = 0; i < sizeof big; ++i)
+	for (unsigned i = 0; i < sizeof big; ++i) {
 		big[i] = (uint8_t)(i * 7 + i / 251);
+	}
 	drives_unmount_all();
 	CHECK_EQ(diskimg_install(diskimg_find("EMPTY"), true, window, NULL, NULL), DISKIMG_WRITTEN);
 	CHECK_EQ(drives_mount(0, "CPM31"), DRIVES_OK);
@@ -1443,9 +1473,11 @@ static void test_mem_banks(void) {
 	CHECK(strstr(screen, "Bank 1  ok") != NULL);
 	CHECK(strstr(screen, "wrong") == NULL);
 	bool pattern = true;
-	for (unsigned b = 1; b <= MACHINE_MAX_BANKS; ++b)
-		for (unsigned a = 0; a < MACHINE_BANK_SIZE; a += 97)
+	for (unsigned b = 1; b <= MACHINE_MAX_BANKS; ++b) {
+		for (unsigned a = 0; a < MACHINE_BANK_SIZE; a += 97) {
 			pattern &= machine_bank(b)[a] == (uint8_t)~((a & 0xff) ^ (a >> 8) ^ b);
+		}
+	}
 	CHECK(pattern);
 	// Back to the SRAM banks for the tests after this one.
 	machine_set_banks(NULL, 0);
@@ -1480,10 +1512,11 @@ static void test_hd_guard(void) {
 		{0x22, 4}, {0x42, 5}, // read, write C:
 	};
 	for (unsigned i = 0; i < sizeof steps / sizeof steps[0]; ++i) {
-		if (steps[i][0])
+		if (steps[i][0]) {
 			emit(4, 0x3e, steps[i][0], 0xd3, 4); // LD A,cmd; OUT (4),A
-		else
+		} else {
 			emit(4, 0x3e, 2, 0xd3, 8); // LD A,2; OUT (8),A
+		}
 		emit(2, 0xdb, steps[i][0] ? 4 : 8);   // IN A,(4) or (8)
 		uint16_t at = (uint16_t)(st + steps[i][1]);
 		emit(3, 0x32, at & 0xff, at >> 8);    // LD (at),A
@@ -1502,8 +1535,8 @@ static void test_hd_guard(void) {
 		memset(bnk0 + st, 0xff, 16);
 		machine_reset();
 		unsigned slices = 0;
-		while (machine_run(10000) == MACHINE_RUNNING && ++slices < 100)
-			;
+		while (machine_run(10000) == MACHINE_RUNNING && ++slices < 100) {
+		}
 		CHECK(strstr(machine_stop_reason(), "HALT with interrupts off") != NULL);
 		CHECK_EQ(bnk0[st + 0], 2); // refused: no disk
 		CHECK_EQ(bnk0[st + 1], 2);
@@ -1531,8 +1564,9 @@ static void console_to_term(uint8_t c) {
 
 static void term_replies_to_keys(void *ctx, const uint8_t *data, size_t len) {
 	(void)ctx;
-	for (size_t i = 0; i < len; ++i)
+	for (size_t i = 0; i < len; ++i) {
 		machine_key(data[i]);
+	}
 }
 
 // The text of a terminal row, trailing blanks dropped.
@@ -1541,8 +1575,9 @@ static const char *trow(unsigned row) {
 	unsigned len = 0;
 	for (unsigned col = 0; col < tscreen.cols; ++col) {
 		text[col] = (char)screen_glyph(&tscreen, col, row);
-		if (text[col] != ' ')
+		if (text[col] != ' ') {
 			len = col + 1;
+		}
 	}
 	text[len] = '\0';
 	return text;
@@ -1551,9 +1586,10 @@ static const char *trow(unsigned row) {
 static bool trow_check(unsigned row, const char *want, bool whole, int line) {
 	const char *got = trow(row);
 	bool ok = whole ? strcmp(got, want) == 0 : strstr(got, want) != NULL;
-	if (!ok)
+	if (!ok) {
 		fprintf(stderr, "%s:%d: row %u \"%s\", want %s\"%s\"\n", __FILE__, line, row, got,
 			whole ? "" : "it to contain ", want);
+	}
 	return ok;
 }
 #define TROW_IS(row, want) CHECK(trow_check(row, want, true, __LINE__))
@@ -1575,8 +1611,9 @@ static void termtest_pages(unsigned p) {
 	screen_init(&tscreen, 80, PALETTE_TEXT, PALETTE_BACKGROUND);
 	term_init(&tterm, &tscreen, 0, 24);
 	term_set_reply(&tterm, term_replies_to_keys, NULL);
-	if (p == 2)
+	if (p == 2) {
 		term_set_defaults(&tterm, &(term_defaults_t){.personality = TERM_ADM3A});
+	}
 	CHECK(type("B:TERMTEST\r"));
 	CHECK_EQ(run_until("Choice? ", 30), MACHINE_RUNNING);
 	CHECK(type(p == 0 ? "1" : p == 1 ? "2" : "3"));
@@ -1593,7 +1630,7 @@ static void termtest_pages(unsigned p) {
 	TGLYPH(11, 2, '-');
 	TGLYPH(10, 3, '|');
 	TGLYPH(69, 20, '|');
-	TROW_HAS(11, "centre");
+	TROW_HAS(11, "center");
 	TROW_IS(1, "top left (row 2)");
 	TGLYPH(68, 22, 'b');
 	TGLYPH(79, 22, 't');
@@ -1607,8 +1644,9 @@ static void termtest_pages(unsigned p) {
 		TGLYPH(30, row, 'O');
 		TGLYPH(31, row, 'K');
 	}
-	for (unsigned row = 0; row < 23; ++row)
+	for (unsigned row = 0; row < 23; ++row) {
 		CHECK(strstr(trow(row), "??") == NULL);
+	}
 	next_page();
 
 	// Erasing.
@@ -1718,8 +1756,9 @@ static void test_termtest(void) {
 	machine_init(&host_platform);
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(cpm("DIR B:TERMTEST.COM", "TERMTEST COM"));
-	for (unsigned p = 0; p < 3; ++p)
+	for (unsigned p = 0; p < 3; ++p) {
 		termtest_pages(p);
+	}
 
 	// Esc on a page goes back to the menu.
 	CHECK(type("B:TERMTEST\r"));
@@ -1748,17 +1787,18 @@ static void altscr_main_shown(bool label) {
 	for (unsigned r = 1; r <= 22; ++r) {
 		char want[80];
 		snprintf(want, sizeof want, "Main screen row %u  the quick brown fox jumps over the lazy dog", r);
-		if (r != 12)
+		if (r != 12) {
 			TROW_IS(r - 1, want);
-		else
+		} else {
 			TROW_HAS(r - 1, "Main screen row 12  the quick brown");
+		}
 	}
 	TGLYPH(39, 11, 'X');
 	if (label) {
 		TROW_HAS(11, "X<1049");
 		uint8_t fg, bg;
-		screen_colours(&tscreen, 40, 11, &fg, &bg);
-		CHECK_EQ(fg, 9); // bold red: the colours ?1049 saved came back
+		screen_colors(&tscreen, 40, 11, &fg, &bg);
+		CHECK_EQ(fg, 9); // bold red: the colors ?1049 saved came back
 		CHECK(screen_attr(&tscreen, 40, 11) & SCREEN_ATTR_BOLD);
 	}
 	CHECK(screen_attr(&tscreen, 0, 0) & SCREEN_ATTR_BOLD); // row 1's style
@@ -1822,8 +1862,9 @@ static void test_altscr(void) {
 	altscr_alt_shown("ALTERNATE SCREEN with SET-UP over it");
 	const unsigned setup_top = 24 - SETUP_ROWS;
 	CHECK(screen_stash_push(&alt_stash, &tscreen, 'S', setup_top, SETUP_ROWS));
-	for (unsigned r = setup_top; r < 24; ++r)
+	for (unsigned r = setup_top; r < 24; ++r) {
 		screen_clear_line(&tscreen, r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	}
 	CHECK(screen_stash_pop(&alt_stash, &tscreen, 'S', PALETTE_TEXT, PALETTE_BACKGROUND));
 	altscr_alt_shown("ALTERNATE SCREEN with SET-UP over it");
 	CHECK(type(" "));
