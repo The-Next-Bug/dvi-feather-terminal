@@ -35,6 +35,12 @@
 #ifndef BOARD_DVI_DRIVE_MA
 #define BOARD_DVI_DRIVE_MA 2
 #endif
+
+// Flash XIP reads in quad (EBh) mode (nvflash.c, bd cpx.2): 1 tries it and
+// keeps it if it reads the same as serial 03h; 0 stays serial.
+#ifndef BOARD_FLASH_QUAD
+#define BOARD_FLASH_QUAD 1
+#endif
 // PADS_BANK0 DRIVE field: 0 2 mA, 1 4 mA, 2 8 mA, 3 12 mA.
 #if BOARD_DVI_DRIVE_MA == 2
 #define BOARD_DVI_DRIVE 0u

@@ -441,7 +441,7 @@ it is, a screen at a time (`-- More --`: any key for the next page, `Q`,
 Firmware         DVI Feather Terminal v0.9.0 (2026-10-15)
 Board            pico2-dvi-sock
 
-CPU              yes      RP2350A at 400 MHz, 4 MB flash
+CPU              yes      RP2350A at 400 MHz, 4 MB flash, quad reads at 50 MHz
 Z80 memory       yes      64 KB + 2 x 48 KB banks in SRAM
 PSRAM            no       none on this board
 Video            yes      DVI 800x600 at 60 Hz, 80 x 24 text + status line
