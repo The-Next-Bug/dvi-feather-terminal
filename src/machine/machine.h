@@ -12,8 +12,8 @@
 // bank), 65/66 clock, 67 60 Hz timer (RST 38H), 160 hardware control
 // (after 0xAA: bit 7 halt, bit 6 reset), 254/255 front panel switches;
 // and our own 8: the format of a drive (OUT the drive, IN its format, IN
-// again its mount count), for our 8-drive BIOSes in src/machine/cpm; and 10: the
-// file transfer device (below).
+// again its mount count), for our 8-drive BIOSes in src/machine/cpm; 10: the
+// file transfer device; and 12: the hardware information device (below).
 //
 // The CPU runs in slices (machine_run) from the platform's main loop;
 // while it waits (HALT, the speed limit) it calls the platform's idle hook,
@@ -50,6 +50,11 @@ typedef struct {
 	// (XFER_RECORD bytes). Returns an XFER_ST_* status. May be NULL: every
 	// command answers XFER_ST_NO_VOLUME.
 	uint8_t (*xfer)(uint8_t cmd, uint8_t volume, uint8_t *buf);
+	// The hardware information device (port 12): put item's bytes
+	// (HWINFO_*, at most HWINFO_MAX) in buf and return how many; 0 for an
+	// item it does not know. Items 1 and up only: machine.c answers
+	// HWINFO_ID. May be NULL: port 12 reads 0xFF, as with no device there.
+	size_t (*hwinfo)(uint8_t item, uint8_t *buf);
 } machine_platform_t;
 
 // Port 10, the file transfer device: files in a folder of a FAT volume,
@@ -84,6 +89,55 @@ typedef struct {
 #define XFER_ST_IO_ERROR 4  // a card error, or the volume is full
 #define XFER_ST_NO_VOLUME 5 // no card or stick, or no FAT file system on it
 #define XFER_ST_BAD 6       // a bad name, an unknown command, or no file open
+
+// Port 12, the hardware information device (bd 1ls.9): what the machine
+// runs on, for HWINFO.COM. OUT 12 an item number; IN 12 then reads the
+// item's bytes in turn, and 0 after its end. Without the device (older
+// firmware, picosim) IN 12 reads 0xFF: check HWINFO_ID first.
+//
+// Items 1 and 2 are text ending in 0. Items HWINFO_RECORD and up are one
+// piece of hardware each, at a fixed number (programs can look one up):
+// a status byte (HWINFO_ST_*), its name and a description, each text
+// ending in 0. Status 0: no record under that number (the numbers in
+// between may be used later, so read them all).
+#define HWINFO_ID 0       // 'H', 'W', HWINFO_VERSION
+#define HWINFO_FIRMWARE 1 // the firmware's version and build date
+#define HWINFO_BOARD 2    // the board: its header's name (boards/<name>.h)
+#define HWINFO_RECORD 16  // the first record
+
+// Records. Planned hardware, which this firmware does not drive yet, has a
+// record too (HWINFO_ST_PLANNED), so the report shows what is to come.
+#define HWINFO_CPU 16          // the chip, its clock and flash
+#define HWINFO_MEMORY 17       // the Z80's memory: bank 0 and the banks, where they are
+#define HWINFO_PSRAM 18        // PSRAM on the QSPI bus
+#define HWINFO_VIDEO 19        // the display
+#define HWINFO_SERIAL 20       // the serial port: UART, pins, line settings
+#define HWINFO_FLOW_CONTROL 21 // RTS/CTS
+#define HWINFO_SD_CARD 22      // the SD card slot and the card in it
+#define HWINFO_USB_HOST 23     // the USB host port: keyboards, sticks
+#define HWINFO_USB_STICK 24    // the stick in use (USB: to the transfer tools)
+#define HWINFO_LED 25          // the status LED
+#define HWINFO_RTC 26          // a real-time clock (planned: bd 1ls.6)
+#define HWINFO_BELL 27         // a DAC or buzzer for BEL (planned: bd 1ls.7)
+#define HWINFO_NEOPIXEL 28     // an RGB status LED (planned: bd 1ls.15)
+#define HWINFO_SD_DETECT 29    // the card slot's detect switch (planned: bd 1ls.11)
+#define HWINFO_BUTTON 30       // a user button (planned: bd 1ls.12)
+#define HWINFO_BATTERY 31      // battery and charger (planned: bd 1ls.13)
+#define HWINFO_DRIVES 32       // the disk images on drives A-H
+
+#define HWINFO_ST_NONE 0      // no record
+#define HWINFO_ST_PRESENT 1   // there and in use
+#define HWINFO_ST_ABSENT 2    // supported, but this board (or build) has none, or nothing is plugged in
+#define HWINFO_ST_NOT_FOUND 3 // the board should have it, but it did not answer
+#define HWINFO_ST_PLANNED 4   // this firmware does not support it yet
+
+#define HWINFO_VERSION 1
+#define HWINFO_MAX 128 // the longest item
+
+// For the platform's hwinfo: text, or a record, in buf (HWINFO_MAX bytes,
+// longer text cut); returns the length.
+size_t hwinfo_text(uint8_t *buf, const char *text);
+size_t hwinfo_record(uint8_t *buf, uint8_t status, const char *name, const char *detail);
 
 typedef enum {
 	MACHINE_RUNNING, // the slice ended; call machine_run again

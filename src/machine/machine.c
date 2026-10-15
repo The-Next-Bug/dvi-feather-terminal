@@ -65,6 +65,9 @@ static struct {
 	// byte; the address and the last command's status.
 	BYTE xfer_state, xfer_status;
 	WORD xfer_dma;
+	// Port 12: the selected item's bytes and the next to read.
+	uint8_t hwinfo[HWINFO_MAX];
+	uint8_t hwinfo_len, hwinfo_pos;
 } m;
 
 // picosim's boot ROM (picosim/roms/bootrom.asm): read drive A track 0
@@ -390,6 +393,48 @@ static BYTE xfer_in(void) {
 	return m.xfer_status;
 }
 
+// Port 12: the hardware information device (machine.h). Cold, as port 10.
+static void __attribute__((cold)) hwinfo_out(BYTE data) {
+	size_t len = 0;
+	if (data == HWINFO_ID) {
+		static const uint8_t id[] = {'H', 'W', HWINFO_VERSION};
+		memcpy(m.hwinfo, id, sizeof id);
+		len = sizeof id;
+	} else if (plat->hwinfo) {
+		len = plat->hwinfo(data, m.hwinfo);
+	}
+	m.hwinfo_len = (uint8_t)(len < HWINFO_MAX ? len : HWINFO_MAX);
+	m.hwinfo_pos = 0;
+}
+
+static BYTE hwinfo_in(void) {
+	if (!plat->hwinfo) {
+		return IO_DATA_UNUSED;
+	}
+	return m.hwinfo_pos < m.hwinfo_len ? m.hwinfo[m.hwinfo_pos++] : 0;
+}
+
+// Text and its 0 in room bytes (at least 1), cut to fit; returns the length.
+static size_t hwinfo_put(uint8_t *buf, const char *text, size_t room) {
+	size_t n = strlen(text);
+	if (n > room - 1) {
+		n = room - 1;
+	}
+	memcpy(buf, text, n);
+	buf[n] = 0;
+	return n + 1;
+}
+
+size_t hwinfo_text(uint8_t *buf, const char *text) {
+	return hwinfo_put(buf, text, HWINFO_MAX);
+}
+
+size_t hwinfo_record(uint8_t *buf, uint8_t status, const char *name, const char *detail) {
+	buf[0] = status;
+	size_t n = 1 + hwinfo_put(buf + 1, name, HWINFO_MAX - 2); // room for the detail's 0
+	return n + hwinfo_put(buf + n, detail, HWINFO_MAX - n);
+}
+
 static BYTE fpsw_in(void) {
 	return 0;
 }
@@ -408,6 +453,7 @@ in_func_t *const port_in[256] = {
 	[6] = prtd_in,
 	[8] = dinfo_in,
 	[10] = xfer_in,
+	[12] = hwinfo_in,
 	[64] = mmu_in,
 	[65] = clkc_in,
 	[66] = clkd_in,
@@ -427,6 +473,7 @@ out_func_t *const port_out[256] = {
 	[6] = prtd_out,
 	[8] = dinfo_out,
 	[10] = xfer_out,
+	[12] = hwinfo_out,
 	[64] = mmu_out,
 	[65] = clkc_out,
 	[66] = clkd_out,

@@ -59,7 +59,8 @@ replace this one.
 
 picosim's banked CP/M 3 disks are built in as `CPM31` (boot disk), `CPM32`
 (picosim's second floppy's files on an 8 MB disk, `diskimg_gen.py --convert`,
-with WORMS, XLS, XPIP, XERA and MEM added by `--file CPM32`) and
+with WORMS, XLS, XPIP, XERA, MEM and HWINFO added by `--file CPM32`; HWINFO
+also on `CPM31`) and
 `CPM3GEN` (bd f8w). `CPM31` gets our `PROFILE.SUB` (`cpm3/profile.sub`:
 VT100DYN only, its help text patched away by `cpm3/build.sh`) and
 `README.TXT` (`cpm3/readme.txt`): our BIOS sets SETDEF's defaults (search

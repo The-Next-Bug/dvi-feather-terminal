@@ -1257,6 +1257,148 @@ static void test_xfer_tools(void) {
 	drives_unmount_all();
 }
 
+// Port 12, the hardware information device (bd 1ls.9), in raw Z80 bytes
+// as test_xfer_port: the ID, an item read past its end, a record, an
+// unknown item; then without the platform's hwinfo, 0xFF as from no device.
+static void hwinfo_program(uint16_t at) {
+	extern uint8_t bnk0[65536];
+	z80.n = 0;
+	emit(1, 0xf3); // DI
+	static const uint8_t items[] = {HWINFO_ID, HWINFO_BOARD, HWINFO_RTC, 99};
+	for (unsigned i = 0; i < sizeof items; ++i) {
+		uint16_t a = (uint16_t)(at + i * 16);
+		emit(4, 0x3e, items[i], 0xd3, 12); // LD A,item; OUT (12),A
+		emit(5, 0x21, a & 0xff, a >> 8, 0x06, 16); // LD HL,a; LD B,16
+		emit(6, 0xdb, 12, 0x77, 0x23, 0x10, 0xfa); // IN A,(12); LD (HL),A; INC HL; DJNZ back
+	}
+	emit(1, 0x76); // HALT
+	CHECK(z80.n <= sizeof z80.code);
+	memcpy(bnk0 + 0xff00, z80.code, z80.n);
+	memset(bnk0 + at, 0x55, 64);
+	machine_reset();
+	unsigned slices = 0;
+	while (machine_run(10000) == MACHINE_RUNNING && ++slices < 100) {
+	}
+	CHECK(strstr(machine_stop_reason(), "HALT with interrupts off") != NULL);
+}
+
+static void test_hwinfo_port(void) {
+	extern uint8_t bnk0[65536];
+	const uint16_t at = 0xf000;
+	machine_init(&host_platform);
+	hwinfo_program(at);
+	static const uint8_t id[16] = {'H', 'W', HWINFO_VERSION};
+	CHECK(memcmp(bnk0 + at, id, 16) == 0);
+	static const uint8_t board[16] = "host-board";
+	CHECK(memcmp(bnk0 + at + 16, board, 16) == 0); // its 0, then 0s
+	CHECK(memcmp(bnk0 + at + 32, "\x04Real-time clock", 16) == 0); // the first 16 bytes
+	static const uint8_t none[16];
+	CHECK(memcmp(bnk0 + at + 48, none, 16) == 0);
+
+	machine_platform_t old = host_platform;
+	old.hwinfo = NULL;
+	machine_init(&old);
+	hwinfo_program(at);
+	for (unsigned i = 0; i < 64; ++i) {
+		CHECK_EQ(bnk0[at + i], 0xff);
+	}
+	machine_init(&host_platform);
+
+	// Records are cut to HWINFO_MAX, the name and the detail still ending
+	// in 0.
+	uint8_t buf[HWINFO_MAX];
+	char longer[200];
+	memset(longer, 'x', sizeof longer - 1);
+	longer[sizeof longer - 1] = 0;
+	CHECK_EQ(hwinfo_record(buf, HWINFO_ST_PRESENT, "Name", longer), HWINFO_MAX);
+	CHECK(buf[0] == HWINFO_ST_PRESENT && memcmp(buf + 1, "Name", 5) == 0);
+	CHECK(buf[6] == 'x' && buf[HWINFO_MAX - 2] == 'x' && buf[HWINFO_MAX - 1] == 0);
+	CHECK_EQ(hwinfo_record(buf, HWINFO_ST_PRESENT, longer, "detail"), HWINFO_MAX);
+	CHECK(buf[HWINFO_MAX - 3] == 'x' && buf[HWINFO_MAX - 2] == 0 && buf[HWINFO_MAX - 1] == 0); // the detail cut to nothing
+	CHECK_EQ(hwinfo_text(buf, longer), HWINFO_MAX);
+	CHECK(buf[HWINFO_MAX - 2] == 'x' && buf[HWINFO_MAX - 1] == 0);
+}
+
+// HWINFO.COM (src/machine/cpm/hwinfo.asm, bd 1ls.10) under CP/M 2.2 and 3,
+// with the host's records (machine_host.c), and on a machine without port 12.
+static void hwinfo_report_checks(void) {
+	CHECK(strstr(screen, "Firmware         Host test firmware\r\n") != NULL);
+	CHECK(strstr(screen, "Board            host-board\r\n") != NULL);
+	CHECK(strstr(screen, "CPU              yes      RP2350A at 400 MHz, 4 MB flash\r\n") != NULL);
+	CHECK(strstr(screen, "PSRAM            missing  none answered on CS1 (GP8)\r\n") != NULL);
+	CHECK(strstr(screen, "USB stick        no       none\r\n") != NULL);
+	CHECK(strstr(screen, "Real-time clock  planned  not supported yet\r\n") != NULL);
+	CHECK(strstr(screen, "Future thing     ?        a status HWINFO does not know\r\n") != NULL);
+	// Wrapped at 79 columns, the rest under the detail column.
+	CHECK(strstr(screen, "SD card          yes      SDHC/SDXC, 29.7 GB; SPI0: GP4 MISO, GP5 CS, GP6 SCK,\r\n"
+		"                          GP7 MOSI\r\n") != NULL);
+	// In item order.
+	const char *cpu = strstr(screen, "CPU "), *rtc = strstr(screen, "Real-time"), *future = strstr(screen, "Future");
+	CHECK(cpu && rtc && future && cpu < rtc && rtc < future);
+}
+
+static void test_hwinfo_tool(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("HWINFO", "Real-time clock"));
+	hwinfo_report_checks();
+	CHECK(strstr(screen, "No hardware information") == NULL);
+
+	machine_platform_t old = host_platform;
+	old.hwinfo = NULL;
+	clear_screen();
+	machine_init(&old);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("HWINFO", "No hardware information here"));
+	CHECK(strstr(screen, "Firmware") == NULL);
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+
+	// A page at a time: 23 lines, the command line's first, then
+	// -- More -- on the 24th; a key clears it for the next 23.
+	host_hwinfo_extra = 50;
+	clear_screen();
+	CHECK(type("HWINFO\r"));
+	CHECK_EQ(run_until("-- More --", 10), MACHINE_RUNNING);
+	unsigned lines = 0;
+	for (const char *p = screen; (p = strstr(p, "\r\n")) != NULL; p += 2) {
+		++lines;
+	}
+	CHECK_EQ(lines, 23); // the command's echo and 22 of HWINFO's
+	CHECK(strstr(screen, "Extra 12 ") != NULL && strstr(screen, "Extra 13 ") == NULL);
+	clear_screen();
+	CHECK(type(" "));
+	CHECK_EQ(run_until("-- More --", 10), MACHINE_RUNNING);
+	CHECK(strncmp(screen, "\r          \r", 12) == 0); // the prompt erased
+	lines = 0;
+	for (const char *p = screen; (p = strstr(p, "\r\n")) != NULL; p += 2) {
+		++lines;
+	}
+	CHECK_EQ(lines, 23);
+	CHECK(strstr(screen, "Extra 13 ") != NULL && strstr(screen, "Extra 35 ") != NULL && strstr(screen, "Extra 36 ") == NULL);
+	// Q stops it.
+	clear_screen();
+	CHECK(type("q"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "Extra 36") == NULL && strstr(screen, "Future") == NULL);
+	// The last page ends without one.
+	clear_screen();
+	CHECK(type("HWINFO\r"));
+	CHECK_EQ(run_until("-- More --", 10), MACHINE_RUNNING);
+	CHECK(type("\r"));
+	CHECK_EQ(run_until("-- More --", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("\r"));
+	CHECK_EQ(run_until("\r\nA>", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "Future thing") != NULL && strstr(screen, "-- More --") == NULL);
+	host_hwinfo_extra = 0;
+	drives_unmount_all();
+}
+
 // ---- CP/M 3 (picosim's banked system: CPM31, CPM32; bd f8w) ----
 
 // Booted by mounting its disks on A: and B:, no setting: the boot ROM
@@ -1367,6 +1509,8 @@ static void test_cpm3_tools(void) {
 	CHECK(cpm("XERA SD:BACK3.BIN", "1 erased"));
 	CHECK(!fat_file_exists("/XFER/BACK3.BIN"));
 	f_unlink("/XFER/BIG.BIN");
+	CHECK(cpm("HWINFO", "Real-time clock")); // from CPM31, A:
+	hwinfo_report_checks();
 	drives_unmount_all();
 }
 
@@ -1910,6 +2054,8 @@ int main(void) {
 	RUN(test_blank_disk_chunks);
 	RUN(test_xfer_port);
 	RUN(test_xfer_tools);
+	RUN(test_hwinfo_port);
+	RUN(test_hwinfo_tool);
 	RUN(test_boot_cpm3);
 	RUN(test_cpm3_tools);
 	RUN(test_cpm3_drives);

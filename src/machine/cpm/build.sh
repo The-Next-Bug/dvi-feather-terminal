@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Assemble the CP/M 2.2 boot loader and BIOS (boot.asm, bios.asm) into
 # OUTDIR/boot.bin and OUTDIR/bios.bin, and WORMS, XLS, XPIP, XERA, TERMTEST,
-# ALTSCR and MEM (worms.asm, xls.asm, xpip.asm and xera.asm with xfer.inc,
-# termtest.asm, altscr.asm, mem.asm; Z80 mnemonics) into OUTDIR/*.com, with z80pack's z80asm, built here from
+# ALTSCR, MEM and HWINFO (worms.asm, xls.asm, xpip.asm and xera.asm with xfer.inc,
+# termtest.asm, altscr.asm, mem.asm, hwinfo.asm; Z80 mnemonics) into OUTDIR/*.com, with z80pack's z80asm, built here from
 # lib/z80pack/z80asm with the host C compiler (CC, default cc). Checks that
 # they fit the system tracks: the loader one sector, the BIOS's code and
 # tables the 7 sectors after CCP and BDOS, its data area below the boot ROM
@@ -33,6 +33,7 @@ asm "$here/xera.asm" "$out/xera.com" "$out/xera.lis" ""
 asm "$here/termtest.asm" "$out/termtest.com" "$out/termtest.lis" ""
 asm "$here/altscr.asm" "$out/altscr.com" "$out/altscr.lis" ""
 asm "$here/mem.asm" "$out/mem.com" "$out/mem.lis" ""
+asm "$here/hwinfo.asm" "$out/hwinfo.com" "$out/hwinfo.lis" ""
 
 size() { stat -c %s "$1"; }
 (( $(size "$out/boot.bin") <= 128 )) || { echo "boot.bin is over one sector" >&2; exit 1; }

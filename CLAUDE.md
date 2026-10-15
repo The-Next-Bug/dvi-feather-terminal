@@ -423,6 +423,25 @@ UF2 in the latter).
   test_cpm3_drives, test_hd_guard (raw Z80 bytes in the ROM page, as
   test_xfer_port), test_mem_banks (15 banks in a host buffer: MEM, MEM T,
   the last pass's bytes).
+  Port 12 (ours, bd 1ls.9; protocol and item numbers in machine.h): the
+  hardware information device. OUT selects an item, IN reads its bytes
+  (0 after the end); machine.c answers item 0 ('H' 'W' version) and keeps
+  the item in a 128-byte buffer, the platform's hwinfo hook fills the
+  rest (NULL: port 12 reads 0xFF, as on older firmware or picosim).
+  Items 1/2 firmware and board text; 16+ a record per piece of hardware
+  at a fixed number (status yes/no/missing/planned, name, detail): planned
+  hardware (RTC, bell, NeoPixel, SD detect, button, battery) is listed as
+  HWINFO_ST_PLANNED until its bead lands, and its driver should then
+  report the real state there. `apps/terminal/hwinfo_glue.c` (cold, in
+  flash via ld/) builds them from board.h and runtime state; 32 lists the
+  mounted images (HWINFO cannot ask port 8: that would unlock hard disks
+  for BIOSes that never ask, f8w.7). src/machine/cpm/hwinfo.asm (1ls.10)
+  -> HWINFO.COM on CPM22, CPM31 and CPM32: reads items 16-255, wraps
+  details at 79 columns, pages (-- More -- after 23 lines, the command
+  line counted; Q/ESC/^C stop). test_machine: test_hwinfo_port (raw Z80 bytes;
+  no hook -> 0xFF; record truncation), test_hwinfo_tool (CP/M 2.2, and
+  without the device) and test_cpm3_tools (CP/M 3), against
+  machine_host.c's records.
   USB sticks (bd qur.3): FatFs volume 1 ("1:", USB: to the tools; ffconf
   FF_VOLUMES 2). `src/storage/diskio.c` (RP2350) dispatches FatFs drives: 0
   sdcard_disk_*, 1 usbmsc_disk_*. `src/storage/usbmsc.[ch]`:

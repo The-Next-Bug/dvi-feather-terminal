@@ -7,6 +7,7 @@
 // - setup_glue.c: SET-UP and the panels over its rows (Drives, firmware
 //   update) and its demo, run from the main loop;
 // - cpm_glue.c: CP/M mode, the Z80 machine's and the monitor's platforms;
+// - hwinfo_glue.c: the machine's hardware information (port 12);
 // - status.c: the status line (terminal, CP/M, debug);
 // - input_glue.c: keys from the USB keyboard.
 // Everything here is core 0's, from the main loop or the USB stack's
@@ -113,6 +114,11 @@ extern const machine_platform_t cpm_platform;
 extern const monitor_platform_t cpm_monitor;
 
 void cpm_step(void);
+
+// ---- hwinfo_glue.c ----
+
+// The machine's hardware information device (port 12, machine.h).
+size_t cpm_hwinfo(uint8_t item, uint8_t *buf);
 
 // ---- status.c ----
 

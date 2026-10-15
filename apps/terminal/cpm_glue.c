@@ -90,6 +90,7 @@ const machine_platform_t cpm_platform = {
 	.disk_format = cpm_disk_format,
 	.disk_mounts = cpm_disk_mounts,
 	.xfer = xfer_command,
+	.hwinfo = cpm_hwinfo,
 };
 
 static void cpm_write(const char *text) {

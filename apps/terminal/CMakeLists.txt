@@ -14,6 +14,7 @@ add_custom_target(build_info
 
 set(TERMINAL_SOURCES
   cpm_glue.c
+  hwinfo_glue.c
   input_glue.c
   main.c
   setup_glue.c
