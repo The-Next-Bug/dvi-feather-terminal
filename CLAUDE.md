@@ -505,7 +505,9 @@ UF2 in the latter).
   addresses, PICOBIN marker in the first 4 KB; CRC of the image as flashed
   (gaps 0xff). `src/platform/fwupdate.[ch]` (RP2350): stage = check again while
   programming the staging area (flash offset 2 MB; images up to
-  NVFLASH_OFFSET - 2 MB), verify by CRC; fwpanel then renames the file
+  NVFLASH_OFFSET - 2 MB), verify by CRC; the file is read 4 KB at a time
+  (FWUPDATE_READ_SIZE: multi-sector commands, a stick takes ms per
+  command, bd akb), and the check's line says how long reading took; fwpanel then renames the file
   to FIRMWARE.OLD and unmounts; the commit (fwupdate_commit_image,
   interrupts off for good) copies sector by sector through the 4 KB
   scratch buffer (`src/common/scratch.[ch]`, portable: one holder at a time; also

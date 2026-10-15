@@ -15,13 +15,23 @@
 #include "uf2.h"
 
 #define MAX_IMAGE (NVFLASH_OFFSET - FWUPDATE_STAGING)
+// The file is read this much at a time (bd akb): FatFs reads whole sectors
+// straight into the buffer, in one command for as many as are in a row (to
+// a cluster's end). A USB stick takes milliseconds per command, so one
+// 512-byte UF2 block per read made the update from a stick slow; the SD
+// card's driver reads a block per command anyway. Build with
+// -DFWUPDATE_READ_SIZE=512 to compare.
+#ifndef FWUPDATE_READ_SIZE
+#define FWUPDATE_READ_SIZE SCRATCH_SIZE
+#endif
+static_assert(FWUPDATE_READ_SIZE % UF2_BLOCK_SIZE == 0 && FWUPDATE_READ_SIZE <= SCRATCH_SIZE, "whole blocks");
 static_assert(MAX_IMAGE <= FWUPDATE_STAGING, "the image stays below the staging area");
 static_assert(FWUPDATE_STAGING % FLASH_SECTOR_SIZE == 0, "");
 static_assert(FLASH_SECTOR_SIZE <= SCRATCH_SIZE && UF2_BLOCK_SIZE <= SCRATCH_SIZE, "fits the scratch buffer");
 
 extern char __flash_binary_end;
 
-// The UF2 block being read, and the commit's copy of a sector (the ROM
+// The UF2 blocks being read, and the commit's copy of a sector (the ROM
 // programs from RAM), are in the scratch buffer (scratch.h).
 static FIL file;
 static uint32_t staged_len;
@@ -35,12 +45,12 @@ static const char *scan(const char *path, bool stage, fwupdate_progress_t progre
 	if ((uintptr_t)&__flash_binary_end - XIP_BASE > FWUPDATE_STAGING) {
 		return "the running firmware is too big to update this way";
 	}
-	uint8_t *block = scratch_acquire();
-	if (!block) {
+	uint8_t *buf = scratch_acquire();
+	if (!buf) {
 		return "busy: a disk is being written";
 	}
 	if (f_open(&file, path, FA_READ) != FR_OK) {
-		scratch_release(block);
+		scratch_release(buf);
 		return "cannot open the file";
 	}
 	*size = (uint32_t)f_size(&file);
@@ -50,33 +60,39 @@ static const char *scan(const char *path, bool stage, fwupdate_progress_t progre
 	uint32_t erased = 0, done = 0;
 	bool partial = false;
 	const char *why = NULL;
-	while (true) {
+	bool stop = false;
+	while (!stop) {
 		UINT got;
-		if (f_read(&file, block, UF2_BLOCK_SIZE, &got) != FR_OK) {
-			why = "card read error";
+		if (f_read(&file, buf, FWUPDATE_READ_SIZE, &got) != FR_OK) {
+			why = "read error";
 			break;
 		}
-		if (got < UF2_BLOCK_SIZE) {
-			partial = got != 0;
-			break;
-		}
-		uint32_t offset;
-		if (uf2_check_block(&check, block, &offset) != UF2_OK) {
-			break;
-		}
-		if (stage && offset != UINT32_MAX) {
-			for (; erased <= offset; erased += FLASH_SECTOR_SIZE) {
-				nvflash_erase(FWUPDATE_STAGING + erased, FLASH_SECTOR_SIZE);
+		UINT at = 0;
+		for (; got - at >= UF2_BLOCK_SIZE; at += UF2_BLOCK_SIZE) {
+			uint8_t *block = buf + at;
+			uint32_t offset;
+			if (uf2_check_block(&check, block, &offset) != UF2_OK) {
+				stop = true;
+				break;
 			}
-			nvflash_program(FWUPDATE_STAGING + offset, uf2_payload(block), UF2_PAYLOAD_SIZE);
+			if (stage && offset != UINT32_MAX) {
+				for (; erased <= offset; erased += FLASH_SECTOR_SIZE) {
+					nvflash_erase(FWUPDATE_STAGING + erased, FLASH_SECTOR_SIZE);
+				}
+				nvflash_program(FWUPDATE_STAGING + offset, uf2_payload(block), UF2_PAYLOAD_SIZE);
+			}
+			done += UF2_BLOCK_SIZE;
+			if (progress) {
+				progress(ctx, done, *size);
+			}
 		}
-		done += got;
-		if (progress) {
-			progress(ctx, done, *size);
+		if (!stop && got < FWUPDATE_READ_SIZE) { // the file's end
+			partial = at != got;
+			stop = true;
 		}
 	}
 	f_close(&file);
-	scratch_release(block);
+	scratch_release(buf);
 	if (why) {
 		return why;
 	}
@@ -99,13 +115,16 @@ static const char *scan(const char *path, bool stage, fwupdate_progress_t progre
 
 bool fwupdate_check(const char *path, char *info, size_t n) {
 	uint32_t size = 0, len = 0;
+	uint64_t start = time_us_64();
 	const char *why = scan(path, false, NULL, NULL, &size, &len);
+	// How long reading the file took: the stick's speed shows (bd akb).
+	unsigned tenths = (unsigned)((time_us_64() - start + 50000) / 100000);
 	if (why) {
 		snprintf(info, n, "%s", why);
 	} else {
-		snprintf(info, n, "%lu KB file, %lu KB firmware (running: %lu KB)", (unsigned long)(size / 1024),
-			(unsigned long)(len / 1024),
-			(unsigned long)(((uintptr_t)&__flash_binary_end - XIP_BASE + 1023) / 1024));
+		snprintf(info, n, "%lu KB file, %lu KB firmware (running: %lu KB), read in %u.%u s",
+			(unsigned long)(size / 1024), (unsigned long)(len / 1024),
+			(unsigned long)(((uintptr_t)&__flash_binary_end - XIP_BASE + 1023) / 1024), tenths / 10, tenths % 10);
 	}
 	return !why;
 }
