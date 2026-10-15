@@ -31,8 +31,9 @@ static stdio_driver_t diag_stdio = {
 };
 
 void diag_init(void) {
-	if (!VIDEO_DIAG)
+	if (!VIDEO_DIAG) {
 		return;
+	}
 	uart_init(DIAG_UART, DIAG_BAUD);
 	gpio_set_function(BOARD_UART_TX_PIN, UART_FUNCSEL_NUM(DIAG_UART, BOARD_UART_TX_PIN));
 #ifdef PICO_DEFAULT_LED_PIN
@@ -45,13 +46,15 @@ void diag_init(void) {
 }
 
 void diag_reinit(uint32_t baud) {
-	if (VIDEO_DIAG)
+	if (VIDEO_DIAG) {
 		uart_set_baudrate(DIAG_UART, baud);
+	}
 }
 
 void diag_mark(const char *text) {
-	if (!VIDEO_DIAG)
+	if (!VIDEO_DIAG) {
 		return;
+	}
 	uart_puts(DIAG_UART, "diag: ");
 	uart_puts(DIAG_UART, text);
 	uart_puts(DIAG_UART, "\r\n");
@@ -60,15 +63,17 @@ void diag_mark(const char *text) {
 }
 
 void diag_heartbeat(void) {
-	if (VIDEO_DIAG)
+	if (VIDEO_DIAG) {
 		led_toggle();
+	}
 }
 
 #if VIDEO_DIAG
 static void put_hex(uint32_t v) {
 	static const char hex[] = "0123456789abcdef";
-	for (int shift = 28; shift >= 0; shift -= 4)
+	for (int shift = 28; shift >= 0; shift -= 4) {
 		uart_putc_raw(DIAG_UART, hex[v >> shift & 0xf]);
+	}
 }
 
 // HardFault: report the faulting core, PC and LR from the exception frame,

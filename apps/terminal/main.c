@@ -2,7 +2,7 @@
 //
 // Core 1 renders the screen over DVI (video.c). Core 0 receives UART0 into
 // a ring buffer (serial.c), feeds it to the VT100 emulator (term.c) that
-// owns rows 0-23, queues its replies back on UART0 TX, and rasterises changed
+// owns rows 0-23, queues its replies back on UART0 TX, and rasterizes changed
 // lines; row 24 is a status line. With -DSERIAL_FLOW_CONTROL=ON, UART0 uses
 // RTS/CTS on GP3/GP2. A USB keyboard on the native USB port (usbkbd.c) types to the host through
 // UART0 TX.
@@ -79,7 +79,7 @@ bool key_pressed;
 
 settings_t settings;
 settings_target_t save_target;
-settings_colours_t colours;
+settings_colors_t colors;
 unsigned default_columns;
 blank_t blank;
 bool screen_blanked;
@@ -93,8 +93,9 @@ static struct {
 // With VIDEO_DIAG, report core 1's timing on UART0 TX twice a second.
 static void diag_poll(void) {
 	static absolute_time_t next;
-	if (!VIDEO_DIAG || !time_reached(next))
+	if (!VIDEO_DIAG || !time_reached(next)) {
 		return;
+	}
 	next = make_timeout_time_ms(500);
 	video_stats_t st = video_stats();
 	char text[160];
@@ -110,12 +111,13 @@ static void diag_poll(void) {
 // Show the palette of s's Colors and Palette settings (from the next
 // frame). From the main loop only: it may wait for a frame.
 void show_palette(const settings_t *s) {
-	if (palette.built && palette.hue == s->colours && palette.mono == s->palette)
+	if (palette.built && palette.hue == s->colors && palette.mono == s->palette) {
 		return;
-	palette_build(palette.table, s->colours, s->palette);
+	}
+	palette_build(palette.table, s->colors, s->palette);
 	video_set_palette(palette.table);
 	palette.built = true;
-	palette.hue = s->colours;
+	palette.hue = s->colors;
 	palette.mono = s->palette;
 }
 
@@ -139,7 +141,7 @@ void apply_settings(const settings_t *s) {
 		.personality = s->term_type == SETTINGS_TERM_ADM3A ? TERM_ADM3A : TERM_VT100});
 	default_columns = settings_columns(s);
 	blank_init(&blank, s->blank_after * 60000u, to_ms_since_boot(get_absolute_time()));
-	colours = settings_colours(s);
+	colors = settings_colors(s);
 	show_palette(s);
 }
 
@@ -148,8 +150,9 @@ void apply_settings(const settings_t *s) {
 static bool wait_for_input(absolute_time_t until, uint8_t *buf, size_t max, size_t *n) {
 	while (!time_reached(until)) {
 		*n = serial_read(buf, max);
-		if (*n || key_pressed)
+		if (*n || key_pressed) {
 			return true;
+		}
 		keyboard_poll();
 		serial_poll();
 		diag_poll();
@@ -166,16 +169,17 @@ static bool show_logo(uint8_t *buf, size_t max, size_t *n) {
 	snprintf(status, sizeof status, " DVI Terminal | build %s (%s, %s)",
 		TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
 	if (status_shown()) {
-		screen_clear_line(&screen, STATUS_ROW, colours.status_fg, colours.status_bg);
-		screen_puts(&screen, 0, STATUS_ROW, status, colours.status_fg, colours.status_bg);
+		screen_clear_line(&screen, STATUS_ROW, colors.status_fg, colors.status_bg);
+		screen_puts(&screen, 0, STATUS_ROW, status, colors.status_fg, colors.status_bg);
 	}
 	video_update(&screen);
 	*n = 0;
-	// In the hue of the Colors setting (white keeps the logo's own colours,
-	// or with the mono palette shows it grey).
-	splash_tint_t tint = splash_tint(&splash_logo, colours.logo_fg, settings.palette);
-	if (!video_splash(&splash_logo, &tint))
+	// In the hue of the Colors setting (white keeps the logo's own colors,
+	// or with the mono palette shows it gray).
+	splash_tint_t tint = splash_tint(&splash_logo, colors.logo_fg, settings.palette);
+	if (!video_splash(&splash_logo, &tint)) {
 		return false;
+	}
 	bool input = wait_for_input(make_timeout_time_ms(LOGO_MS), buf, max, n);
 	video_splash_end();
 	return input;
@@ -190,8 +194,9 @@ static size_t run_demo(uint8_t *buf, size_t max) {
 		video_update(&screen);
 
 		size_t n;
-		if (wait_for_input(make_timeout_time_ms(DEMO_INTERVAL_MS), buf, max, &n))
+		if (wait_for_input(make_timeout_time_ms(DEMO_INTERVAL_MS), buf, max, &n)) {
 			return n;
+		}
 	}
 }
 
@@ -199,8 +204,9 @@ static size_t run_demo(uint8_t *buf, size_t max) {
 static void send_reply(void *ctx, const uint8_t *data, size_t len) {
 	(void)ctx;
 	if (cpm.on) {
-		for (size_t i = 0; i < len; ++i)
+		for (size_t i = 0; i < len; ++i) {
 			machine_key(data[i]);
+		}
 	} else {
 		serial_write(data, len);
 	}
@@ -220,10 +226,11 @@ int main(void) {
 	// Read the settings while the flash is still in its boot-time setup.
 	nvflash_init();
 	const uint8_t *slots[SETTINGS_SLOTS];
-	for (unsigned i = 0; i < SETTINGS_SLOTS; ++i)
+	for (unsigned i = 0; i < SETTINGS_SLOTS; ++i) {
 		slots[i] = nvflash_sector(i);
+	}
 	settings_load(slots, &settings, &save_target);
-	colours = settings_colours(&settings); // the status line under the logo uses them
+	colors = settings_colors(&settings); // the status line under the logo uses them
 
 	video_init();
 	// The PSRAM's timing for the new clock; it leaves the flash's XIP set
@@ -259,8 +266,9 @@ int main(void) {
 #if STARTUP_LOGO
 	input = show_logo(buf, sizeof buf, &pending);
 #endif
-	if (STARTUP_DEMO && !input)
+	if (STARTUP_DEMO && !input) {
 		pending = run_demo(buf, sizeof buf);
+	}
 
 	cpm.on = settings.mode == SETTINGS_MODE_CPM;
 	screen_init(&screen, settings_columns(&settings), PALETTE_TEXT, PALETTE_BACKGROUND);
@@ -273,10 +281,11 @@ int main(void) {
 	status_t shown = status_now();
 	unsigned shown_resets = term.screen_resets;
 	unsigned setup_requests = term.setup_requests;
-	if (cpm.on)
+	if (cpm.on) {
 		draw_cpm_status();
-	else
+	} else {
 		draw_status(&shown);
+	}
 
 	char banner[SCREEN_MAX_COLS + 1];
 	snprintf(banner, sizeof banner, "DVI Feather Terminal build %s (%s, %s)\r\n",
@@ -309,8 +318,9 @@ int main(void) {
 #else
 		term_puts(&term, BOARD_UART_PINS_TEXT "\r\n\r\n");
 #endif
-		if (pending)
+		if (pending) {
 			term_write(&term, buf, pending);
+		}
 	}
 	video_update(&screen);
 
@@ -320,13 +330,15 @@ int main(void) {
 		if (cpm.on) {
 			cpm_step();
 			// A drive light changed: show it now, not at the next status update.
-			if (drive_lights(to_ms_since_boot(get_absolute_time())) != cpm.lit)
+			if (drive_lights(to_ms_since_boot(get_absolute_time())) != cpm.lit) {
 				draw_cpm_status();
+			}
 			// The Z80's output asked for SET-UP (CSI ? 999 ~).
 			if (term.setup_requests != setup_requests) {
 				setup_requests = term.setup_requests;
-				if (!setup.active)
+				if (!setup.active) {
 					setup_enter(false);
+				}
 			}
 		} else {
 			// While SET-UP is open from the keyboard, host data waits in the
@@ -347,33 +359,38 @@ int main(void) {
 		usbmsc_poll(); // a USB stick plugged in or pulled: mount or unmount it
 		if (setup.open_requested) {
 			setup.open_requested = false;
-			if (!setup.active)
+			if (!setup.active) {
 				setup_enter(false);
+			}
 		}
-		if (setup.active)
+		if (setup.active) {
 			setup_service();
+		}
 		serial_poll();
 		led_poll(screen_blanked);
 
 		uint32_t now = to_ms_since_boot(get_absolute_time());
-		if (setup.active)
+		if (setup.active) {
 			blank_activity(&blank, now); // not idle while SET-UP is open
+		}
 		screen_blanked = blank_tick(&blank, now);
 		video_set_blank(screen_blanked);
 
-		// DECCOLM re-initialises the whole screen, status line included,
+		// DECCOLM re-initializes the whole screen, status line included,
 		// whether or not the width changes.
 		if (term.screen_resets != shown_resets) {
 			shown_resets = term.screen_resets;
-			if (cpm.on)
+			if (cpm.on) {
 				draw_cpm_status();
-			else
+			} else {
 				draw_status(&shown);
+			}
 		}
 		if (time_reached(next_status)) {
 			next_status = make_timeout_time_ms(STATUS_INTERVAL_MS);
-			if (debug_status_on())
+			if (debug_status_on()) {
 				debug_status_refresh();
+			}
 			if (cpm.on) {
 				draw_cpm_status();
 			} else {

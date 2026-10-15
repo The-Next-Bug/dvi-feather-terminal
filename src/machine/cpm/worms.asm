@@ -1,18 +1,18 @@
-;	WORMS: worms wander about the screen, after BSD worms(6), in colour.
+;	WORMS: worms wander about the screen, after BSD worms(6), in color.
 ;
 ;	WORMS [-C] [-D ms] [-F] [-L length] [-N number] [-T] [-M]
 ;
-;	-C	  256 colours: rainbow worms (see RAINBOW)
+;	-C	  256 colors: rainbow worms (see RAINBOW)
 ;	-D ms	  delay between steps (default 40; 0: as fast as it goes)
 ;	-F	  fill the screen with a field of dots for the worms to eat
 ;	-L length segments per worm, 2-255 (default 16)
 ;	-N number worms, 1-40 (default 3)
 ;	-T	  worms leave a trail of dots
-;	-M	  monochrome: no colour codes (also with -C)
+;	-M	  monochrome: no color codes (also with -C)
 ;
 ;	Any key ends it. Written for the terminal's VT100 emulation: the
 ;	screen size comes from a cursor position report (24 x 80 if none
-;	arrives), each worm is drawn in its own bright colour (SGR 91-96)
+;	arrives), each worm is drawn in its own bright color (SGR 91-96)
 ;	with its own glyph. The delay loop is timed against the clock
 ;	(ports 65/66) at the start, so -D is in milliseconds at any speed.
 ;
@@ -20,8 +20,8 @@
 ;	each step turns 45 degrees left, goes on or turns 45 degrees right
 ;	at random, keeping to the screen; a cell is cleared when the last
 ;	worm on it leaves. This is a new program in Z80 assembly following
-;	the behaviour of BSD worms (Eric S. Raymond and others, BSD
-;	licence), not a translation of its code.
+;	the behavior of BSD worms (Eric S. Raymond and others, BSD
+;	license), not a translation of its code.
 ;
 ;	Assembled with z80pack's z80asm by build.sh, put on the CPM22 disk
 ;	by diskimg_gen.py.
@@ -33,7 +33,7 @@ CLKCMD	EQU	65		;clock: register select
 CLKDAT	EQU	66		;clock: register data (0: seconds)
 ESC	EQU	1BH
 MAXW	EQU	40
-NWHEEL	EQU	30		;colours on the -C hue wheel
+NWHEEL	EQU	30		;colors on the -C hue wheel
 NONE	EQU	0FFH		;x of a segment not on the screen yet
 
 	ORG	100H
@@ -582,7 +582,7 @@ MOVE2:	LD	(HL),B
 	JR	NZ,MOVE3
 	CALL	GOTO
 	XOR	A
-	CALL	COLOUR
+	CALL	COLOR
 	LD	A,(TRAIL)
 	CALL	PUTC
 MOVE3:	CALL	TURN		;B, C: the new head's y, x
@@ -635,16 +635,16 @@ REFDEC:	CALL	REFADR
 	DEC	(HL)
 	RET
 
-;	Draw worm WORM's glyph in its colour at (column C, row B).
+;	Draw worm WORM's glyph in its color at (column C, row B).
 DRWORM:	CALL	GOTO
 	LD	A,(C256)
 	OR	A
 	JR	NZ,DRW2
 	LD	A,(WORM)
-DRW1:	SUB	6		;colour: SGR 91-96 by WORM mod 6
+DRW1:	SUB	6		;color: SGR 91-96 by WORM mod 6
 	JR	NC,DRW1
 	ADD	A,6+91
-	CALL	COLOUR
+	CALL	COLOR
 	JR	DRW3
 DRW2:	CALL	RAINBOW
 DRW3:	LD	A,(WORM)	;glyph: by WORM mod 8
@@ -779,9 +779,9 @@ GOTO:	PUSH	BC
 	POP	BC
 	RET
 
-;	Select colour A (an SGR number, 0 for the default) unless it is the
+;	Select color A (an SGR number, 0 for the default) unless it is the
 ;	one in use or -M was given.
-COLOUR:	LD	HL,MONO
+COLOR:	LD	HL,MONO
 	BIT	0,(HL)
 	RET	NZ
 	LD	HL,CURCOL
@@ -798,7 +798,7 @@ COLOUR:	LD	HL,MONO
 	LD	A,'m'
 	JP	PUTC
 
-;	-C: worm WORM's next colour on the hue wheel, as SGR 38;5;n (unless
+;	-C: worm WORM's next color on the hue wheel, as SGR 38;5;n (unless
 ;	-M). Every head drawn is one step on, so a worm's body is a rainbow.
 RAINBOW:
 	LD	A,(WORM)
@@ -818,7 +818,7 @@ RAIN1:	LD	(HL),A
 	LD	A,(MONO)
 	OR	A
 	RET	NZ
-	LD	A,1		;CURCOL: not an SGR colour of ours, so COLOUR 0
+	LD	A,1		;CURCOL: not an SGR color of ours, so COLOR 0
 	LD	(CURCOL),A	;is sent again for the tail
 	PUSH	HL
 	LD	HL,S256
@@ -887,7 +887,7 @@ PUTC:	PUSH	BC
 DX:	DB	1,1,1,0,-1,-1,-1,0
 DY:	DB	-1,0,1,1,1,0,-1,-1
 GLYPHS:	DB	'O*#$%0@~'
-;	-C's hue wheel: the xterm colour cube's saturated edge, red, yellow,
+;	-C's hue wheel: the xterm color cube's saturated edge, red, yellow,
 ;	green, cyan, blue, magenta and back, five steps an edge.
 WHEEL:	DB	196,202,208,214,220,226,190,154,118,82
 	DB	46,47,48,49,50,51,45,39,33,27
@@ -898,7 +898,7 @@ SINIT:	DB	ESC,'[0m',ESC,'[?25l',ESC,'[2J',0	;also CURCOL 0
 S256:	DB	ESC,'[38;5;',0
 SBYE:	DB	ESC,'[0m',ESC,'[2J',ESC,'[H',ESC,'[?25h',0
 SUSAGE:	DB	'Usage: WORMS [-C] [-D ms] [-F] [-L length] [-N number] [-T] [-M]',13,10
-	DB	'  -C 256-colour rainbows  -D delay per step (40)  -F field to eat',13,10
+	DB	'  -C 256-color rainbows  -D delay per step (40)  -F field to eat',13,10
 	DB	'  -L 2-255 (16)  -N 1-40 worms (3)  -T leave a trail  -M monochrome',13,10,'$'
 SROOM:	DB	'Not enough memory for that many worms.',13,10,'$'
 

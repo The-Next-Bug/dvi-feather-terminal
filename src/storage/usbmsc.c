@@ -54,8 +54,9 @@ void usbmsc_poll(void) {
 		last_mount = last_sector == SECTOR ? f_mount(&fs, VOLUME, 1) : FR_INVALID_PARAMETER;
 		bool ok = last_mount == FR_OK;
 		usbkbd_log(ok ? "vol" : "vol?", dev);
-		if (!ok)
+		if (!ok) {
 			f_unmount(VOLUME);
+		}
 		usbvol_mounted(&vol, ok);
 		break;
 	}
@@ -84,37 +85,43 @@ const char *usbmsc_info(void) {
 	unsigned devices = 0;
 	for (uint8_t a = 1; a <= CFG_TUH_DEVICE_MAX + CFG_TUH_HUB && n < sizeof text; ++a) {
 		uint16_t vid, pid;
-		if (!tuh_vid_pid_get(a, &vid, &pid))
+		if (!tuh_vid_pid_get(a, &vid, &pid)) {
 			continue;
+		}
 		const char *what = a > CFG_TUH_DEVICE_MAX ? (usbkbd_device_ready(a) ? "hub" : "hub setting up")
 			: tuh_msc_mounted(a) ? "stick" : !usbkbd_device_ready(a) ? "setting up" : "ready";
 		n += (size_t)snprintf(text + n, sizeof text - n, "%s %u %04x:%04x %s", devices ? "," : "", a, vid, pid,
 			what);
 		// HID interfaces set up of those found: one stuck stops the device.
 		uint8_t hids = a <= CFG_TUH_DEVICE_MAX ? tuh_hid_instance_count(a) : 0, done = 0;
-		for (uint8_t i = 0; i < hids; ++i)
+		for (uint8_t i = 0; i < hids; ++i) {
 			done += tuh_hid_mounted(a, i);
-		if (hids && n < sizeof text)
+		}
+		if (hids && n < sizeof text) {
 			n += (size_t)snprintf(text + n, sizeof text - n, " HID %u/%u", done, hids);
+		}
 		++devices;
 	}
-	if (!devices && n < sizeof text)
+	if (!devices && n < sizeof text) {
 		n += (size_t)snprintf(text + n, sizeof text - n, " no devices");
+	}
 	if (n < sizeof text) {
 		usbmsc_status_t st = usbmsc_status();
-		if (st.mounted)
+		if (st.mounted) {
 			n += (size_t)snprintf(text + n, sizeof text - n, "\r\n          USB: is the stick at %u, FAT%s, %lu MB",
 				vol.active, fs.fs_type == FS_FAT12 ? "12" : fs.fs_type == FS_FAT16 ? "16" : "32",
 				(unsigned long)(tuh_msc_get_block_count(vol.active, LUN) / 2048));
-		else if (last_mount != FR_OK && last_sector != SECTOR)
+		} else if (last_mount != FR_OK && last_sector != SECTOR) {
 			n += (size_t)snprintf(text + n, sizeof text - n,
 				"\r\n          last stick: %lu-byte sectors (512 needed)", (unsigned long)last_sector);
-		else if (last_mount != FR_OK)
+		} else if (last_mount != FR_OK) {
 			n += (size_t)snprintf(text + n, sizeof text - n,
 				"\r\n          last stick: no FAT file system (FatFs error %d; exFAT?)", (int)last_mount);
+		}
 	}
-	if (n < sizeof text)
+	if (n < sizeof text) {
 		snprintf(text + n, sizeof text - n, "\r\n");
+	}
 	return text;
 }
 
@@ -141,8 +148,9 @@ static DRESULT io_wait(uint8_t dev) {
 			return RES_ERROR;
 		}
 	}
-	if (!io_ok)
+	if (!io_ok) {
 		usbkbd_log("ioerr", dev);
+	}
 	return io_ok ? RES_OK : RES_ERROR;
 }
 
@@ -156,8 +164,9 @@ DSTATUS usbmsc_disk_initialize(void) {
 
 DRESULT usbmsc_disk_read(BYTE *buff, LBA_t sector, UINT count) {
 	uint8_t dev = usbvol_io_dev(&vol);
-	if (!dev)
+	if (!dev) {
 		return RES_NOTRDY;
+	}
 	activity = true;
 	io_dev = dev;
 	io_busy = true;
@@ -171,8 +180,9 @@ DRESULT usbmsc_disk_read(BYTE *buff, LBA_t sector, UINT count) {
 
 DRESULT usbmsc_disk_write(const BYTE *buff, LBA_t sector, UINT count) {
 	uint8_t dev = usbvol_io_dev(&vol);
-	if (!dev)
+	if (!dev) {
 		return RES_NOTRDY;
+	}
 	activity = true;
 	io_dev = dev;
 	io_busy = true;
@@ -186,8 +196,9 @@ DRESULT usbmsc_disk_write(const BYTE *buff, LBA_t sector, UINT count) {
 
 DRESULT usbmsc_disk_ioctl(BYTE cmd, void *buff) {
 	uint8_t dev = usbvol_io_dev(&vol);
-	if (!dev)
+	if (!dev) {
 		return RES_NOTRDY;
+	}
 	switch (cmd) {
 	case CTRL_SYNC:
 		return RES_OK; // each write completes before disk_write returns

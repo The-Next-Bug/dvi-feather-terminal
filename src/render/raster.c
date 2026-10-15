@@ -27,14 +27,18 @@ static unsigned source_row(const void *table, bool wide, unsigned i) {
 }
 
 void raster_select_font(raster_layout_t l) {
-	if ((int)l == font_layout)
+	if ((int)l == font_layout) {
 		return;
+	}
 	const unsigned n = FONT_GLYPHS * raster_font_rows(l);
-	for (unsigned i = 0; i < n; ++i)
+	for (unsigned i = 0; i < n; ++i) {
 		font_copy[0][i] = (uint16_t)source_row(fonts[l].normal, fonts[l].wide, i);
-	if (fonts[l].bold)
-		for (unsigned i = 0; i < n; ++i)
+	}
+	if (fonts[l].bold) {
+		for (unsigned i = 0; i < n; ++i) {
 			font_copy[1][i] = (uint16_t)source_row(fonts[l].bold, fonts[l].wide, i);
+		}
+	}
 	font_bold = fonts[l].bold ? font_copy[1] : font_copy[0];
 	font_layout = (int)l;
 }
@@ -76,49 +80,54 @@ bool raster_render_line(raster_line_t *out, const screen_line_t *line, raster_la
 		bool blink = attr & SCREEN_ATTR_BLINK;
 		any_blink |= blink;
 		if (blink && (flags & RASTER_BLINK_OFF)) {
-			for (unsigned sr = 0; sr < rows + 2; ++sr)
+			for (unsigned sr = 0; sr < rows + 2; ++sr) {
 				put_cell_bits(out->bits[sr], w, c, 0);
+			}
 			continue;
 		}
 		// Line drawing keeps its shape in bold, so it still joins. No bold
 		// face (132 columns): the glyph as it is; bold shows only as the
-		// brighter colour term.c gives it. At 6 pixels a smear closes the
+		// brighter color term.c gives it. At 6 pixels a smear closes the
 		// gaps of m, w, # and the like.
 		bool connector = glyph_is_connector(g);
 		bool bold = (attr & SCREEN_ATTR_BOLD) && !connector;
 		const uint16_t *glyph = (bold ? font_bold : font_normal) + g * rows;
 		// The padding rows repeat a connector's edge rows, blank otherwise.
 		put_cell_bits(out->bits[0], w, c, connector ? glyph[0] & cell_mask : 0);
-		for (unsigned r = 0; r < rows; ++r)
+		for (unsigned r = 0; r < rows; ++r) {
 			put_cell_bits(out->bits[1 + r], w, c, glyph[r] & cell_mask);
+		}
 		put_cell_bits(out->bits[rows + 1], w, c, connector ? glyph[rows - 1] & cell_mask : 0);
-		if (attr & SCREEN_ATTR_UNDERLINE) // the glyph's bottom row
+		if (attr & SCREEN_ATTR_UNDERLINE) { // the glyph's bottom row
 			put_cell_bits(out->bits[rows], w, c, cell_mask);
+		}
 	}
 	return any_blink;
 }
 
-void raster_blank_line(raster_line_t *line, uint8_t colour) {
-	// Colours first: until the bits are clear, set pixels show the colour
+void raster_blank_line(raster_line_t *line, uint8_t color) {
+	// Colors first: until the bits are clear, set pixels show the color
 	// too, so the line is blank from the first store on.
-	memset(line->fg, colour, sizeof line->fg);
-	memset(line->bg, colour, sizeof line->bg);
+	memset(line->fg, color, sizeof line->fg);
+	memset(line->bg, color, sizeof line->bg);
 	memset(line->bits, 0, sizeof line->bits);
 }
 
 void raster_compose(uint32_t *px, const raster_line_t *line, raster_layout_t l, unsigned sr, int cursor_col,
-		const uint32_t colours[256]) {
+		const uint32_t colors[256]) {
 	const unsigned w = raster_cell_width(l), cols = raster_cols(l);
 	const unsigned pairs = w / 2, border = raster_x_offset(l) / 2;
 	const uint8_t *row = line->bits[sr];
 	uint32_t *p = px;
-	for (unsigned i = 0; i < border; ++i)
+	for (unsigned i = 0; i < border; ++i) {
 		*p++ = 0;
+	}
 	for (unsigned c = 0; c < cols; ++c) {
 		unsigned b = raster_cell_bits(row, w, c);
-		if ((int)c == cursor_col)
+		if ((int)c == cursor_col) {
 			b = ~b;
-		uint32_t fg = colours[line->fg[c]], bg = colours[line->bg[c]];
+		}
+		uint32_t fg = colors[line->fg[c]], bg = colors[line->bg[c]];
 		// Two pixels per word: pixel 2k in the low half, from bit 2k.
 		for (unsigned k = 0; k < pairs; ++k, b >>= 2) {
 			uint32_t m = (0u - (b & 1)) & 0xffffu;
@@ -126,6 +135,7 @@ void raster_compose(uint32_t *px, const raster_line_t *line, raster_layout_t l, 
 			*p++ = (fg & m) | (bg & ~m);
 		}
 	}
-	while (p < px + RASTER_LINE_WORDS)
+	while (p < px + RASTER_LINE_WORDS) {
 		*p++ = 0;
+	}
 }

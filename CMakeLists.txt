@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.13)
 
+# For scripts/lint.sh (clang-tidy).
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Default to the submodules and the toolchain installed by
 # scripts/setup-toolchain.sh; any of these can be overridden on the command
 # line or from the environment.

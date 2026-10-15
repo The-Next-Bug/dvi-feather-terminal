@@ -32,11 +32,13 @@ static uint32_t staged_len;
 static const char *scan(const char *path, bool stage, fwupdate_progress_t progress, void *ctx,
 	uint32_t *size, uint32_t *len) {
 	// The running image must not reach the staging area (a big build).
-	if ((uintptr_t)&__flash_binary_end - XIP_BASE > FWUPDATE_STAGING)
+	if ((uintptr_t)&__flash_binary_end - XIP_BASE > FWUPDATE_STAGING) {
 		return "the running firmware is too big to update this way";
+	}
 	uint8_t *block = scratch_acquire();
-	if (!block)
+	if (!block) {
 		return "busy: a disk is being written";
+	}
 	if (f_open(&file, path, FA_READ) != FR_OK) {
 		scratch_release(block);
 		return "cannot open the file";
@@ -59,31 +61,38 @@ static const char *scan(const char *path, bool stage, fwupdate_progress_t progre
 			break;
 		}
 		uint32_t offset;
-		if (uf2_check_block(&check, block, &offset) != UF2_OK)
+		if (uf2_check_block(&check, block, &offset) != UF2_OK) {
 			break;
+		}
 		if (stage && offset != UINT32_MAX) {
-			for (; erased <= offset; erased += FLASH_SECTOR_SIZE)
+			for (; erased <= offset; erased += FLASH_SECTOR_SIZE) {
 				nvflash_erase(FWUPDATE_STAGING + erased, FLASH_SECTOR_SIZE);
+			}
 			nvflash_program(FWUPDATE_STAGING + offset, uf2_payload(block), UF2_PAYLOAD_SIZE);
 		}
 		done += got;
-		if (progress)
+		if (progress) {
 			progress(ctx, done, *size);
+		}
 	}
 	f_close(&file);
 	scratch_release(block);
-	if (why)
+	if (why) {
 		return why;
+	}
 
 	uint32_t crc;
 	uf2_result_t r = uf2_check_end(&check, partial, len, &crc);
-	if (r != UF2_OK)
+	if (r != UF2_OK) {
 		return uf2_result_text(r);
+	}
 	if (stage) {
-		for (; erased < *len; erased += FLASH_SECTOR_SIZE)
+		for (; erased < *len; erased += FLASH_SECTOR_SIZE) {
 			nvflash_erase(FWUPDATE_STAGING + erased, FLASH_SECTOR_SIZE);
-		if (crc32_update(0, nvflash_read(FWUPDATE_STAGING), *len) != crc)
+		}
+		if (crc32_update(0, nvflash_read(FWUPDATE_STAGING), *len) != crc) {
 			return "flash verify failed";
+		}
 	}
 	return NULL;
 }
@@ -91,12 +100,13 @@ static const char *scan(const char *path, bool stage, fwupdate_progress_t progre
 bool fwupdate_check(const char *path, char *info, size_t n) {
 	uint32_t size = 0, len = 0;
 	const char *why = scan(path, false, NULL, NULL, &size, &len);
-	if (why)
+	if (why) {
 		snprintf(info, n, "%s", why);
-	else
+	} else {
 		snprintf(info, n, "%lu KB file, %lu KB firmware (running: %lu KB)", (unsigned long)(size / 1024),
 			(unsigned long)(len / 1024),
 			(unsigned long)(((uintptr_t)&__flash_binary_end - XIP_BASE + 1023) / 1024));
+	}
 	return !why;
 }
 
@@ -124,20 +134,23 @@ static void __no_inline_not_in_flash_func(fwupdate_commit_image)(uint32_t len, u
 			to[i] = from[i];
 			same = same && now[i] == to[i];
 		}
-		if (same) // as it is already: spare the flash
+		if (same) { // as it is already: spare the flash
 			continue;
+		}
 		nvflash_erase(offset, FLASH_SECTOR_SIZE);
 		nvflash_program(offset, sector, FLASH_SECTOR_SIZE);
 	}
 	watchdog_reboot(0, 0, 0);
-	while (true)
+	while (true) {
 		tight_loop_contents();
+	}
 }
 
 void fwupdate_commit(void) {
 	uint8_t *sector = staged_len ? scratch_acquire() : NULL;
-	if (!sector)
+	if (!sector) {
 		return;
+	}
 	(void)save_and_disable_interrupts(); // for good: the board restarts
 	fwupdate_commit_image(staged_len, sector);
 }

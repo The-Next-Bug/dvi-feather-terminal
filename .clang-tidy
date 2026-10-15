@@ -1,0 +1,11 @@
+# clang-tidy checks for our C sources, run by scripts/lint.sh (vendored code
+# under lib/ is built as it comes and not checked).
+#
+# readability-braces-around-statements: every if/else/for/while/do body is
+# a { } block (else if chains excepted). A body without braces is a known
+# source of bugs: a second line added under it, or a macro expanding to two
+# statements, runs unconditionally.
+Checks: '-*,readability-braces-around-statements'
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*'
+ExcludeHeaderFilterRegex: '/(lib|build)/'

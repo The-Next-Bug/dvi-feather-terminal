@@ -49,4 +49,4 @@ The BIN files are the same images as raw flash contents, for SWD programmers
 
 THIRD-PARTY.md lists the open-source components and data built into the
 firmware (pico-sdk, TinyUSB, z80pack, FatFs, Terminus Font, the CP/M disk
-images) and their licences; the licence texts are in licenses/.
+images) and their licenses; the license texts are in licenses/.

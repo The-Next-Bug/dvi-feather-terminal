@@ -85,8 +85,9 @@ void nvflash_program(uint32_t offset, const uint8_t *data, uint32_t len) {
 }
 
 bool nvflash_write(unsigned i, const uint8_t page[NVFLASH_PAGE_SIZE]) {
-	if (!usable || i >= NVFLASH_SECTORS)
+	if (!usable || i >= NVFLASH_SECTORS) {
 		return false;
+	}
 	write_sector(NVFLASH_OFFSET + i * FLASH_SECTOR_SIZE, page);
 	return memcmp(nvflash_sector(i), page, NVFLASH_PAGE_SIZE) == 0;
 }

@@ -86,7 +86,7 @@ drives_format_t drives_image_format(const char *name);
 
 // name (an image's, without .DSK) in upper case; false if it cannot be
 // one (empty, over 8 characters, or . / \\ : * ? or a blank in it).
-bool drives_normalise(const char *name, char upper[DRIVES_NAME_MAX + 1]);
+bool drives_normalize(const char *name, char upper[DRIVES_NAME_MAX + 1]);
 
 // The images in /DISKS80 (base names, sorted), up to max (drivecfg.c, as
 // the configuration and sets below).

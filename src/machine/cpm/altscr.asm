@@ -7,7 +7,7 @@
 ;	yellow and reverse video, with an X in the middle. Each step goes to
 ;	the alternate screen with one of the three modes, scrolls it, says
 ;	what to look for and comes back on a key: the main screen must be as
-;	it was. ?1049 also saves and restores the cursor and its colours, so
+;	it was. ?1049 also saves and restores the cursor and its colors, so
 ;	"<1049" comes back right of the X in bold red; ?1047 and ?47 leave the
 ;	cursor where the alternate screen had it. The last step asks for
 ;	SET-UP over the alternate screen, whose rows must come back when it
@@ -96,7 +96,7 @@ STEP:	LD	A,(HL)
 	PUSH	HL		;the message
 	CALL	SKIP
 	PUSH	HL		;the next step
-	; The cursor and colours ?1049 saves: right of the X, bold red.
+	; The cursor and colors ?1049 saves: right of the X, bold red.
 	LD	DE,0C29H	;row 12, column 41
 	CALL	CUP
 	LD	HL,SRED
@@ -127,7 +127,7 @@ STEP1:	LD	HL,SSCRL
 	LD	A,(FLAG)
 	OR	A
 	JR	Z,STEP2
-	LD	HL,SLABEL	;at the restored cursor, in its colours
+	LD	HL,SLABEL	;at the restored cursor, in its colors
 	CALL	PUTS
 STEP2:	LD	HL,SPLAIN
 	CALL	PUTS

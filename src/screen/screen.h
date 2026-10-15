@@ -6,7 +6,7 @@
 // on the host.
 //
 // Each cell holds a glyph code (see font.h), foreground and background
-// colours as palette indices (palette.h: what they look like is decided at
+// colors as palette indices (palette.h: what they look like is decided at
 // display time), and attribute bits (underline, blink, bold). The screen
 // is 80 or 132 columns wide. Rows in reverse_rows are shown with every
 // cell's fg and bg swapped (DECSCNM).
@@ -26,13 +26,13 @@
 #define SCREEN_MAX_COLS 132
 #define SCREEN_ROWS 25 // 24 text rows + a status line
 
-// A 6-bit colour 0bRRGGBB (the logo's tint and the HSTX test pattern).
+// A 6-bit color 0bRRGGBB (the logo's tint and the HSTX test pattern).
 #define RGB222(r, g, b) ((uint8_t)(((r) & 3) << 4 | ((g) & 3) << 2 | ((b) & 3)))
 
 // Cell attribute bits.
 #define SCREEN_ATTR_UNDERLINE 0x01
 #define SCREEN_ATTR_BLINK 0x02
-#define SCREEN_ATTR_BOLD 0x04 // drawn emboldened (the colour is already bright)
+#define SCREEN_ATTR_BOLD 0x04 // drawn emboldened (the color is already bright)
 
 typedef struct {
 	uint8_t glyph[SCREEN_MAX_COLS];
@@ -74,7 +74,7 @@ void screen_put_attr(screen_t *s, unsigned col, unsigned row, uint8_t glyph, uin
 void screen_puts(screen_t *s, unsigned col, unsigned row, const char *text, uint8_t fg, uint8_t bg);
 
 uint8_t screen_glyph(const screen_t *s, unsigned col, unsigned row);
-void screen_colours(const screen_t *s, unsigned col, unsigned row, uint8_t *fg, uint8_t *bg);
+void screen_colors(const screen_t *s, unsigned col, unsigned row, uint8_t *fg, uint8_t *bg);
 uint8_t screen_attr(const screen_t *s, unsigned col, unsigned row);
 
 // Show the display rows in mask reversed (and the rest normal).

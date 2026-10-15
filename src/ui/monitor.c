@@ -56,8 +56,9 @@ static void say(const char *fmt, ...) {
 // Show what was written so far: the main loop does not run during long
 // operations (writing disk images).
 static void flush(void) {
-	if (plat->flush)
+	if (plat->flush) {
 		plat->flush();
+	}
 }
 
 // Progress of a long write: a dot per progress_step bytes.
@@ -75,8 +76,9 @@ static void progress(void *ctx, uint32_t done, uint32_t total) {
 	(void)ctx;
 	(void)total;
 	if (dots < done / progress_step) {
-		for (; dots < done / progress_step; ++dots)
+		for (; dots < done / progress_step; ++dots) {
 			put(".");
+		}
 		flush();
 	}
 }
@@ -105,34 +107,38 @@ static void mount_card(void) {
 	drives_unmount_all();
 	f_unmount("");
 	mount_result = f_mount(&fs, "", 1);
-	if (mount_result == FR_OK)
+	if (mount_result == FR_OK) {
 		drives_load_config();
+	}
 }
 
 // ---- the menu ----
 
 static void show_card(void) {
 	const char *info = plat->card_info();
-	if (!info && plat->card_pins)
+	if (!info && plat->card_pins) {
 		say("SD card:  none found (%s)\r\n", plat->card_pins);
-	else if (!info)
+	} else if (!info) {
 		say("SD card:  none found\r\n");
-	else if (mount_result != FR_OK)
+	} else if (mount_result != FR_OK) {
 		say("SD card:  %s, no FAT file system (error %d)\r\n", info, (int)mount_result);
-	else
+	} else {
 		say("SD card:  %s, %s\r\n", info, fs_name());
-	if (plat->usb_info)
+	}
+	if (plat->usb_info) {
 		say("%s", plat->usb_info());
+	}
 }
 
 static void show_drives(void) {
 	for (unsigned d = 0; d < DRIVES; ++d) {
 		const char *name = drives_name(d);
 		char text[24];
-		if (name)
+		if (name) {
 			snprintf(text, sizeof text, "%s (%s)", name, drives_geometry(drives_format(d))->short_name);
-		else
+		} else {
 			snprintf(text, sizeof text, "-");
+		}
 		say("%s %c: %-15s", d % 4 ? "" : d ? "\r\n        " : "Drives: ", 'A' + d, text);
 	}
 	say("\r\n");
@@ -143,8 +149,9 @@ static void show_menu(void) {
 	show_card();
 	show_drives();
 	put("\r\n  Return  boot from drive A        M  mount a disk on a drive\r\n");
-	if (can_resume)
+	if (can_resume) {
 		put("  R       resume the running CPU\r\n");
+	}
 	put("  L       list the disks            N  new blank disk (8\", 4 MB, 8 MB)\r\n");
 	put("  I       install the built-in disks\r\n");
 	put("  S       CPU speed test            C  check the card again\r\n");
@@ -162,12 +169,14 @@ static void list_disks(void) {
 		const drives_geometry_t *g = drives_geometry(drives_image_format(names[i]));
 		say("%-9s%-4s%s", names[i], g ? g->short_name : "?", (i + 1) % LIST_COLUMNS ? " " : "\r\n");
 	}
-	if (n % LIST_COLUMNS)
+	if (n % LIST_COLUMNS) {
 		say("\r\n");
-	if (!n)
+	}
+	if (!n) {
 		say("No disk images in /DISKS80: I installs the built-in ones, N makes a blank one.\r\n");
-	else
+	} else {
 		say("(FD 8\" floppy, 4MB/8MB hard disks, ? not a disk image)\r\n");
+	}
 }
 
 static_assert(LZ_WINDOW <= SCRATCH_SIZE, "the LZ window is the scratch buffer");
@@ -213,28 +222,35 @@ static void install(bool overwrite) {
 		const diskimg_t *img = &diskimg_list[i];
 		// A mounted image is closed while it is replaced.
 		int mounted_on = -1;
-		for (unsigned d = 0; d < DRIVES; ++d)
-			if (overwrite && drives_name(d) && strcmp(drives_name(d), img->name) == 0)
+		for (unsigned d = 0; d < DRIVES; ++d) {
+			if (overwrite && drives_name(d) && strcmp(drives_name(d), img->name) == 0) {
 				mounted_on = (int)d;
-		if (mounted_on >= 0)
+			}
+		}
+		if (mounted_on >= 0) {
 			drives_unmount((unsigned)mounted_on);
+		}
 		say("%-9s", img->name);
 		progress_start(PROGRESS_STEP);
 		diskimg_result_t r = diskimg_install(img, overwrite, window, progress, NULL);
-		if (dots)
+		if (dots) {
 			put(" ");
+		}
 		put(r == DISKIMG_WRITTEN ? "written\r\n" : r == DISKIMG_EXISTS ? "already there\r\n" : "FAILED\r\n");
-		if (mounted_on >= 0)
+		if (mounted_on >= 0) {
 			drives_mount((unsigned)mounted_on, img->name);
+		}
 	}
 	scratch_release(window);
 	install_sets();
 	// Empty drives get the boot and test disks.
 	if (!drives_name(0) || !drives_name(1)) {
-		if (!drives_name(0))
+		if (!drives_name(0)) {
 			drives_mount(0, "CPM22");
-		if (!drives_name(1))
+		}
+		if (!drives_name(1)) {
 			drives_mount(1, "Z80TESTS");
+		}
 		drives_save_config();
 	}
 	can_resume = false; // the disks changed under it
@@ -245,8 +261,9 @@ static bool any_installed(void) {
 		char path[32];
 		FILINFO info;
 		snprintf(path, sizeof path, "/DISKS80/%s.DSK", diskimg_list[i].name);
-		if (f_stat(path, &info) == FR_OK)
+		if (f_stat(path, &info) == FR_OK) {
 			return true;
+		}
 	}
 	return false;
 }
@@ -274,8 +291,9 @@ static monitor_action_t menu_key(uint8_t c) {
 	case '\n':
 		return boot();
 	case 'R':
-		if (!can_resume)
+		if (!can_resume) {
 			break;
+		}
 		say("R\r\n");
 		return MONITOR_RUN;
 	case 'M':
@@ -283,8 +301,9 @@ static monitor_action_t menu_key(uint8_t c) {
 		mode = MODE_DRIVE;
 		return MONITOR_NONE;
 	case 'N':
-		if (mount_result != FR_OK)
+		if (mount_result != FR_OK) {
 			break;
+		}
 		say("N\r\nName of the new disk? ");
 		line_len = 0;
 		line[0] = '\0';
@@ -319,9 +338,9 @@ static monitor_action_t menu_key(uint8_t c) {
 	return MONITOR_NONE;
 }
 
-static void name_done(bool cancelled) {
+static void name_done(bool canceled) {
 	mode = MODE_MENU;
-	if (cancelled) {
+	if (canceled) {
 		say("\r\n");
 	} else if (!line_len) {
 		drives_unmount(drive_asked);
@@ -346,10 +365,10 @@ static void name_done(bool cancelled) {
 	show_menu();
 }
 
-static void line_done(bool cancelled) {
+static void line_done(bool canceled) {
 	if (mode == MODE_NAME) {
-		name_done(cancelled);
-	} else if (cancelled || !line_len) {
+		name_done(canceled);
+	} else if (canceled || !line_len) {
 		mode = MODE_MENU;
 		say("\r\n");
 		show_menu();
@@ -408,11 +427,13 @@ monitor_action_t monitor_key(uint8_t c, uint32_t now_ms) {
 	}
 	if (esc == 1) {
 		esc = c == '[' || c == 'O' ? 2 : 0;
-		if (esc)
+		if (esc) {
 			return MONITOR_NONE;
+		}
 	} else if (esc == 2) {
-		if (c >= 0x40 && c <= 0x7e)
+		if (c >= 0x40 && c <= 0x7e) {
 			esc = 0;
+		}
 		return MONITOR_NONE;
 	}
 	if (c == 0x1b) {
@@ -443,8 +464,9 @@ monitor_action_t monitor_key(uint8_t c, uint32_t now_ms) {
 	case MODE_NEW_NAME:
 		return line_key(c);
 	case MODE_NEW_FORMAT:
-		if (c >= '1' && c <= '3')
+		if (c >= '1' && c <= '3') {
 			create_disk((drives_format_t)(DRIVES_FLOPPY + (c - '1')));
+		}
 		return MONITOR_NONE;
 	case MODE_OVERWRITE:
 		if (toupper(c) == 'Y' || toupper(c) == 'N') {
@@ -483,8 +505,9 @@ void monitor_start(const monitor_platform_t *platform, bool autoboot, uint32_t n
 	}
 	autobooting = false;
 	show_menu();
-	if (mount_result == FR_OK && !drives_name(0))
+	if (mount_result == FR_OK && !drives_name(0)) {
 		say("\r\nNo boot disk: I installs CP/M 2.2 on the card.\r\n> ");
+	}
 }
 
 void monitor_enter(const char *reason, bool resume) {
@@ -493,7 +516,8 @@ void monitor_enter(const char *reason, bool resume) {
 	esc = 0;
 	autobooting = false;
 	can_resume = resume;
-	if (reason)
+	if (reason) {
 		say("\r\n\r\n*** %s\r\n", reason);
+	}
 	show_menu();
 }

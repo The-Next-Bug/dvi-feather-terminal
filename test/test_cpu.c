@@ -35,13 +35,17 @@ static bool boot(void) {
 	static uint8_t work[4096], window[LZ_WINDOW];
 	const MKFS_PARM opt = {.fmt = FM_FAT32, .au_size = 512};
 	diskio_ram_init(VOLUME_SECTORS);
-	if (f_mkfs("", &opt, work, sizeof work) != FR_OK || f_mount(&fs, "", 1) != FR_OK)
+	if (f_mkfs("", &opt, work, sizeof work) != FR_OK || f_mount(&fs, "", 1) != FR_OK) {
 		return false;
-	for (unsigned i = 0; i < diskimg_count; ++i)
-		if (diskimg_install(&diskimg_list[i], false, window, NULL, NULL) != DISKIMG_WRITTEN)
+	}
+	for (unsigned i = 0; i < diskimg_count; ++i) {
+		if (diskimg_install(&diskimg_list[i], false, window, NULL, NULL) != DISKIMG_WRITTEN) {
 			return false;
-	if (drives_mount(0, "CPM22") != DRIVES_OK || drives_mount(1, "Z80TESTS") != DRIVES_OK)
+		}
+	}
+	if (drives_mount(0, "CPM22") != DRIVES_OK || drives_mount(1, "Z80TESTS") != DRIVES_OK) {
 		return false;
+	}
 	clear_screen();
 	machine_init(&host_platform);
 	return run_until("A>", 10) == MACHINE_RUNNING;
@@ -55,17 +59,20 @@ static bool run_program(const char *name, double minutes) {
 	snprintf(command, sizeof command, "B:%s\r", name);
 	// From a fresh CP/M: the last program may have stopped the CPU.
 	machine_reset();
-	if (run_until("A>", 10) != MACHINE_RUNNING)
+	if (run_until("A>", 10) != MACHINE_RUNNING) {
 		return false;
+	}
 	clear_screen();
 	uint64_t start = host_clock_us();
-	if (!type(command))
+	if (!type(command)) {
 		return false;
+	}
 	static const char *const ends[] = {"\r\nA>", "TEST NUMBER", NULL};
 	int which;
 	machine_state_t st = run_until_any(ends, minutes * 60, &which);
-	if (st == MACHINE_RUNNING && which == 1)
+	if (st == MACHINE_RUNNING && which == 1) {
 		run_until("\r\n", 1); // the rest of the report
+	}
 	printf("\n[%s: %.1f s]\n", name, (double)(host_clock_us() - start) / 1e6);
 	if (st != MACHINE_RUNNING) {
 		printf("[%s: CPU stopped or timed out: %s]\n", name, machine_stop_reason());
@@ -80,8 +87,9 @@ int main(int argc, char **argv) {
 	CHECK(boot());
 	host_echo = true;
 	if (argc > 1) {
-		for (int i = 1; i < argc; ++i)
+		for (int i = 1; i < argc; ++i) {
 			CHECK(run_program(argv[i], minutes));
+		}
 	} else {
 		// The exercisers' line per instruction group ends in "OK" or
 		// "ERROR ****".

@@ -2,6 +2,8 @@
 # scripts/test.sh, or:
 #   cmake -S test -B build/test && cmake --build build/test && ctest --test-dir build/test
 cmake_minimum_required(VERSION 3.13)
+# For scripts/lint.sh (clang-tidy).
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 project(dvi_terminal_tests C)
 set(CMAKE_C_STANDARD 11)
 
@@ -10,7 +12,7 @@ enable_testing()
 set(SRC "${CMAKE_CURRENT_LIST_DIR}/../src")
 include(../cmake/dvt.cmake)
 
-# The portable libraries, sanitised like the tests; ours with warnings as
+# The portable libraries, sanitized like the tests; ours with warnings as
 # errors (FatFs and z80pack built as they come).
 set(DVT_C_OPTIONS -fsanitize=address,undefined)
 set(DVT_WARNING_OPTIONS -Werror)
@@ -65,8 +67,8 @@ target_sources(test_machine PRIVATE machine_host.c diskio_ram.c)
 unit_test(xfer dvt_disks)
 target_sources(test_xfer PRIVATE diskio_ram.c)
 unit_test(usbvol dvt_disks)
-# The CPU exercisers (minutes): test_cpu is always built, optimised and
-# without the sanitisers (they make it ten times slower), and run only with
+# The CPU exercisers (minutes): test_cpu is always built, optimized and
+# without the sanitizers (they make it ten times slower), and run only with
 # -DCPU_TESTS=ON (scripts/test.sh: CPU_TESTS=1). Its own copies of the
 # libraries: ours with the test's warnings, the vendored ones as they come.
 option(CPU_TESTS "Run the Z80 instruction exercisers (minutes)" OFF)

@@ -53,13 +53,13 @@ static int row_is(unsigned row, const char *expected) {
 
 static uint8_t fg_at(unsigned col, unsigned row) {
 	uint8_t fg, bg;
-	screen_colours(&s, col, row, &fg, &bg);
+	screen_colors(&s, col, row, &fg, &bg);
 	return fg;
 }
 
 static uint8_t bg_at(unsigned col, unsigned row) {
 	uint8_t fg, bg;
-	screen_colours(&s, col, row, &fg, &bg);
+	screen_colors(&s, col, row, &fg, &bg);
 	return bg;
 }
 
@@ -122,8 +122,9 @@ static void test_tabs(void) {
 	setup();
 	put("a\tb\tc");
 	CHECK(row_is(0, "a       b       c"));
-	for (int i = 0; i < 20; ++i)
+	for (int i = 0; i < 20; ++i) {
 		put("\t");
+	}
 	CHECK_CURSOR(s.cols - 1, 0);
 }
 
@@ -247,8 +248,9 @@ static void test_erase_in_display(void) {
 	setup();
 	number_rows();
 	put("\x1b[2J");
-	for (unsigned r = 0; r < ROWS; ++r)
+	for (unsigned r = 0; r < ROWS; ++r) {
 		CHECK(row_is(r, ""));
+	}
 	CHECK(row_is(STATUS, "status"));
 }
 
@@ -401,7 +403,7 @@ static void test_save_restore_cursor(void) {
 	put("\x1b[5;6H\x1b[31m\x1b(0\x1b" "7\x1b[H\x1b[0m\x1b(B" "a\x1b" "8q");
 	CHECK_CURSOR(6, 4);
 	CHECK_EQ(screen_glyph(&s, 5, 4), GLYPH_DEC_GRAPHICS('q')); // charset restored
-	CHECK_EQ(fg_at(5, 4), 1);               // colour restored
+	CHECK_EQ(fg_at(5, 4), 1);               // color restored
 	CHECK_EQ(screen_glyph(&s, 0, 0), 'a');
 }
 
@@ -439,8 +441,9 @@ static void test_decaln(void) {
 	setup();
 	put("\x1b[5;10r\x1b#8");
 	CHECK_CURSOR(0, 0);
-	for (unsigned r = 0; r < ROWS; ++r)
+	for (unsigned r = 0; r < ROWS; ++r) {
 		CHECK_EQ(screen_glyph(&s, s.cols - 1, r), 'E');
+	}
 	CHECK(row_is(STATUS, "status"));
 }
 
@@ -471,7 +474,7 @@ static void test_term_reset(void) {
 	CHECK_EQ(t.margin_bottom, ROWS - 1);
 	put("\x1b[99Bx"); // margins and origin mode gone: down to the last row
 	CHECK_CURSOR(1, ROWS - 1);
-	CHECK_EQ(fg_at(0, ROWS - 1), FG); // default colours, not reversed
+	CHECK_EQ(fg_at(0, ROWS - 1), FG); // default colors, not reversed
 	CHECK_EQ(bg_at(0, ROWS - 1), BG);
 	CHECK_EQ(bg_at(s.cols - 1, 0), BG); // and the screen was cleared with them
 	CHECK(row_is(STATUS, "status"));
@@ -643,7 +646,7 @@ static void test_reset_forgets_rep_char(void) {
 // ---------------------------------------------------------------------------
 // SGR
 
-static void test_sgr_colours(void) {
+static void test_sgr_colors(void) {
 	setup();
 	put("\x1b[31ma\x1b[1mb\x1b[0mc\x1b[42;37md\x1b[7me\x1b[27;39;49mf");
 	CHECK_EQ(fg_at(0, 0), 1);
@@ -690,10 +693,10 @@ static void test_reverse_screen(void) {
 	CHECK_EQ(s.reverse_rows, 0);
 }
 
-static void test_sgr_extended_colours(void) {
+static void test_sgr_extended_colors(void) {
 	setup();
 	put("\x1b[38;5;196ma\x1b[48;5;21mb\x1b[38;2;255;128;0mc\x1b[38;5;244md\x1b[38;5;3me\x1b[0m");
-	CHECK_EQ(fg_at(0, 0), 196); // 256 colours: the index itself
+	CHECK_EQ(fg_at(0, 0), 196); // 256 colors: the index itself
 	CHECK_EQ(bg_at(1, 0), 21);
 	CHECK_EQ(fg_at(2, 0), 208); // direct: the nearest xterm entry (255, 135, 0)
 	CHECK_EQ(fg_at(3, 0), 244);
@@ -701,7 +704,7 @@ static void test_sgr_extended_colours(void) {
 	put("\x1b[38;2;300;0;0mf\x1b[38;5;300mg\x1b[1;38;5;2mh\x1b[0m");
 	CHECK_EQ(fg_at(5, 0), 196); // channels above 255 count as 255
 	CHECK_EQ(fg_at(6, 0), 196); // no such index: unchanged
-	CHECK_EQ(fg_at(7, 0), 10);  // bold brightens ANSI 0-7 given as 256 colours too
+	CHECK_EQ(fg_at(7, 0), 10);  // bold brightens ANSI 0-7 given as 256 colors too
 }
 
 static void test_rep(void) {
@@ -758,8 +761,9 @@ static void test_random_input_is_safe(void) {
 		for (unsigned i = 0; i < 200000; ++i) {
 			seed = seed * 1103515245u + 12345u;
 			uint8_t b = (uint8_t)(seed >> 16);
-			if ((seed >> 8 & 7) == 0) // bias towards sequence bytes
+			if ((seed >> 8 & 7) == 0) { // bias towards sequence bytes
 				b = (uint8_t)interesting[(seed >> 24) % (sizeof interesting - 1)];
+			}
 			term_putc(&t, b);
 			if (s.cursor_col >= s.cols || s.cursor_row >= ROWS) {
 				CHECK(!"cursor out of range");
@@ -827,7 +831,7 @@ static void test_newline_default(void) {
 // Cells hold palette indices whatever the palette: the defaults are ANSI
 // entries (so SGR 37 and 40 look like the defaults), bold brightens,
 // reverse swaps, erasing uses the current background.
-static void test_default_colour_indices(void) {
+static void test_default_color_indices(void) {
 	setup();
 	put("a\x1b[1mb\x1b[0;37mc\x1b[40md\x1b[0;7me\x1b[1mf\x1b[0;31;44mg");
 	CHECK(fg_at(0, 0) == PALETTE_TEXT && bg_at(0, 0) == PALETTE_BACKGROUND);
@@ -924,8 +928,9 @@ static void test_vt52_controls_and_wrap(void) {
 	CHECK(row_is(0, "cb      x"));
 	CHECK(row_is(1, "        y"));
 	put("\x1bY!\x20");
-	for (unsigned i = 0; i < 81; ++i)
+	for (unsigned i = 0; i < 81; ++i) {
 		term_putc(&t, 'w');
+	}
 	CHECK_CURSOR(1, 2); // autowrap as in ANSI mode
 }
 
@@ -1074,8 +1079,9 @@ static void test_adm3a_clear_and_scroll(void) {
 	CHECK(row_is(0, "row 1"));
 	CHECK(row_is(23, ""));
 	put("\x1a"); // clear and home
-	for (unsigned r = 0; r < ROWS; ++r)
+	for (unsigned r = 0; r < ROWS; ++r) {
 		CHECK(row_is(r, ""));
+	}
 	CHECK_CURSOR(0, 0);
 	CHECK(row_is(STATUS, "status"));
 }
@@ -1155,7 +1161,7 @@ int main(void) {
 	RUN(test_set_columns);
 	RUN(test_decbkm);
 	RUN(test_newline_default);
-	RUN(test_default_colour_indices);
+	RUN(test_default_color_indices);
 	RUN(test_save_restore_cursor);
 	RUN(test_charsets);
 	RUN(test_tab_stops);
@@ -1172,8 +1178,8 @@ int main(void) {
 	RUN(test_alt_screen_deccolm);
 	RUN(test_alt_screen_shares_stash);
 	RUN(test_reset_forgets_rep_char);
-	RUN(test_sgr_colours);
-	RUN(test_sgr_extended_colours);
+	RUN(test_sgr_colors);
+	RUN(test_sgr_extended_colors);
 	RUN(test_sgr_underline_blink);
 	RUN(test_reverse_screen);
 	RUN(test_rep);

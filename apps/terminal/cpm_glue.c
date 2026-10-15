@@ -49,8 +49,9 @@ static void cpm_feed_keys(uint32_t now_ms) {
 	while (cpm.key_tail != cpm.key_head) {
 		uint8_t c = cpm.keys[cpm.key_tail % CPM_KEY_QUEUE];
 		if (cpm.running) {
-			if (!machine_key(c))
+			if (!machine_key(c)) {
 				return;
+			}
 		} else if (monitor_key(c, now_ms) == MONITOR_RUN) {
 			cpm.running = true;
 		}
@@ -64,8 +65,9 @@ static void cpm_idle(void) {
 	keyboard_poll();
 	serial_poll();
 	led_poll(screen_blanked);
-	if (cpm.running)
+	if (cpm.running) {
 		cpm_feed_keys(to_ms_since_boot(get_absolute_time()));
+	}
 	video_update(&screen);
 }
 
@@ -97,8 +99,9 @@ static void cpm_write(const char *text) {
 static const char *cpm_card_info(void) {
 	static char text[32];
 	sdcard_type_t type = sdcard_type();
-	if (type == SDCARD_NONE)
+	if (type == SDCARD_NONE) {
 		return NULL;
+	}
 	uint32_t mb = sdcard_blocks() / 2048;
 	snprintf(text, sizeof text, "%s, %lu.%lu GB", type == SDCARD_SDHC ? "SDHC/SDXC" : "SDSC",
 		(unsigned long)(mb / 1024), (unsigned long)(mb % 1024 * 10 / 1024));
@@ -119,15 +122,16 @@ const monitor_platform_t cpm_monitor = {
 
 // F11: reset the machine and boot from drive A, as the reset button of a
 // real one would; with no disk in A, the monitor instead. The terminal is
-// reset too (colours, modes, margins, a stuck escape sequence) and goes back
+// reset too (colors, modes, margins, a stuck escape sequence) and goes back
 // to the SET-UP width, so a program that left it unreadable cannot keep it so.
 static void cpm_reset(void) {
 	cpm.reset_requested = false;
 	cpm.key_tail = cpm.key_head; // typed-ahead keys were for the old run
 	drives_flush();
 	term_reset(&term);
-	if (screen.cols != default_columns)
+	if (screen.cols != default_columns) {
 		term_set_columns(&term, default_columns); // the status line follows
+	}
 	if (!drives_name(0)) {
 		cpm.running = false;
 		monitor_enter("Reset: no disk in drive A", false);
@@ -141,8 +145,9 @@ static void cpm_reset(void) {
 // Run the CPU for a slice, or the monitor's countdown.
 void cpm_step(void) {
 	uint32_t now = to_ms_since_boot(get_absolute_time());
-	if (cpm.reset_requested)
+	if (cpm.reset_requested) {
 		cpm_reset();
+	}
 	cpm_feed_keys(now);
 	if (!setup.active) {
 		if (cpm.running) {

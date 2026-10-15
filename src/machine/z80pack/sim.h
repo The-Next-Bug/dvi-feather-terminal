@@ -1,7 +1,7 @@
 /*
  * z80pack configuration for the terminal's Z80 machine (machine.c), in
  * place of a z80pack machine's sim.h. Based on picosim's (z80pack,
- * Copyright (C) 2024-2025 by Udo Munk & Thomas Eberhardt, MIT licence).
+ * Copyright (C) 2024-2025 by Udo Munk & Thomas Eberhardt, MIT license).
  */
 
 #ifndef SIM_INC

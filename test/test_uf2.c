@@ -27,8 +27,9 @@ static void block(uint8_t *blk, uint32_t flags, uint32_t addr, uint32_t no, uint
 	put32(blk + 20, no);
 	put32(blk + 24, n);
 	put32(blk + 28, family);
-	for (unsigned i = 0; i < UF2_PAYLOAD_SIZE; ++i)
+	for (unsigned i = 0; i < UF2_PAYLOAD_SIZE; ++i) {
 		blk[32 + i] = (uint8_t)(addr / UF2_PAYLOAD_SIZE * 7 + i);
+	}
 	put32(blk + 508, 0x0ab16f30);
 }
 
@@ -44,8 +45,9 @@ static unsigned make_file(unsigned n, unsigned gap) {
 	for (unsigned i = 0; i < n; ++i) {
 		uint32_t off = (i + (i == n - 1 ? gap : 0)) * UF2_PAYLOAD_SIZE;
 		block(file[i + 1], 0x2000, UF2_FLASH_BASE + off, i, n, UF2_FAMILY_RP2350_ARM_S);
-		if (i == 0)
+		if (i == 0) {
 			put32(file[1] + 32 + 0x10, UF2_PICOBIN_MARKER);
+		}
 		memcpy(image + off, uf2_payload(file[i + 1]), UF2_PAYLOAD_SIZE);
 	}
 	return n + 1;
@@ -56,9 +58,11 @@ static uf2_result_t check(unsigned count, bool partial, uint32_t *len, uint32_t 
 	uf2_check_t c;
 	uint32_t offset;
 	uf2_check_start(&c, UF2_FAMILY_RP2350_ARM_S, LIMIT);
-	for (unsigned i = 0; i < count; ++i)
-		if (uf2_check_block(&c, file[i], &offset) != UF2_OK)
+	for (unsigned i = 0; i < count; ++i) {
+		if (uf2_check_block(&c, file[i], &offset) != UF2_OK) {
 			break;
+		}
+	}
 	return uf2_check_end(&c, partial, len, crc);
 }
 
@@ -106,8 +110,9 @@ static void test_truncated(void) {
 
 static void test_wrong_family(void) {
 	unsigned count = make_file(10, 0);
-	for (unsigned i = 1; i < count; ++i)
+	for (unsigned i = 1; i < count; ++i) {
 		put32(file[i] + 28, FAMILY_RP2040);
+	}
 	uint32_t len, crc;
 	CHECK_EQ(check(count, false, &len, &crc), UF2_NO_BLOCKS);
 	CHECK_EQ(check(0, false, &len, &crc), UF2_NO_BLOCKS);
@@ -165,8 +170,9 @@ static void test_not_bootable(void) {
 	CHECK_EQ(check(count, false, &len, &crc), UF2_NOT_BOOTABLE);
 	// No block at the start of flash.
 	count = make_file(20, 0);
-	for (unsigned i = 1; i < count; ++i)
+	for (unsigned i = 1; i < count; ++i) {
 		put32(file[i] + 12, UF2_FLASH_BASE + i * UF2_PAYLOAD_SIZE);
+	}
 	CHECK_EQ(check(count, false, &len, &crc), UF2_NO_START);
 }
 

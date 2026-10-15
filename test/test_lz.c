@@ -19,10 +19,12 @@ static collect_t got;
 
 static bool collect(void *ctx, const uint8_t *data, size_t len) {
 	collect_t *c = ctx;
-	if (len > c->max_chunk)
+	if (len > c->max_chunk) {
 		c->max_chunk = len;
-	if (c->len < sizeof c->out) // the 8 MB disks are only counted
+	}
+	if (c->len < sizeof c->out) { // the 8 MB disks are only counted
 		memcpy(c->out + c->len, data, len < sizeof c->out - c->len ? len : sizeof c->out - c->len);
+	}
 	c->crc = crc32_update(c->crc, data, len);
 	c->len += len;
 	return !c->stop_after || c->len < c->stop_after;
@@ -53,8 +55,9 @@ static void test_long_lengths(void) {
 	size_t n = 0;
 	src[n++] = 0xff;
 	src[n++] = 5;
-	for (int i = 0; i < 20; ++i)
+	for (int i = 0; i < 20; ++i) {
 		src[n++] = (uint8_t)('A' + i);
+	}
 	src[n++] = 1;
 	src[n++] = 0;
 	src[n++] = 255;

@@ -637,7 +637,7 @@ keys:
 
 **F11** is the reset button: it reboots from drive A at once (keys typed
 ahead are dropped; with drive A empty it goes to the monitor). It resets the
-terminal too, as RIS does (colours, modes, scrolling region, an unfinished
+terminal too, as RIS does (colors, modes, scrolling region, an unfinished
 escape sequence or string), clears the screen and returns to the SET-UP
 width. In terminal mode F11 sends its usual `ESC [ 2 3 ~`.
 
@@ -705,11 +705,18 @@ needed.
 ```sh
 git submodule update --init          # pico-sdk (not its submodules; z80pack is vendored)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # the one we need
-scripts/setup-toolchain.sh           # CMake, Arm GNU Toolchain, picotool
+scripts/setup-toolchain.sh           # CMake, Arm GNU Toolchain, picotool, clang-tidy
 scripts/test.sh                      # host unit tests
 scripts/build.sh                     # -> build/pico2-dvi-sock/dvi_terminal.uf2, build-info.txt
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<rev>.zip, dist/CHANGES.md
+scripts/lint.sh                      # clang-tidy over the tests' and the firmware's builds
 ```
+
+`scripts/lint.sh` runs clang-tidy with the checks in `.clang-tidy` (for
+now: braces around every `if`/`else`/`for`/`while`/`do` body) on our
+sources, as `build/test` and `build/<target>` compile them, so run
+`scripts/test.sh` and `scripts/build.sh` first. CI runs it after the tests
+and after each target's build.
 
 `scripts/build.sh` takes `TARGET` (a board header in `boards/`, default
 `pico2-dvi-sock`; see [Other boards](#other-boards)), `SERIAL_FLOW_CONTROL`, `CMAKE_ARGS` (extra configure
@@ -847,7 +854,7 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | `assets/fonts/` | Terminus Font 10x20 and its bold face (SIL OFL 1.1) and misc-fixed 6x12 (public domain); see its README |
 | `cmake/build_info.cmake` | Generates `term_build.h` (git describe, commit, date) on every build |
 | `cmake/dvt.cmake` | Helpers for the libraries, shared by the firmware and host tests |
-| `scripts/` | `setup-toolchain.sh`, `build.sh`, `test.sh`, `package.sh`, `changelog.sh` |
+| `scripts/` | `setup-toolchain.sh`, `build.sh`, `test.sh`, `lint.sh`, `package.sh`, `changelog.sh` |
 | `LICENSE` | The project's MIT license |
 | `toolchain.env` | Pinned CMake, Arm GNU Toolchain and picotool versions |
 | `docs/FLASHING.txt` | End-user flashing steps, shipped in the package |

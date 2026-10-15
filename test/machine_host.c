@@ -27,14 +27,17 @@ static void idle(void) {
 }
 
 static void console_out(uint8_t c) {
-	if (host_console_hook)
+	if (host_console_hook) {
 		host_console_hook(c);
-	if (c == 0) // padding (CPUTEST sends it), as a terminal ignores it
+	}
+	if (c == 0) { // padding (CPUTEST sends it), as a terminal ignores it
 		return;
+	}
 	if (host_echo) {
 		putchar(c);
-		if (c == '\n')
+		if (c == '\n') {
 			fflush(stdout);
+		}
 	}
 	if (screen_len == sizeof screen - 1) { // long runs: keep the newer half
 		memmove(screen, screen + sizeof screen / 2, sizeof screen / 2);
@@ -42,14 +45,17 @@ static void console_out(uint8_t c) {
 	}
 	screen[screen_len++] = (char)c;
 	screen[screen_len] = '\0';
-	if (host_cpr_reply && c == 'n' && screen_len >= 4 && memcmp(screen + screen_len - 4, "\x1b[6n", 4) == 0)
-		for (const char *r = host_cpr_reply; *r; ++r)
+	if (host_cpr_reply && c == 'n' && screen_len >= 4 && memcmp(screen + screen_len - 4, "\x1b[6n", 4) == 0) {
+		for (const char *r = host_cpr_reply; *r; ++r) {
 			machine_key((uint8_t)*r);
+		}
+	}
 }
 
 static void aux_out(uint8_t c) {
-	if (aux_len < sizeof aux_sent)
+	if (aux_len < sizeof aux_sent) {
 		aux_sent[aux_len++] = (char)c;
+	}
 }
 
 static bool aux_in(uint8_t *c) {
@@ -96,16 +102,18 @@ machine_state_t run_until_any(const char *const texts[], double seconds, int *wh
 	uint64_t end = host_clock_us() + (uint64_t)(seconds * 1e6);
 	while (host_clock_us() < end) {
 		machine_state_t st = machine_run(10000);
-		if (screen_len < from) // the older half was dropped
+		if (screen_len < from) { // the older half was dropped
 			from = 0;
+		}
 		for (int i = 0; texts[i]; ++i) {
 			if (strstr(screen + from, texts[i])) {
 				*which = i;
 				return MACHINE_RUNNING;
 			}
 		}
-		if (st == MACHINE_STOPPED)
+		if (st == MACHINE_STOPPED) {
 			return st;
+		}
 	}
 	fprintf(stderr, "timed out waiting for \"%s\"; console:\n%s\n", texts[0], screen);
 	return MACHINE_STOPPED;
@@ -119,7 +127,8 @@ machine_state_t run_until(const char *text, double seconds) {
 
 bool type(const char *s) {
 	bool ok = true;
-	while (*s)
+	while (*s) {
 		ok = machine_key((uint8_t)*s++) && ok;
+	}
 	return ok;
 }

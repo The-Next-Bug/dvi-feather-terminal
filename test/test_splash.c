@@ -5,13 +5,15 @@
 
 static uint16_t px[RASTER_ACTIVE_WIDTH];
 
-// Level colours for the tests: level l as the pixel 0x10 + l (black is 0).
-static const uint16_t colours[4] = { 0x10, 0x11, 0x12, 0x13 };
+// Level colors for the tests: level l as the pixel 0x10 + l (black is 0).
+static const uint16_t colors[4] = { 0x10, 0x11, 0x12, 0x13 };
 
 static bool row_black(void) {
-	for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x)
-		if (px[x])
+	for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x) {
+		if (px[x]) {
 			return false;
+		}
+	}
 	return true;
 }
 
@@ -23,21 +25,23 @@ static const uint8_t small_data[] = {
 };
 static const splash_image_t small = { 16, 2, 0x2, small_data, sizeof small_data };
 
-static void test_small_image_centred(void) {
+static void test_small_image_centered(void) {
 	CHECK(splash_check(&small));
 	splash_decoder_t d = splash_decoder_init(&small, small_data);
 	unsigned x0 = (RASTER_ACTIVE_WIDTH - 16) / 2, y0 = (SPLASH_HEIGHT - 2) / 2;
 	for (unsigned y = 0; y < SPLASH_HEIGHT; ++y) {
 		memset(px, 0xa5, sizeof px); // every pixel must be written
-		splash_compose(px, &d, y, colours);
+		splash_compose(px, &d, y, colors);
 		if (y == y0) {
-			for (unsigned i = 0; i < 16; ++i)
+			for (unsigned i = 0; i < 16; ++i) {
 				CHECK_EQ(px[x0 + i], i < 3 ? 0x10 : i < 8 ? 0x13 : 0x12);
+			}
 			CHECK_EQ(px[x0 - 1], 0);
 			CHECK_EQ(px[x0 + 16], 0);
 		} else if (y == y0 + 1) {
-			for (unsigned i = 0; i < 16; ++i)
+			for (unsigned i = 0; i < 16; ++i) {
 				CHECK_EQ(px[x0 + i], 0x11);
+			}
 		} else {
 			CHECK(row_black());
 		}
@@ -75,8 +79,9 @@ static void test_bad_images_rejected(void) {
 	img.size = 2;
 	splash_decoder_t d = splash_decoder_init(&img, small_data);
 	unsigned y0 = (SPLASH_HEIGHT - 2) / 2, x0 = (RASTER_ACTIVE_WIDTH - 16) / 2;
-	for (unsigned y = 0; y <= y0; ++y)
-		splash_compose(px, &d, y, colours);
+	for (unsigned y = 0; y <= y0; ++y) {
+		splash_compose(px, &d, y, colors);
+	}
 	CHECK_EQ(px[x0 + 7], 0x13);
 	CHECK_EQ(px[x0 + 8], 0);
 }
@@ -89,22 +94,23 @@ static void test_built_in_logo(void) {
 	splash_decoder_t d = splash_decoder_init(&splash_logo, splash_logo.data);
 	unsigned lit = 0;
 	for (unsigned y = 0; y < SPLASH_HEIGHT; ++y) {
-		splash_compose(px, &d, y, colours);
-		for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x)
+		splash_compose(px, &d, y, colors);
+		for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x) {
 			lit += px[x] > 0x10;
+		}
 	}
 	CHECK(d.data == d.end && d.left == 0);
 	CHECK(lit > SPLASH_HEIGHT);
 }
 
-// The tint follows the text colour's hue: its brightest plane at the
-// logo's levels, the others lowered in proportion; grey keeps the logo's
+// The tint follows the text color's hue: its brightest plane at the
+// logo's levels, the others lowered in proportion; gray keeps the logo's
 // own planes.
 static void test_tint(void) {
 	const splash_image_t img = {.planes = 0x2}; // green only
 	splash_tint_t t = splash_tint(&img, RGB222(2, 2, 2), false); // white
 	CHECK(t.shift[0] == SPLASH_PLANE_OFF && t.shift[1] == 0 && t.shift[2] == SPLASH_PLANE_OFF);
-	t = splash_tint(&img, RGB222(2, 2, 2), true); // white, mono: grey
+	t = splash_tint(&img, RGB222(2, 2, 2), true); // white, mono: gray
 	CHECK(t.shift[0] == 0 && t.shift[1] == 0 && t.shift[2] == 0);
 	t = splash_tint(&img, RGB222(0, 2, 0), false); // green
 	CHECK(t.shift[0] == SPLASH_PLANE_OFF && t.shift[1] == 0 && t.shift[2] == SPLASH_PLANE_OFF);
@@ -114,25 +120,26 @@ static void test_tint(void) {
 	CHECK(t.shift[0] == 0 && t.shift[1] == 2 && t.shift[2] == SPLASH_PLANE_OFF);
 }
 
-// Each level's colour: per plane, off or the level lowered by the shift.
-static void test_tint_colour(void) {
+// Each level's color: per plane, off or the level lowered by the shift.
+static void test_tint_color(void) {
 	const splash_tint_t green = { { SPLASH_PLANE_OFF, 0, SPLASH_PLANE_OFF } };
-	for (unsigned l = 0; l < 4; ++l)
-		CHECK_EQ(splash_tint_colour(&green, l), RGB222(0, l, 0));
+	for (unsigned l = 0; l < 4; ++l) {
+		CHECK_EQ(splash_tint_color(&green, l), RGB222(0, l, 0));
+	}
 	const splash_tint_t amber = { { SPLASH_PLANE_OFF, 1, 0 } };
-	CHECK_EQ(splash_tint_colour(&amber, 3), RGB222(3, 2, 0));
-	CHECK_EQ(splash_tint_colour(&amber, 1), RGB222(1, 0, 0));
-	CHECK_EQ(splash_tint_colour(&amber, 0), 0);
-	const splash_tint_t grey = { { 0, 0, 0 } };
-	CHECK_EQ(splash_tint_colour(&grey, 2), RGB222(2, 2, 2));
+	CHECK_EQ(splash_tint_color(&amber, 3), RGB222(3, 2, 0));
+	CHECK_EQ(splash_tint_color(&amber, 1), RGB222(1, 0, 0));
+	CHECK_EQ(splash_tint_color(&amber, 0), 0);
+	const splash_tint_t gray = { { 0, 0, 0 } };
+	CHECK_EQ(splash_tint_color(&gray, 2), RGB222(2, 2, 2));
 }
 
 int main(void) {
-	RUN(test_small_image_centred);
+	RUN(test_small_image_centered);
 	RUN(test_start_even);
 	RUN(test_bad_images_rejected);
 	RUN(test_built_in_logo);
 	RUN(test_tint);
-	RUN(test_tint_colour);
+	RUN(test_tint_color);
 	return tests_done();
 }

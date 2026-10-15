@@ -16,7 +16,7 @@
 #include "diskio.h"
 
 #define SD_SPI BOARD_SD_SPI_INST
-#define INIT_HZ 400000     // the spec's limit until initialised
+#define INIT_HZ 400000     // the spec's limit until initialized
 #define RUN_HZ 25000000    // default-speed cards
 #define BLOCK 512
 
@@ -59,8 +59,9 @@ static uint8_t xfer(uint8_t out) {
 static bool wait_ready(uint32_t ms) {
 	absolute_time_t until = make_timeout_time_ms(ms);
 	do {
-		if (xfer(0xff) == 0xff)
+		if (xfer(0xff) == 0xff) {
 			return true;
+		}
 	} while (!time_reached(until));
 	return false;
 }
@@ -73,8 +74,9 @@ static void deselect(void) {
 static bool select_card(void) {
 	gpio_put(BOARD_SD_CS_PIN, 0);
 	xfer(0xff);
-	if (wait_ready(500))
+	if (wait_ready(500)) {
 		return true;
+	}
 	deselect();
 	return false;
 }
@@ -84,31 +86,37 @@ static bool select_card(void) {
 static uint8_t command(uint8_t cmd, uint32_t arg) {
 	if (cmd == ACMD41) {
 		uint8_t r = command(CMD55, 0);
-		if (r > R1_IDLE)
+		if (r > R1_IDLE) {
 			return r;
+		}
 	}
 	deselect();
-	if (!select_card())
+	if (!select_card()) {
 		return 0xff;
+	}
 	// Only CMD0 and CMD8 are checked for a CRC in SPI mode.
 	uint8_t crc = cmd == CMD0 ? 0x95 : cmd == CMD8 ? 0x87 : 0x01;
 	uint8_t frame[6] = {(uint8_t)(0x40 | cmd), (uint8_t)(arg >> 24), (uint8_t)(arg >> 16), (uint8_t)(arg >> 8),
 		(uint8_t)arg, crc};
 	spi_write_blocking(SD_SPI, frame, sizeof frame);
 	uint8_t r = 0xff;
-	for (int i = 0; i < 10 && (r & 0x80); ++i)
+	for (int i = 0; i < 10 && (r & 0x80); ++i) {
 		r = xfer(0xff);
+	}
 	return r;
 }
 
 static bool read_data(uint8_t *buf, unsigned len, uint32_t ms) {
 	absolute_time_t until = make_timeout_time_ms(ms);
 	uint8_t token;
-	while ((token = xfer(0xff)) == 0xff)
-		if (time_reached(until))
+	while ((token = xfer(0xff)) == 0xff) {
+		if (time_reached(until)) {
 			return false;
-	if (token != TOKEN_START)
+		}
+	}
+	if (token != TOKEN_START) {
 		return false;
+	}
 	spi_read_blocking(SD_SPI, 0xff, buf, len);
 	xfer(0xff); // CRC, unchecked
 	xfer(0xff);
@@ -116,8 +124,9 @@ static bool read_data(uint8_t *buf, unsigned len, uint32_t ms) {
 }
 
 static void pins_init(void) {
-	if (pins_ready)
+	if (pins_ready) {
 		return;
+	}
 	spi_init(SD_SPI, INIT_HZ);
 	spi_set_format(SD_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 	gpio_set_function(BOARD_SD_MISO_PIN, GPIO_FUNC_SPI);
@@ -133,8 +142,9 @@ static void pins_init(void) {
 // Bits hi..lo (inclusive) of a 128-bit register, as the spec numbers them.
 static uint32_t bits(const uint8_t reg[16], unsigned hi, unsigned lo) {
 	uint32_t v = 0;
-	for (unsigned b = hi + 1; b-- > lo;)
+	for (unsigned b = hi + 1; b-- > lo;) {
 		v = v << 1 | (reg[15 - b / 8] >> (b % 8) & 1);
+	}
 	return v;
 }
 
@@ -161,12 +171,14 @@ static sdcard_type_t card_init(void) {
 	// At least 74 clocks with CS high put the card in its native mode,
 	// ready for CMD0 with CS low to switch it to SPI mode.
 	gpio_put(BOARD_SD_CS_PIN, 1);
-	for (int i = 0; i < 10; ++i)
+	for (int i = 0; i < 10; ++i) {
 		xfer(0xff);
+	}
 
 	uint8_t r = 0xff;
-	for (int i = 0; i < 10 && r != R1_IDLE; ++i)
+	for (int i = 0; i < 10 && r != R1_IDLE; ++i) {
 		r = command(CMD0, 0);
+	}
 	if (r != R1_IDLE) {
 		deselect();
 		return SDCARD_NONE;
@@ -195,8 +207,9 @@ static sdcard_type_t card_init(void) {
 	if (v2 && command(CMD58, 0) == 0) {
 		uint8_t ocr[4];
 		spi_read_blocking(SD_SPI, 0xff, ocr, sizeof ocr);
-		if (ocr[0] & 0x40) // CCS
+		if (ocr[0] & 0x40) { // CCS
 			t = SDCARD_SDHC;
+		}
 	}
 	if (t == SDCARD_SDSC && command(CMD16, BLOCK) != 0) {
 		deselect();
@@ -224,13 +237,15 @@ DSTATUS sdcard_disk_initialize(void) {
 }
 
 DRESULT sdcard_disk_read(BYTE *buff, LBA_t sector, UINT count) {
-	if (type == SDCARD_NONE)
+	if (type == SDCARD_NONE) {
 		return RES_NOTRDY;
+	}
 	for (; count; --count, ++sector, buff += BLOCK) {
 		bool ok = command(CMD17, address(sector)) == 0 && read_data(buff, BLOCK, 200);
 		deselect();
-		if (!ok)
+		if (!ok) {
 			return RES_ERROR;
+		}
 	}
 	return RES_OK;
 }
@@ -247,15 +262,17 @@ static bool write_block(uint8_t token, const uint8_t *buf) {
 }
 
 DRESULT sdcard_disk_write(const BYTE *buff, LBA_t sector, UINT count) {
-	if (type == SDCARD_NONE)
+	if (type == SDCARD_NONE) {
 		return RES_NOTRDY;
+	}
 	bool ok = false;
 	if (count == 1) {
 		ok = command(CMD24, address(sector)) == 0 && write_block(TOKEN_START, buff);
 	} else if (command(CMD25, address(sector)) == 0) {
 		ok = true;
-		for (; ok && count; --count, buff += BLOCK)
+		for (; ok && count; --count, buff += BLOCK) {
 			ok = write_block(TOKEN_START_MULTI, buff);
+		}
 		// The stop token ends the transfer, also after a rejected block;
 		// the card is busy again while it finishes.
 		xfer(TOKEN_STOP);
@@ -267,8 +284,9 @@ DRESULT sdcard_disk_write(const BYTE *buff, LBA_t sector, UINT count) {
 }
 
 DRESULT sdcard_disk_ioctl(BYTE cmd, void *buff) {
-	if (type == SDCARD_NONE)
+	if (type == SDCARD_NONE) {
 		return RES_NOTRDY;
+	}
 	switch (cmd) {
 	case CTRL_SYNC: {
 		// Writes finish before disk_write returns; just wait out the card.

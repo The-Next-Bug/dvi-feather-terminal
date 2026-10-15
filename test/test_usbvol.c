@@ -10,12 +10,14 @@ static usbvol_t v;
 static usbvol_action_t step(bool mount_ok, uint8_t *dev) {
 	uint8_t d = 0;
 	usbvol_action_t a = usbvol_next(&v, &d);
-	if (a == USBVOL_MOUNT)
+	if (a == USBVOL_MOUNT) {
 		usbvol_mounted(&v, mount_ok);
-	else if (a == USBVOL_UNMOUNT)
+	} else if (a == USBVOL_UNMOUNT) {
 		usbvol_unmounted(&v);
-	if (dev)
+	}
+	if (dev) {
 		*dev = d;
+	}
 	return a;
 }
 
@@ -138,8 +140,9 @@ static void test_pulled_while_mounting(void) {
 // No room for more than USBVOL_MAX: the extra is ignored, not a crash.
 static void test_full(void) {
 	usbvol_init(&v);
-	for (uint8_t d = 1; d <= USBVOL_MAX + 2; ++d)
+	for (uint8_t d = 1; d <= USBVOL_MAX + 2; ++d) {
 		usbvol_attach(&v, d);
+	}
 	CHECK_EQ(v.n, USBVOL_MAX);
 	usbvol_detach(&v, USBVOL_MAX + 2); // never attached: nothing
 	CHECK_EQ(v.n, USBVOL_MAX);

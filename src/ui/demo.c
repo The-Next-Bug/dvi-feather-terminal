@@ -8,7 +8,7 @@
 
 // Palette indices.
 #define BLACK PALETTE_BLACK
-#define GREY PALETTE_TEXT
+#define GRAY PALETTE_TEXT
 #define DIM PALETTE_DIM
 #define WHITE PALETTE_BOLD_TEXT
 #define TITLE_BG PALETTE_BLUE
@@ -17,7 +17,7 @@ static const char *const names[8] = {
 	"Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White",
 };
 
-// ANSI colour n (0-7: bit 0 red, bit 1 green, bit 2 blue), normal or bright.
+// ANSI color n (0-7: bit 0 red, bit 1 green, bit 2 blue), normal or bright.
 static uint8_t normal(unsigned n) {
 	return (uint8_t)n;
 }
@@ -34,9 +34,10 @@ static uint8_t rainbow(unsigned i, int is_bright) {
 
 static void fill_row(screen_t *s, unsigned row, const char *text, unsigned offset, int bright_hues) {
 	size_t len = strlen(text);
-	for (unsigned c = 0; c < s->cols; ++c)
+	for (unsigned c = 0; c < s->cols; ++c) {
 		screen_put(s, c, row, (uint8_t)text[(c + offset) % len],
 			rainbow(c + offset, bright_hues), BLACK);
+	}
 }
 
 static void box(screen_t *s, unsigned col, unsigned row, unsigned w, unsigned h, int dbl, uint8_t fg) {
@@ -61,8 +62,8 @@ static void box(screen_t *s, unsigned col, unsigned row, unsigned w, unsigned h,
 }
 
 // "Label   Black Red Green ..." with each name drawn by style().
-static void colour_row(screen_t *s, unsigned row, const char *label, int style) {
-	screen_puts(s, 1, row, label, GREY, BLACK);
+static void color_row(screen_t *s, unsigned row, const char *label, int style) {
+	screen_puts(s, 1, row, label, GRAY, BLACK);
 	unsigned col = 10, step = s->cols > 80 ? 14 : 9;
 	for (unsigned n = 0; n < 8; ++n, col += step) {
 		uint8_t fg, bg;
@@ -79,7 +80,7 @@ static void colour_row(screen_t *s, unsigned row, const char *label, int style) 
 }
 
 void demo_draw(screen_t *s, unsigned cols, const char *font, const char *status) {
-	screen_init(s, cols, GREY, BLACK);
+	screen_init(s, cols, GRAY, BLACK);
 	const unsigned w = s->cols;
 	char text[SCREEN_MAX_COLS + 1];
 
@@ -89,18 +90,19 @@ void demo_draw(screen_t *s, unsigned cols, const char *font, const char *status)
 	screen_puts(s, 0, 0, text, WHITE, TITLE_BG);
 	screen_puts(s, w - 12, 0, "800x600p60", WHITE, TITLE_BG);
 
-	// Column ruler: tens, then units coloured per decade.
+	// Column ruler: tens, then units colored per decade.
 	for (unsigned c = 0; c < w; ++c) {
 		unsigned n = c + 1;
-		if (n % 10 == 0)
+		if (n % 10 == 0) {
 			screen_put(s, c, 2, (uint8_t)('0' + n / 10 % 10), WHITE, BLACK);
+		}
 		screen_put(s, c, 3, (uint8_t)('0' + n % 10), n / 10 % 2 ? bright(6) : bright(3), BLACK);
 	}
 
-	colour_row(s, 5, "Normal", 0);
-	colour_row(s, 6, "Bright", 1);
-	colour_row(s, 7, "Reverse", 2);
-	colour_row(s, 8, "Rev+Brt", 3);
+	color_row(s, 5, "Normal", 0);
+	color_row(s, 6, "Bright", 1);
+	color_row(s, 7, "Reverse", 2);
+	color_row(s, 8, "Rev+Brt", 3);
 
 	fill_row(s, 10, "The quick brown fox jumps over the lazy dog. ", 0, 0);
 	fill_row(s, 11, "Pack my box with five dozen liquor jugs! ", 3, 1);
@@ -109,36 +111,40 @@ void demo_draw(screen_t *s, unsigned cols, const char *font, const char *status)
 	// Normal and bold side by side; m, w, M and W have the closest stems.
 	static const char sample[] = "mwMW Hamburgefonstiv 0123456789";
 	unsigned half_col = w / 2;
-	screen_puts(s, 1, 13, "Normal", GREY, BLACK);
+	screen_puts(s, 1, 13, "Normal", GRAY, BLACK);
 	screen_puts(s, 9, 13, sample, WHITE, BLACK);
-	screen_puts(s, half_col + 1, 13, "Bold", GREY, BLACK);
-	for (unsigned i = 0; sample[i]; ++i)
+	screen_puts(s, half_col + 1, 13, "Bold", GRAY, BLACK);
+	for (unsigned i = 0; sample[i]; ++i) {
 		screen_put_attr(s, half_col + 7 + i, 13, (uint8_t)sample[i], WHITE, BLACK, SCREEN_ATTR_BOLD);
+	}
 
 	// Line drawing and Latin-1 in two boxes side by side.
 	unsigned half = w / 2;
 	box(s, 0, 14, half, 6, 0, bright(6));
 	box(s, half, 14, w - half, 6, 1, bright(3));
 	screen_puts(s, 2, 15, "DEC Special Graphics", WHITE, BLACK);
-	for (unsigned i = 0; i < 31; ++i)
-		screen_put(s, 2 + i, 16, GLYPH_DEC_GRAPHICS(0x60 + i), GREY, BLACK);
+	for (unsigned i = 0; i < 31; ++i) {
+		screen_put(s, 2 + i, 16, GLYPH_DEC_GRAPHICS(0x60 + i), GRAY, BLACK);
+	}
 	screen_puts(s, 2, 17, "Latin-1: \xe0\xe9\xee\xf5\xfc \xc6\xd8\xc5 \xdf \xa3 \xa9 \xb1 \xbd \xbf",
-		GREY, BLACK);
+		GRAY, BLACK);
 	snprintf(text, sizeof text, "%u columns x 24 rows", w);
 	screen_puts(s, 2, 18, text, bright(2), BLACK);
 
 	screen_puts(s, half + 2, 15, "Shades and blocks", WHITE, BLACK);
-	for (unsigned i = 0; i < 9; ++i)
+	for (unsigned i = 0; i < 9; ++i) {
 		screen_put(s, half + 2 + 2 * i, 16, (uint8_t)(GLYPH_SHADE_LIGHT + i), bright(5), BLACK);
-	screen_puts(s, half + 2, 17, "Font: ", GREY, BLACK);
+	}
+	screen_puts(s, half + 2, 17, "Font: ", GRAY, BLACK);
 	screen_puts(s, half + 8, 17, font, bright(3), BLACK);
 
-	// The 240 colours above the ANSI ones (cube and grey ramp) as
+	// The 240 colors above the ANSI ones (cube and gray ramp) as
 	// background swatches, as many as fit, evenly spaced.
-	screen_puts(s, 1, 21, "xterm", GREY, BLACK);
+	screen_puts(s, 1, 21, "xterm", GRAY, BLACK);
 	unsigned swatches = w - 8;
-	for (unsigned c = 0; c < swatches; ++c)
+	for (unsigned c = 0; c < swatches; ++c) {
 		screen_put(s, 7 + c, 21, ' ', BLACK, (uint8_t)(16 + c * 240 / swatches));
+	}
 
 	screen_puts(s, 1, 23, "Switches between 80 and 132 columns every 5 s; any key ends the demo.",
 		DIM, BLACK);

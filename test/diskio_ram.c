@@ -20,16 +20,18 @@ static struct {
 static unsigned max_write;
 
 void diskio_ram_init_drive(unsigned pdrv, size_t sectors) {
-	if (pdrv >= DRIVES)
+	if (pdrv >= DRIVES) {
 		return;
+	}
 	free(drive[pdrv].ram);
 	drive[pdrv].ram = calloc(sectors, 512);
 	drive[pdrv].sectors = drive[pdrv].ram ? sectors : 0;
 }
 
 void diskio_ram_free_drive(unsigned pdrv) {
-	if (pdrv >= DRIVES)
+	if (pdrv >= DRIVES) {
 		return;
+	}
 	free(drive[pdrv].ram);
 	drive[pdrv].ram = NULL;
 	drive[pdrv].sectors = 0;
@@ -63,28 +65,34 @@ DSTATUS disk_initialize(BYTE pdrv) {
 }
 
 DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
-	if (!present(pdrv))
+	if (!present(pdrv)) {
 		return RES_NOTRDY;
-	if (sector + count > drive[pdrv].sectors)
+	}
+	if (sector + count > drive[pdrv].sectors) {
 		return RES_PARERR;
+	}
 	memcpy(buff, drive[pdrv].ram + sector * 512, count * 512u);
 	return RES_OK;
 }
 
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
-	if (!present(pdrv))
+	if (!present(pdrv)) {
 		return RES_NOTRDY;
-	if (sector + count > drive[pdrv].sectors)
+	}
+	if (sector + count > drive[pdrv].sectors) {
 		return RES_PARERR;
+	}
 	memcpy(drive[pdrv].ram + sector * 512, buff, count * 512u);
-	if (count > max_write)
+	if (count > max_write) {
 		max_write = count;
+	}
 	return RES_OK;
 }
 
 DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
-	if (!present(pdrv))
+	if (!present(pdrv)) {
 		return RES_NOTRDY;
+	}
 	switch (cmd) {
 	case CTRL_SYNC:
 		return RES_OK;

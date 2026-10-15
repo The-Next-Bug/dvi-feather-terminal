@@ -22,7 +22,7 @@
 
 #define SETUP_ITEMS SETTINGS_FIELDS
 // In a box (screen_frame): the top line with the title, the settings with
-// two preview rows under the colour ones, message, two help rows, the
+// two preview rows under the color ones, message, two help rows, the
 // bottom line.
 #define SETUP_ROWS (SETUP_ITEMS + 7)
 #define SETUP_ESC_TIMEOUT_MS 100
@@ -58,10 +58,10 @@ setup_action_t setup_tick(setup_t *u, uint32_t now_ms);
 
 // Draw the panel on rows top .. top + SETUP_ROWS - 1: a box in border, the
 // text in fg on bg, the selected setting's name in bold and every current
-// choice reversed (told apart by more than colour, for the mono palette);
+// choice reversed (told apart by more than color, for the mono palette);
 // title is shown after "SET-UP" in the top line. Under Colors and
-// Palette, a preview of the chosen colours: default text, bold and status
-// line, and the 16 ANSI colours as text and as backgrounds.
+// Palette, a preview of the chosen colors: default text, bold and status
+// line, and the 16 ANSI colors as text and as backgrounds.
 void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, uint8_t fg, uint8_t bg,
 	uint8_t border);
 

@@ -16,11 +16,13 @@ static uint32_t word(const uint8_t *p) {
 
 uf2_block_kind_t uf2_block_check(const uint8_t blk[UF2_BLOCK_SIZE], uint32_t family, uint32_t *addr,
 	uint32_t *block_no, uint32_t *num_blocks) {
-	if (word(blk) != MAGIC_START0 || word(blk + 4) != MAGIC_START1 || word(blk + 508) != MAGIC_END)
+	if (word(blk) != MAGIC_START0 || word(blk + 4) != MAGIC_START1 || word(blk + 508) != MAGIC_END) {
 		return UF2_BLOCK_BAD;
+	}
 	uint32_t flags = word(blk + 8);
-	if (flags & FLAG_NOT_MAIN_FLASH || !(flags & FLAG_FAMILY_ID) || word(blk + 28) != family)
+	if (flags & FLAG_NOT_MAIN_FLASH || !(flags & FLAG_FAMILY_ID) || word(blk + 28) != family) {
 		return UF2_BLOCK_SKIP;
+	}
 	*addr = word(blk + 12);
 	*block_no = word(blk + 20);
 	*num_blocks = word(blk + 24);
@@ -50,15 +52,17 @@ static uint32_t crc_erased(uint32_t crc, uint32_t n) {
 }
 
 static uf2_result_t fail(uf2_check_t *c, uf2_result_t r) {
-	if (c->error == UF2_OK)
+	if (c->error == UF2_OK) {
 		c->error = r;
+	}
 	return c->error;
 }
 
 uf2_result_t uf2_check_block(uf2_check_t *c, const uint8_t blk[UF2_BLOCK_SIZE], uint32_t *offset) {
 	*offset = UINT32_MAX;
-	if (c->error != UF2_OK)
+	if (c->error != UF2_OK) {
 		return c->error;
+	}
 	uint32_t addr, block_no, num_blocks;
 	switch (uf2_block_check(blk, c->family, &addr, &block_no, &num_blocks)) {
 	case UF2_BLOCK_BAD:
@@ -68,45 +72,59 @@ uf2_result_t uf2_check_block(uf2_check_t *c, const uint8_t blk[UF2_BLOCK_SIZE], 
 	case UF2_BLOCK_OURS:
 		break;
 	}
-	if (c->blocks == 0)
+	if (c->blocks == 0) {
 		c->num_blocks = num_blocks;
-	if (num_blocks != c->num_blocks || block_no != c->blocks || block_no >= num_blocks)
+	}
+	if (num_blocks != c->num_blocks || block_no != c->blocks || block_no >= num_blocks) {
 		return fail(c, UF2_BAD_SEQUENCE);
-	if (word(blk + 16) != UF2_PAYLOAD_SIZE)
+	}
+	if (word(blk + 16) != UF2_PAYLOAD_SIZE) {
 		return fail(c, UF2_BAD_PAYLOAD);
+	}
 	uint32_t off = addr - UF2_FLASH_BASE;
 	if (addr < UF2_FLASH_BASE || off % UF2_PAYLOAD_SIZE || off >= c->limit
-		|| c->limit - off < UF2_PAYLOAD_SIZE || (c->blocks && off < c->end))
+		|| c->limit - off < UF2_PAYLOAD_SIZE || (c->blocks && off < c->end)) {
 		return fail(c, UF2_BAD_ADDRESS);
+	}
 
 	const uint8_t *data = uf2_payload(blk);
 	c->crc = crc32_update(crc_erased(c->crc, off - c->end), data, UF2_PAYLOAD_SIZE);
 	c->end = off + UF2_PAYLOAD_SIZE;
 	++c->blocks;
-	if (off == 0)
+	if (off == 0) {
 		c->start = true;
-	if (off < UF2_SECTOR_SIZE)
-		for (unsigned i = 0; i < UF2_PAYLOAD_SIZE; i += 4)
-			if (word(data + i) == UF2_PICOBIN_MARKER)
+	}
+	if (off < UF2_SECTOR_SIZE) {
+		for (unsigned i = 0; i < UF2_PAYLOAD_SIZE; i += 4) {
+			if (word(data + i) == UF2_PICOBIN_MARKER) {
 				c->picobin = true;
+			}
+		}
+	}
 	*offset = off;
 	return UF2_OK;
 }
 
 uf2_result_t uf2_check_end(uf2_check_t *c, bool partial, uint32_t *len, uint32_t *crc) {
-	if (c->error != UF2_OK)
+	if (c->error != UF2_OK) {
 		return c->error;
-	if (!c->blocks)
+	}
+	if (!c->blocks) {
 		return fail(c, partial ? UF2_TRUNCATED : UF2_NO_BLOCKS);
-	if (partial || c->blocks != c->num_blocks)
+	}
+	if (partial || c->blocks != c->num_blocks) {
 		return fail(c, UF2_TRUNCATED);
-	if (!c->start)
+	}
+	if (!c->start) {
 		return fail(c, UF2_NO_START);
-	if (!c->picobin)
+	}
+	if (!c->picobin) {
 		return fail(c, UF2_NOT_BOOTABLE);
+	}
 	*len = (c->end + UF2_SECTOR_SIZE - 1) / UF2_SECTOR_SIZE * UF2_SECTOR_SIZE;
-	if (*len > c->limit)
+	if (*len > c->limit) {
 		return fail(c, UF2_BAD_ADDRESS);
+	}
 	*crc = crc_erased(c->crc, *len - c->end);
 	return UF2_OK;
 }

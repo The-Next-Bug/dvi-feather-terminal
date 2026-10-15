@@ -31,8 +31,9 @@ static int test_failures;
 } while (0)
 
 static inline int tests_done(void) {
-	if (test_failures)
+	if (test_failures) {
 		fprintf(stderr, "%d check(s) failed\n", test_failures);
+	}
 	return test_failures ? 1 : 0;
 }
 

@@ -22,13 +22,14 @@ static struct {
 } composed;
 
 static void render(const screen_line_t *line, raster_layout_t l, unsigned flags) {
-	for (unsigned c = 0; c < 256; ++c)
+	for (unsigned c = 0; c < 256; ++c) {
 		identity[c] = c | c << 16;
+	}
 	raster_render_line(&out, line, l, flags);
 	composed.valid = false;
 }
 
-// The colour (palette index) of pixel x on scanline sy of `out`, with the cursor on
+// The color (palette index) of pixel x on scanline sy of `out`, with the cursor on
 // cell cursor (-1: none).
 static unsigned shown_at(raster_layout_t l, unsigned sy, unsigned x, int cursor) {
 	unsigned sr = raster_stored_row(l, sy);
@@ -49,25 +50,27 @@ static unsigned shown(raster_layout_t l, unsigned sy, unsigned x) {
 }
 
 // Whether pixel i of glyph g is set on scanline sy (0-23) of a text row:
-// the glyph centred in the row, with connectors extended to the edges.
+// the glyph centered in the row, with connectors extended to the edges.
 static unsigned glyph_pixel(raster_layout_t l, uint8_t g, unsigned sy, unsigned i) {
 	int rows = (int)raster_font_rows(l), gy = (int)sy - (int)raster_pad_top(l);
 	gy = gy < 0 ? -1 : gy / (int)raster_font_scale(l);
 	if (gy < 0 || gy >= rows) {
-		if (!glyph_is_connector(g))
+		if (!glyph_is_connector(g)) {
 			return 0;
+		}
 		gy = gy < 0 ? 0 : rows - 1;
 	}
 	return raster_glyph_row(l, false, g, (unsigned)gy) >> i & 1;
 }
 
-// The colour the cells ask for at pixel x of scanline sy (attributes: bold
+// The color the cells ask for at pixel x of scanline sy (attributes: bold
 // only).
 static unsigned wanted(const screen_line_t *line, raster_layout_t l, unsigned sy, unsigned x) {
 	const unsigned cols = raster_cols(l);
 	unsigned w = raster_cell_width(l), x0 = raster_x_offset(l);
-	if (x < x0 || x >= x0 + cols * w)
+	if (x < x0 || x >= x0 + cols * w) {
 		return 0; // border
+	}
 	unsigned c = (x - x0) / w, i = (x - x0) % w;
 	uint8_t g = line->glyph[c];
 	unsigned lit = glyph_pixel(l, g, sy, i);
@@ -82,14 +85,16 @@ static unsigned wanted(const screen_line_t *line, raster_layout_t l, unsigned sy
 }
 
 // Render row `row` of s in layout l and count pixels (over all scanlines
-// and pixels, border included) whose colour is not the wanted one.
+// and pixels, border included) whose color is not the wanted one.
 static unsigned mismatches(unsigned row, raster_layout_t l) {
 	const screen_line_t *line = screen_line(&s, row);
 	render(line, l, 0);
 	unsigned bad = 0;
-	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
-		for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x)
+	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
+		for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x) {
 			bad += shown(l, sy, x) != wanted(line, l, sy, x);
+		}
+	}
 	return bad;
 }
 
@@ -99,7 +104,7 @@ static void test_layout(void) {
 	CHECK_EQ(raster_cell_width(RASTER_80), 10);
 	CHECK_EQ(raster_x_offset(RASTER_80), 0); // the full width
 	CHECK_EQ(raster_cell_width(RASTER_132), 6);
-	CHECK_EQ(raster_x_offset(RASTER_132), 4); // centred
+	CHECK_EQ(raster_x_offset(RASTER_132), 4); // centered
 	CHECK_EQ(raster_x_offset(RASTER_132) * 2 + 132 * 6, RASTER_ACTIVE_WIDTH);
 	CHECK_EQ(SCREEN_ROWS * RASTER_ROW_HEIGHT, RASTER_ACTIVE_HEIGHT);
 	CHECK_EQ(raster_pad_top(RASTER_80), 2); // 20 glyph rows in 24
@@ -122,19 +127,21 @@ static void test_layout(void) {
 	}
 }
 
-// Any fg/bg per cell is exact, in both widths: neighbouring cells no longer
-// share colour levels.
-static void test_any_colours_exact(void) {
+// Any fg/bg per cell is exact, in both widths: neighboring cells no longer
+// share color levels.
+static void test_any_colors_exact(void) {
 	for (raster_layout_t l = 0; l < RASTER_LAYOUTS; ++l) {
 		const unsigned cols = raster_cols(l);
 		screen_init(&s, cols, 0, 0);
-		for (unsigned c = 0; c < cols; ++c)
+		for (unsigned c = 0; c < cols; ++c) {
 			screen_put(&s, c, 0, (uint8_t)(0x21 + c % 94), (uint8_t)(c * 7 % 256), (uint8_t)(c * 13 % 256));
+		}
 		CHECK_EQ(mismatches(0, l), 0);
 		// Full blocks of three levels side by side (the old encoder's worst case).
 		screen_init(&s, cols, 0, 0);
-		for (unsigned c = 0; c < cols; ++c)
+		for (unsigned c = 0; c < cols; ++c) {
 			screen_put(&s, c, 0, GLYPH_FULL_BLOCK, RGB222(c % 3 + 1, 0, 0), RGB222(0, 0, c % 2 + 1));
+		}
 		CHECK_EQ(mismatches(0, l), 0);
 		// White on blue with ink in the first and last cells.
 		screen_init(&s, cols, RGB222(2, 2, 2), RGB222(0, 0, 1));
@@ -169,8 +176,9 @@ static void test_glyph_bits(void) {
 	render(screen_line(&s, 0), RASTER_132, 0);
 	CHECK_EQ(raster_cell_bits(out.bits[5], 6, 0), 0x3f);
 	CHECK_EQ(raster_cell_bits(out.bits[5], 6, 1), 0);
-	for (unsigned gy = 0; gy < FONT_132_HEIGHT; ++gy)
+	for (unsigned gy = 0; gy < FONT_132_HEIGHT; ++gy) {
 		CHECK_EQ(raster_cell_bits(out.bits[1 + gy], 6, 2), font_132['g' * FONT_132_HEIGHT + gy] & 0x3fu);
+	}
 }
 
 // A line rendered over another (any layout, any attributes) comes out as
@@ -202,24 +210,28 @@ static void test_render_over(void) {
 				fill_busy(raster_cols(l), 2);
 				raster_render_line(&out, screen_line(&s, 0), l, flags);
 				unsigned w = raster_cell_width(l), bad = 0;
-				for (unsigned sr = 0; sr < raster_font_rows(l) + 2; ++sr)
-					for (unsigned c = 0; c < raster_cols(l); ++c)
+				for (unsigned sr = 0; sr < raster_font_rows(l) + 2; ++sr) {
+					for (unsigned c = 0; c < raster_cols(l); ++c) {
 						bad += raster_cell_bits(out.bits[sr], w, c) != raster_cell_bits(fresh.bits[sr], w, c);
+					}
+				}
 				CHECK_EQ(bad, 0);
 				CHECK(memcmp(out.fg, fresh.fg, raster_cols(l)) == 0);
 				CHECK(memcmp(out.bg, fresh.bg, raster_cols(l)) == 0);
 			}
 		}
 	}
-	// A cell's neighbours keep their pixels when it changes.
+	// A cell's neighbors keep their pixels when it changes.
 	screen_init(&s, 132, RGB222(2, 2, 2), 0);
-	for (unsigned c = 0; c < 132; ++c)
+	for (unsigned c = 0; c < 132; ++c) {
 		screen_put(&s, c, 0, GLYPH_FULL_BLOCK, RGB222(2, 2, 2), 0);
+	}
 	render(screen_line(&s, 0), RASTER_132, 0);
 	screen_put(&s, 5, 0, ' ', RGB222(2, 2, 2), 0);
 	render(screen_line(&s, 0), RASTER_132, 0);
-	for (unsigned c = 0; c < 132; ++c)
+	for (unsigned c = 0; c < 132; ++c) {
 		CHECK_EQ(raster_cell_bits(out.bits[3], 6, c), c == 5 ? 0 : 0x3fu);
+	}
 }
 
 static void test_border_is_black(void) {
@@ -228,9 +240,11 @@ static void test_border_is_black(void) {
 		screen_init(&s, cols, RGB222(3, 3, 3), RGB222(3, 3, 3));
 		render(screen_line(&s, 0), l, 0);
 		const unsigned x0 = raster_x_offset(l), x_end = x0 + cols * raster_cell_width(l);
-		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
-			for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x)
+		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
+			for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x) {
 				CHECK_EQ(shown(l, sy, x), x >= x0 && x < x_end ? RGB222(3, 3, 3) : 0);
+			}
+		}
 	}
 }
 
@@ -245,16 +259,18 @@ static void test_connectors_join(void) {
 		const unsigned cols = raster_cols(l);
 		unsigned x0 = raster_x_offset(l), w = raster_cell_width(l);
 		screen_init(&s, cols, RGB222(2, 2, 2), 0);
-		for (unsigned i = 0; i < sizeof verticals; ++i)
+		for (unsigned i = 0; i < sizeof verticals; ++i) {
 			screen_put(&s, i, 0, verticals[i], RGB222(2, 2, 2), 0);
+		}
 		render(screen_line(&s, 0), l, 0);
 		for (unsigned i = 0; i < sizeof verticals; ++i) {
 			// Some column of the glyph is lit on every scanline.
 			unsigned always = (1u << w) - 1;
 			for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
 				unsigned lit = 0;
-				for (unsigned b = 0; b < w; ++b)
+				for (unsigned b = 0; b < w; ++b) {
 					lit |= (shown(l, sy, x0 + i * w + b) != 0) << b;
+				}
 				always &= lit;
 			}
 			CHECK(always != 0);
@@ -265,10 +281,12 @@ static void test_connectors_join(void) {
 		render(screen_line(&s, 0), l, 0);
 		unsigned top = raster_pad_top(l), height = raster_glyph_height(l);
 		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
-			if (sy >= top && sy < top + height)
+			if (sy >= top && sy < top + height) {
 				continue;
-			for (unsigned x = x0; x < x0 + 8 * w; ++x)
+			}
+			for (unsigned x = x0; x < x0 + 8 * w; ++x) {
 				CHECK_EQ(shown(l, sy, x), 0);
+			}
 		}
 	}
 }
@@ -310,8 +328,9 @@ static void test_cursor_inverts_cell(void) {
 				CHECK_EQ(shown_at(l, sy, x6, 6), inv); // glyph: swapped
 				CHECK_EQ(shown_at(l, sy, x5, 6), bg);
 			}
-			if (x0) // the full width has no border
+			if (x0) { // the full width has no border
 				CHECK_EQ(shown_at(l, sy, x0 - 1, 0), 0); // border unaffected
+			}
 		}
 	}
 }
@@ -325,15 +344,18 @@ static void test_underline(void) {
 		// The bottom glyph row covers raster_font_scale scanlines.
 		unsigned k = raster_font_scale(l), bottom = raster_pad_top(l) + raster_glyph_height(l) - 1;
 		screen_init(&s, cols, RGB222(2, 2, 2), 0);
-		for (unsigned c = 0; c < 3; ++c)
+		for (unsigned c = 0; c < 3; ++c) {
 			screen_put_attr(&s, c, 0, ' ', RGB222(0, 3, 0), 0, SCREEN_ATTR_UNDERLINE);
+		}
 		render(screen_line(&s, 0), l, 0);
 		for (unsigned x = x0; x < x0 + 3 * w; ++x) {
-			for (unsigned i = 0; i < k; ++i)
+			for (unsigned i = 0; i < k; ++i) {
 				CHECK_EQ(shown(l, bottom - i, x), RGB222(0, 3, 0));
+			}
 			CHECK_EQ(shown(l, bottom - k, x), 0);
-			if (bottom + 1 < RASTER_ROW_HEIGHT)
+			if (bottom + 1 < RASTER_ROW_HEIGHT) {
 				CHECK_EQ(shown(l, bottom + 1, x), 0);
+			}
 		}
 		CHECK_EQ(shown(l, bottom, x0 + 3 * w), 0);
 	}
@@ -349,24 +371,30 @@ static void test_blink(void) {
 	CHECK(raster_render_line(&out, screen_line(&s, 0), RASTER_80, 0));
 	render(screen_line(&s, 0), RASTER_80, 0);
 	unsigned lit = 0;
-	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
-		for (unsigned x = 10; x < 20; ++x)
+	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
+		for (unsigned x = 10; x < 20; ++x) {
 			lit += shown(RASTER_80, sy, x) != 0;
+		}
+	}
 	CHECK(lit > 0);
 	render(screen_line(&s, 0), RASTER_80, RASTER_BLINK_OFF);
-	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
-		for (unsigned x = 10; x < 20; ++x)
+	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
+		for (unsigned x = 10; x < 20; ++x) {
 			CHECK_EQ(shown(RASTER_80, sy, x), 0);
-	// The non-blinking neighbour is unaffected.
+		}
+	}
+	// The non-blinking neighbor is unaffected.
 	lit = 0;
-	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
-		for (unsigned x = 0; x < 10; ++x)
+	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
+		for (unsigned x = 0; x < 10; ++x) {
 			lit += shown(RASTER_80, sy, x) != 0;
+		}
+	}
 	CHECK(lit > 0);
 }
 
 // Bold: in 80 columns Terminus's bold faces; in 132 (no bold face) the
-// normal glyph, bold being only the brighter colour. Line-drawing glyphs keep their shape so they
+// normal glyph, bold being only the brighter color. Line-drawing glyphs keep their shape so they
 // still join.
 static void test_bold(void) {
 	for (raster_layout_t l = 0; l < RASTER_LAYOUTS; ++l) {
@@ -400,12 +428,14 @@ static void test_bold(void) {
 		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
 			CHECK_EQ(shown(l, sy, x0 + w - 1), 0);
 			unsigned lit = 0;
-			for (unsigned i = 0; i < w; ++i)
+			for (unsigned i = 0; i < w; ++i) {
 				lit += shown(l, sy, x0 + i) != 0;
+			}
 			gaps += lit > 0 && lit < w - 1;
 		}
-		if (raster_has_bold_face(l))
+		if (raster_has_bold_face(l)) {
 			CHECK(gaps > 0); // not a solid block
+		}
 	}
 }
 
@@ -417,13 +447,15 @@ static void test_reverse(void) {
 	// A blank cell shows the (old) fg everywhere; a glyph pixel shows black.
 	CHECK_EQ(shown(RASTER_80, 0, 100), RGB222(2, 2, 2));
 	unsigned dark = 0;
-	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
-		for (unsigned x = 0; x < 10; ++x)
+	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
+		for (unsigned x = 0; x < 10; ++x) {
 			dark += shown(RASTER_80, sy, x) == 0;
+		}
+	}
 	CHECK(dark > 0);
 }
 
-// A blanked line (a slot a scroll reuses) shows one colour over every cell,
+// A blanked line (a slot a scroll reuses) shows one color over every cell,
 // whatever it held, with the border black.
 static void test_blank_line(void) {
 	for (raster_layout_t l = 0; l < RASTER_LAYOUTS; ++l) {
@@ -433,31 +465,34 @@ static void test_blank_line(void) {
 		composed.valid = false;
 		const unsigned x0 = raster_x_offset(l), x_end = x0 + raster_cols(l) * raster_cell_width(l);
 		unsigned bad = 0;
-		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy)
-			for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x)
+		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
+			for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x) {
 				bad += shown(l, sy, x) != (x >= x0 && x < x_end ? RGB222(0, 1, 1) : 0);
+			}
+		}
 		CHECK_EQ(bad, 0);
-		// The cursor on it: a block of the colour inverted is the colour too.
+		// The cursor on it: a block of the color inverted is the color too.
 		CHECK_EQ(shown_at(l, 10, x0 + 1, 0), RGB222(0, 1, 1));
 	}
 }
 
-// The demo screen, the xterm colours as adjacent backgrounds included, is
+// The demo screen, the xterm colors as adjacent backgrounds included, is
 // pixel-exact in both widths.
 static void test_demo(void) {
 	for (raster_layout_t l = 0; l < RASTER_LAYOUTS; ++l) {
 		const unsigned cols = raster_cols(l);
 		demo_draw(&s, cols, raster_font_name(l), " status");
 		unsigned bad = 0;
-		for (unsigned row = 0; row < SCREEN_ROWS; ++row)
+		for (unsigned row = 0; row < SCREEN_ROWS; ++row) {
 			bad += mismatches(row, l);
+		}
 		CHECK_EQ(bad, 0);
 	}
 }
 
 int main(void) {
 	RUN(test_layout);
-	RUN(test_any_colours_exact);
+	RUN(test_any_colors_exact);
 	RUN(test_glyph_bits);
 	RUN(test_render_over);
 	RUN(test_blank_line);

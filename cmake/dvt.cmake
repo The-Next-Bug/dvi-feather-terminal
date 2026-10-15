@@ -10,7 +10,7 @@
 # SDK libraries themselves, so no SDK source is compiled into an archive).
 #
 # The including project sets DVT_C_OPTIONS (every library, vendored code
-# too: the firmware's code generation options, the host tests' sanitisers)
+# too: the firmware's code generation options, the host tests' sanitizers)
 # and DVT_WARNING_OPTIONS (our code only: the host tests' -Werror).
 
 # dvt_compile_options(<target> [THIRD_PARTY]): the options above, and our
@@ -24,7 +24,7 @@ endfunction()
 
 # dvt_rebuild(<target> <library>...): compile the libraries' sources into
 # <target> with its own options instead of linking the archives (test_cpu:
-# optimised, no sanitisers), with the include directories and definitions
+# optimized, no sanitizers), with the include directories and definitions
 # they are built with. Generated sources wait for their library's
 # generators.
 function(dvt_rebuild target)

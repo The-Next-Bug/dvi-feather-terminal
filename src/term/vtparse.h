@@ -6,7 +6,7 @@
 //
 // It splits a byte stream into printable characters, C0/C1 controls, escape
 // sequences and control sequences, and hands each to a callback. Device
-// control strings, OSC strings and SOS/PM/APC strings are recognised and
+// control strings, OSC strings and SOS/PM/APC strings are recognized and
 // discarded, so their contents never reach the screen. A string that is
 // never terminated must not swallow everything after it (an Alt key sends a
 // bare ESC prefix, so Alt+] opens an OSC string): as xterm's

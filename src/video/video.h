@@ -2,7 +2,7 @@
 #define VIDEO_H
 
 // DVI output at 800x600 through the RP2350 HSTX (hstx_dvi.c). Changed
-// screen lines are rasterised on core 0 (video_update); core 1 composes
+// screen lines are rasterized on core 0 (video_update); core 1 composes
 // each scanline from them into RGB565 (raster_compose), shows the cursor and
 // the startup logo, and the HSTX's TMDS encoder does the rest.
 
@@ -15,15 +15,15 @@
 
 // Raise the core voltage, set the system clock (10 x the pixel clock) and
 // set up the HSTX. Call before any peripheral that depends on
-// clk_sys/clk_peri (e.g. the UART) is initialised.
+// clk_sys/clk_peri (e.g. the UART) is initialized.
 void video_init(void);
 
-// Show the screen's palette indices in these colours (RGB565; see
+// Show the screen's palette indices in these colors (RGB565; see
 // palette_build) from the next frame, without re-rendering anything. Call
 // before video_start too (until then nothing is shown in them). From core
 // 0's main loop: it may wait up to a frame for core 1 to take the previous
 // table.
-void video_set_palette(const uint16_t colours[PALETTE_SIZE]);
+void video_set_palette(const uint16_t colors[PALETTE_SIZE]);
 
 // Turn the DVI signal off (blank.h), or on again. Off, there is no signal
 // at all, so the monitor can power down (backlight included); back on, it
@@ -32,7 +32,7 @@ void video_set_palette(const uint16_t colours[PALETTE_SIZE]);
 // video_splash do not wait for good.
 void video_set_blank(bool blank);
 
-// Rasterise every dirty line of the screen and clear its dirty flags. Call
+// Rasterize every dirty line of the screen and clear its dirty flags. Call
 // from core 0 after changing the screen; changes are not shown until then.
 void video_update(screen_t *screen);
 
@@ -50,7 +50,7 @@ typedef struct {
 // Read the diagnostics and reset max_line_cycles and max_render_us.
 video_stats_t video_stats(void);
 
-// Rasterise the whole screen and launch core 1. The screen must outlive the
+// Rasterize the whole screen and launch core 1. The screen must outlive the
 // program.
 void video_start(screen_t *screen);
 
@@ -59,7 +59,7 @@ void video_start(screen_t *screen);
 // before the text rows scroll (a copy of the image data goes in the text
 // rows' raster memory, as core 1 must not read flash; the status line must
 // still be in its own, last, slot). Returns false, showing the screen as
-// before, if img cannot be shown. tint (splash_tint) gives its colours.
+// before, if img cannot be shown. tint (splash_tint) gives its colors.
 bool video_splash(const splash_image_t *img, const splash_tint_t *tint);
 
 // Back to the text rows (all re-rendered).

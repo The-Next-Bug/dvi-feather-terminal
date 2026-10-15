@@ -52,7 +52,7 @@ extern bool key_pressed; // before the terminal started: ends the logo and demo
 
 extern settings_t settings;          // as saved in flash
 extern settings_target_t save_target;
-extern settings_colours_t colours;   // in use: the status line's
+extern settings_colors_t colors;   // in use: the status line's
 extern unsigned default_columns;     // the SET-UP width in use: what F11 goes back to
 extern blank_t blank;                // the Blank after setting: keys keep the screen lit
 extern bool screen_blanked;          // blank_tick's answer: the LED's heartbeat runs then

@@ -47,8 +47,9 @@ void usbkbd_log(const char *what, uint8_t dev) {
 	if (log_next) {
 		unsigned last = (log_next - 1) % LOG_SIZE;
 		if (usb_log[last].what == what && usb_log[last].dev == dev) {
-			if (usb_log[last].count < UINT16_MAX)
+			if (usb_log[last].count < UINT16_MAX) {
 				++usb_log[last].count;
+			}
 			usb_log[last].s = s;
 			return;
 		}
@@ -70,15 +71,17 @@ void usbkbd_log_text(char *out, size_t size) {
 			? snprintf(out + n, size - n, " %lus %s%u x%u", (unsigned long)usb_log[i].s, usb_log[i].what,
 				usb_log[i].dev, usb_log[i].count)
 			: snprintf(out + n, size - n, " %lus %s%u", (unsigned long)usb_log[i].s, usb_log[i].what, usb_log[i].dev);
-		if (m < 0)
+		if (m < 0) {
 			break;
+		}
 		n += (size_t)m;
 	}
 }
 
 bool usbkbd_device_ready(uint8_t dev_addr) {
-	if (dev_addr > CFG_TUH_DEVICE_MAX && dev_addr <= ADDRESSES)
+	if (dev_addr > CFG_TUH_DEVICE_MAX && dev_addr <= ADDRESSES) {
 		return tuh_mounted(dev_addr);
+	}
 	return dev_addr <= ADDRESSES && ready[dev_addr];
 }
 
@@ -90,8 +93,9 @@ bool usbkbd_device_ready(uint8_t dev_addr) {
 static bool usb_quiet(void) {
 	for (uint8_t a = 1; a <= ADDRESSES; ++a) {
 		uint16_t vid, pid;
-		if (tuh_vid_pid_get(a, &vid, &pid) && !usbkbd_device_ready(a))
+		if (tuh_vid_pid_get(a, &vid, &pid) && !usbkbd_device_ready(a)) {
 			return false;
+		}
 	}
 	return true;
 }
@@ -99,17 +103,20 @@ static bool usb_quiet(void) {
 // Send the lock LEDs to every keyboard, once nothing else needs the
 // control transfer; tried again on a later poll if it was busy.
 static void send_leds(void) {
-	if (!leds_pending || !usb_quiet())
+	if (!leds_pending || !usb_quiet()) {
 		return;
+	}
 	leds_pending = false;
 	for (size_t i = 0; i < count_of(keyboards); ++i) {
-		if (!keyboards[i].used || !usbkbd_device_ready(keyboards[i].dev_addr))
+		if (!keyboards[i].used || !usbkbd_device_ready(keyboards[i].dev_addr)) {
 			continue;
+		}
 		bool sent = tuh_hid_set_report(keyboards[i].dev_addr, keyboards[i].instance, 0, HID_REPORT_TYPE_OUTPUT,
 			&led_report, sizeof led_report);
 		usbkbd_log(sent ? "led" : "led?", keyboards[i].dev_addr);
-		if (!sent)
+		if (!sent) {
 			leds_pending = true;
+		}
 	}
 }
 
@@ -141,8 +148,9 @@ void usbkbd_poll(const kbd_modes_t *modes) {
 
 unsigned usbkbd_count(void) {
 	unsigned n = 0;
-	for (size_t i = 0; i < count_of(keyboards); ++i)
+	for (size_t i = 0; i < count_of(keyboards); ++i) {
 		n += keyboards[i].used;
+	}
 	return n;
 }
 
@@ -151,14 +159,16 @@ unsigned usbkbd_count(void) {
 
 void tuh_mount_cb(uint8_t dev_addr) {
 	usbkbd_log("up", dev_addr);
-	if (dev_addr <= ADDRESSES)
+	if (dev_addr <= ADDRESSES) {
 		ready[dev_addr] = true;
+	}
 }
 
 void tuh_umount_cb(uint8_t dev_addr) {
 	usbkbd_log("down", dev_addr);
-	if (dev_addr <= ADDRESSES)
+	if (dev_addr <= ADDRESSES) {
 		ready[dev_addr] = false;
+	}
 }
 
 void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *desc_report, uint16_t desc_len) {
@@ -166,8 +176,9 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *desc_re
 	(void)desc_len;
 	// Boot keyboards only; TinyUSB has put them in boot protocol. Other HID
 	// interfaces (mice, media keys) are left alone.
-	if (tuh_hid_interface_protocol(dev_addr, instance) != HID_ITF_PROTOCOL_KEYBOARD)
+	if (tuh_hid_interface_protocol(dev_addr, instance) != HID_ITF_PROTOCOL_KEYBOARD) {
 		return;
+	}
 	usbkbd_log("kbd", dev_addr);
 	for (size_t i = 0; i < count_of(keyboards); ++i) {
 		if (!keyboards[i].used) {

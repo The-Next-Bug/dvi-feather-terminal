@@ -1,6 +1,6 @@
 // The Z80 machine (machine.h): z80pack's CPU core with picosim's memory,
 // ports and boot ROM. The port handlers follow picosim's simio.c (z80pack,
-// Copyright (C) 2024-2025 by Udo Munk & Thomas Eberhardt, MIT licence).
+// Copyright (C) 2024-2025 by Udo Munk & Thomas Eberhardt, MIT license).
 //
 // z80pack keeps the CPU in globals (A, B, PC, T, ...), so only this file
 // includes its headers.
@@ -80,13 +80,15 @@ static const BYTE boot_rom[] = {
 // ---- time: the slices and the 60 Hz timer ----
 
 static void timer_check(uint64_t now) {
-	if (!m.timer || now < m.next_tick)
+	if (!m.timer || now < m.next_tick) {
 		return;
+	}
 	int_data = 0xff; // RST 38H in IM 0, the vector byte in IM 2
 	int_int = true;
 	m.next_tick += TIMER_PERIOD_US;
-	if (now >= m.next_tick) // far behind (the CPU was not running): resync
+	if (now >= m.next_tick) { // far behind (the CPU was not running): resync
 		m.next_tick = now + TIMER_PERIOD_US;
+	}
 }
 
 // z80pack reads the clock every CHECK_TSTATES T-states and around port I/O:
@@ -132,14 +134,16 @@ void machine_halt_wait_ms(unsigned ms) {
 
 static BYTE sio1s_in(void) {
 	BYTE stat = 0x01; // bit 0 = 0: input ready; bit 7 = 0: output ready
-	if (m.key_head != m.key_tail)
+	if (m.key_head != m.key_tail) {
 		stat &= (BYTE)~0x01;
+	}
 	return stat;
 }
 
 static BYTE sio1d_in(void) {
-	if (m.key_head != m.key_tail)
+	if (m.key_head != m.key_tail) {
 		m.sio1_last = m.keys[m.key_tail++ % KEY_QUEUE];
+	}
 	return m.sio1_last;
 }
 
@@ -149,14 +153,16 @@ static void sio1d_out(BYTE data) {
 
 // SIO2: one byte held from the platform until the CPU reads it.
 static BYTE sio2s_in(void) {
-	if (!m.aux_have && plat->aux_in(&m.aux_held))
+	if (!m.aux_have && plat->aux_in(&m.aux_held)) {
 		m.aux_have = true;
+	}
 	return m.aux_have ? 0x00 : 0x01;
 }
 
 static BYTE sio2d_in(void) {
-	if (!m.aux_have && plat->aux_in(&m.aux_held))
+	if (!m.aux_have && plat->aux_in(&m.aux_held)) {
 		m.aux_have = true;
+	}
 	if (m.aux_have) {
 		m.sio2_last = m.aux_held;
 		m.aux_have = false;
@@ -185,8 +191,9 @@ static void prts_out(BYTE data) {
 }
 
 static void prtd_out(BYTE data) {
-	if (plat->printer_out && data != '\r' && data != 0)
+	if (plat->printer_out && data != '\r' && data != 0) {
 		plat->printer_out(data);
+	}
 }
 
 static void led_out(BYTE data) {
@@ -206,8 +213,9 @@ static void mmu_out(BYTE data) {
 		return;
 	}
 	selbnk = data;
-	if (selbnk != 0)
+	if (selbnk != 0) {
 		curbnk = bnks[selbnk - 1];
+	}
 }
 
 static BYTE timer_in(void) {
@@ -234,8 +242,9 @@ static BYTE hwctl_in(void) {
 // nothing: there is no 8080.
 static void hwctl_out(BYTE data) {
 	if (m.hwctl_lock) {
-		if (data == HWCTL_UNLOCK)
+		if (data == HWCTL_UNLOCK) {
 			m.hwctl_lock = 0;
+		}
 		return;
 	}
 	m.hwctl_lock = 0xff;
@@ -261,8 +270,9 @@ static BYTE clkc_in(void) {
 
 static void clkc_out(BYTE data) {
 	m.clk_cmd = data;
-	if (data == 255)
+	if (data == 255) {
 		m.clk_fmt ^= 1;
+	}
 }
 
 static BYTE clkd_in(void) {
@@ -318,11 +328,13 @@ static void dinfo_out(BYTE data) {
 }
 
 static BYTE dinfo_in(void) {
-	if (m.dinfo_format_read)
+	if (m.dinfo_format_read) {
 		return plat->disk_mounts ? plat->disk_mounts(m.dinfo_drive) : 0;
+	}
 	m.dinfo_format_read = true;
-	if (m.dinfo_drive < 8)
+	if (m.dinfo_drive < 8) {
 		m.dinfo_asked |= (uint8_t)(1u << m.dinfo_drive);
+	}
 	return plat->disk_format ? plat->disk_format(m.dinfo_drive) : 0;
 }
 
@@ -331,8 +343,9 @@ static BYTE dinfo_in(void) {
 // MP/M) takes every drive for an 8" floppy, whose tracks and sectors fit
 // inside a hard disk's, so it would read garbage and write over the image.
 static bool disk_refused(int drive) {
-	if (drive < 0 || drive >= 8 || (m.dinfo_asked & (1u << drive)) || !plat->disk_format)
+	if (drive < 0 || drive >= 8 || (m.dinfo_asked & (1u << drive)) || !plat->disk_format) {
 		return false;
+	}
 	return plat->disk_format((unsigned)drive) >= 2;
 }
 
@@ -362,12 +375,15 @@ static void __attribute__((cold)) xfer_out(BYTE data) {
 	unsigned out = cmd == XFER_READ ? XFER_RECORD : cmd == XFER_FIND_FIRST || cmd == XFER_FIND_NEXT ? XFER_ENTRY : 0;
 	uint8_t buf[XFER_RECORD];
 	memset(buf, 0, sizeof buf);
-	for (unsigned i = 0; i < in; ++i)
+	for (unsigned i = 0; i < in; ++i) {
 		buf[i] = dma_read((WORD)(m.xfer_dma + i));
+	}
 	m.xfer_status = plat->xfer ? plat->xfer(cmd, volume, buf) : XFER_ST_NO_VOLUME;
-	if (m.xfer_status == XFER_ST_OK)
-		for (unsigned i = 0; i < out; ++i)
+	if (m.xfer_status == XFER_ST_OK) {
+		for (unsigned i = 0; i < out; ++i) {
 			dma_write((WORD)(m.xfer_dma + i), buf[i]);
+		}
+	}
 }
 
 static BYTE xfer_in(void) {
@@ -430,32 +446,40 @@ void exit_io(void) {
 // ---- the disk controller's platform functions (sd-fdc.h) ----
 
 BYTE read_sec(int drive, int track, int sector, WORD addr) {
-	if (addr > 0x10000 - SEC_SZ)
+	if (addr > 0x10000 - SEC_SZ) {
 		return FDC_STAT_DMAADR;
-	if (disk_refused(drive))
+	}
+	if (disk_refused(drive)) {
 		return FDC_STAT_NODISK;
+	}
 	uint8_t buf[SEC_SZ];
 	BYTE st = plat->disk_read((unsigned)drive, (unsigned)track, (unsigned)sector, buf);
-	if (st == FDC_STAT_OK)
-		for (unsigned i = 0; i < SEC_SZ; ++i)
+	if (st == FDC_STAT_OK) {
+		for (unsigned i = 0; i < SEC_SZ; ++i) {
 			dma_write((WORD)(addr + i), buf[i]);
+		}
+	}
 	return st;
 }
 
 BYTE write_sec(int drive, int track, int sector, WORD addr) {
-	if (addr > 0x10000 - SEC_SZ)
+	if (addr > 0x10000 - SEC_SZ) {
 		return FDC_STAT_DMAADR;
-	if (disk_refused(drive))
+	}
+	if (disk_refused(drive)) {
 		return FDC_STAT_NODISK;
+	}
 	uint8_t buf[SEC_SZ];
-	for (unsigned i = 0; i < SEC_SZ; ++i)
+	for (unsigned i = 0; i < SEC_SZ; ++i) {
 		buf[i] = dma_read((WORD)(addr + i));
+	}
 	return plat->disk_write((unsigned)drive, (unsigned)track, (unsigned)sector, buf);
 }
 
 void get_fdccmd(BYTE *cmd, WORD addr) {
-	for (unsigned i = 0; i < 4; ++i)
+	for (unsigned i = 0; i < 4; ++i) {
 		cmd[i] = dma_read((WORD)(addr + i));
+	}
 }
 
 // ---- the machine ----
@@ -477,8 +501,9 @@ void machine_reset(void) {
 }
 
 void machine_set_banks(void *memory, unsigned count) {
-	if (count > MACHINE_MAX_BANKS)
+	if (count > MACHINE_MAX_BANKS) {
 		count = MACHINE_MAX_BANKS;
+	}
 	bnks = memory;
 	nbanks = memory ? count : 0;
 }
@@ -495,15 +520,19 @@ void machine_init(const machine_platform_t *platform) {
 	plat = platform;
 	memset(&m, 0, sizeof m);
 #if NUMSEG > 0
-	if (!bnks)
+	if (!bnks) {
 		machine_set_banks(sram_banks, NUMSEG);
+	}
 #endif
 	// Noise, as in a real machine after power on.
-	for (size_t i = 0; i < ROM_PAGE; ++i)
+	for (size_t i = 0; i < ROM_PAGE; ++i) {
 		bnk0[i] = (BYTE)rand();
-	for (unsigned b = 0; b < nbanks; ++b)
-		for (size_t i = 0; i < SEGSIZ; ++i)
+	}
+	for (unsigned b = 0; b < nbanks; ++b) {
+		for (size_t i = 0; i < SEGSIZ; ++i) {
 			bnks[b][i] = (BYTE)rand();
+		}
+	}
 	memset(bnk0 + ROM_PAGE, 0xff, 0x10000 - ROM_PAGE);
 	memcpy(bnk0 + ROM_PAGE, boot_rom, sizeof boot_rom);
 	init_cpu();
@@ -520,8 +549,9 @@ machine_state_t machine_run(uint32_t us) {
 	m.slice_over = false;
 	run_cpu();
 	m.slicing = false;
-	if (cpu_error == NONE && m.slice_over)
+	if (cpu_error == NONE && m.slice_over) {
 		return MACHINE_RUNNING;
+	}
 	return MACHINE_STOPPED;
 }
 
@@ -546,8 +576,9 @@ const char *machine_stop_reason(void) {
 		unsigned n = cpu_error == OPTRAP1 ? 1 : cpu_error == OPTRAP2 ? 2 : 4;
 		WORD at = (WORD)(PC - n);
 		int len = snprintf(m.reason, sizeof m.reason, "Unknown instruction");
-		for (unsigned i = 0; i < n; ++i)
+		for (unsigned i = 0; i < n; ++i) {
 			len += snprintf(m.reason + len, sizeof m.reason - (size_t)len, " %02X", getmem((WORD)(at + i)));
+		}
 		snprintf(m.reason + len, sizeof m.reason - (size_t)len, " at 0x%04x", at);
 		break;
 	}
@@ -565,8 +596,9 @@ const char *machine_stop_reason(void) {
 }
 
 bool machine_key(uint8_t c) {
-	if (m.key_head - m.key_tail >= KEY_QUEUE)
+	if (m.key_head - m.key_tail >= KEY_QUEUE) {
 		return false;
+	}
 	m.keys[m.key_head++ % KEY_QUEUE] = c;
 	return true;
 }

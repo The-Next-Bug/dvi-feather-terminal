@@ -3,16 +3,16 @@
 
 Usage: logo_gen.py [--name NAME] SOURCE.png OUT.c
 
-SOURCE is a non-interlaced PNG, 8 bits per channel (greyscale, RGB,
+SOURCE is a non-interlaced PNG, 8 bits per channel (grayscale, RGB,
 palette, with or without alpha; alpha is composited over black), at most
 800 x 576 pixels and a multiple of 8 pixels wide. It is shown as is: scale
 it beforehand.
 
-The display has 4 levels (RGB222) per colour plane. Each channel is rounded
+The display has 4 levels (RGB222) per color plane. Each channel is rounded
 to the nearest level, and per 8-pixel group to at most two levels (the pair
 with the least squared error against the source): the PicoDVI encoder
 needed that, the HSTX renderer does not (bd follow-up). The planes that are
-not all black must show the same levels (a single-hue or grey logo): the
+not all black must show the same levels (a single-hue or gray logo): the
 firmware decodes one plane's levels and shows them, tinted, in each plane
 of `planes`.
 
@@ -46,7 +46,7 @@ def read_png(path):
         body = data[pos + 8:pos + 8 + length]
         pos += 12 + length
         if kind == b"IHDR":
-            width, height, depth, colour, _, _, interlace = struct.unpack(">IIBBBBB", body)
+            width, height, depth, color, _, _, interlace = struct.unpack(">IIBBBBB", body)
         elif kind == b"PLTE":
             palette = [tuple(body[i:i + 3]) for i in range(0, len(body), 3)]
         elif kind == b"tRNS":
@@ -55,10 +55,10 @@ def read_png(path):
             idat += body
         elif kind == b"IEND":
             break
-    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(colour)
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(color)
     if depth != 8 or channels is None or interlace:
         sys.exit(f"{path}: need a non-interlaced PNG with 8 bits per channel "
-                 f"(got depth {depth}, colour type {colour}, interlace {interlace})")
+                 f"(got depth {depth}, color type {color}, interlace {interlace})")
 
     raw = zlib.decompress(idat)
     stride = width * channels
@@ -86,13 +86,13 @@ def read_png(path):
         pixels = []
         for x in range(width):
             px = line[x * channels:(x + 1) * channels]
-            if colour == 0:
+            if color == 0:
                 rgb, alpha = (px[0],) * 3, 255
-            elif colour == 4:
+            elif color == 4:
                 rgb, alpha = (px[0],) * 3, px[1]
-            elif colour == 2:
+            elif color == 2:
                 rgb, alpha = tuple(px), 255
-            elif colour == 6:
+            elif color == 6:
                 rgb, alpha = tuple(px[:3]), px[3]
             else:
                 rgb = palette[px[0]]
@@ -153,7 +153,7 @@ def main():
     planes = [p for p in range(3) if any(any(r) for r in rounded[p])]
     if any(rounded[p] != rounded[planes[0]] for p in planes[1:]):
         sys.exit(f"{args.source}: planes {', '.join(PLANE_NAMES[p] for p in planes)} differ; the logo "
-                 "must be a single hue (or grey), black elsewhere")
+                 "must be a single hue (or gray), black elsewhere")
     source = planes[0] if planes else 1
     levels = []
     for row in rows:
