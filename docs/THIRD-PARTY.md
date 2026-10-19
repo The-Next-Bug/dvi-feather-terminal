@@ -39,3 +39,8 @@ Z80 machine's monitor can write to an SD card:
   `licenses/GPL-2.0.txt`), and `CPUTEST` (SuperSoft Diagnostics II), as
   distributed with z80pack.
 - `EMPTY`: a blank, formatted CP/M disk.
+- `F83` (`lib/f83`, the files of F83V2-80.ARK, `lib/f83/UPSTREAM.md`):
+  F83, FORTH-83 version 2.0 for CP/M-80, by Henry Laxen and Michael Perry,
+  public domain ("may be freely distributed and copied, as long as the
+  authors are given credit and no copyright notice is placed upon it",
+  `README.80`).

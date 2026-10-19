@@ -400,7 +400,14 @@ UF2 in the latter).
   CP/M 3 (bd f8w): picosim's banked CP/M 3 disks are built in as CPM31
   (boots), CPM32 (picosim's cpm3-2.dsk files on an 8 MB disk:
   diskimg_gen.py --convert HD8; our WORMS/XLS/XPIP/XERA/MEM added) and
-  CPM3GEN. Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
+  CPM3GEN, and F83 (bd xdu): Laxen and Perry's F83 Forth for CP/M-80,
+  lib/f83 (F83V2-80.ARK's files, UPSTREAM.md) on a blank 8 MB disk
+  (test_f83). Its F83.COM is lib/f83's with src/machine/cpm/f83/
+  viewdrv.fth (-> VIEWDRV.BLK, also on the disk) loaded and SAVE-SYSTEMed
+  by f83/build.sh under CP/M 2.2 in cpmrun (cpm3/build.sh's, an output
+  of that step): at boot VIEW-DRIVE puts 0050H (CP/M 3's load drive,
+  only if BDOS 12 >= 30H and 1-16) into each VIEW-FILES FCB's drive
+  byte, so VIEW works with F83 found through CP/M 3's search path. Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
   default, A:, B:; order COM,SUB; temporary drive B:; no display: f8w.9),
   so PROFILE.SUB (src/machine/cpm/cpm3/profile.sub) only loads VT100DYN, whose
   help text build.sh patches away; README.TXT (src/machine/cpm/cpm3/readme.txt)
@@ -565,7 +572,8 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit
   (the PSRAM build has none in SRAM: __end__ 0x20057b88).
 - Flash (4 MB): image 0-0x7e108 (504 KB at v0.6.1; the 4 KB LZ window costs 32 KB;
-  ~875 KB with the CP/M 3 disks, f8w.1: ~610 KB of compressed images in all); free to 2 MB (image growth;
+  ~875 KB with the CP/M 3 disks, f8w.1: ~610 KB of compressed images in all;
+  1.05 MB with F83, xdu: ~810 KB of images); free to 2 MB (image growth;
   fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used
   only during an update, up to the new image's length); settings
   0x3fd000-0x3fefff; last sector left blank (E10). New persistent storage
