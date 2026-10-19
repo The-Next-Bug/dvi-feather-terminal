@@ -14,13 +14,29 @@ set(DISKIMG_IMAGES
   "EMPTY=${Z80PACK_DIR}/picosim/disks/empty.dsk"
   "CPM31=${Z80PACK_DIR}/picosim/disks/cpm3-1.dsk"
   "CPM32=${GENERATED}/cpm32.dsk"
-  "CPM3GEN=${GENERATED}/cpm3/cpm3gen.dsk")
+  "CPM3GEN=${GENERATED}/cpm3/cpm3gen.dsk"
+  "F83=${GENERATED}/f83.dsk")
 # CPM31 (boot disk) and CPM32 are picosim's banked CP/M 3: mount them on A:
 # and B: and boot (bd f8w). CPM31's CPM3.SYS is ours (below); CPM3GEN is
 # picosim's system generation disk with our BIOS sources and what they made.
 # CPM32 is picosim's second floppy's files on an 8 MB disk: room for our
 # tools, and for temporary files (our BIOS makes B: the temporary drive).
+# F83 is Laxen and Perry's F83 Forth for CP/M-80 (lib/f83, bd xdu): its
+# 553 KB of files on a blank 8 MB disk. Its F83.COM is patched by our
+# VIEWDRV.BLK so that VIEW reads the source from F83's own drive
+# (src/machine/cpm/f83/build.sh, run with cpmrun: below).
+set(F83_DIR "${CMAKE_CURRENT_LIST_DIR}/../../lib/f83")
+set(F83_FILES -READ.ME README.80 F83-FIXS.TXT KERNEL80.BLK META80.BLK CPU8080.BLK
+  EXTEND80.BLK UTILITY.BLK HUFFMAN.BLK CLOCK.BLK EXPAND80.BLK BASIC.BLK)
 set(DISKIMG_SOURCES "${GENERATED}/diskimg_data.c")
+add_custom_command(
+  OUTPUT ${GENERATED}/f83.dsk
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${GENERATED}
+  COMMAND Python3::Interpreter ${DISKIMG_GEN} --convert ${Z80PACK_DIR}/picosim/disks/empty.dsk HD8
+    ${GENERATED}/f83.dsk
+  DEPENDS ${DISKIMG_GEN} ${Z80PACK_DIR}/picosim/disks/empty.dsk
+  COMMENT "Making a blank 8 MB disk for F83"
+  VERBATIM)
 add_custom_command(
   OUTPUT ${GENERATED}/cpm32.dsk
   COMMAND ${CMAKE_COMMAND} -E make_directory ${GENERATED}
@@ -57,7 +73,7 @@ file(GLOB _machine_sources "${Z80PACK_DIR}/z80core/*.[ch]" "${Z80PACK_DIR}/iodev
   "${CMAKE_CURRENT_LIST_DIR}/../machine/z80pack/*.h")
 add_custom_command(
   OUTPUT ${CPM3_OUT}/cpm3.sys ${CPM3_OUT}/vt100dyn.com ${CPM3_OUT}/profile.sub ${CPM3_OUT}/readme.txt
-    ${CPM3_OUT}/cpm3gen.dsk
+    ${CPM3_OUT}/cpm3gen.dsk ${CPM3_OUT}/cpmrun
   COMMAND ${CMAKE_COMMAND} -E env CC=${HOST_CC} PYTHON=${Python3_EXECUTABLE} ${CPM3_DIR}/build.sh ${CPM3_OUT}
   DEPENDS ${CPM3_DIR}/build.sh ${CPM3_DIR}/cpmrun.c ${CPM3_DIR}/sysgen.run ${CPM3_DIR}/bnkbios3.asm
     ${CPM3_DIR}/gencpm.dat ${CPM3_DIR}/profile.sub ${CPM3_DIR}/readme.txt ${DISKIMG_GEN} ${CMAKE_CURRENT_LIST_DIR}/../machine/machine.c
@@ -65,6 +81,21 @@ add_custom_command(
     ${Z80PACK_DIR}/picosim/disks/cpm3-1.dsk ${Z80PACK_DIR}/picosim/disks/cpm3-2.dsk
     ${Z80PACK_DIR}/picosim/disks/cpm3gen.dsk
   COMMENT "Making CP/M 3's CPM3.SYS (RMAC, LINK, GENCPM on the Z80 machine)"
+  VERBATIM)
+
+# F83.COM with VIEWDRV.BLK loaded, saved by F83 under CP/M 2.2 with the
+# CP/M 3 step's cpmrun.
+set(F83_SRC "${CPM_DIR}/f83")
+set(F83_OUT "${GENERATED}/f83")
+add_custom_command(
+  OUTPUT ${F83_OUT}/f83.com ${F83_OUT}/viewdrv.blk
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${F83_OUT}
+  COMMAND ${CMAKE_COMMAND} -E env CPMRUN=${CPM3_OUT}/cpmrun PYTHON=${Python3_EXECUTABLE}
+    ${F83_SRC}/build.sh ${F83_OUT}
+  DEPENDS ${F83_SRC}/build.sh ${F83_SRC}/f83.run ${F83_SRC}/viewdrv.fth ${F83_DIR}/F83.COM
+    ${CPM3_OUT}/cpmrun ${DISKIMG_GEN} ${Z80PACK_DIR}/picosim/disks/cpm22.dsk
+    ${Z80PACK_DIR}/picosim/disks/empty.dsk
+  COMMENT "Patching F83.COM's VIEW (F83 on the Z80 machine)"
   VERBATIM)
 
 set(DISKIMG_SYSTEM --system CPM22 ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin
@@ -99,6 +130,12 @@ set(DISKIMG_FILES --delete CPM22 XDIR.COM
   --file CPM32 XERA.COM ${CPM_OUT}/xera.com
   --file CPM32 MEM.COM ${CPM_OUT}/mem.com
   --file CPM32 HWINFO.COM ${CPM_OUT}/hwinfo.com)
+set(_f83_paths ${F83_OUT}/f83.com ${F83_OUT}/viewdrv.blk)
+list(APPEND DISKIMG_FILES --file F83 F83.COM ${F83_OUT}/f83.com --file F83 VIEWDRV.BLK ${F83_OUT}/viewdrv.blk)
+foreach(_file IN LISTS F83_FILES)
+  list(APPEND DISKIMG_FILES --file F83 ${_file} ${F83_DIR}/${_file})
+  list(APPEND _f83_paths ${F83_DIR}/${_file})
+endforeach()
 
 set(_diskimg_files)
 foreach(_image IN LISTS DISKIMG_IMAGES)
@@ -115,7 +152,7 @@ add_custom_command(
     ${CPM_OUT}/xls.com ${CPM_OUT}/xpip.com ${CPM_OUT}/xera.com ${CPM_OUT}/termtest.com
     ${CPM_OUT}/altscr.com ${CPM_OUT}/mem.com ${CPM_OUT}/hwinfo.com ${Z80PACK_DIR}/picosim/srccpm2/cpm.bin ${CPM_DIR}/ccpbdos.rel
     ${CPM3_OUT}/cpm3.sys ${CPM3_OUT}/vt100dyn.com ${CPM3_OUT}/profile.sub
-    ${CPM3_OUT}/readme.txt ${GENERATED}/cpm32.dsk
+    ${CPM3_OUT}/readme.txt ${GENERATED}/cpm32.dsk ${GENERATED}/f83.dsk ${_f83_paths}
   COMMENT "Compressing the built-in CP/M disk images"
   VERBATIM)
 

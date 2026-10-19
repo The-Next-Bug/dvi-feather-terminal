@@ -1,0 +1,14 @@
+# cpmrun script (build.sh): F83 loads VIEWDRV.BLK and saves itself as
+# F83.COM on B:. Boots picosim's CP/M 2.2 from A:.
+! ?
+! Open error
+> A>
+< B:
+> B>
+< F83 VIEWDRV.BLK
+> 01Jun84
+< 1 LOAD
+> F83.COM saved
+> ok
+< BYE
+> B>

@@ -428,6 +428,40 @@ instead of reading a hard disk as a floppy and writing over it).
 
 MP/M II has not been tested on this board yet.
 
+### Forth (F83)
+
+The `F83` disk (built in, 8 MB) holds Henry Laxen and Michael Perry's
+F83, FORTH-83 2.0 for CP/M-80 (public domain, `lib/f83`): `F83.COM`
+ready to run, the system's source as block files (`KERNEL80.BLK`,
+`META80.BLK`, `CPU8080.BLK`, `EXTEND80.BLK`, `UTILITY.BLK`), examples
+(`CLOCK.BLK`, `HUFFMAN.BLK`, `BASIC.BLK`, a BASIC compiler) and their
+manual, `README.80`. Mount it on B: under CP/M 2.2 or 3 and run it,
+with a block file to open if you like:
+
+```
+A>B:
+B>F83 CLOCK.BLK
+8080 Forth 83 Model
+Version 2.1.0 Modified 01Jun84
+2 3 + . 5  ok
+1 LIST
+BYE
+```
+
+`README.80` is a WordStar file (high bits set), so `TYPE` shows it
+garbled; `-READ.ME` and `F83-FIXS.TXT` are plain text.
+
+`VIEW name` (and the editor's `FIX`) lists the source screen of a word.
+The original F83 opens the source files on the current drive, so under
+CP/M 3, where `F83` at `A>` is found on B: through the search path, it
+fails with `Open error`. The disk's `F83.COM` is patched by
+`VIEWDRV.BLK` (`src/machine/cpm/f83/viewdrv.fth`, loaded into the
+original at build time) to look on the drive it was loaded from, which
+CP/M 3 records at 0050H. CP/M 2.2 does not record it, so there
+start F83 from its own drive (`B:`, then `F83`), as above. After
+rebuilding F83 from its source (`README.80`), `F83 VIEWDRV.BLK` and then
+`1 LOAD` patch and save the new `F83.COM` the same way.
+
 ### HWINFO
 
 `CPM22`, `CPM31` and `CPM32` carry `HWINFO` (`src/machine/cpm/hwinfo.asm`):
@@ -629,9 +663,10 @@ A after 3 seconds (any key stops that), or shows its menu:
   `EXZ80DOC` and `EXZ80ALL`, about 10 minutes each at full speed, and the
   `CPUTEST` diagnostics; `PRELIM` needs an emulator that runs block moves
   in one go, as z80pack's cpmsim does, and wrecks CP/M here: reset after
-  it), `EMPTY` (a blank disk), and CP/M 3's `CPM31` (boots), `CPM32` and
-  `CPM3GEN` (see [Other operating systems](#other-operating-systems)).
-  They are kept compressed in flash (about 610 KB) to start a blank card
+  it), `EMPTY` (a blank disk), CP/M 3's `CPM31` (boots), `CPM32` and
+  `CPM3GEN` (see [Other operating systems](#other-operating-systems)), and
+  `F83` ([Forth](#forth-f83)).
+  They are kept compressed in flash (about 810 KB) to start a blank card
   with; existing files are only replaced if
   you say so.
 - **S**: CPU speed test (a JP loop for a second, in Z80 MHz).

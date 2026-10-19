@@ -217,9 +217,9 @@ static drivepanel_action_t panel_keys(drivepanel_t *p, const char *keys) {
 static void test_drive_panel(void) {
 	static drivepanel_t p;
 	drivepanel_open(&p);
-	// On the card: CPM22 CPM31 CPM32 CPM3GEN EMPTY HD4 HD8 SHORT Z80TESTS
-	// (sorted).
-	CHECK_EQ(p.n_images, 9);
+	// On the card: CPM22 CPM31 CPM32 CPM3GEN EMPTY F83 HD4 HD8 SHORT
+	// Z80TESTS (sorted).
+	CHECK_EQ(p.n_images, 10);
 	CHECK(strcmp(p.images[p.choice[0]], "CPM22") == 0);
 	CHECK(strcmp(p.images[p.choice[4]], "HD8") == 0);
 	CHECK_EQ(p.choice[2], -1);
@@ -240,12 +240,14 @@ static void test_drive_panel(void) {
 	CHECK_EQ(panel_keys(&p, " "), DRIVEPANEL_REDRAW);
 	CHECK(p.choice[2] >= 0 && strcmp(p.images[p.choice[2]], "CPM31") == 0);
 	// B: Z80TESTS -> back one: SHORT; back again skips HD8 (E) and HD4
-	// (F): EMPTY. Forward twice: Z80TESTS.
+	// (F): F83, then EMPTY. Forward three times: Z80TESTS.
 	CHECK_EQ(panel_keys(&p, "\x1b[A\x1b[D"), DRIVEPANEL_REDRAW);
 	CHECK(strcmp(p.images[p.choice[1]], "SHORT") == 0);
 	CHECK_EQ(panel_keys(&p, "\x1b[D"), DRIVEPANEL_REDRAW);
+	CHECK(p.choice[1] >= 0 && strcmp(p.images[p.choice[1]], "F83") == 0);
+	CHECK_EQ(panel_keys(&p, "\x1b[D"), DRIVEPANEL_REDRAW);
 	CHECK(p.choice[1] >= 0 && strcmp(p.images[p.choice[1]], "EMPTY") == 0);
-	CHECK_EQ(panel_keys(&p, "\x1b[C\x1b[C"), DRIVEPANEL_REDRAW);
+	CHECK_EQ(panel_keys(&p, "\x1b[C\x1b[C\x1b[C"), DRIVEPANEL_REDRAW);
 	CHECK(p.choice[1] >= 0 && strcmp(p.images[p.choice[1]], "Z80TESTS") == 0);
 
 	CHECK_EQ(panel_keys(&p, "\r"), DRIVEPANEL_APPLY);
@@ -262,7 +264,7 @@ static void test_drive_panel(void) {
 	// A bad image fails to mount.
 	drivepanel_open(&p);
 	p.drive = 7;
-	p.choice[7] = 7; // SHORT
+	p.choice[7] = 8; // SHORT
 	CHECK_EQ(drivepanel_apply(&p, &failed), 1);
 	CHECK(failed);
 	CHECK(drives_name(7) == NULL);
@@ -2032,6 +2034,65 @@ static void test_altscr(void) {
 	host_console_hook = NULL;
 }
 
+// ---- F83 (lib/f83, bd xdu) ----
+
+// Type each line and wait for its text.
+static void f83_lines(const char *const lines[][2], unsigned n) {
+	for (unsigned i = 0; i < n; ++i) {
+		clear_screen();
+		CHECK(type(lines[i][0]));
+		CHECK_EQ(run_until(lines[i][1], 10), MACHINE_RUNNING);
+	}
+}
+
+// Laxen and Perry's F83 from the F83 disk under CP/M 2.2: it starts on a
+// block file, interprets, compiles, lists a block and leaves with BYE;
+// VIEW finds the source (VIEWDRV.BLK's patch included) on the current
+// drive. Under CP/M 3, found through the search path from A:, VIEW reads
+// B:, the drive it was loaded from (VIEWDRV.BLK).
+static void test_f83(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("F83"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "F83"), DRIVES_OK);
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("B:\r"));
+	CHECK_EQ(run_until("B>", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("F83 CLOCK.BLK\r"));
+	CHECK_EQ(run_until("Version 2.1.0", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "8080 Forth 83 Model") != NULL);
+	static const char *const cpm22[][2] = {
+		{"2 3 + .\r", "5  ok"},
+		{": SQUARE DUP * ;\r", " ok"},
+		{"12 SQUARE .\r", "144  ok"},
+		{"1 LIST\r", "System Support 1   Load screen"},
+		{"VIEW DUP\r", "CODE DUP"},
+		{"VIEW VIEW-DRIVE\r", ": VIEW-DRIVE"},
+		{"BYE\r", "B>"},
+	};
+	f83_lines(cpm22, sizeof cpm22 / sizeof cpm22[0]);
+	CHECK(strstr(screen, "Open error") == NULL);
+
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM31"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM31"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "F83"), DRIVES_OK);
+	cpm3_boot();
+	static const char *const cpm3[][2] = {
+		{"F83\r", "Version 2.1.0"},
+		{"VIEW DUP\r", "Scr # 19         B:KERNEL80.BLK"},
+		{"BYE\r", "A>"},
+	};
+	f83_lines(cpm3, sizeof cpm3 / sizeof cpm3[0]);
+	CHECK(strstr(screen, "Open error") == NULL);
+	drives_unmount_all();
+}
+
 int main(void) {
 	srand(1);
 	RUN(test_fat32_volume);
@@ -2063,6 +2124,7 @@ int main(void) {
 	RUN(test_mem_banks);
 	RUN(test_termtest);
 	RUN(test_altscr);
+	RUN(test_f83);
 	drives_unmount_all();
 	f_unmount("");
 	diskio_ram_free();
