@@ -308,7 +308,10 @@ UF2 in the latter).
   palette_used) for core 0's waits, hstx_dvi_resume at a frame start on
   wake; bd 3rk), term_type (VT100 0 / VT52 2 / ADM-3A 3: personality and
   power-on/RIS mode; byte 11 once held the retired layout, so 1 is never a
-  value; settings_columns() is 80 for the ADM-3A;
+  value; then the status line clock's clock (24 / 12 / 0 off),
+  clock_seconds, clock_date (SETTINGS_DATE_*), bd 1ls.6.5: after
+  SETTINGS_MAIN_FIELDS (12, SET-UP's rows = SETUP_ITEMS), edited only on
+  the Clock panel; settings_columns() is 80 for the ADM-3A;
   settings_field_fixed() names what fixes a field, Columns under the
   ADM-3A: SET-UP skips it and shows "80 (ADM-3A)", dmt.39);
   settings_colors() gives the status
@@ -342,13 +345,28 @@ UF2 in the latter).
   (seconds since 31.12.1977 = CP/M 3's day number x 86400, civil
   conversions without localtime, FAT timestamps; DATETIME_DEFAULT_DAYS
   17533 = 1.1.2026), ds3231.[ch] (register codec, 24 h, century bit).
-  `src/platform/rtc.[ch]`: the wall clock = the DS3231 read once in
-  rtc_init (after nvflash_retime; I2C 100 kHz, 5 ms timeouts) + time_us_64;
-  OSF set or no answer -> 1.1.2026; rtc_set writes the chip and clears
-  OSF (always kept for the session); rtc_state for HWINFO's record. Users:
-  cpm_glue's machine platform (time_get/time_set), get_fattime. Not yet:
-  SET-UP row, status line clock, a CP/M 2.2 setter, re-reading the chip
-  against drift.
+  wallclock.[ch]: a second at a timestamp; wallclock_edge (the chip's
+  seconds went up) moves it to the edge, rounding for missed edges,
+  ignoring glitches < 0.5 s, never back. `src/platform/rtc.[ch]`: the
+  DS3231 read once in rtc_init (after nvflash_retime; I2C 100 kHz, 5 ms
+  timeouts), then with BOARD_RTC_SQW_PIN the control register set to the
+  1 Hz square wave (INTCN, RS, EOSC cleared) and a raw GPIO IRQ on its
+  falling edge (bd 1ls.6.2) feeding wallclock_edge, else time_us_64;
+  readers disable interrupts around the wallclock. OSF set or no answer ->
+  1.1.2026; rtc_set writes the chip and clears OSF (always kept for the
+  session); rtc_state / rtc_ticking for HWINFO's record, rtc_valid (read
+  OK or set since) gates status.c's clock (bd 1ls.6.3: " HH:MM " in the
+  last 7 columns of both modes' status lines, colon on while
+  rtc_fraction_us < 500 ms; status_clock_poll each main-loop pass redraws
+  only its cells on a minute*2+colon change; put_status_text cuts the
+  line's text before it; its text and width from datetime_clock_text with
+  the clock settings, 7-24 columns). Users: cpm_glue's machine platform
+  (time_get/time_set), get_fattime. SET-UP's C: `src/ui/clockpanel.[ch]`
+  (portable, cold, test_setup; bd 1ls.6.4): Date/Time follow rtc_now until
+  digits are typed over them (fixed positions, no sscanf), the three clock
+  settings as choices, a sample row; Return -> setup_glue.c clock_service
+  (main loop: rtc_set if typed, the settings into setup.ui.values for
+  SET-UP's save).
 - `src/platform/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
   RTS/CTS. `src/ui/demo.[ch]`: opt-in startup demo. `src/platform/diag.[ch]`: VIDEO_DIAG.
 - `src/render/logo_gen.py` + `src/render/logo.cmake`: PNG -> run-length encoded 2-bit

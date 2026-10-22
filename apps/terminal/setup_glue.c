@@ -1,6 +1,6 @@
 // SET-UP and what opens over its rows (terminal.h): the panel itself
-// (setup.c), the Drives panel (drivepanel.c, CP/M mode), the firmware
-// update (fwpanel.c) and the demo (T). Keys arrive from the USB stack
+// (setup.c), the Drives panel (drivepanel.c, CP/M mode), the Clock panel
+// (clockpanel.c), the firmware update (fwpanel.c) and the demo (T). Keys arrive from the USB stack
 // (setup_feed); anything slow, or touching the SD card or the flash, waits
 // for the main loop (setup_service).
 
@@ -17,6 +17,7 @@
 #include "nvflash.h"
 #include "palette.h"
 #include "raster.h"
+#include "rtc.h"
 #include "sdcard.h"
 #include "term_build.h"
 #include "terminal.h"
@@ -30,6 +31,7 @@ setup_state_t setup;
 
 static_assert(DRIVEPANEL_ROWS <= SETUP_ROWS, "the Drives panel fits SET-UP's rows");
 static_assert(FWPANEL_ROWS <= SETUP_ROWS, "the firmware panel fits SET-UP's rows");
+static_assert(CLOCKPANEL_ROWS <= SETUP_ROWS, "the Clock panel fits SET-UP's rows");
 
 // The panels are boxes on the default background, the box in the status
 // line's color of the edited settings, like the preview (setup_service
@@ -59,6 +61,16 @@ static void fw_draw_panel(void) {
 	}
 	fwpanel_draw(&setup.fw, &screen, SETUP_TOP + SETUP_ROWS - FWPANEL_ROWS, PALETTE_TEXT, PALETTE_BACKGROUND,
 		c.status_bg);
+}
+
+// The Clock panel, at the bottom of SET-UP's rows like the Drives panel.
+static void clock_draw_panel(void) {
+	settings_colors_t c = settings_colors(&setup.ui.values);
+	for (unsigned r = 0; r < SETUP_ROWS - CLOCKPANEL_ROWS; ++r) {
+		screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	}
+	clockpanel_draw(&setup.clock, &screen, SETUP_TOP + SETUP_ROWS - CLOCKPANEL_ROWS, PALETTE_TEXT,
+		PALETTE_BACKGROUND, c.status_bg);
 }
 
 // The firmware panel's platform. In CP/M mode the monitor keeps the card
@@ -136,6 +148,20 @@ static void fw_feed(uint8_t c) {
 	}
 }
 
+// A key for the Clock panel. Setting the clock (the RTC's I2C) is left for
+// the main loop.
+static void clock_feed(uint8_t c, uint32_t now) {
+	clockpanel_action_t a = clockpanel_input(&setup.clock, c, now);
+	if (a == CLOCKPANEL_REDRAW) {
+		clock_draw_panel();
+	} else if (a == CLOCKPANEL_APPLY) {
+		setup.clock_apply = true;
+	} else if (a == CLOCKPANEL_CANCEL) {
+		setup.clock_open = false;
+		setup_draw_panel();
+	}
+}
+
 // A key for the Drives panel. Mounting and the sets' files are left for
 // the main loop.
 static void drives_feed(uint8_t c, uint32_t now) {
@@ -160,9 +186,13 @@ void setup_feed(const uint8_t *data, size_t len) {
 		return;
 	}
 	for (size_t i = 0; i < len && setup.action == SETUP_NONE && !setup.drives_work && !setup.fw_work &&
-		!setup.fw_cancel; ++i) {
+		!setup.fw_cancel && !setup.clock_apply; ++i) {
 		if (setup.fw_open) {
 			fw_feed(data[i]);
+			continue;
+		}
+		if (setup.clock_open) {
+			clock_feed(data[i], now);
 			continue;
 		}
 		if (setup.drives_open) {
@@ -202,6 +232,7 @@ void setup_enter(bool from_host) {
 	setup.drives_open = false;
 	setup.drives_work = DRIVEPANEL_NONE;
 	setup.fw_open = setup.fw_work = setup.fw_cancel = false;
+	setup.clock_open = setup.clock_apply = false;
 	setup.from_host = from_host;
 	setup.action = SETUP_NONE;
 	setup.demo = false;
@@ -222,6 +253,7 @@ static void setup_leave(bool apply) {
 	setup.active = false;
 	setup.drives_open = false;
 	setup.drives_work = DRIVEPANEL_NONE;
+	setup.clock_open = setup.clock_apply = false;
 	fw_close();
 	if (!apply) {
 		show_palette(&settings); // back from SET-UP's preview
@@ -268,6 +300,40 @@ static void drives_service(void) {
 		setup.drives_open = false;
 		setup_draw_panel();
 	}
+}
+
+// The Clock panel's Return: the clock set if a time was typed in, the
+// status line clock's choices kept in SET-UP's edited settings (its Return
+// saves them); or its Escape key timeout, and the time it shows ticking.
+static void clock_service(void) {
+	if (!setup.clock_apply) {
+		clockpanel_action_t a = clockpanel_tick(&setup.clock, to_ms_since_boot(get_absolute_time()), rtc_now());
+		if (a == CLOCKPANEL_REDRAW) {
+			clock_draw_panel();
+		} else if (a == CLOCKPANEL_CANCEL) {
+			setup.clock_open = false;
+			setup_draw_panel();
+		}
+		return;
+	}
+	setup.clock_apply = false;
+	setup.clock_open = false;
+	uint32_t secs;
+	bool set = clockpanel_time(&setup.clock, &secs);
+	if (set) {
+		rtc_set(secs);
+	}
+	const settings_t *v = &setup.clock.values;
+	settings_t *u = &setup.ui.values;
+	bool format = v->clock != u->clock || v->clock_seconds != u->clock_seconds || v->clock_date != u->clock_date;
+	u->clock = v->clock;
+	u->clock_seconds = v->clock_seconds;
+	u->clock_date = v->clock_date;
+	setup.ui.message = set && format ? "Clock set; Return here saves the status line clock's format"
+		: set ? "Clock set"
+		: format ? "Return here saves the status line clock's format"
+		: NULL;
+	setup_draw_panel();
 }
 
 // The demo screen at cols, with `what` on its status line.
@@ -330,6 +396,10 @@ void setup_service(void) {
 		drives_service();
 		return;
 	}
+	if (setup.clock_open && setup.action == SETUP_NONE) {
+		clock_service();
+		return;
+	}
 	if (setup.fw_open && setup.action == SETUP_NONE) {
 		if (setup.fw_cancel) {
 			fw_close();
@@ -356,6 +426,11 @@ void setup_service(void) {
 		fwpanel_open(&setup.fw);
 		setup.fw_open = setup.fw_work = true; // the check
 		fw_draw_panel();
+	} else if (a == SETUP_CLOCK) {
+		rtc_state_t st = rtc_state();
+		clockpanel_open(&setup.clock, &setup.ui.values, rtc_now(), st != RTC_NONE && st != RTC_MISSING);
+		setup.clock_open = true;
+		clock_draw_panel();
 	} else if (a == SETUP_DRIVES) {
 		drivepanel_open(&setup.drives);
 		setup.drives_open = true;

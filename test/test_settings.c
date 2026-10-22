@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <string.h>
 
 #include "palette.h"
@@ -156,9 +157,9 @@ static void test_retired_wide80(void) {
 		in.blank_after = 5;
 		uint8_t rec[SETTINGS_RECORD_SIZE];
 		settings_encode(&in, 7, rec);
-		CHECK_EQ(rec[5], 12);
+		CHECK_EQ(rec[5], SETTINGS_FIELDS);
 		rec[16 + 11] = old;
-		uint32_t crc = crc_of(rec, 12);
+		uint32_t crc = crc_of(rec, SETTINGS_FIELDS);
 		for (unsigned i = 0; i < 4; ++i) {
 			rec[12 + i] = (uint8_t)(crc >> 8 * i);
 		}
@@ -170,6 +171,39 @@ static void test_retired_wide80(void) {
 		CHECK_EQ(out.term_type, SETTINGS_TERM_VT100);
 		CHECK_EQ(seq, 7);
 	}
+}
+
+// Records from before the clock's settings (12 bytes): those come back as
+// their defaults, the rest as saved; and the clock's choices round-trip.
+static void test_clock_settings(void) {
+	settings_t in, out;
+	settings_defaults(&in);
+	CHECK_EQ(in.clock, SETTINGS_CLOCK_24H);
+	CHECK_EQ(in.clock_seconds, 0);
+	CHECK_EQ(in.clock_date, SETTINGS_DATE_NONE);
+	in.baud = 4;
+	in.clock = SETTINGS_CLOCK_12H;
+	uint8_t rec[SETTINGS_RECORD_SIZE];
+	settings_encode(&in, 3, rec);
+	rec[5] = 12;
+	uint32_t crc = crc_of(rec, 12);
+	for (unsigned i = 0; i < 4; ++i) {
+		rec[12 + i] = (uint8_t)(crc >> 8 * i);
+	}
+	uint32_t seq;
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.baud, 4);
+	CHECK_EQ(out.clock, SETTINGS_CLOCK_24H);
+
+	in.clock_seconds = 1;
+	in.clock_date = SETTINGS_DATE_SHORT;
+	settings_encode(&in, 4, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.clock, SETTINGS_CLOCK_12H);
+	CHECK_EQ(out.clock_seconds, 1);
+	CHECK_EQ(out.clock_date, SETTINGS_DATE_SHORT);
+	// SET-UP's main rows stop before them.
+	CHECK_EQ(SETTINGS_MAIN_FIELDS, offsetof(settings_t, clock));
 }
 
 static void test_term_type(void) {
@@ -258,6 +292,7 @@ int main(void) {
 	RUN(test_newest_wins_and_next_alternates);
 	RUN(test_sequence_wraps);
 	RUN(test_bad_value_keeps_default);
+	RUN(test_clock_settings);
 	RUN(test_older_record);
 	RUN(test_retired_wide80);
 	RUN(test_term_type);

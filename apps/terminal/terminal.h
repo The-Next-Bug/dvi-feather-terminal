@@ -20,6 +20,7 @@
 #include "pico/time.h"
 
 #include "blank.h"
+#include "clockpanel.h"
 #include "drivepanel.h"
 #include "drives.h"
 #include "fwpanel.h"
@@ -76,6 +77,10 @@ typedef struct {
 	bool drives_open;
 	drivepanel_action_t drives_work;
 	drivepanel_t drives;
+	// The Clock panel (C), over the same rows; setting the clock (I2C)
+	// waits for the main loop.
+	bool clock_open, clock_apply;
+	clockpanel_t clock;
 	// The firmware update panel (U), over the same rows; its work and its
 	// cancel wait for the main loop.
 	bool fw_open, fw_work, fw_cancel;
@@ -136,6 +141,7 @@ bool status_equal(const status_t *a, const status_t *b);
 void draw_status(const status_t *st);
 void draw_cpm_status(void);
 uint16_t drive_lights(uint32_t now);
+void status_clock_poll(void); // each main-loop pass: the clock's colon and minute
 bool debug_status_on(void);
 void debug_status_start(void);
 void debug_status_pass(void);

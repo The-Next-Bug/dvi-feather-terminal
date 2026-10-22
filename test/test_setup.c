@@ -2,6 +2,8 @@
 #include <string.h>
 
 #include "setup.h"
+#include "clockpanel.h"
+#include "datetime.h"
 #include "font.h"
 #include "palette.h"
 #include "test.h"
@@ -220,7 +222,7 @@ static void test_machine_menu_key(void) {
 	for (unsigned c = 0; c < 80; ++c) {
 		help[c] = (char)screen_glyph(&s, c, SCREEN_ROWS - 3);
 	}
-	CHECK(strstr(help, "R reboot  D drives  M monitor") != NULL);
+	CHECK(strstr(help, "R reboot  C clock  D drives  M monitor") != NULL);
 }
 
 // T shows the demo screen, in either mode.
@@ -268,6 +270,157 @@ static void test_firmware_key(void) {
 		setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG, BORDER);
 		CHECK(row_contains(&s, SCREEN_ROWS - 3, "U firmware update"));
 	}
+}
+
+// C opens the Clock panel, in either mode; the help line says so.
+static void test_clock_key(void) {
+	for (int machine = 0; machine <= 1; ++machine) {
+		open_with(80);
+		u.machine_menu = machine;
+		CHECK_EQ(send("c", 0), SETUP_CLOCK);
+		CHECK_EQ(send("C", 0), SETUP_CLOCK);
+		static screen_t s;
+		screen_init(&s, 80, FG, BG);
+		setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG, BORDER);
+		CHECK(row_contains(&s, SCREEN_ROWS - 3, "C clock"));
+		// SET-UP's own rows stop before the clock's settings.
+		CHECK(!row_contains(&s, SCREEN_ROWS - 1 - SETUP_ROWS + 1 + SETUP_ITEMS + 2, "Status line clock"));
+	}
+}
+
+// ---- the Clock panel (clockpanel.h, bd 1ls.6.4) ----
+
+static clockpanel_t cp;
+
+static clockpanel_action_t clock_send(const char *keys) {
+	clockpanel_action_t last = CLOCKPANEL_NONE;
+	for (const char *k = keys; *k; ++k) {
+		clockpanel_action_t a = clockpanel_input(&cp, (uint8_t)*k, 0);
+		if (a != CLOCKPANEL_NONE) {
+			last = a;
+		}
+	}
+	return last;
+}
+
+static uint32_t secs_at(unsigned y, unsigned mo, unsigned d, unsigned h, unsigned mi, unsigned sec) {
+	datetime_t t = {(uint16_t)y, (uint8_t)mo, (uint8_t)d, (uint8_t)h, (uint8_t)mi, (uint8_t)sec, 0};
+	uint32_t secs = 0;
+	CHECK(datetime_to_secs(&t, &secs));
+	return secs;
+}
+
+static void clock_open_at(uint32_t secs) {
+	settings_t v;
+	settings_defaults(&v);
+	clockpanel_open(&cp, &v, secs, true);
+}
+
+// Date and Time follow the clock until typed in; Return then sets nothing.
+static void test_clock_panel_follows(void) {
+	uint32_t now = secs_at(2026, 10, 22, 13, 45, 30);
+	clock_open_at(now);
+	CHECK(strcmp(cp.date, "2026-10-22") == 0);
+	CHECK(strcmp(cp.time, "13:45:30") == 0);
+	CHECK_EQ(clockpanel_tick(&cp, 0, now), CLOCKPANEL_NONE);
+	CHECK_EQ(clockpanel_tick(&cp, 0, now + 31), CLOCKPANEL_REDRAW);
+	CHECK(strcmp(cp.time, "13:46:01") == 0);
+	CHECK_EQ(clock_send("\r"), CLOCKPANEL_APPLY);
+	uint32_t secs;
+	CHECK(!clockpanel_time(&cp, &secs));
+
+	static screen_t s;
+	screen_init(&s, 80, FG, BG);
+	const unsigned top = SCREEN_ROWS - 1 - CLOCKPANEL_ROWS;
+	clockpanel_draw(&cp, &s, top, FG, BG, BORDER);
+	CHECK(row_contains(&s, top, "SET-UP  Clock"));
+	CHECK(row_contains(&s, top + 1, "> Date") && row_contains(&s, top + 1, "2026-10-22"));
+	CHECK(row_contains(&s, top + 2, "Time") && row_contains(&s, top + 2, "13:46:01"));
+	CHECK(row_contains(&s, top + 4, "Status line clock") && row_contains(&s, top + 4, "24 h   12 h   off"));
+	CHECK(row_contains(&s, top + 7, "Status line shows  13:46")); // the default format
+	// Without an RTC the title says it lasts until power-off.
+	settings_t v;
+	settings_defaults(&v);
+	clockpanel_open(&cp, &v, now, false);
+	clockpanel_draw(&cp, &s, top, FG, BG, BORDER);
+	CHECK(row_contains(&s, top, "no RTC"));
+}
+
+// Digits overwrite the one under the cursor, skipping the separators;
+// Return sets the clock to them.
+static void test_clock_panel_typing(void) {
+	clock_open_at(secs_at(2026, 10, 22, 13, 45, 30));
+	CHECK_EQ(clock_send("20251231"), CLOCKPANEL_REDRAW);
+	CHECK(strcmp(cp.date, "2025-12-31") == 0);
+	CHECK(cp.edited);
+	CHECK_EQ(clockpanel_tick(&cp, 0, secs_at(2026, 10, 22, 13, 50, 0)), CLOCKPANEL_NONE); // stays as typed
+	CHECK(strcmp(cp.date, "2025-12-31") == 0);
+	// Down to Time; Right twice skips the colon.
+	CHECK_EQ(clock_send("\x1b[B23"), CLOCKPANEL_REDRAW);
+	CHECK_EQ(cp.cursor, 3u);
+	CHECK_EQ(clock_send("59"), CLOCKPANEL_REDRAW);
+	CHECK_EQ(clock_send("\x7f\x7f"), CLOCKPANEL_REDRAW); // Backspace twice: back on 59's 5
+	CHECK_EQ(clock_send("5958"), CLOCKPANEL_REDRAW);
+	CHECK(strcmp(cp.time, "23:59:58") == 0);
+	CHECK_EQ(clock_send("7"), CLOCKPANEL_REDRAW); // at the end: the last digit again
+	CHECK(strcmp(cp.time, "23:59:57") == 0);
+	CHECK_EQ(clock_send("\x1b[D\x1b[D\x1b[D"), CLOCKPANEL_REDRAW);
+	CHECK_EQ(cp.cursor, 3u);
+	CHECK_EQ(clock_send("\r"), CLOCKPANEL_APPLY);
+	uint32_t secs;
+	CHECK(clockpanel_time(&cp, &secs));
+	CHECK_EQ(secs, secs_at(2025, 12, 31, 23, 59, 57));
+
+	// Not a date: Return stays, with a message.
+	clock_open_at(secs_at(2026, 10, 22, 13, 45, 30));
+	CHECK_EQ(clock_send("20260230\r"), CLOCKPANEL_REDRAW);
+	CHECK(cp.message != NULL);
+	CHECK(!clockpanel_time(&cp, &secs));
+	CHECK_EQ(clock_send("\x1b[D2"), CLOCKPANEL_REDRAW); // the 3 of 30 made a 2
+	CHECK(strcmp(cp.date, "2026-02-20") == 0);
+	CHECK(cp.message == NULL);
+	CHECK_EQ(clock_send("\r"), CLOCKPANEL_APPLY);
+}
+
+// The status line rows step through the clock settings' choices, and the
+// sample shows what they give.
+static void test_clock_panel_format(void) {
+	uint32_t now = secs_at(2026, 10, 22, 13, 45, 30);
+	clock_open_at(now);
+	CHECK_EQ(clock_send("\x1b[B\x1b[B\x1b[C"), CLOCKPANEL_REDRAW);
+	CHECK_EQ(cp.values.clock, SETTINGS_CLOCK_12H);
+	CHECK_EQ(clock_send("\x1b[B "), CLOCKPANEL_REDRAW);
+	CHECK_EQ(cp.values.clock_seconds, 1);
+	CHECK_EQ(clock_send("\x1b[B  "), CLOCKPANEL_REDRAW);
+	CHECK_EQ(cp.values.clock_date, SETTINGS_DATE_SHORT);
+	static screen_t s;
+	screen_init(&s, 80, FG, BG);
+	const unsigned top = SCREEN_ROWS - 1 - CLOCKPANEL_ROWS;
+	clockpanel_draw(&cp, &s, top, FG, BG, BORDER);
+	CHECK(row_contains(&s, top + 7, "Thu 22 Oct  1:45:30 PM"));
+	// Down from the last row wraps to Date; Up from Date to the last row.
+	CHECK_EQ(clock_send("\x1b[B"), CLOCKPANEL_REDRAW);
+	CHECK_EQ(cp.line, (unsigned)CLOCKPANEL_DATE);
+	CHECK_EQ(clock_send("\x1b[A\x1b[D"), CLOCKPANEL_REDRAW);
+	CHECK_EQ(cp.values.clock_date, SETTINGS_DATE_ISO);
+	// Off: the sample says so; Space on Date does nothing.
+	CHECK_EQ(clock_send("\x1b[A\x1b[A "), CLOCKPANEL_REDRAW);
+	CHECK_EQ(cp.values.clock, SETTINGS_CLOCK_OFF);
+	clockpanel_draw(&cp, &s, top, FG, BG, BORDER);
+	CHECK(row_contains(&s, top + 7, "no clock"));
+	CHECK_EQ(clock_send("\x1b[A\x1b[A"), CLOCKPANEL_REDRAW);
+	CHECK_EQ(cp.line, (unsigned)CLOCKPANEL_DATE);
+	CHECK_EQ(clock_send(" "), CLOCKPANEL_NONE);
+	CHECK(!cp.edited);
+}
+
+static void test_clock_panel_escape(void) {
+	clock_open_at(1000);
+	CHECK_EQ(clockpanel_input(&cp, 0x1b, 50), CLOCKPANEL_NONE);
+	CHECK_EQ(clockpanel_tick(&cp, 100, 1000), CLOCKPANEL_NONE);
+	CHECK_EQ(clockpanel_tick(&cp, 150, 1000), CLOCKPANEL_CANCEL);
+	clock_open_at(1000);
+	CHECK_EQ(clock_send("\x1bx"), CLOCKPANEL_CANCEL);
 }
 
 static void test_mode_setting(void) {
@@ -425,6 +578,11 @@ int main(void) {
 	RUN(test_demo_key);
 	RUN(test_reboot_key);
 	RUN(test_firmware_key);
+	RUN(test_clock_key);
+	RUN(test_clock_panel_follows);
+	RUN(test_clock_panel_typing);
+	RUN(test_clock_panel_format);
+	RUN(test_clock_panel_escape);
 	RUN(test_mode_setting);
 	RUN(test_status_line_setting);
 	RUN(test_blank_after_setting);
