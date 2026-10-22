@@ -12,6 +12,7 @@ target_link_libraries(dvt_storage
     fatfs
   PRIVATE
     dvt_board
+    dvt_clock
     dvt_disks
     dvt_platform
     dvt_usb

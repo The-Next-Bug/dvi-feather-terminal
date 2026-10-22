@@ -26,8 +26,9 @@ edit() { "${PYTHON:-python3}" "$root/src/disks/diskimg_gen.py" --edit "$@"; }
 work="$out/cpm3work"
 mkdir -p "$work"
 
-"${CC:-cc}" -O2 -w -o "$out/cpmrun" -I"$root/src/machine" -I"$root/src/machine/z80pack" \
+"${CC:-cc}" -O2 -w -o "$out/cpmrun" -I"$root/src/machine" -I"$root/src/machine/z80pack" -I"$root/src/clock" \
   -I"$z80pack/z80core" -I"$z80pack/iodevices" "$here/cpmrun.c" "$root/src/machine/machine.c" \
+  "$root/src/clock/datetime.c" \
   "$z80pack"/z80core/sim{glb,core,z80,z80-cb,z80-dd,z80-ddcb,z80-ed,z80-fd,z80-fdcb}.c \
   "$z80pack/iodevices/sd-fdc.c"
 

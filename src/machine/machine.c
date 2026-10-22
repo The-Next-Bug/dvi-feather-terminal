@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "datetime.h"
 #include "sim.h"
 #include "simdefs.h"
 #include "simglb.h"
@@ -25,11 +26,6 @@
 #define CHECK_TSTATES 20000   // how often the CPU loop reads the clock when unlimited
 #define KEY_QUEUE 64          // a power of two
 #define HWCTL_UNLOCK 0xaa
-// The clock's date at power-on, in days since 1.1.1978 (CP/M 3's day 1):
-// 1.1.2026 (no RTC: the date only moves on while the board is powered).
-#ifndef MACHINE_EPOCH_DAYS
-#define MACHINE_EPOCH_DAYS 17533
-#endif
 
 BYTE __attribute__((aligned(4))) bnk0[65536];
 #if NUMSEG > 0
@@ -58,6 +54,7 @@ static struct {
 	uint64_t speed_time;
 	char reason[48];
 	BYTE clk_cmd, clk_fmt; // clock: register selected, 1 = decimal (else BCD)
+	BYTE clk_days_low;     // register 3's write, for register 4's
 	BYTE dinfo_drive;      // port 8: the drive asked about
 	bool dinfo_format_read; // its format read: the next IN is the mount count
 	uint8_t dinfo_asked;   // drives (bit n) asked about since the reset
@@ -260,11 +257,19 @@ static void hwctl_out(BYTE data) {
 }
 
 // The clock (ports 65/66), as z80pack's rtc80.c reads it but without the C
-// library's localtime: the time is MACHINE_EPOCH_DAYS (days since 1.1.1978)
-// plus the time since power-on. Register 3/4: days since 1.1.1978; 6: the
-// month 0-11 and 7: the year - 1900, as rtc80.c gives them.
+// library's localtime: the platform's wall clock (time_get), or without
+// one 1.1.2026 plus the time since power-on. Register 3/4: days since
+// 1.1.1978 (CP/M 3's day number); 6: the month 0-11 and 7: the year - 1900,
+// as rtc80.c gives them. Writes (ours, machine.h) set it through time_set.
 static BYTE to_bcd(unsigned v) {
 	return (BYTE)((v / 10 % 10) << 4 | v % 10);
+}
+
+static uint32_t clock_now(void) {
+	if (plat->time_get) {
+		return plat->time_get();
+	}
+	return DATETIME_DEFAULT_DAYS * DATETIME_DAY + (uint32_t)(plat->clock_us() / 1000000u);
 }
 
 static BYTE clkc_in(void) {
@@ -279,39 +284,32 @@ static void clkc_out(BYTE data) {
 }
 
 static BYTE clkd_in(void) {
-	uint64_t secs = plat->clock_us() / 1000000u;
-	unsigned days = MACHINE_EPOCH_DAYS + (unsigned)(secs / 86400);
-	unsigned day_secs = (unsigned)(secs % 86400);
-	// The date from the days since 1.3.0000 (Howard Hinnant's
-	// civil_from_days); 1.1.1978 is day 722390 of that count.
-	unsigned z = days - 1 + 722390, era = z / 146097, doe = z - era * 146097;
-	unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-	unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100), mp = (5 * doy + 2) / 153;
-	unsigned mday = doy - (153 * mp + 2) / 5 + 1, month = mp < 10 ? mp + 3 : mp - 9;
-	unsigned year = yoe + era * 400 + (month <= 2);
+	uint32_t secs = clock_now(), days = secs / DATETIME_DAY;
+	datetime_t t;
+	datetime_from_secs(secs, &t);
 	unsigned v;
 	switch (m.clk_cmd) {
 	case 0:
-		v = day_secs % 60;
+		v = t.sec;
 		break;
 	case 1:
-		v = day_secs / 60 % 60;
+		v = t.min;
 		break;
 	case 2:
-		v = day_secs / 3600;
+		v = t.hour;
 		break;
 	case 3:
 		return (BYTE)days;
 	case 4:
 		return (BYTE)(days >> 8);
 	case 5:
-		v = mday;
+		v = t.mday;
 		break;
 	case 6:
-		v = month - 1;
+		v = t.month - 1u;
 		break;
 	case 7:
-		v = year - 1900;
+		v = t.year - 1900u;
 		break;
 	default:
 		return 0;
@@ -320,7 +318,41 @@ static BYTE clkd_in(void) {
 }
 
 static void clkd_out(BYTE data) {
-	UNUSED(data); // the clock cannot be set
+	if (!plat->time_set) {
+		return;
+	}
+	uint32_t secs = clock_now(), days = secs / DATETIME_DAY, day_secs = secs % DATETIME_DAY;
+	unsigned v = data, hour = day_secs / 3600, min = day_secs / 60 % 60, sec = day_secs % 60;
+	if (m.clk_cmd <= 2 && !m.clk_fmt) {
+		if ((data & 0x0f) > 9 || data >> 4 > 9) {
+			return;
+		}
+		v = (data >> 4) * 10u + (data & 0x0fu);
+	}
+	switch (m.clk_cmd) {
+	case 0:
+		sec = v;
+		break;
+	case 1:
+		min = v;
+		break;
+	case 2:
+		hour = v;
+		break;
+	case 3:
+		m.clk_days_low = data;
+		return;
+	case 4:
+		days = (uint32_t)data << 8 | m.clk_days_low;
+		break;
+	default:
+		return;
+	}
+	// The last whole day of the count is 49710 (datetime.h).
+	if (sec > 59 || min > 59 || hour > 23 || days < 1 || days > 49710) {
+		return;
+	}
+	plat->time_set(days * DATETIME_DAY + hour * 3600u + min * 60u + sec);
 }
 
 // Port 8: the format of the disk in the drive last written, then (IN

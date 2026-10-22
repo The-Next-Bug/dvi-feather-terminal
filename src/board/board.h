@@ -117,6 +117,36 @@
 #error "BOARD_PSRAM_CS_PIN is not an XIP_CS1 pin (GP0, GP8, GP19, GP47)"
 #endif
 
+// --- Real-time clock (optional) ---
+
+// GPIO n is I2C (n >> 1) & 1 with SDA on even pins, SCL on odd ones.
+#define BOARD_I2C_OF(pin) (((pin) >> 1) & 1)
+#ifdef BOARD_RTC_DS3231
+#if !defined(BOARD_RTC_I2C) || !defined(BOARD_RTC_SDA_PIN) || !defined(BOARD_RTC_SCL_PIN)
+#error "BOARD_RTC_DS3231 needs BOARD_RTC_I2C, BOARD_RTC_SDA_PIN and BOARD_RTC_SCL_PIN (see boards/example.h)"
+#endif
+#if BOARD_RTC_I2C != 0 && BOARD_RTC_I2C != 1
+#error "BOARD_RTC_I2C must be 0 or 1"
+#endif
+#if BOARD_I2C_OF(BOARD_RTC_SDA_PIN) != BOARD_RTC_I2C || BOARD_RTC_SDA_PIN % 2 != 0
+#error "BOARD_RTC_SDA_PIN is not an SDA pin of BOARD_RTC_I2C"
+#endif
+#if BOARD_I2C_OF(BOARD_RTC_SCL_PIN) != BOARD_RTC_I2C || BOARD_RTC_SCL_PIN % 2 != 1
+#error "BOARD_RTC_SCL_PIN is not an SCL pin of BOARD_RTC_I2C"
+#endif
+#define BOARD_RTC_I2C_INST I2C_INSTANCE(BOARD_RTC_I2C)
+#define BOARD_RTC_BITS (BOARD_PIN_BIT(BOARD_RTC_SDA_PIN) | BOARD_PIN_BIT(BOARD_RTC_SCL_PIN))
+#elif defined(BOARD_RTC_I2C) || defined(BOARD_RTC_SDA_PIN) || defined(BOARD_RTC_SCL_PIN)
+#error "BOARD_RTC_I2C and its pins need a chip: BOARD_RTC_DS3231"
+#else
+#define BOARD_RTC_BITS 0ull
+#endif
+#ifdef BOARD_RTC_SQW_PIN
+#define BOARD_SQW_BIT BOARD_PIN_BIT(BOARD_RTC_SQW_PIN)
+#else
+#define BOARD_SQW_BIT 0ull
+#endif
+
 // --- Every pin used once ---
 
 // Pins that are optional or only used in some builds count as used when
@@ -153,9 +183,10 @@
 	(BOARD_PIN_BIT(BOARD_UART_TX_PIN) op BOARD_PIN_BIT(BOARD_UART_RX_PIN) op           \
 	BOARD_CTS_BIT op BOARD_RTS_BIT op BOARD_PIN_BIT(BOARD_SD_MISO_PIN) op                           \
 	BOARD_PIN_BIT(BOARD_SD_CS_PIN) op BOARD_PIN_BIT(BOARD_SD_SCK_PIN) op                            \
-	BOARD_PIN_BIT(BOARD_SD_MOSI_PIN) op BOARD_VBUS_BIT op BOARD_LED_BIT op BOARD_PSRAM_BIT)
+	BOARD_PIN_BIT(BOARD_SD_MOSI_PIN) op BOARD_VBUS_BIT op BOARD_LED_BIT op BOARD_PSRAM_BIT op       \
+	BOARD_RTC_BITS op BOARD_SQW_BIT)
 #if BOARD_OTHER_PINS(+) != BOARD_OTHER_PINS(|)
-#error "the board header uses a pin twice (UART, SD card, USB VBUS enable, LED, PSRAM)"
+#error "the board header uses a pin twice (UART, SD card, USB VBUS enable, LED, PSRAM, RTC)"
 #endif
 #if BOARD_OTHER_PINS(|) & 0xff000ull
 #error "the board header gives a DVI pin (GP12-19) another job"
@@ -175,6 +206,11 @@
 #define BOARD_UART_PINS_TEXT                                                                       \
 	BOARD_UART_NAME " on TX (GP" BOARD_STR(BOARD_UART_TX_PIN) ") / RX (GP" BOARD_STR(                 \
 		BOARD_UART_RX_PIN) ")"
+#ifdef BOARD_RTC_DS3231
+#define BOARD_RTC_PINS_TEXT                                                                        \
+	"I2C" BOARD_STR(BOARD_RTC_I2C) ": GP" BOARD_STR(BOARD_RTC_SDA_PIN) " SDA, GP" BOARD_STR(       \
+		BOARD_RTC_SCL_PIN) " SCL"
+#endif
 #ifdef BOARD_UART_RTS_PIN
 #define BOARD_UART_FLOW_TEXT                                                                       \
 	", RTS (GP" BOARD_STR(BOARD_UART_RTS_PIN) ") / CTS (GP" BOARD_STR(BOARD_UART_CTS_PIN) ")"

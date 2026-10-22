@@ -1,11 +1,14 @@
 // FatFs disk I/O on the board: drive 0 the SD card (sdcard.c), drive 1 a
-// USB stick (usbmsc.c, with the USB host). The host tests use
-// test/diskio_ram.c instead. Reads and writes blink the LED.
+// USB stick (usbmsc.c, with the USB host), and the files' dates from the
+// wall clock (rtc.c). The host tests use test/diskio_ram.c instead. Reads
+// and writes blink the LED.
 
 #include "ff.h"
 #include "diskio.h"
 
+#include "datetime.h"
 #include "led.h"
+#include "rtc.h"
 #include "sdcard.h"
 #include "usbmsc.h"
 
@@ -59,4 +62,8 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
 		return usbmsc_disk_ioctl(cmd, buff);
 	}
 	return RES_NOTRDY;
+}
+
+DWORD get_fattime(void) {
+	return datetime_to_fat(rtc_now());
 }

@@ -6,6 +6,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "datetime.h"
 #include "drives.h"
 #include "xfer.h"
 
@@ -112,6 +113,21 @@ static size_t hwinfo(uint8_t item, uint8_t *buf) {
 	}
 }
 
+// The wall clock: the time since the host's start plus an offset in
+// microseconds, so that a set zeroes the seconds' fraction as a real clock
+// chip's write does.
+uint64_t host_time_offset_us = (uint64_t)DATETIME_DEFAULT_DAYS * DATETIME_DAY * 1000000u;
+unsigned host_time_sets;
+
+static uint32_t time_get(void) {
+	return (uint32_t)((host_time_offset_us + host_clock_us()) / 1000000u);
+}
+
+static void time_set(uint32_t secs) {
+	host_time_offset_us = (uint64_t)secs * 1000000u - host_clock_us();
+	++host_time_sets;
+}
+
 const machine_platform_t host_platform = {
 	.clock_us = host_clock_us,
 	.idle = idle,
@@ -124,6 +140,8 @@ const machine_platform_t host_platform = {
 	.disk_mounts = disk_mounts,
 	.xfer = xfer_command,
 	.hwinfo = hwinfo,
+	.time_get = time_get,
+	.time_set = time_set,
 };
 
 void clear_screen(void) {

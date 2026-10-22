@@ -40,6 +40,7 @@
 #include "led.h"
 #include "nvflash.h"
 #include "palette.h"
+#include "rtc.h"
 #include "serial.h"
 #include "splash.h"
 #include "term_build.h"
@@ -240,6 +241,9 @@ int main(void) {
 	// with LOGO_IN_FLASH the logo, and the cold code left in flash
 	// (ld/section_copy_to_ram_rodata.incl), palette.c's included.
 	nvflash_retime();
+	// The wall clock from the board's RTC (I2C clocked from clk_peri, final
+	// now).
+	rtc_init();
 	show_palette(&settings);
 	// After video_init: the baud divisor depends on the final clk_peri.
 	// Diagnostic builds write to UART0 with blocking calls, which a CTS that

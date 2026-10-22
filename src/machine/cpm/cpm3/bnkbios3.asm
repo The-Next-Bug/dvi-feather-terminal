@@ -783,12 +783,36 @@ SETBNK:	STA	BANK
 ;
 XMOVE: RET			; no memory to memory DMA available
 ;
-;	get/set time
+;	get/set time: C = 0FFH sets the clock from the SCB (the machine's
+;	clock ports take writes, src/machine/machine.h): the day number,
+;	low byte first (the high byte's write sets it), then hours,
+;	minutes, seconds in BCD
 ;
 TIME:	MOV	A,C
 	CPI	0FFH
-	RZ			; can't set time
-	MVI	A,GETSEC	; get seconds
+	JNZ	GETTIM
+	MVI	A,GETDAL
+	OUT	CLKCMD
+	LDA	@date
+	OUT	CLKDAT
+	MVI	A,GETDAH
+	OUT	CLKCMD
+	LDA	@date+1
+	OUT	CLKDAT
+	MVI	A,GETHOU
+	OUT	CLKCMD
+	LDA	@hour
+	OUT	CLKDAT
+	MVI	A,GETMIN
+	OUT	CLKCMD
+	LDA	@min
+	OUT	CLKDAT
+	MVI	A,GETSEC
+	OUT	CLKCMD
+	LDA	@sec
+	OUT	CLKDAT
+	RET
+GETTIM:	MVI	A,GETSEC	; get seconds
 	OUT	CLKCMD
 	IN	CLKDAT
 	STA	@sec

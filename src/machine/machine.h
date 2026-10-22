@@ -55,7 +55,26 @@ typedef struct {
 	// item it does not know. Items 1 and up only: machine.c answers
 	// HWINFO_ID. May be NULL: port 12 reads 0xFF, as with no device there.
 	size_t (*hwinfo)(uint8_t item, uint8_t *buf);
+	// The wall clock for ports 65/66, in seconds since 31.12.1977 00:00
+	// (datetime.h: / 86400 is CP/M 3's day number). May be NULL: 1.1.2026
+	// at power-on plus the time since.
+	uint32_t (*time_get)(void);
+	// Set the wall clock (writes to port 66, below). May be NULL: the
+	// clock cannot be set, as on picosim.
+	void (*time_set)(uint32_t secs);
 } machine_platform_t;
+
+// Ports 65/66, the clock, as picosim's: OUT 65 selects a register, IN 66
+// reads it: 0 seconds, 1 minutes, 2 hours, 3/4 the day number (low, high:
+// days since 31.12.1977, CP/M 3's), 5 the day of the month, 6 the month
+// 0-11, 7 the year - 1900; in BCD, or in binary after OUT 65,255 (which
+// toggles it; IN 65 reads 1 for binary). Days are always binary. Ours:
+// OUT 66 sets the selected register through the platform's time_set: 0-2
+// (BCD or binary as read) replace that field of the current time, with the
+// seconds' fraction zeroed; a write to 3 is kept for the next write to 4,
+// which sets the day number from both (the time of day kept). Values out of
+// range, and registers 5-7, are ignored. CP/M 3's BIOS TIME (bnkbios3.asm)
+// writes the day number, then hours, minutes, seconds.
 
 // Port 10, the file transfer device: files in a folder of a FAT volume,
 // read and written a 128-byte record at a time by DMA, in the style of the
@@ -117,7 +136,7 @@ typedef struct {
 #define HWINFO_USB_HOST 23     // the USB host port: keyboards, sticks
 #define HWINFO_USB_STICK 24    // the stick in use (USB: to the transfer tools)
 #define HWINFO_LED 25          // the status LED
-#define HWINFO_RTC 26          // a real-time clock (planned: bd 1ls.6)
+#define HWINFO_RTC 26          // a real-time clock (bd 1ls.6.1)
 #define HWINFO_BELL 27         // a DAC or buzzer for BEL (planned: bd 1ls.7)
 #define HWINFO_NEOPIXEL 28     // an RGB status LED (planned: bd 1ls.15)
 #define HWINFO_SD_DETECT 29    // the card slot's detect switch (planned: bd 1ls.11)

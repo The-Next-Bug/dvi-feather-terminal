@@ -27,5 +27,5 @@ dvt_compile_options(dvt_z80pack THIRD_PARTY)
 
 add_library(dvt_machine STATIC machine.c)
 target_include_directories(dvt_machine PUBLIC ${CMAKE_CURRENT_LIST_DIR})
-target_link_libraries(dvt_machine PRIVATE dvt_z80pack)
+target_link_libraries(dvt_machine PRIVATE dvt_clock dvt_z80pack)
 dvt_compile_options(dvt_machine)

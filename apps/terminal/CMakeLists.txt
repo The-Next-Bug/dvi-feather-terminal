@@ -48,6 +48,7 @@ target_compile_definitions(dvi_terminal PRIVATE
 
 target_link_libraries(dvi_terminal
   dvt_board
+  dvt_clock
   dvt_common
   dvt_disks
   dvt_input
@@ -64,6 +65,7 @@ target_link_libraries(dvi_terminal
   # The SDK's libraries, which the dvt_ ones compile against.
   hardware_dma
   hardware_flash
+  hardware_i2c
   hardware_spi
   hardware_uart
   hardware_vreg

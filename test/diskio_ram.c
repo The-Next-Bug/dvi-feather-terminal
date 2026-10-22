@@ -109,3 +109,9 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
 		return RES_PARERR;
 	}
 }
+
+// Files' dates: 1.1.2026 00:00, as FatFs's FF_NORTC_* gave before the
+// firmware's clock (the firmware's get_fattime is in src/storage/diskio.c).
+DWORD get_fattime(void) {
+	return (DWORD)(2026 - 1980) << 25 | 1u << 21 | 1u << 16;
+}

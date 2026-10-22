@@ -34,6 +34,12 @@ extern void (*host_console_hook)(uint8_t c);
 extern char aux_sent[256];
 extern size_t aux_len;
 
+// The wall clock (machine.h time_get/time_set): seconds since 31.12.1977
+// are (host_time_offset_us + host_clock_us()) / 1000000; starts at
+// 1.1.2026. time_set counts host_time_sets.
+extern uint64_t host_time_offset_us;
+extern unsigned host_time_sets;
+
 uint64_t host_clock_us(void);
 void clear_screen(void);
 
