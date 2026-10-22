@@ -66,6 +66,7 @@ target_link_libraries(dvi_terminal
   hardware_dma
   hardware_flash
   hardware_i2c
+  hardware_pio
   hardware_spi
   hardware_uart
   hardware_vreg

@@ -1,5 +1,6 @@
 #include "clockpanel.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -12,7 +13,7 @@
 
 // The settings field of line (2 ..), settings_fields' index.
 static unsigned field_of(unsigned line) {
-	return SETTINGS_MAIN_FIELDS + line - 2;
+	return (unsigned)offsetof(settings_t, clock) + line - 2;
 }
 
 static char *text_of(clockpanel_t *p) {

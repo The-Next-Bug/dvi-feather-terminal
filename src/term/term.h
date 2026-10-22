@@ -34,6 +34,9 @@
 // CSI ? 999 ~ (private to this terminal) asks for SET-UP: it bumps
 // setup_requests, and term_write stops right after it, so the owner can hand
 // the bytes that follow to SET-UP instead.
+//
+// BEL bumps bells in every personality (not BEL ending an OSC string), for
+// the owner to sound the bell.
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -113,6 +116,7 @@ typedef struct {
 	uint8_t tabs[(SCREEN_MAX_COLS + 7) / 8];
 	unsigned screen_resets; // times DECCOLM cleared the whole screen
 	unsigned setup_requests; // times the host sent CSI ? 999 ~
+	unsigned bells;          // BELs received
 
 	term_reply_t reply;
 	void *reply_ctx;

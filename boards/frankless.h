@@ -8,8 +8,8 @@
 // explains each setting.
 //
 // The board's other pins, which the firmware leaves alone (inputs with the
-// reset pulls): GP5/6/7 the TDA1387 DAC's BCK/WS/DATA (not fitted), GP8 the
-// RTC's 1 Hz SQW (open drain, 4.7k pull-up; reserved), GP24-29 on header J1.
+// reset pulls): GP24-29 on header J1. No RGB LED, card detect, user button
+// or battery (the RTC's cell aside).
 //
 // USB: slide switch S1 routes the RP2350's USB either to the USB-C socket
 // (flashing over BOOTSEL) or to the hub (keyboards and sticks); the hub
@@ -96,13 +96,23 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 // --- Real-time clock ---
 //
 // DS3231M on I2C1 with 4.7k pull-ups; VBAT from an external battery holder
-// (without a cell the time is lost at power-off). Its 1 Hz SQW output goes
-// to GP8 (open drain, 4.7k pull-up), unused so far.
+// (without a cell the time is lost at power-off). Its 1 Hz SQW output on
+// GP8 (open drain, 4.7k pull-up) keeps the firmware's clock on the chip's.
 #define BOARD_RTC_DS3231 1
 #define BOARD_RTC_I2C 1
 #define BOARD_RTC_SDA_PIN 10
 #define BOARD_RTC_SCL_PIN 11
 #define BOARD_RTC_SQW_PIN 8
+
+// --- Audio ---
+//
+// U8, a TDA1387 stereo DAC (hand-fitted: not in the JLCPCB assembly),
+// 16-bit words left-justified (at 16 bits, the same as its LSB-justified
+// format), to the audio amplifier and jack: the bell.
+#define BOARD_AUDIO_I2S_BCK_PIN 5
+#define BOARD_AUDIO_I2S_WS_PIN 6
+#define BOARD_AUDIO_I2S_DATA_PIN 7
+#define BOARD_AUDIO_I2S_NAME "TDA1387"
 
 // --- LED ---
 //

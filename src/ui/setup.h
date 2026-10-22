@@ -20,7 +20,7 @@
 #include "screen.h"
 #include "settings.h"
 
-#define SETUP_ITEMS SETTINGS_MAIN_FIELDS
+#define SETUP_ITEMS SETTINGS_MAIN_FIELDS // rows: settings_main_field gives each one's field
 // In a box (screen_frame): the top line with the title, the settings with
 // two preview rows under the color ones, message, two help rows, the
 // bottom line.
@@ -47,6 +47,7 @@ typedef struct {
 	uint32_t esc_ms;     // when the ESC arrived
 	const char *message; // shown in the panel until the next key; NULL: none
 	bool machine_menu;   // offer M for the Z80 machine's menu (set after setup_open)
+	bool no_bell;        // the board has no bell: Bell shows off, fixed (set after setup_open)
 } setup_t;
 
 void setup_open(setup_t *u, const settings_t *values);

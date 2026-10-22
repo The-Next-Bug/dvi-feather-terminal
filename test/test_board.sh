@@ -90,6 +90,19 @@ check "RTC without its pins" "needs BOARD_RTC_I2C" "$sock" "#define BOARD_RTC_DS
 check "RTC pins without a chip" "need a chip" "$sock" "#define BOARD_RTC_I2C 1"
 check "RTC on the SD card" "uses a pin twice" "$sock" "$(rtc 0 4 5)"
 check "RTC SQW on the LED" "uses a pin twice" "$sock" "$(rtc 1 10 11)" "#define BOARD_RTC_SQW_PIN 25"
+i2s() { echo "#define BOARD_AUDIO_I2S_BCK_PIN $1"; echo "#define BOARD_AUDIO_I2S_WS_PIN $2"
+  echo "#define BOARD_AUDIO_I2S_DATA_PIN $3"; }
+check "I2S DAC" "" "$sock" "$(i2s 9 10 11)"
+check "I2S WS not after BCK" "must be BOARD_AUDIO_I2S_BCK_PIN + 1" "$sock" "$(i2s 9 11 10)"
+check "I2S without DATA" "needs BOARD_AUDIO_I2S_BCK_PIN" "$sock" "#define BOARD_AUDIO_I2S_BCK_PIN 9" \
+  "#define BOARD_AUDIO_I2S_WS_PIN 10"
+check "I2S on the SD card" "uses a pin twice" "$sock" "$(i2s 4 5 8)"
+check "planned hardware" "" "$sock" "#define BOARD_BUZZER_PIN 8" "#define BOARD_NEOPIXEL_PIN 9" \
+  "#define BOARD_SD_CD_PIN 10" "#define BOARD_BUTTON_PIN 11" "#define BOARD_BATTERY_ADC_PIN 26" \
+  "#define BOARD_CHARGER_STAT_PIN 27"
+check "button on the LED" "uses a pin twice" "$sock" "#define BOARD_BUTTON_PIN 25"
+check "battery not on an ADC pin" "not an ADC pin" "$sock" "#define BOARD_BATTERY_ADC_PIN 22"
+check "battery on GP40 of an RP2350A" "not an ADC pin" "$sock" "#define BOARD_BATTERY_ADC_PIN 40"
 check "no LED" "" "$sock" "#undef PICO_DEFAULT_LED_PIN"
 check "DVI drive 8 mA" "" "$sock" "#define BOARD_DVI_DRIVE_MA 8"
 check "DVI drive 6 mA" "must be 2, 4, 8 or 12" "$sock" "#define BOARD_DVI_DRIVE_MA 6"

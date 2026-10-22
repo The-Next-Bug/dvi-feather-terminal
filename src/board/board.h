@@ -147,6 +147,73 @@
 #define BOARD_SQW_BIT 0ull
 #endif
 
+// --- Other optional hardware (bd 1ls.4) ---
+//
+// A board header names what it has, also before the firmware drives it:
+// HWINFO reports such hardware as planned, and leaves out what the board
+// does not name.
+
+// An I2S (or 16-bit left-justified) DAC: the bell (bell.c). BCK and WS are
+// PIO side-set pins, so WS is BCK + 1.
+#if defined(BOARD_AUDIO_I2S_BCK_PIN) || defined(BOARD_AUDIO_I2S_WS_PIN) || defined(BOARD_AUDIO_I2S_DATA_PIN)
+#if !defined(BOARD_AUDIO_I2S_BCK_PIN) || !defined(BOARD_AUDIO_I2S_WS_PIN) || !defined(BOARD_AUDIO_I2S_DATA_PIN)
+#error "an I2S DAC needs BOARD_AUDIO_I2S_BCK_PIN, BOARD_AUDIO_I2S_WS_PIN and BOARD_AUDIO_I2S_DATA_PIN"
+#endif
+#if BOARD_AUDIO_I2S_WS_PIN != BOARD_AUDIO_I2S_BCK_PIN + 1
+#error "BOARD_AUDIO_I2S_WS_PIN must be BOARD_AUDIO_I2S_BCK_PIN + 1 (PIO side-set pins)"
+#endif
+#define BOARD_AUDIO_I2S 1
+#define BOARD_I2S_BITS (BOARD_PIN_BIT(BOARD_AUDIO_I2S_BCK_PIN) | BOARD_PIN_BIT(BOARD_AUDIO_I2S_WS_PIN) | \
+	BOARD_PIN_BIT(BOARD_AUDIO_I2S_DATA_PIN))
+#ifndef BOARD_AUDIO_I2S_NAME
+#define BOARD_AUDIO_I2S_NAME "I2S DAC"
+#endif
+#else
+#define BOARD_AUDIO_I2S 0
+#define BOARD_I2S_BITS 0ull
+#endif
+
+// The battery's voltage on an ADC pin (GP26-29, RP2350B GP40-47).
+#ifdef BOARD_BATTERY_ADC_PIN
+#if PICO_RP2350A ? BOARD_BATTERY_ADC_PIN < 26 || BOARD_BATTERY_ADC_PIN > 29 \
+	: BOARD_BATTERY_ADC_PIN < 40 || BOARD_BATTERY_ADC_PIN > 47
+#error "BOARD_BATTERY_ADC_PIN is not an ADC pin (GP26-29, RP2350B GP40-47)"
+#endif
+#endif
+
+// The single pins: a buzzer, an RGB LED (WS2812), the SD slot's card
+// detect, a user button, the battery's ADC and the charger's status.
+#ifdef BOARD_BUZZER_PIN
+#define BOARD_BUZZER_BIT BOARD_PIN_BIT(BOARD_BUZZER_PIN)
+#else
+#define BOARD_BUZZER_BIT 0ull
+#endif
+#ifdef BOARD_NEOPIXEL_PIN
+#define BOARD_NEOPIXEL_BIT BOARD_PIN_BIT(BOARD_NEOPIXEL_PIN)
+#else
+#define BOARD_NEOPIXEL_BIT 0ull
+#endif
+#ifdef BOARD_SD_CD_PIN
+#define BOARD_SD_CD_BIT BOARD_PIN_BIT(BOARD_SD_CD_PIN)
+#else
+#define BOARD_SD_CD_BIT 0ull
+#endif
+#ifdef BOARD_BUTTON_PIN
+#define BOARD_BUTTON_BIT BOARD_PIN_BIT(BOARD_BUTTON_PIN)
+#else
+#define BOARD_BUTTON_BIT 0ull
+#endif
+#ifdef BOARD_BATTERY_ADC_PIN
+#define BOARD_BATTERY_BIT BOARD_PIN_BIT(BOARD_BATTERY_ADC_PIN)
+#else
+#define BOARD_BATTERY_BIT 0ull
+#endif
+#ifdef BOARD_CHARGER_STAT_PIN
+#define BOARD_CHARGER_BIT BOARD_PIN_BIT(BOARD_CHARGER_STAT_PIN)
+#else
+#define BOARD_CHARGER_BIT 0ull
+#endif
+
 // --- Every pin used once ---
 
 // Pins that are optional or only used in some builds count as used when
@@ -184,9 +251,10 @@
 	BOARD_CTS_BIT op BOARD_RTS_BIT op BOARD_PIN_BIT(BOARD_SD_MISO_PIN) op                           \
 	BOARD_PIN_BIT(BOARD_SD_CS_PIN) op BOARD_PIN_BIT(BOARD_SD_SCK_PIN) op                            \
 	BOARD_PIN_BIT(BOARD_SD_MOSI_PIN) op BOARD_VBUS_BIT op BOARD_LED_BIT op BOARD_PSRAM_BIT op       \
-	BOARD_RTC_BITS op BOARD_SQW_BIT)
+	BOARD_RTC_BITS op BOARD_SQW_BIT op BOARD_I2S_BITS op BOARD_BUZZER_BIT op BOARD_NEOPIXEL_BIT op       \
+	BOARD_SD_CD_BIT op BOARD_BUTTON_BIT op BOARD_BATTERY_BIT op BOARD_CHARGER_BIT)
 #if BOARD_OTHER_PINS(+) != BOARD_OTHER_PINS(|)
-#error "the board header uses a pin twice (UART, SD card, USB VBUS enable, LED, PSRAM, RTC)"
+#error "the board header uses a pin twice (UART, SD card, USB VBUS enable, LED, PSRAM, RTC, other hardware)"
 #endif
 #if BOARD_OTHER_PINS(|) & 0xff000ull
 #error "the board header gives a DVI pin (GP12-19) another job"

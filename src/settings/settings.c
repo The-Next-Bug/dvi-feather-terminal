@@ -36,28 +36,41 @@ static const uint8_t logo_fgs[PALETTE_HUES] = {
 };
 
 const settings_field_t settings_fields[SETTINGS_FIELDS] = {
-	{"Columns", 2, {80, 132}, {"80", "132"}},
-	{"Backspace sends", 2, {0x7f, 0x08}, {"DEL", "BS"}},
-	{"Local echo", 2, {0, 1}, {"off", "on"}},
+	{"Columns", 2, {80, 132}, {"80", "132"}, SETTINGS_PAGE_MAIN},
+	{"Backspace sends", 2, {0x7f, 0x08}, {"DEL", "BS"}, SETTINGS_PAGE_MAIN},
+	{"Local echo", 2, {0, 1}, {"off", "on"}, SETTINGS_PAGE_MAIN},
 	{"Baud rate", 9, {0, 1, 2, 3, 4, 5, 6, 7, 8},
-		{"300", "1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200"}},
+		{"300", "1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200"}, SETTINGS_PAGE_MAIN},
 	{"Data/parity/stop", 8, {0, 1, 2, 3, 4, 5, 6, 7},
-		{"8N1", "8E1", "8O1", "8N2", "7E1", "7O1", "7N1", "7N2"}},
-	{"New line (LNM)", 2, {0, 1}, {"off", "on"}},
-	{"Colors", 4, {0, 1, 2, 3}, {"white", "green", "amber", "blue"}},
-	{"Palette", 2, {0, 1}, {"color", "mono"}},
-	{"Mode", 2, {SETTINGS_MODE_TERMINAL, SETTINGS_MODE_CPM}, {"terminal", "CP/M machine"}},
+		{"8N1", "8E1", "8O1", "8N2", "7E1", "7O1", "7N1", "7N2"}, SETTINGS_PAGE_MAIN},
+	{"New line (LNM)", 2, {0, 1}, {"off", "on"}, SETTINGS_PAGE_MAIN},
+	{"Colors", 4, {0, 1, 2, 3}, {"white", "green", "amber", "blue"}, SETTINGS_PAGE_MAIN},
+	{"Palette", 2, {0, 1}, {"color", "mono"}, SETTINGS_PAGE_MAIN},
+	{"Mode", 2, {SETTINGS_MODE_TERMINAL, SETTINGS_MODE_CPM}, {"terminal", "CP/M machine"}, SETTINGS_PAGE_MAIN},
 	{"Status line", 4, {1, 0, SETTINGS_STATUS_DEBUG, SETTINGS_STATUS_DEBUG_USB},
-		{"shown", "hidden", "debug", "debug usb"}},
-	{"Blank after", 6, {0, 1, 5, 10, 30, 60}, {"never", "1 min", "5 min", "10 min", "30 min", "60 min"}},
+		{"shown", "hidden", "debug", "debug usb"}, SETTINGS_PAGE_MAIN},
+	{"Blank after", 6, {0, 1, 5, 10, 30, 60}, {"never", "1 min", "5 min", "10 min", "30 min", "60 min"},
+		SETTINGS_PAGE_MAIN},
 	{"Terminal type", 3, {SETTINGS_TERM_VT100, SETTINGS_TERM_VT52, SETTINGS_TERM_ADM3A},
-		{"VT100", "VT52", "ADM-3A"}},
+		{"VT100", "VT52", "ADM-3A"}, SETTINGS_PAGE_MAIN},
 	{"Status line clock", 3, {SETTINGS_CLOCK_24H, SETTINGS_CLOCK_12H, SETTINGS_CLOCK_OFF},
-		{"24 h", "12 h", "off"}},
-	{"Seconds", 2, {0, 1}, {"off", "on"}},
+		{"24 h", "12 h", "off"}, SETTINGS_PAGE_CLOCK},
+	{"Seconds", 2, {0, 1}, {"off", "on"}, SETTINGS_PAGE_CLOCK},
 	{"Date", 3, {SETTINGS_DATE_NONE, SETTINGS_DATE_ISO, SETTINGS_DATE_SHORT},
-		{"off", "2026-10-22", "Thu 22 Oct"}},
+		{"off", "2026-10-22", "Thu 22 Oct"}, SETTINGS_PAGE_CLOCK},
+	{"Bell", 4, {SETTINGS_BELL_OFF, SETTINGS_BELL_LOW, SETTINGS_BELL_MEDIUM, SETTINGS_BELL_HIGH},
+		{"off", "low", "medium", "high"}, SETTINGS_PAGE_MAIN},
 };
+
+unsigned settings_main_field(unsigned row) {
+	unsigned f = 0;
+	for (; f < SETTINGS_FIELDS; ++f) {
+		if (settings_fields[f].page == SETTINGS_PAGE_MAIN && row-- == 0) {
+			break;
+		}
+	}
+	return f;
+}
 
 unsigned settings_baud_rate(const settings_t *s) {
 	return baud_rates[s->baud < COUNT(baud_rates) ? s->baud : BAUD_DEFAULT];
@@ -110,7 +123,7 @@ void settings_defaults(settings_t *s) {
 	*s = (settings_t){.columns = 80, .backspace = 0x7f, .local_echo = 0, .baud = BAUD_DEFAULT,
 		.framing = 0, .newline = 0, .colors = 0, .palette = 0, .mode = SETTINGS_MODE_TERMINAL,
 		.status_line = 1, .blank_after = 0, .term_type = SETTINGS_TERM_VT100, .clock = SETTINGS_CLOCK_24H,
-		.clock_seconds = 0, .clock_date = SETTINGS_DATE_NONE};
+		.clock_seconds = 0, .clock_date = SETTINGS_DATE_NONE, .bell = SETTINGS_BELL_MEDIUM};
 }
 
 void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_RECORD_SIZE]) {

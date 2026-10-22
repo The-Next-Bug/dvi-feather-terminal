@@ -785,6 +785,26 @@ static void run_basics(void) {
 	RUN(test_band_offset);
 }
 
+// BEL counts in every personality, in VT52 mode also between ESC and its
+// letter (ESC Y's row and column bytes are taken as they come), but not as
+// the end of an OSC string; nothing moves.
+static void test_bell(void) {
+	setup();
+	put("a\x07" "b\x07");
+	CHECK_EQ(t.bells, 2);
+	CHECK(row_is(0, "ab"));
+	put("\x1b]0;title\x07"); // OSC ended by BEL
+	CHECK_EQ(t.bells, 2);
+	term_set_defaults(&t, &(term_defaults_t){.vt52 = true});
+	unsigned before = t.bells;
+	put("\x07\x1b\x07" "A");
+	CHECK_EQ(t.bells - before, 2);
+	term_set_defaults(&t, &(term_defaults_t){.personality = TERM_ADM3A});
+	before = t.bells;
+	put("x\x07");
+	CHECK_EQ(t.bells - before, 1);
+}
+
 // CSI ? 999 ~ asks for SET-UP; term_write stops right after it.
 static void test_setup_request(void) {
 	setup();
@@ -1205,5 +1225,6 @@ int main(void) {
 	RUN(test_adm3a_kaypro);
 	RUN(test_adm3a_no_replies_and_7_bits);
 	RUN(test_adm3a_reset);
+	RUN(test_bell);
 	return tests_done();
 }

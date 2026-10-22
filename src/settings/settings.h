@@ -44,6 +44,7 @@ typedef struct {
 	uint8_t clock;         // SETTINGS_CLOCK_*: 24-hour, 12-hour, or off
 	uint8_t clock_seconds; // 1: with the seconds
 	uint8_t clock_date;    // SETTINGS_DATE_*: the date before the time, or none
+	uint8_t bell;          // SETTINGS_BELL_*: the bell's loudness, or off (bell.c)
 } settings_t;
 
 #define SETTINGS_MODE_TERMINAL 0 // a serial terminal on UART0
@@ -64,22 +65,34 @@ typedef struct {
 #define SETTINGS_DATE_ISO 1   // 2026-10-22
 #define SETTINGS_DATE_SHORT 2 // Thu 22 Oct
 
+#define SETTINGS_BELL_OFF 0
+#define SETTINGS_BELL_LOW 1
+#define SETTINGS_BELL_MEDIUM 2
+#define SETTINGS_BELL_HIGH 3
+
 // The settings, in settings_t order, with the values each can take (the
-// first choice need not be the default) and their names for SET-UP. The
-// first SETTINGS_MAIN_FIELDS are SET-UP's rows; the clock's are on its
-// Clock panel (clockpanel.h).
-#define SETTINGS_FIELDS 15
-#define SETTINGS_MAIN_FIELDS 12
+// first choice need not be the default), their names and the SET-UP page
+// they are on: SET-UP's own rows (SETTINGS_MAIN_FIELDS of them, in this
+// order: settings_main_field) or its Clock panel (clockpanel.h).
+#define SETTINGS_FIELDS 16
+#define SETTINGS_MAIN_FIELDS 13
 #define SETTINGS_MAX_CHOICES 9
+
+#define SETTINGS_PAGE_MAIN 0
+#define SETTINGS_PAGE_CLOCK 1
 
 typedef struct {
 	const char *name;
 	uint8_t n_choices;
 	uint8_t values[SETTINGS_MAX_CHOICES];
 	const char *labels[SETTINGS_MAX_CHOICES];
+	uint8_t page; // SETTINGS_PAGE_*
 } settings_field_t;
 
 extern const settings_field_t settings_fields[SETTINGS_FIELDS];
+
+// The field shown on SET-UP's row (< SETTINGS_MAIN_FIELDS).
+unsigned settings_main_field(unsigned row);
 
 // A field's value in s (i < SETTINGS_FIELDS).
 static inline uint8_t *settings_field(settings_t *s, unsigned i) {
