@@ -133,9 +133,27 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 // --- PSRAM (optional) ---
 //
 // A QSPI PSRAM sharing the flash's bus, on the QMI's second chip select
-// (XIP_CS1: GP0, GP8, GP19 or GP47). Nothing uses it yet; the firmware only
-// drives this pin high at start-up so the PSRAM stays off the bus.
+// (XIP_CS1: GP0, GP8, GP19 or GP47). To give it the Z80 machine's banks
+// (up to 15 x 48 KB; none in SRAM), also tell CMake and the SDK:
+//   pico_board_cmake_set(PSRAM_BANKS, 1)
+//   #define PICO_PSRAM_CS_PIN BOARD_PSRAM_CS_PIN
+//   #define PICO_AUTO_DETECT_PSRAM_SIZE 1  // checks it answers
+// (boards/frankless.h). Without PSRAM_BANKS the firmware only drives this
+// pin high at start-up so the PSRAM stays off the bus.
 // #define BOARD_PSRAM_CS_PIN 8
+
+// --- Real-time clock (optional) ---
+//
+// A DS3231 or DS3231M at I2C address 68h on BOARD_RTC_I2C (0/1) and its pins
+// (GPIO n: I2C (n >> 1) & 1, SDA on even, SCL on odd pins); the board's
+// pull-ups (the internal ones are on too). The time is read at start-up and
+// kept by the chip's battery; CP/M 3's DATE SET sets it. BOARD_RTC_SQW_PIN,
+// the chip's 1 Hz output, only reserves its pin (nothing uses it yet).
+// #define BOARD_RTC_DS3231 1
+// #define BOARD_RTC_I2C 1
+// #define BOARD_RTC_SDA_PIN 10
+// #define BOARD_RTC_SCL_PIN 11
+// #define BOARD_RTC_SQW_PIN 8
 
 // --- LED ---
 //

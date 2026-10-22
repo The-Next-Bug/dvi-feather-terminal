@@ -70,7 +70,7 @@ add_custom_command(
 set(CPM3_DIR "${CPM_DIR}/cpm3")
 set(CPM3_OUT "${GENERATED}/cpm3")
 file(GLOB _machine_sources "${Z80PACK_DIR}/z80core/*.[ch]" "${Z80PACK_DIR}/iodevices/sd-fdc.[ch]"
-  "${CMAKE_CURRENT_LIST_DIR}/../machine/z80pack/*.h")
+  "${CMAKE_CURRENT_LIST_DIR}/../machine/z80pack/*.h" "${CMAKE_CURRENT_LIST_DIR}/../clock/datetime.[ch]")
 add_custom_command(
   OUTPUT ${CPM3_OUT}/cpm3.sys ${CPM3_OUT}/vt100dyn.com ${CPM3_OUT}/profile.sub ${CPM3_OUT}/readme.txt
     ${CPM3_OUT}/cpm3gen.dsk ${CPM3_OUT}/cpmrun

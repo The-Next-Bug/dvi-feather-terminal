@@ -13,6 +13,7 @@
 #include "extram.h"
 #include "hstx_dvi.h"
 #include "nvflash.h"
+#include "rtc.h"
 #include "sdcard.h"
 #include "terminal.h"
 #include "term_build.h"
@@ -65,6 +66,25 @@ static size_t psram_record(uint8_t *buf) {
 	return hwinfo_record(buf, HWINFO_ST_PRESENT, "PSRAM", text);
 #else
 	return hwinfo_record(buf, HWINFO_ST_ABSENT, "PSRAM", "none on this board");
+#endif
+}
+
+static size_t rtc_record(uint8_t *buf) {
+#ifdef BOARD_RTC_DS3231
+#define RTC_TEXT "DS3231 on " BOARD_RTC_PINS_TEXT
+	switch (rtc_state()) {
+	case RTC_OK:
+		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Real-time clock", RTC_TEXT);
+	case RTC_NOT_SET:
+		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Real-time clock",
+			RTC_TEXT ", time not set (battery?): DATE SET under CP/M 3 sets it");
+	default:
+		return hwinfo_record(buf, HWINFO_ST_NOT_FOUND, "Real-time clock", RTC_TEXT " did not answer");
+	}
+#undef RTC_TEXT
+#else
+	return hwinfo_record(buf, HWINFO_ST_ABSENT, "Real-time clock",
+		"none on this board: starts at 1 Jan 2026 at power-on");
 #endif
 }
 
@@ -182,8 +202,7 @@ size_t cpm_hwinfo(uint8_t item, uint8_t *buf) {
 		return drives_record(buf);
 	// Planned (bd 1ls): not driven by this firmware yet.
 	case HWINFO_RTC:
-		return hwinfo_record(buf, HWINFO_ST_PLANNED, "Real-time clock",
-			"not supported yet: the clock starts at a fixed date at power-on");
+		return rtc_record(buf);
 	case HWINFO_BELL:
 		return hwinfo_record(buf, HWINFO_ST_PLANNED, "Bell", "not supported yet: BEL is silent");
 	case HWINFO_NEOPIXEL:

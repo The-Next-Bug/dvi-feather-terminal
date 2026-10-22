@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "datetime.h"
 #include "diskimg.h"
 #include "diskio_ram.h"
 #include "drivepanel.h"
@@ -1321,6 +1322,94 @@ static void test_hwinfo_port(void) {
 	CHECK(buf[HWINFO_MAX - 2] == 'x' && buf[HWINFO_MAX - 1] == 0);
 }
 
+// ---- the clock (ports 65/66; bd 1ls.6.1) ----
+
+// Run raw Z80 bytes from FF00H to their HALT.
+static void run_program(void) {
+	extern uint8_t bnk0[65536];
+	emit(1, 0x76); // HALT
+	CHECK(z80.n <= sizeof z80.code);
+	memcpy(bnk0 + 0xff00, z80.code, z80.n);
+	machine_reset();
+	unsigned slices = 0;
+	while (machine_run(10000) == MACHINE_RUNNING && ++slices < 100) {
+	}
+	CHECK(strstr(machine_stop_reason(), "HALT with interrupts off") != NULL);
+}
+
+static void clock_write(uint8_t reg, uint8_t value) {
+	emit(8, 0x3e, reg, 0xd3, 65, 0x3e, value, 0xd3, 66); // LD A,reg; OUT (65),A; LD A,v; OUT (66),A
+}
+
+// Registers 0-7 into memory at `at`.
+static void clock_read_all(uint16_t at) {
+	for (unsigned r = 0; r < 8; ++r) {
+		uint16_t a = (uint16_t)(at + r);
+		emit(7, 0x3e, r, 0xd3, 65, 0xdb, 66, 0x32); // LD A,r; OUT (65),A; IN A,(66); LD (a),A
+		emit(2, a & 0xff, a >> 8);
+	}
+}
+
+static void test_clock_ports(void) {
+	extern uint8_t bnk0[65536];
+	const uint16_t at = 0xf000;
+	machine_init(&host_platform);
+	unsigned sets = host_time_sets;
+	// 22.10.2026 (day 17827 = 45A3H) 13:45:30, as CP/M 3's BIOS writes it:
+	// the day number, then hours, minutes and seconds in BCD.
+	z80.n = 0;
+	emit(1, 0xf3); // DI
+	clock_write(3, 0xa3);
+	clock_write(4, 0x45);
+	clock_write(2, 0x13);
+	clock_write(1, 0x45);
+	clock_write(0, 0x30);
+	// Ignored: out of range, not BCD, the date registers.
+	clock_write(2, 0x24);
+	clock_write(1, 0x5a);
+	clock_write(6, 0x01);
+	clock_read_all(at);
+	emit(4, 0x3e, 255, 0xd3, 65); // binary
+	clock_read_all((uint16_t)(at + 8));
+	emit(4, 0x3e, 255, 0xd3, 65); // BCD again
+	run_program();
+	CHECK_EQ(host_time_sets - sets, 4); // the write to 3 only waits for 4's
+	CHECK_EQ((host_time_offset_us + host_clock_us()) / 1000000u, 17827u * DATETIME_DAY + 13 * 3600 + 45 * 60 + 30);
+	// The year is 126 (- 1900), in BCD only its last two digits, as rtc80.c's.
+	static const uint8_t bcd[8] = {0x30, 0x45, 0x13, 0xa3, 0x45, 0x22, 0x09, 0x26};
+	static const uint8_t binary[8] = {30, 45, 13, 0xa3, 0x45, 22, 9, 126};
+	CHECK(memcmp(bnk0 + at, bcd, 8) == 0);
+	CHECK(memcmp(bnk0 + at + 8, binary, 8) == 0);
+
+	// A day number past the count's end, and day 0, are ignored.
+	z80.n = 0;
+	emit(1, 0xf3);
+	clock_write(3, 0x2f); // 49711 = C22FH
+	clock_write(4, 0xc2);
+	clock_write(3, 0x00);
+	clock_write(4, 0x00);
+	run_program();
+	CHECK_EQ(host_time_sets - sets, 4);
+
+	// Without time_set the clock cannot be set; without time_get it reads
+	// 1.1.2026 plus the time since power-on.
+	machine_platform_t old = host_platform;
+	old.time_get = NULL;
+	old.time_set = NULL;
+	machine_init(&old);
+	z80.n = 0;
+	emit(1, 0xf3);
+	clock_write(4, 0x45);
+	clock_read_all(at);
+	run_program();
+	CHECK_EQ(host_time_sets - sets, 4);
+	// (The host's clock counts from its boot.)
+	unsigned days = bnk0[at + 3] | bnk0[at + 4] << 8;
+	unsigned want = (unsigned)((DATETIME_DEFAULT_DAYS + host_clock_us() / 1000000u / DATETIME_DAY) & 0xffff);
+	CHECK(days == want || days + 1 == want);
+	machine_init(&host_platform);
+}
+
 // HWINFO.COM (src/machine/cpm/hwinfo.asm, bd 1ls.10) under CP/M 2.2 and 3,
 // with the host's records (machine_host.c), and on a machine without port 12.
 static void hwinfo_report_checks(void) {
@@ -1487,6 +1576,33 @@ static void test_boot_cpm3(void) {
 	CHECK(strstr(screen, "Temporary Drive      - A:") != NULL);
 	CHECK(cpm("SETDEF", "Temporary Drive      - A:"));
 	CHECK(strstr(screen, "3rd Drive            - B:") != NULL); // the rest as before
+}
+
+// DATE SET under CP/M 3 sets the machine's clock through our BIOS's TIME
+// (C = 0FFH: ports 65/66), and DATE reads it back (bd 1ls.6.1).
+static void test_cpm3_date(void) {
+	drives_unmount_all();
+	CHECK_EQ(drives_mount(0, "CPM31"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "CPM32"), DRIVES_OK);
+	cpm3_boot();
+	unsigned sets = host_time_sets;
+	static const char *const steps[][2] = {
+		{"DATE SET\r", "(MM/DD/YY): "},
+		{"10/22/26\r", "(HH:MM:SS): "},
+		{"13:45:00\r", "Press any key to set time"},
+		{" ", "A>"},
+	};
+	for (unsigned i = 0; i < sizeof steps / sizeof steps[0]; ++i) {
+		clear_screen();
+		CHECK(type(steps[i][0]));
+		CHECK_EQ(run_until(steps[i][1], 10), MACHINE_RUNNING);
+	}
+	CHECK(host_time_sets > sets);
+	uint32_t now = (uint32_t)((host_time_offset_us + host_clock_us()) / 1000000u);
+	uint32_t want = 17827u * DATETIME_DAY + 13 * 3600 + 45 * 60; // 22.10.2026 13:45:00
+	CHECK(now >= want && now < want + 5);
+	CHECK(cpm("DATE", "Thu 10/22/2026 13:45:0"));
+	drives_unmount_all();
 }
 
 // XLS, XPIP and XERA under CP/M 3, run from B: through its search path;
@@ -2116,9 +2232,11 @@ int main(void) {
 	RUN(test_xfer_port);
 	RUN(test_xfer_tools);
 	RUN(test_hwinfo_port);
+	RUN(test_clock_ports);
 	RUN(test_hwinfo_tool);
 	RUN(test_boot_cpm3);
 	RUN(test_cpm3_tools);
+	RUN(test_cpm3_date);
 	RUN(test_cpm3_drives);
 	RUN(test_hd_guard);
 	RUN(test_mem_banks);

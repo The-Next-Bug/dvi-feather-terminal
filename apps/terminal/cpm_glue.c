@@ -8,6 +8,7 @@
 
 #include "board.h"
 #include "led.h"
+#include "rtc.h"
 #include "sdcard.h"
 #include "serial.h"
 #include "terminal.h"
@@ -91,6 +92,8 @@ const machine_platform_t cpm_platform = {
 	.disk_mounts = cpm_disk_mounts,
 	.xfer = xfer_command,
 	.hwinfo = cpm_hwinfo,
+	.time_get = rtc_now,
+	.time_set = rtc_set,
 };
 
 static void cpm_write(const char *text) {

@@ -67,7 +67,7 @@ CMake or Arm GCC on the dev host. Use the scripts:
 git submodule update --init          # lib/pico-sdk (2.3.1), not its submodules (lib/z80pack is vendored)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool, clang-tidy (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, clock, uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimized, no sanitizers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default; any boards/<target>.h) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
@@ -96,9 +96,13 @@ optional BOARD_USB_VBUS_EN_PIN / _LEVEL, optional PICO_DEFAULT_LED_PIN
 with the screen blanked a 100 ms heartbeat each second from led_poll in
 the main loop and cpm_idle, so a hang shows as steady on or off; no-op
 without the pin or with VIDEO_DIAG, which owns it),
-optional BOARD_PSRAM_CS_PIN (XIP_CS1: GP0/8/19/47; main() drives it high
-first thing so the PSRAM stays off the shared QSPI bus; nothing uses the
-PSRAM yet, bd g31).
+optional BOARD_PSRAM_CS_PIN (XIP_CS1: GP0/8/19/47; without PSRAM_BANKS
+main() drives it high first thing so the PSRAM stays off the shared QSPI
+bus; with it, PICO_PSRAM_CS_PIN + PICO_AUTO_DETECT_PSRAM_SIZE in the header
+let the SDK's runtime init set it up),
+optional BOARD_RTC_DS3231 + BOARD_RTC_I2C + BOARD_RTC_SDA/SCL_PIN (GPIO n
+is I2C (n >> 1) & 1, SDA even, SCL odd) and BOARD_RTC_SQW_PIN (reserved
+only; bd 1ls.6.1).
 `src/board/board.h` (RP2350 code only) #errors on missing settings, wrong
 function pins, pins used twice or off the chip; test/test_board.sh (ctest
 `board`) runs it on every board header and on broken variants. Pin values
@@ -107,11 +111,13 @@ must be plain numbers (they are stringified into on-screen messages).
 standalone: RP2350A, flash, crystal). The user is designing a custom board.
 `boards/frankless.h` (bd 59u.1): that board, the user's reworked MicroFRANK
 (github.com/arlaneenalra/pi-pico-boards, reworked/frankless; reviewed in bd
-59u), from its KiCad files, untested on hardware: RP2350A, 16 MB flash,
+59u), from its KiCad files, partly tried on hardware: RP2350A, 16 MB flash,
 12 MHz oscillator on XIN, HDMI GP12-19 (CLK 13/12, D0 15/14, D1 17/16, D2
 19/18), UART1 GP20-23 with CTS/RTS (header J8), SD on SPI0 MISO 4 / CS 1 /
-SCK 2 / MOSI 3, APS6404L PSRAM CS on GP0, LED GP9; DS3231M RTC on I2C1
-GP10/11 with its 1 Hz on GP8 (unused so far). Slide switch S1 puts the USB
+SCK 2 / MOSI 3, APS6404L PSRAM CS on GP0 with PSRAM_BANKS (the Feather
+PSRAM build's mechanism; bd 1ls.3.1.1), LED GP9; DS3231M RTC on I2C1
+GP10/11 (BOARD_RTC_DS3231, bd 1ls.6.1) with its 1 Hz on GP8 (reserved,
+unused). Slide switch S1 puts the USB
 on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
 CI builds it.
 `boards/feather-rp2350-hstx.h` (bd 1ls.14.1): Adafruit Feather RP2350 with
@@ -167,7 +173,7 @@ libraries under `src/<name>/`, each a static `dvt_<name>` with its own
 CMakeLists.txt (`src/CMakeLists.txt` lists them); public headers next to
 the sources (the directory is the PUBLIC include path), a header only the
 library's own files share is `<name>_internal.h` (term_internal.h).
-Portable (host-tested): common, screen, term, render, input, settings,
+Portable (host-tested): common, clock, screen, term, render, input, settings,
 machine (+ dvt_z80pack, cpm/), disks, ui; RP2350, added only with
 DVT_FIRMWARE: board (header only), platform, usb, storage, video. The
 host tests add the same `src/` without DVT_FIRMWARE, so a pico-sdk
@@ -332,6 +338,17 @@ UF2 in the latter).
   they read the same, else a status read via flash_do_cmd (exit sequence,
   CS1 PSRAM restored) and back to 03h; nvflash_quad()/_read_hz() for
   HWINFO's CPU line.
+- Clock (bd 1ls.6.1): `src/clock/` (portable, test_clock): datetime.[ch]
+  (seconds since 31.12.1977 = CP/M 3's day number x 86400, civil
+  conversions without localtime, FAT timestamps; DATETIME_DEFAULT_DAYS
+  17533 = 1.1.2026), ds3231.[ch] (register codec, 24 h, century bit).
+  `src/platform/rtc.[ch]`: the wall clock = the DS3231 read once in
+  rtc_init (after nvflash_retime; I2C 100 kHz, 5 ms timeouts) + time_us_64;
+  OSF set or no answer -> 1.1.2026; rtc_set writes the chip and clears
+  OSF (always kept for the session); rtc_state for HWINFO's record. Users:
+  cpm_glue's machine platform (time_get/time_set), get_fattime. Not yet:
+  SET-UP row, status line clock, a CP/M 2.2 setter, re-reading the chip
+  against drift.
 - `src/platform/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
   RTS/CTS. `src/ui/demo.[ch]`: opt-in startup demo. `src/platform/diag.[ch]`: VIDEO_DIAG.
 - `src/render/logo_gen.py` + `src/render/logo.cmake`: PNG -> run-length encoded 2-bit
@@ -358,7 +375,10 @@ UF2 in the latter).
   z80core + iodevices/sd-fdc.c, built as dvt_z80pack by `src/machine/CMakeLists.txt`) configured
   by `src/machine/z80pack/{sim,simmem,simio,simport}.h`; picosim's port map (SIO1
   0/1 console, SIO2 2/3 = UART0, FDC 4, MMU 64, clock 65/66 without
-  localtime, 60 Hz timer 67, hwctl 160) and boot ROM; bank 0 64 KB +
+  localtime from the platform's time_get (NULL: 1.1.2026 + uptime) and,
+  ours, writable through time_set (registers 0-2 a field, 3 latched for
+  4's day number; machine.h; CP/M 3's BIOS TIME C=0FFH writes them, so
+  DATE SET works), 60 Hz timer 67, hwctl 160) and boot ROM; bank 0 64 KB +
   MACHINE_BANKS x 48 KB in SRAM, or machine_set_banks's memory (before
   machine_init; NULL: back to the SRAM ones) of up to MACHINE_MAX_BANKS
   (15: IN 64 reports the count in its high nibble) x MACHINE_BANK_SIZE;
@@ -495,7 +515,9 @@ UF2 in the latter).
   monitor. `src/storage/sdcard.[ch]` (RP2350): polled SPI0 SD driver = FatFs
   diskio (GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI; 400 kHz init, 25 MHz).
   `lib/fatfs`: ChaN FatFs R0.15a vendored (ffconf: FIND, MKFS, CP437,
-  NORTC, TINY (files share the volume's sector buffer), no LFN; ffconf.h
+  timestamps on (FF_FS_NORTC 0: get_fattime in storage/diskio.c from
+  rtc_now, test/diskio_ram.c a fixed 1.1.2026), TINY (files share the
+  volume's sector buffer), no LFN; ffconf.h
   has CRLF line endings, edit it byte-wise). Host tests use `test/diskio_ram.c`. Changing Mode
   saves and reboots (watchdog). In SET-UP, M leaves for the monitor.
   SET-UP's T (both modes) shows the demo until a key (setup_glue.c
@@ -566,7 +588,8 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   (qur.24, -48.5 KB) to 0x2006f458, ~67 KB free; status LED, Feather
   board (1ls.8, 1ls.14.1) to 0x2006f6b0; the library restructure (gr1:
   libraries identical, main.c's split outlines what was inlined into
-  main(), -648 bytes) to 0x2006f428. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  main(), -648 bytes) to 0x2006f428; the clock (src/clock, rtc.c, 1ls.6.1)
+  to 0x2006fda4 (Frankless with PSRAM banks: 0x20058d94). Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, stash_buf 13.4 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit

@@ -121,12 +121,13 @@ setting explained:
   crystal (a pico-sdk board header; the SDK's own boards can be included,
   as the DVI Sock's does).
 
-Board headers so far (only the DVI Sock is checked on hardware):
+Board headers so far (the DVI Sock is checked on hardware, the Frankless
+in part):
 
 | Target | Board |
 |---|---|
 | `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default) |
-| `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS |
+| `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS, the Z80 machine's banks in its 8 MB PSRAM (`PSRAM_BANKS`), DS3231M real-time clock |
 | `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing) |
 | `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
 
@@ -462,6 +463,17 @@ start F83 from its own drive (`B:`, then `F83`), as above. After
 rebuilding F83 from its source (`README.80`), `F83 VIEWDRV.BLK` and then
 `1 LOAD` patch and save the new `F83.COM` the same way.
 
+### The clock
+
+The machine's clock (ports 65/66) is the board's real-time clock when it
+has one (the Frankless's DS3231M, with a cell in its battery holder),
+read at power-on and kept by the firmware from there. Without one, or
+while its time is not set, the clock starts at 1 Jan 2026 at power-on.
+Under CP/M 3, `DATE` shows it and `DATE SET` sets it, the RTC's too, so it
+survives power-off; `HWINFO` says whether the RTC answered and whether its
+time was set. Files written on the SD card and USB sticks (`XPIP SD:...`,
+`DRIVES.CFG`, new disk images) get their dates from it.
+
 ### HWINFO
 
 `CPM22`, `CPM31` and `CPM32` carry `HWINFO` (`src/machine/cpm/hwinfo.asm`):
@@ -486,8 +498,7 @@ SD card          yes      SDHC/SDXC, 29.7 GB; SPI0: GP4 MISO, GP5 CS, GP6 SCK,
 USB host         yes      native USB port, 1 keyboard
 USB stick        no       none
 Status LED       yes      GP25: disks, serial, heartbeat
-Real-time clock  planned  not supported yet: the clock starts at a fixed date
-                          at power-on
+Real-time clock  no       none on this board: starts at 1 Jan 2026 at power-on
 Bell             planned  not supported yet: BEL is silent
 RGB status LED   planned  not supported yet
 SD card detect   planned  not supported yet
@@ -737,7 +748,7 @@ The machine is picosim's:
 | 8 | the disk in a drive, for our BIOSes (ours, not picosim's): OUT the drive, IN its format (0 none, 1 8" floppy, 2 4 MB, 3 8 MB), IN again the count of images mounted on it. A hard-disk image is refused to a system that has not asked about its drive since the reset |
 | 10 | file transfer: files in the `/XFER` folder of the SD card or a USB stick, a 128-byte record at a time by DMA, for `XLS`, `XPIP` and `XERA` (ours; `src/machine/machine.h` has the commands) |
 | 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II uses as many as it was generated for, see [Other operating systems](#other-operating-systems)), or with `PSRAM_BANKS` up to 15 in the PSRAM; reads the number of banks in the high nibble (so 15 at most) and the selected one in the low |
-| 65/66 | clock (no RTC: it starts at 1 Jan 2026 at power-on) |
+| 65/66 | clock: the board's real-time clock, or without one 1 Jan 2026 at power-on; writing it is ours (CP/M 3's `DATE SET`), see [The clock](#the-clock) |
 | 67 | 60 Hz timer interrupt |
 | 160 | hardware control |
 
@@ -951,6 +962,7 @@ has the helpers; `src/CMakeLists.txt` lists the libraries.
 | Library | | |
 |---|---|---|
 | `common` | portable | `crc32`, `lz` (LZ4-format decoder), `scratch` (the shared 4 KB buffer) |
+| `clock` | portable | `datetime` (dates without the C library's `localtime`, FAT timestamps), `ds3231` (the DS3231's registers) |
 | `screen` | portable | `screen` (cell buffer, saved rows), `palette` (the 256-color palette per Colors/Palette setting), `font.h` (glyph codes) |
 | `term` | portable | `term.[ch]` (the terminal) with its personalities `vt100.c`, `vt52.c` and `adm3a.c` (sharing `term_internal.h`), `vtparse` (escape sequence parser) |
 | `render` | portable | `raster` (cells to pixels), `splash` (startup logo); generated font tables and logo (`font_gen.py`, `logo_gen.py`) |
@@ -960,7 +972,7 @@ has the helpers; `src/CMakeLists.txt` lists the libraries.
 | `disks` | portable | `drives` (disk images on FatFs), `drivecfg.c` (`DRIVES.CFG`, the image list and the drive sets), `diskimg` (the built-in images; `diskimg_gen.py` compresses them), `xfer` (port 10's files: `/XFER`), `usbvol` (which USB stick is `USB:`) |
 | `ui` | portable | `setup` (SET-UP panel), `drivepanel` (SET-UP's Drives panel), `fwpanel` (SET-UP's firmware update), `monitor` (the CP/M machine's monitor), `demo` |
 | `board` | RP2350 | `board.h` (the board header's pins, checked) |
-| `platform` | RP2350 | `serial` (UART with optional RTS/CTS and a TX queue), `led`, `nvflash` (settings sectors, written at the DVI clock), `fwupdate` (firmware update), `diag` (`VIDEO_DIAG`) |
+| `platform` | RP2350 | `serial` (UART with optional RTS/CTS and a TX queue), `led`, `nvflash` (settings sectors, written at the DVI clock), `fwupdate` (firmware update), `extram` (the PSRAM), `rtc` (the wall clock and the board's RTC on I2C), `diag` (`VIDEO_DIAG`) |
 | `usb` | RP2350 | `usbkbd` (USB keyboards), `tusb_config.h` (TinyUSB host) |
 | `storage` | RP2350 | `diskio.c` (FatFs drives: 0 the SD card, 1 a USB stick), `sdcard` (SPI SD card), `usbmsc` (USB sticks) |
 | `video` | RP2350 | `hstx_dvi` (HSTX DVI output), `video` (scanlines on core 1) |

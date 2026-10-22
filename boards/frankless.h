@@ -2,13 +2,14 @@
 // reworked/frankless; after github.com/rh1tech/frank, hardware/microfrank).
 // RP2350A, 16 MB flash, 8 MB PSRAM, HDMI connector on the HSTX pins, micro SD
 // slot, a CH334R hub to two USB-A ports, DS3231M RTC. Pins taken from the
-// KiCad schematic and PCB at commit 8edc485; not yet tried on the board.
-// boards/example.h explains each setting.
+// KiCad schematic and PCB at commit 8edc485; partly tried on the board
+// (bring-up in bd 59u). The Z80 machine's banks are in the PSRAM
+// (PSRAM_BANKS: 15 x 48 KB), the clock is the RTC's. boards/example.h
+// explains each setting.
 //
 // The board's other pins, which the firmware leaves alone (inputs with the
 // reset pulls): GP5/6/7 the TDA1387 DAC's BCK/WS/DATA (not fitted), GP8 the
-// RTC's 1 Hz SQW (open drain, 4.7k pull-up), GP10/11 I2C1 SDA/SCL to the RTC
-// (4.7k pull-ups), GP24-29 on header J1.
+// RTC's 1 Hz SQW (open drain, 4.7k pull-up; reserved), GP24-29 on header J1.
 //
 // USB: slide switch S1 routes the RP2350's USB either to the USB-C socket
 // (flashing over BOOTSEL) or to the hub (keyboards and sticks); the hub
@@ -25,6 +26,7 @@
 // --- RP2350, flash, crystal ---
 
 pico_board_cmake_set(PICO_PLATFORM, rp2350)
+pico_board_cmake_set(PSRAM_BANKS, 1)
 
 #define PICO_RP2350A 1
 
@@ -86,8 +88,21 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 // --- PSRAM ---
 //
 // APS6404L (8 MB) on the QSPI bus, CE on GP0 (XIP_CS1) with a 10k pull-up.
-// Not used yet; the firmware keeps it deselected.
+// The SDK's PSRAM setup (runtime init) checks that it answers and its size.
 #define BOARD_PSRAM_CS_PIN 0
+#define PICO_PSRAM_CS_PIN BOARD_PSRAM_CS_PIN
+#define PICO_AUTO_DETECT_PSRAM_SIZE 1
+
+// --- Real-time clock ---
+//
+// DS3231M on I2C1 with 4.7k pull-ups; VBAT from an external battery holder
+// (without a cell the time is lost at power-off). Its 1 Hz SQW output goes
+// to GP8 (open drain, 4.7k pull-up), unused so far.
+#define BOARD_RTC_DS3231 1
+#define BOARD_RTC_I2C 1
+#define BOARD_RTC_SDA_PIN 10
+#define BOARD_RTC_SCL_PIN 11
+#define BOARD_RTC_SQW_PIN 8
 
 // --- LED ---
 //
