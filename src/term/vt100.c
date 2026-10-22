@@ -4,6 +4,7 @@
 
 #include "palette.h"
 
+#define BEL 0x07
 #define BS 0x08
 #define HT 0x09
 #define LF 0x0a
@@ -349,8 +350,11 @@ void vt100_execute(term_t *t, uint8_t ch) {
 	case SI:
 		t->cur.gl = 0;
 		break;
+	case BEL:
+		++t->bells;
+		break;
 	default:
-		break; // BEL, ENQ (no answerback), NUL, CAN, SUB...: nothing to do
+		break; // ENQ (no answerback), NUL, CAN, SUB...: nothing to do
 	}
 }
 

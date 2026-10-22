@@ -101,8 +101,15 @@ main() drives it high first thing so the PSRAM stays off the shared QSPI
 bus; with it, PICO_PSRAM_CS_PIN + PICO_AUTO_DETECT_PSRAM_SIZE in the header
 let the SDK's runtime init set it up),
 optional BOARD_RTC_DS3231 + BOARD_RTC_I2C + BOARD_RTC_SDA/SCL_PIN (GPIO n
-is I2C (n >> 1) & 1, SDA even, SCL odd) and BOARD_RTC_SQW_PIN (reserved
-only; bd 1ls.6.1).
+is I2C (n >> 1) & 1, SDA even, SCL odd) and BOARD_RTC_SQW_PIN (the 1 Hz
+tick; bd 1ls.6.1, 1ls.6.2), optional BOARD_AUDIO_I2S_{BCK,WS,DATA}_PIN (WS
+= BCK + 1: PIO side-set) + _NAME (src/platform/bell.c, bd 1ls.7), and the
+planned hardware's pins, named before any driver exists (bd 1ls.4):
+BOARD_BUZZER_PIN, BOARD_NEOPIXEL_PIN, BOARD_SD_CD_PIN, BOARD_BUTTON_PIN,
+BOARD_BATTERY_ADC_PIN (ADC pins only), BOARD_CHARGER_STAT_PIN. All count
+in board.h's used-once check. apps/terminal/hwinfo_glue.c gives no record
+(0 bytes, HWINFO skips it) for hardware the header does not name, PLANNED
+for what it names without a driver.
 `src/board/board.h` (RP2350 code only) #errors on missing settings, wrong
 function pins, pins used twice or off the chip; test/test_board.sh (ctest
 `board`) runs it on every board header and on broken variants. Pin values
@@ -116,8 +123,9 @@ standalone: RP2350A, flash, crystal). The user is designing a custom board.
 19/18), UART1 GP20-23 with CTS/RTS (header J8), SD on SPI0 MISO 4 / CS 1 /
 SCK 2 / MOSI 3, APS6404L PSRAM CS on GP0 with PSRAM_BANKS (the Feather
 PSRAM build's mechanism; bd 1ls.3.1.1), LED GP9; DS3231M RTC on I2C1
-GP10/11 (BOARD_RTC_DS3231, bd 1ls.6.1) with its 1 Hz on GP8 (reserved,
-unused). Slide switch S1 puts the USB
+GP10/11 (BOARD_RTC_DS3231, bd 1ls.6.1) with its 1 Hz on GP8 (the clock's
+tick); TDA1387 DAC (U8, hand-fitted) on GP5 BCK / 6 WS / 7 DATA for the
+bell. Slide switch S1 puts the USB
 on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
 CI builds it.
 `boards/feather-rp2350-hstx.h` (bd 1ls.14.1): Adafruit Feather RP2350 with
@@ -310,8 +318,13 @@ UF2 in the latter).
   power-on/RIS mode; byte 11 once held the retired layout, so 1 is never a
   value; then the status line clock's clock (24 / 12 / 0 off),
   clock_seconds, clock_date (SETTINGS_DATE_*), bd 1ls.6.5: after
-  SETTINGS_MAIN_FIELDS (12, SET-UP's rows = SETUP_ITEMS), edited only on
-  the Clock panel; settings_columns() is 80 for the ADM-3A;
+  SETTINGS_MAIN_FIELDS, edited only on the Clock panel (settings_field_t
+  .page: SETTINGS_PAGE_CLOCK); then bell (SETTINGS_BELL_* off/low/medium/
+  high, default medium), back on SET-UP's main page: SET-UP's rows
+  (SETUP_ITEMS = SETTINGS_MAIN_FIELDS, 13) are the main-page fields in
+  order, settings_main_field(row) -> field (rows 0-11 = fields 0-11, row 12
+  = bell, field 15); setup_t.no_bell (set by setup_glue.c from
+  bell_present) shows Bell fixed as "off (no bell on this board)"; settings_columns() is 80 for the ADM-3A;
   settings_field_fixed() names what fixes a field, Columns under the
   ADM-3A: SET-UP skips it and shows "80 (ADM-3A)", dmt.39);
   settings_colors() gives the status
@@ -367,6 +380,20 @@ UF2 in the latter).
   settings as choices, a sample row; Return -> setup_glue.c clock_service
   (main loop: rtc_set if typed, the settings into setup.ui.values for
   SET-UP's save).
+- Bell (bd 1ls.7): term.c's personalities bump term_t.bells on BEL (not
+  OSC's terminator); main.c's loop calls bell_ring when it changes.
+  `src/platform/bell.[ch]`: a PIO program built at runtime (pio_encode_*,
+  no pioasm: 9 instructions) shifting 16-bit left-justified stereo words
+  (WS high for the high half; at 16 bits the TDA1387's LSB-justified form),
+  `pull noblock` taking X = 0 when the FIFO is empty so the DAC's clocks
+  never stop; 32 kHz from clk_sys (65 PIO cycles a frame); a beep is one
+  DMA run (3200 words, 100 ms) over a 32-word, 128-byte-aligned ring of
+  one 1 kHz square-wave period, amplitude from the Bell setting
+  (bell_set_level from apply_settings: high 0x2000 = a quarter of full
+  scale, medium 0x1000, low 0x0800; off: bell_ring does nothing); a BEL
+  while it runs is dropped. SET-UP sounds the edited Bell when it changes
+  (setup_service) and restores the saved one on cancel. PCM output beyond
+  that: bd 1ls.18.
 - `src/platform/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
   RTS/CTS. `src/ui/demo.[ch]`: opt-in startup demo. `src/platform/diag.[ch]`: VIDEO_DIAG.
 - `src/render/logo_gen.py` + `src/render/logo.cmake`: PNG -> run-length encoded 2-bit
@@ -630,6 +657,29 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   SD, GP12-19 DVI Sock, GP25 LED (status, src/platform/led.c), GP23/24/29 board
   internal. Free: GP8-11, GP20-22, GP26-28 (ADC capable), and GP2/3 when
   flow control is off.
+
+### Frankless (TARGET=frankless, PSRAM_BANKS, 2026-10-22: bd 1ls.3.1)
+
+- GPIO: all of GP0-23 taken (GP0 PSRAM CS, GP1-4 SD on SPI0, GP5-7
+  TDA1387 BCK/WS/DATA, GP8 RTC 1 Hz, GP9 LED, GP10/11 I2C1 RTC, GP12-19
+  HSTX, GP20-23 UART1 on J8 incl. CTS/RTS). Free: GP24-29 on header J1
+  only: UART0 GP28 TX / GP29 RX (a second serial port, bd qtq), SPI1 GP24
+  RX / 25 CS / 26 SCK / 27 TX, I2C0 GP24/25 or GP28/29, ADC0-3 GP26-29,
+  PWM slices 4-6, PIO.
+- PIO: one SM and 9 of 32 instructions (bell.c, block picked at runtime,
+  normally PIO0); 11 SMs free. DMA: 3 of 16 channels (video 2, bell 1),
+  DMA_IRQ_0 core 1's; IRQ_1-3 free. IO_IRQ_BANK0 has the RTC tick's raw
+  handler (shared: add more). UART0, SPI1, I2C0, TIMER1, PWM, ADC, TRNG,
+  SHA-256, POWMAN's always-on timer free; I2C1 can take more chips (other
+  addresses). No spare PLL (PLL_SYS 400 MHz, PLL_USB 48 MHz; bd cpx.1).
+- SRAM: __end__ 0x2005a1d4, ~151 KB free (the Z80 banks are in the
+  PSRAM). PSRAM 8 MB: 720 KB banks (15 x 48 KB, port 64's limit), ~7.3 MB
+  free (bd g31: RAM disk, scrollback). Flash 16 MB: image 1.04 MB, growth
+  room to 8 MB (FWUPDATE_STAGING = half the flash), settings in the top
+  12 KB.
+- Core 1: video only (62% of a line at 80 columns, 87-92% at 132, qur.22's
+  Sock figures). Core 0: main loop + the Z80 unthrottled, so new core 0
+  work costs Z80 speed.
 
 ## Conventions & Patterns
 

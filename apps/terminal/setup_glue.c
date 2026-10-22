@@ -10,6 +10,7 @@
 #include "pico/stdlib.h"
 #include "hardware/watchdog.h"
 
+#include "bell.h"
 #include "board.h"
 #include "demo.h"
 #include "ff.h"
@@ -228,6 +229,8 @@ void setup_enter(bool from_host) {
 	current.newline = cpm.on ? settings.newline : term.newline_mode;
 	setup_open(&setup.ui, &current);
 	setup.ui.machine_menu = cpm.on;
+	setup.ui.no_bell = !bell_present();
+	setup.bell_heard = current.bell;
 	setup.active = true;
 	setup.drives_open = false;
 	setup.drives_work = DRIVEPANEL_NONE;
@@ -257,6 +260,7 @@ static void setup_leave(bool apply) {
 	fw_close();
 	if (!apply) {
 		show_palette(&settings); // back from SET-UP's preview
+		bell_set_level(settings.bell);
 		return;
 	}
 	apply_settings(&setup.ui.values);
@@ -385,9 +389,15 @@ static void restart(void) {
 }
 
 // Run SET-UP's pending save or cancel, the demo, the reboot, or the Escape
-// key timeout, and show the edited Colors and Palette.
+// key timeout; show the edited Colors and Palette and sound the edited Bell.
 void setup_service(void) {
 	show_palette(&setup.ui.values);
+	// A new Bell setting: heard at once, as the palette is seen.
+	if (setup.ui.values.bell != setup.bell_heard) {
+		setup.bell_heard = setup.ui.values.bell;
+		bell_set_level(setup.bell_heard);
+		bell_ring();
+	}
 	if (setup.demo) {
 		setup_demo_service();
 		return;

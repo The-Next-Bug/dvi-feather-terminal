@@ -127,7 +127,7 @@ in part):
 | Target | Board |
 |---|---|
 | `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default) |
-| `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS, the Z80 machine's banks in its 8 MB PSRAM (`PSRAM_BANKS`), DS3231M real-time clock |
+| `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS, the Z80 machine's banks in its 8 MB PSRAM (`PSRAM_BANKS`), DS3231M real-time clock, TDA1387 DAC for the bell (U8, hand-fitted) |
 | `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing) |
 | `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
 
@@ -270,6 +270,7 @@ shown in reverse video:
 | Status line | shown, hidden, debug, debug usb | hidden: row 24 stays blank (the text area is still 24 rows; the boot logo's build line and CP/M's drive lights are not shown). debug: video timing instead; debug usb: the USB host's last events (both below, refreshed four times a second) |
 | Terminal type | VT100, VT52, ADM-3A | what the terminal is at power-on and after a reset: a VT100, a VT100 in VT52 mode, or an ADM-3A (80 columns only); see [Terminal types](#terminal-types). Changing to or from ADM-3A clears the screen |
 | Blank after | never, 1, 5, 10, 30, 60 min | the screen goes black after this long without a key, against burn-in. The next key only wakes it (it is not sent). Output from the host or the Z80 does not wake it; it carries on unseen. The DVI signal is turned off, so the monitor can go into power saving (backlight off); on waking it has to resync, which takes it a few seconds |
+| Bell | off, low, medium, high | how loud BEL beeps (default medium); changing it in SET-UP sounds a beep at the new level. On a board without a bell it shows `off (no bell on this board)` and is skipped. See [The bell](#the-bell) |
 
 **Debug status line**: `late T+N | line C/P% | F fps | loop M/Q ms |
 render R/S us | Z MHz`: scanlines not ready in time for the DVI output (in
@@ -496,14 +497,27 @@ survives power-off; `HWINFO` says whether the RTC answered, whether its
 time was set and whether its 1 Hz output ticks. Files written on the SD card and USB sticks (`XPIP SD:...`,
 `DRIVES.CFG`, new disk images) get their dates from it.
 
+### The bell
+
+On a board with a DAC (`BOARD_AUDIO_I2S_*` in its header: the Frankless's
+TDA1387), BEL from the host or from a CP/M program sounds a short beep:
+100 ms of 1 kHz, a new BEL while one sounds adding nothing, as loud as
+SET-UP's Bell setting says (high is a quarter of the DAC's full scale,
+each step down half as loud; off is silent). Other boards stay silent.
+Ctrl-G at a CP/M prompt is no test: CP/M echoes it as `^G`; F83's
+`7 EMIT` or a host's `printf '\a'` sends a real BEL.
+
 ### HWINFO
 
 `CPM22`, `CPM31` and `CPM32` carry `HWINFO` (`src/machine/cpm/hwinfo.asm`):
-the firmware, the board, and a line for each piece of hardware: whether it
-is there (`yes`, `no`, `missing` when the board should have it but it did
-not answer, `planned` when the firmware does not support it yet) and what
-it is, a screen at a time (`-- More --`: any key for the next page, `Q`,
-`Esc` or `^C` to stop). On a Pico 2 with the DVI Sock:
+the firmware, the board, and a line for each piece of hardware the board
+has: whether it is in use (`yes`; `no` when nothing is plugged in or the
+build does not use it; `missing` when the board should have it but it did
+not answer; `planned` when the board header names it but the firmware does
+not drive it yet) and what it is, a screen at a time (`-- More --`: any
+key for the next page, `Q`, `Esc` or `^C` to stop). What a board does not
+have is left out: its header (`boards/<target>.h`, `boards/example.h`)
+says what it has. On a Pico 2 with the DVI Sock:
 
 ```
 Firmware         DVI Feather Terminal v0.9.0 (2026-10-15)
@@ -511,7 +525,6 @@ Board            pico2-dvi-sock
 
 CPU              yes      RP2350A at 400 MHz, 4 MB flash, quad reads at 50 MHz
 Z80 memory       yes      64 KB + 2 x 48 KB banks in SRAM
-PSRAM            no       none on this board
 Video            yes      DVI 800x600 at 60 Hz, 80 x 24 text + status line
 Serial port      yes      UART0 TX GP0 / RX GP1, 115200 8N1 (SIO2)
 Flow control     no       off (build option SERIAL_FLOW_CONTROL)
@@ -520,12 +533,6 @@ SD card          yes      SDHC/SDXC, 29.7 GB; SPI0: GP4 MISO, GP5 CS, GP6 SCK,
 USB host         yes      native USB port, 1 keyboard
 USB stick        no       none
 Status LED       yes      GP25: disks, serial, heartbeat
-Real-time clock  no       none on this board: starts at 1 Jan 2026 at power-on
-Bell             planned  not supported yet: BEL is silent
-RGB status LED   planned  not supported yet
-SD card detect   planned  not supported yet
-User button      planned  not supported yet
-Battery          planned  not supported yet
 Disk drives      yes      A: CPM22, B: Z80TESTS
 ```
 
@@ -537,7 +544,8 @@ port 12 reads `0FFH` and `HWINFO` says there is no information. Items 1
 and 2 are the firmware and the board as text; from 16 on, each item is one
 piece of hardware at a fixed number (16 the CPU, 18 the PSRAM, 26 the
 real-time clock, ...): a status byte (1 yes, 2 no, 3 missing, 4 planned;
-0 no such item), then its name and its description, each ending in 0.
+0 no such item, or none on this board), then its name and its
+description, each ending in 0.
 
 ### MEM
 

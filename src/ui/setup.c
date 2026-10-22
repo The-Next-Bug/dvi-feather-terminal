@@ -13,10 +13,10 @@
 // "< value >", so the row fits in 80 columns.
 #define INLINE_CHOICES 4
 
-// Index of the item's current value (the first choice if it is none).
-static unsigned choice_index(settings_t *v, unsigned item) {
-	const settings_field_t *it = &settings_fields[item];
-	uint8_t value = *settings_field(v, item);
+// Index of field f's current value (the first choice if it is none).
+static unsigned choice_index(settings_t *v, unsigned f) {
+	const settings_field_t *it = &settings_fields[f];
+	uint8_t value = *settings_field(v, f);
 	for (unsigned i = 0; i < it->n_choices; ++i) {
 		if (it->values[i] == value) {
 			return i;
@@ -25,20 +25,30 @@ static unsigned choice_index(settings_t *v, unsigned item) {
 	return 0;
 }
 
+// Why field f cannot be changed now (settings_field_fixed, or a Bell with
+// no bell to ring), else NULL.
+static const char *fixed_why(const setup_t *u, const settings_t *v, unsigned f) {
+	if (f == offsetof(settings_t, bell) && u->no_bell) {
+		return "no bell on this board";
+	}
+	return settings_field_fixed(v, f);
+}
+
 static void change(setup_t *u, int step) {
-	if (settings_field_fixed(&u->values, u->item)) {
+	unsigned f = settings_main_field(u->item);
+	if (fixed_why(u, &u->values, f)) {
 		return;
 	}
-	const settings_field_t *it = &settings_fields[u->item];
-	unsigned i = (choice_index(&u->values, u->item) + it->n_choices + (unsigned)step) % it->n_choices;
-	*settings_field(&u->values, u->item) = it->values[i];
+	const settings_field_t *it = &settings_fields[f];
+	unsigned i = (choice_index(&u->values, f) + it->n_choices + (unsigned)step) % it->n_choices;
+	*settings_field(&u->values, f) = it->values[i];
 }
 
 // Select the next setting in direction step (1 or -1) that can be changed.
 static void select_next(setup_t *u, int step) {
 	for (unsigned n = 0; n < SETUP_ITEMS; ++n) {
 		u->item = (u->item + SETUP_ITEMS + (unsigned)step) % SETUP_ITEMS;
-		if (!settings_field_fixed(&u->values, u->item)) {
+		if (!fixed_why(u, &u->values, settings_main_field(u->item))) {
 			return;
 		}
 	}
@@ -46,7 +56,7 @@ static void select_next(setup_t *u, int step) {
 
 void setup_open(setup_t *u, const settings_t *values) {
 	*u = (setup_t){.values = *values};
-	if (settings_field_fixed(&u->values, u->item)) {
+	if (fixed_why(u, &u->values, settings_main_field(u->item))) {
 		select_next(u, 1);
 	}
 }
@@ -190,7 +200,8 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 	const unsigned preview_after = offsetof(settings_t, palette);
 	unsigned row = top;
 	for (unsigned i = 0; i < SETUP_ITEMS; ++i) {
-		const settings_field_t *it = &settings_fields[i];
+		unsigned f = settings_main_field(i);
+		const settings_field_t *it = &settings_fields[f];
 		++row;
 		if (i == preview_after + 1) {
 			row += 2; // below the preview
@@ -202,20 +213,23 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 			screen_put_attr(s, LEFT + c, row, (uint8_t)text[c], fg, bg, selected ? SCREEN_ATTR_BOLD : 0);
 		}
 		unsigned col = LEFT + 3 + NAME_WIDTH;
-		const char *fixed = settings_field_fixed(&values, i);
+		const char *fixed = fixed_why(u, &values, f);
 		if (fixed) {
-			// Only the value in use (Columns is the one field that can be
-			// fixed), then what decides it.
+			// Only the value in use (Columns under the ADM-3A, Bell
+			// without one), then what decides it.
 			settings_t used = values;
 			used.columns = (uint8_t)settings_columns(&values);
-			const char *label = it->labels[choice_index(&used, i)];
+			if (u->no_bell) {
+				used.bell = SETTINGS_BELL_OFF;
+			}
+			const char *label = it->labels[choice_index(&used, f)];
 			snprintf(text, sizeof text, " %s ", label);
 			screen_puts(s, col, row, text, bg, fg);
 			snprintf(text, sizeof text, "(%s)", fixed);
 			screen_puts(s, col + (unsigned)strlen(label) + 3, row, text, fg, bg);
 			continue;
 		}
-		unsigned current = choice_index(&values, i);
+		unsigned current = choice_index(&values, f);
 		if (it->n_choices > INLINE_CHOICES) {
 			snprintf(text, sizeof text, "< %s >", it->labels[current]);
 			screen_puts(s, col + 1, row, text, bg, fg);

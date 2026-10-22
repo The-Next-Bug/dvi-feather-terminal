@@ -34,6 +34,7 @@
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
 
+#include "bell.h"
 #include "board.h"
 #include "diag.h"
 #include "extram.h"
@@ -144,6 +145,7 @@ void apply_settings(const settings_t *s) {
 	blank_init(&blank, s->blank_after * 60000u, to_ms_since_boot(get_absolute_time()));
 	colors = settings_colors(s);
 	show_palette(s);
+	bell_set_level(s->bell);
 }
 
 // Wait until `until`, UART0 receiving something (copied into buf) or a key
@@ -244,6 +246,7 @@ int main(void) {
 	// The wall clock from the board's RTC (I2C clocked from clk_peri, final
 	// now).
 	rtc_init();
+	bell_init(); // its sample rate from clk_sys, final now
 	show_palette(&settings);
 	// After video_init: the baud divisor depends on the final clk_peri.
 	// Diagnostic builds write to UART0 with blocking calls, which a CTS that
@@ -285,6 +288,7 @@ int main(void) {
 	status_t shown = status_now();
 	unsigned shown_resets = term.screen_resets;
 	unsigned setup_requests = term.setup_requests;
+	unsigned bells = term.bells;
 	if (cpm.on) {
 		draw_cpm_status();
 	} else {
@@ -404,6 +408,11 @@ int main(void) {
 					draw_status(&shown);
 				}
 			}
+		}
+		// BEL from the host or the CP/M console.
+		if (term.bells != bells) {
+			bells = term.bells;
+			bell_ring();
 		}
 		status_clock_poll();
 		video_update(&screen);

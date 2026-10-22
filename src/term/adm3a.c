@@ -1,6 +1,7 @@
 #include "term_internal.h"
 
 
+#define BEL 0x07
 #define BS 0x08
 #define HT 0x09
 #define LF 0x0a
@@ -85,8 +86,11 @@ static void control(term_t *t, uint8_t ch) {
 	case RS:
 		home(t);
 		break;
+	case BEL:
+		++t->bells;
+		break;
 	default:
-		break; // BEL, ^N/^O (keyboard unlock/lock), the rest: nothing
+		break; // ^N/^O (keyboard unlock/lock), the rest: nothing
 	}
 }
 

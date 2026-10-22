@@ -202,8 +202,39 @@ static void test_clock_settings(void) {
 	CHECK_EQ(out.clock, SETTINGS_CLOCK_12H);
 	CHECK_EQ(out.clock_seconds, 1);
 	CHECK_EQ(out.clock_date, SETTINGS_DATE_SHORT);
-	// SET-UP's main rows stop before them.
-	CHECK_EQ(SETTINGS_MAIN_FIELDS, offsetof(settings_t, clock));
+	// They are not SET-UP's rows: those are the main page's fields, in
+	// order, Bell after Terminal type.
+	unsigned main = 0;
+	for (unsigned f = 0; f < SETTINGS_FIELDS; ++f) {
+		bool clock = f >= offsetof(settings_t, clock) && f <= offsetof(settings_t, clock_date);
+		CHECK_EQ(settings_fields[f].page, clock ? SETTINGS_PAGE_CLOCK : SETTINGS_PAGE_MAIN);
+		main += !clock;
+	}
+	CHECK_EQ(main, SETTINGS_MAIN_FIELDS);
+	for (unsigned row = 0; row <= offsetof(settings_t, term_type); ++row) {
+		CHECK_EQ(settings_main_field(row), row);
+	}
+	CHECK_EQ(settings_main_field(SETTINGS_MAIN_FIELDS - 1), offsetof(settings_t, bell));
+}
+
+// Bell: medium unless saved; records from before it (15 bytes) get that.
+static void test_bell_setting(void) {
+	settings_t in, out;
+	settings_defaults(&in);
+	CHECK_EQ(in.bell, SETTINGS_BELL_MEDIUM);
+	in.bell = SETTINGS_BELL_OFF;
+	uint8_t rec[SETTINGS_RECORD_SIZE];
+	uint32_t seq;
+	settings_encode(&in, 1, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.bell, SETTINGS_BELL_OFF);
+	rec[5] = 15;
+	uint32_t crc = crc_of(rec, 15);
+	for (unsigned i = 0; i < 4; ++i) {
+		rec[12 + i] = (uint8_t)(crc >> 8 * i);
+	}
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.bell, SETTINGS_BELL_MEDIUM);
 }
 
 static void test_term_type(void) {
@@ -293,6 +324,7 @@ int main(void) {
 	RUN(test_sequence_wraps);
 	RUN(test_bad_value_keeps_default);
 	RUN(test_clock_settings);
+	RUN(test_bell_setting);
 	RUN(test_older_record);
 	RUN(test_retired_wide80);
 	RUN(test_term_type);

@@ -147,13 +147,37 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 // A DS3231 or DS3231M at I2C address 68h on BOARD_RTC_I2C (0/1) and its pins
 // (GPIO n: I2C (n >> 1) & 1, SDA on even, SCL on odd pins); the board's
 // pull-ups (the internal ones are on too). The time is read at start-up and
-// kept by the chip's battery; CP/M 3's DATE SET sets it. BOARD_RTC_SQW_PIN,
-// the chip's 1 Hz output, only reserves its pin (nothing uses it yet).
+// kept by the chip's battery; CP/M 3's DATE SET and SET-UP's Clock panel set
+// it. BOARD_RTC_SQW_PIN, the chip's 1 Hz output, keeps the firmware's clock
+// on the chip's seconds.
 // #define BOARD_RTC_DS3231 1
 // #define BOARD_RTC_I2C 1
 // #define BOARD_RTC_SDA_PIN 10
 // #define BOARD_RTC_SCL_PIN 11
 // #define BOARD_RTC_SQW_PIN 8
+
+// --- Other optional hardware ---
+//
+// Name what the board has, even before the firmware drives it: HWINFO lists
+// it (as planned until its driver lands) and leaves out what is not named.
+//
+// An I2S DAC (or one taking 16-bit left-justified words, as the TDA1387):
+// the bell, a short beep on BEL. WS must be BCK + 1 (PIO side-set pins);
+// the name is only for HWINFO.
+// #define BOARD_AUDIO_I2S_BCK_PIN 9
+// #define BOARD_AUDIO_I2S_WS_PIN 10
+// #define BOARD_AUDIO_I2S_DATA_PIN 11
+// #define BOARD_AUDIO_I2S_NAME "TDA1387"
+//
+// Planned (no driver yet): a buzzer, an RGB status LED (WS2812), the SD
+// slot's card detect switch, a user button, the battery's voltage (an ADC
+// pin: GP26-29) and the charger's status.
+// #define BOARD_BUZZER_PIN 10
+// #define BOARD_NEOPIXEL_PIN 21
+// #define BOARD_SD_CD_PIN 22
+// #define BOARD_BUTTON_PIN 24
+// #define BOARD_BATTERY_ADC_PIN 26
+// #define BOARD_CHARGER_STAT_PIN 27
 
 // --- LED ---
 //

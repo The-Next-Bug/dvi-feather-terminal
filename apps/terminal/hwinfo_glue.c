@@ -1,14 +1,16 @@
 // The Z80 machine's hardware information device (port 12, machine.h; bd
 // 1ls.9): the board and its hardware for HWINFO.COM, from the board header
-// and what the firmware found. Planned hardware the firmware does not drive
-// yet has a record too (HWINFO_ST_PLANNED). Cold code in flash (ld/): it
-// runs only when a program asks.
+// and what the firmware found. Hardware the board header names but the
+// firmware does not drive yet is HWINFO_ST_PLANNED (bd 1ls.4); what the
+// board does not have gets no record (0 bytes: HWINFO skips it). Cold code
+// in flash (ld/): it runs only when a program asks.
 
 #include <stdio.h>
 
 #include "hardware/clocks.h"
 #include "hardware/structs/sysinfo.h"
 
+#include "bell.h"
 #include "board.h"
 #include "extram.h"
 #include "hstx_dvi.h"
@@ -65,7 +67,8 @@ static size_t psram_record(uint8_t *buf) {
 	snprintf(text, sizeof text, "%u KB on CS1 (" GP(BOARD_PSRAM_CS_PIN) "), Z80 banks", (unsigned)(size / 1024));
 	return hwinfo_record(buf, HWINFO_ST_PRESENT, "PSRAM", text);
 #else
-	return hwinfo_record(buf, HWINFO_ST_ABSENT, "PSRAM", "none on this board");
+	(void)buf;
+	return 0;
 #endif
 }
 
@@ -89,8 +92,8 @@ static size_t rtc_record(uint8_t *buf) {
 	}
 #undef RTC_TEXT
 #else
-	return hwinfo_record(buf, HWINFO_ST_ABSENT, "Real-time clock",
-		"none on this board: starts at 1 Jan 2026 at power-on");
+	(void)buf;
+	return 0;
 #endif
 }
 
@@ -113,7 +116,10 @@ static size_t serial_record(uint8_t *buf) {
 }
 
 static size_t flow_record(uint8_t *buf) {
-#if !SERIAL_FLOW_CONTROL
+#if !defined(BOARD_UART_CTS_PIN) || !defined(BOARD_UART_RTS_PIN)
+	(void)buf;
+	return 0; // no pins for it
+#elif !SERIAL_FLOW_CONTROL
 	return hwinfo_record(buf, HWINFO_ST_ABSENT, "Flow control", "off (build option SERIAL_FLOW_CONTROL)");
 #elif VIDEO_DIAG
 	return hwinfo_record(buf, HWINFO_ST_PRESENT, "Flow control", "RTS " GP(BOARD_UART_RTS_PIN) " (CTS: VIDEO_DIAG)");
@@ -161,8 +167,62 @@ static size_t led_record(uint8_t *buf) {
 	}
 	return hwinfo_record(buf, HWINFO_ST_PRESENT, "Status LED", GP(PICO_DEFAULT_LED_PIN) ": disks, serial, heartbeat");
 #else
-	return hwinfo_record(buf, HWINFO_ST_ABSENT, "Status LED", "none on this board");
+	(void)buf;
+	return 0;
 #endif
+}
+
+static size_t bell_record(uint8_t *buf) {
+#if BOARD_AUDIO_I2S
+#define BELL_PINS BOARD_AUDIO_I2S_NAME " on " GP(BOARD_AUDIO_I2S_BCK_PIN) " BCK, " GP(BOARD_AUDIO_I2S_WS_PIN) \
+	" WS, " GP(BOARD_AUDIO_I2S_DATA_PIN) " DATA"
+	if (bell_present()) {
+		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Bell", BELL_PINS ": a beep on BEL");
+	}
+	return hwinfo_record(buf, HWINFO_ST_NOT_FOUND, "Bell", BELL_PINS ": no PIO or DMA channel free");
+#undef BELL_PINS
+#elif defined(BOARD_BUZZER_PIN)
+	return hwinfo_record(buf, HWINFO_ST_PLANNED, "Bell", "buzzer on " GP(BOARD_BUZZER_PIN) ": not supported yet");
+#else
+	(void)buf;
+	return 0;
+#endif
+}
+
+// Hardware the board header names that has no driver yet (bd 1ls.4):
+// planned, with its pin; nothing for what the board does not have.
+static size_t planned_record(uint8_t item, uint8_t *buf) {
+	switch (item) {
+#ifdef BOARD_NEOPIXEL_PIN
+	case HWINFO_NEOPIXEL:
+		return hwinfo_record(buf, HWINFO_ST_PLANNED, "RGB status LED", GP(BOARD_NEOPIXEL_PIN) ": not supported yet");
+#endif
+#ifdef BOARD_SD_CD_PIN
+	case HWINFO_SD_DETECT:
+		return hwinfo_record(buf, HWINFO_ST_PLANNED, "SD card detect", GP(BOARD_SD_CD_PIN) ": not supported yet");
+#endif
+#ifdef BOARD_BUTTON_PIN
+	case HWINFO_BUTTON:
+		return hwinfo_record(buf, HWINFO_ST_PLANNED, "User button", GP(BOARD_BUTTON_PIN) ": not supported yet");
+#endif
+#if defined(BOARD_BATTERY_ADC_PIN) || defined(BOARD_CHARGER_STAT_PIN)
+	case HWINFO_BATTERY:
+		return hwinfo_record(buf, HWINFO_ST_PLANNED, "Battery",
+#ifdef BOARD_BATTERY_ADC_PIN
+			"voltage on " GP(BOARD_BATTERY_ADC_PIN)
+#ifdef BOARD_CHARGER_STAT_PIN
+			", "
+#endif
+#endif
+#ifdef BOARD_CHARGER_STAT_PIN
+			"charger status on " GP(BOARD_CHARGER_STAT_PIN)
+#endif
+			": not supported yet");
+#endif
+	default:
+		(void)buf;
+		return 0;
+	}
 }
 
 static size_t drives_record(uint8_t *buf) {
@@ -210,15 +270,12 @@ size_t cpm_hwinfo(uint8_t item, uint8_t *buf) {
 	case HWINFO_RTC:
 		return rtc_record(buf);
 	case HWINFO_BELL:
-		return hwinfo_record(buf, HWINFO_ST_PLANNED, "Bell", "not supported yet: BEL is silent");
+		return bell_record(buf);
 	case HWINFO_NEOPIXEL:
-		return hwinfo_record(buf, HWINFO_ST_PLANNED, "RGB status LED", "not supported yet");
 	case HWINFO_SD_DETECT:
-		return hwinfo_record(buf, HWINFO_ST_PLANNED, "SD card detect", "not supported yet");
 	case HWINFO_BUTTON:
-		return hwinfo_record(buf, HWINFO_ST_PLANNED, "User button", "not supported yet");
 	case HWINFO_BATTERY:
-		return hwinfo_record(buf, HWINFO_ST_PLANNED, "Battery", "not supported yet");
+		return planned_record(item, buf);
 	default:
 		return 0;
 	}
