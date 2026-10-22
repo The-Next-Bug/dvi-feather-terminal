@@ -72,12 +72,18 @@ static size_t psram_record(uint8_t *buf) {
 static size_t rtc_record(uint8_t *buf) {
 #ifdef BOARD_RTC_DS3231
 #define RTC_TEXT "DS3231 on " BOARD_RTC_PINS_TEXT
+	char text[HWINFO_MAX];
+	const char *tick = "";
+#ifdef BOARD_RTC_SQW_PIN
+	tick = rtc_ticking() ? ", 1 Hz on " GP(BOARD_RTC_SQW_PIN) : ", no 1 Hz on " GP(BOARD_RTC_SQW_PIN);
+#endif
 	switch (rtc_state()) {
 	case RTC_OK:
-		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Real-time clock", RTC_TEXT);
+		snprintf(text, sizeof text, RTC_TEXT "%s", tick);
+		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Real-time clock", text);
 	case RTC_NOT_SET:
-		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Real-time clock",
-			RTC_TEXT ", time not set (battery?): DATE SET under CP/M 3 sets it");
+		snprintf(text, sizeof text, RTC_TEXT "%s, time not set (battery?): DATE SET under CP/M 3 sets it", tick);
+		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Real-time clock", text);
 	default:
 		return hwinfo_record(buf, HWINFO_ST_NOT_FOUND, "Real-time clock", RTC_TEXT " did not answer");
 	}

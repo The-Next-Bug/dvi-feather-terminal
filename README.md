@@ -325,6 +325,7 @@ It opens from:
 | **T** | show the demo screen in the edited colors until a key is pressed |
 | **R** | reboot the board, as at power-on (unsaved changes are dropped; CP/M drives are written back first). The last resort when the terminal is stuck |
 | **U** | [update the firmware](#updating-the-firmware-from-the-sd-card-or-a-usb-stick) from `FIRMWARE.UF2` on the SD card or a USB stick, in either mode |
+| **C** | the [Clock panel](#the-clock): set the date and time, choose how the status line shows them |
 | **D** | CP/M mode: the [Drives panel](#running-cpm) |
 | **M** | CP/M mode: back to the [monitor](#the-monitor) |
 
@@ -467,11 +468,32 @@ rebuilding F83 from its source (`README.80`), `F83 VIEWDRV.BLK` and then
 
 The machine's clock (ports 65/66) is the board's real-time clock when it
 has one (the Frankless's DS3231M, with a cell in its battery holder),
-read at power-on and kept by the firmware from there. Without one, or
-while its time is not set, the clock starts at 1 Jan 2026 at power-on.
+read at power-on and kept by the firmware from there, a second at a time
+on the chip's 1 Hz output (GP8 on the Frankless) so it keeps the chip's
+time instead of drifting. Without one, or while its time is not set, the
+clock starts at 1 Jan 2026 at power-on.
+
+Once the time is real (read from the RTC, or set since power-on), both
+modes' status lines end in it, `13:45` by default, the colons blinking: on
+for the first half of each second, in step with the RTC's 1 Hz output.
+
+SET-UP's **C** opens the Clock panel, in either mode:
+
+- **Date** and **Time** show the clock as it runs. Typing digits over
+  them (Left/Right move the cursor, Backspace goes back) and Return sets
+  the clock to them, and the RTC with it. This is the way to set it under
+  CP/M 2.2 and in terminal mode; under CP/M 3, `DATE SET` works too.
+- **Status line clock** (24 h, 12 h, off), **Seconds** and **Date**
+  (off, `2026-10-22`, `Thu 22 Oct`) choose what the status line shows; a
+  row underneath shows the result. Return takes them back to SET-UP, whose
+  Return saves them with the other settings. At its widest
+  (`Thu 22 Oct  1:45:30 PM`) the clock takes 24 columns, and the end of the
+  terminal's status line (the last key) gives way to it.
+- Esc goes back to SET-UP without changes. Without an RTC the panel says
+  the time lasts only until power-off.
 Under CP/M 3, `DATE` shows it and `DATE SET` sets it, the RTC's too, so it
-survives power-off; `HWINFO` says whether the RTC answered and whether its
-time was set. Files written on the SD card and USB sticks (`XPIP SD:...`,
+survives power-off; `HWINFO` says whether the RTC answered, whether its
+time was set and whether its 1 Hz output ticks. Files written on the SD card and USB sticks (`XPIP SD:...`,
 `DRIVES.CFG`, new disk images) get their dates from it.
 
 ### HWINFO

@@ -52,6 +52,11 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 	{"Blank after", 6, {0, 1, 5, 10, 30, 60}, {"never", "1 min", "5 min", "10 min", "30 min", "60 min"}},
 	{"Terminal type", 3, {SETTINGS_TERM_VT100, SETTINGS_TERM_VT52, SETTINGS_TERM_ADM3A},
 		{"VT100", "VT52", "ADM-3A"}},
+	{"Status line clock", 3, {SETTINGS_CLOCK_24H, SETTINGS_CLOCK_12H, SETTINGS_CLOCK_OFF},
+		{"24 h", "12 h", "off"}},
+	{"Seconds", 2, {0, 1}, {"off", "on"}},
+	{"Date", 3, {SETTINGS_DATE_NONE, SETTINGS_DATE_ISO, SETTINGS_DATE_SHORT},
+		{"off", "2026-10-22", "Thu 22 Oct"}},
 };
 
 unsigned settings_baud_rate(const settings_t *s) {
@@ -104,7 +109,8 @@ static uint32_t record_crc(const uint8_t *rec, unsigned len) {
 void settings_defaults(settings_t *s) {
 	*s = (settings_t){.columns = 80, .backspace = 0x7f, .local_echo = 0, .baud = BAUD_DEFAULT,
 		.framing = 0, .newline = 0, .colors = 0, .palette = 0, .mode = SETTINGS_MODE_TERMINAL,
-		.status_line = 1, .blank_after = 0, .term_type = SETTINGS_TERM_VT100};
+		.status_line = 1, .blank_after = 0, .term_type = SETTINGS_TERM_VT100, .clock = SETTINGS_CLOCK_24H,
+		.clock_seconds = 0, .clock_date = SETTINGS_DATE_NONE};
 }
 
 void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_RECORD_SIZE]) {

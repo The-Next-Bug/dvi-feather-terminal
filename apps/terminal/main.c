@@ -405,6 +405,7 @@ int main(void) {
 				}
 			}
 		}
+		status_clock_poll();
 		video_update(&screen);
 		diag_poll();
 		debug_status_pass();

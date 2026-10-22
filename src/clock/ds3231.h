@@ -13,6 +13,10 @@
 #define DS3231_ADDR 0x68
 #define DS3231_REG_TIME 0x00   // 7 registers: seconds to year
 #define DS3231_TIME_REGS 7
+#define DS3231_REG_CONTROL 0x0e
+#define DS3231_CONTROL_EOSC 0x80  // 1: the oscillator stops on the battery
+#define DS3231_CONTROL_RS 0x18    // square-wave rate: 00 = 1 Hz (the DS3231M has only that)
+#define DS3231_CONTROL_INTCN 0x04 // 1: INT/SQW is the alarms' interrupt, 0: the square wave
 #define DS3231_REG_STATUS 0x0f
 #define DS3231_STATUS_OSF 0x80 // the oscillator stopped: the time is not valid
 

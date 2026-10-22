@@ -29,6 +29,23 @@ void datetime_from_secs(uint32_t secs, datetime_t *t);
 // count's end, or one that does not exist (31.4., 29.2.2027, 24:00); the
 // weekday is not read.
 bool datetime_to_secs(const datetime_t *t, uint32_t *secs);
+// A clock's text, as the status line shows it: the date if asked
+// (DATETIME_DATE_ISO "2026-10-22 ", _SHORT "Thu 22 Oct "), then the time,
+// 24-hour ("13:45", "13:45:30") or 12-hour (" 1:45 PM", " 1:45:30 PM"),
+// the colons blanked unless colons. The same format always gives the same
+// length (DATETIME_CLOCK_MAX at most), which it returns.
+#define DATETIME_DATE_NONE 0
+#define DATETIME_DATE_ISO 1
+#define DATETIME_DATE_SHORT 2
+#define DATETIME_CLOCK_MAX 22
+typedef struct {
+	bool twelve_hour;
+	bool seconds;
+	uint8_t date; // DATETIME_DATE_*
+} datetime_clock_t;
+unsigned datetime_clock_text(char out[DATETIME_CLOCK_MAX + 1], uint32_t secs, bool colons,
+	const datetime_clock_t *format);
+
 // As a FAT timestamp (FatFs's get_fattime: the year - 1980, month, day,
 // hours, minutes, seconds / 2, from bit 25 down), held to 1980-2107.
 uint32_t datetime_to_fat(uint32_t secs);

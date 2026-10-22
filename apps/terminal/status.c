@@ -1,15 +1,18 @@
 // The status line, row 24 (terminal.h): the terminal's (type, width,
 // line settings, keyboard, stick, echo, last key), CP/M mode's (drive
 // letters lit while accessed, the stick, the Z80's speed) or the debug
-// choices' (timing, the USB host's events); blank when hidden.
+// choices' (timing, the USB host's events); blank when hidden. The first
+// two end in the clock once the time is real.
 
 #include <stdio.h>
 #include <string.h>
 
 #include "pico/stdlib.h"
 
+#include "datetime.h"
 #include "keyname.h"
 #include "palette.h"
+#include "rtc.h"
 #include "term_build.h"
 #include "terminal.h"
 #include "usbkbd.h"
@@ -26,6 +29,70 @@ bool status_shown(void) {
 	}
 	screen_clear_line(&screen, STATUS_ROW, PALETTE_TEXT, PALETTE_BACKGROUND);
 	return false;
+}
+
+// The clock at the right end (bd 1ls.6.3), as the Status line clock,
+// Seconds and Date settings choose (SET-UP's Clock panel, bd 1ls.6.5):
+// shown once the time is real (the RTC's, or set since start-up), a space
+// either side, the colons on for the first half of each second, in step
+// with the RTC's 1 Hz output while it ticks. Only its cells are redrawn as
+// it changes; the line's text stops before it.
+#define CLOCK_COLON_US 500000u
+
+static uint32_t clock_drawn = UINT32_MAX; // the minute (or second) * 2 + colon shown
+
+static datetime_clock_t clock_format(void) {
+	return (datetime_clock_t){settings.clock == SETTINGS_CLOCK_12H, settings.clock_seconds != 0,
+		settings.clock_date};
+}
+
+static bool clock_on(void) {
+	return rtc_valid() && settings.clock != SETTINGS_CLOCK_OFF && settings.status_line && !debug_status_on() &&
+		!setup.demo;
+}
+
+// The columns the clock takes, its spaces included (0 when it is off).
+static unsigned clock_cols(void) {
+	if (!clock_on()) {
+		return 0;
+	}
+	char text[DATETIME_CLOCK_MAX + 1];
+	datetime_clock_t format = clock_format();
+	return datetime_clock_text(text, 0, true, &format) + 2; // every time is as wide
+}
+
+static void draw_clock(bool force) {
+	if (!clock_on()) {
+		return;
+	}
+	datetime_clock_t format = clock_format();
+	uint32_t secs = rtc_now();
+	bool colons = rtc_fraction_us() < CLOCK_COLON_US;
+	uint32_t key = (format.seconds ? secs : secs / 60) * 2 + colons;
+	if (key == clock_drawn && !force) {
+		return;
+	}
+	clock_drawn = key;
+	char text[DATETIME_CLOCK_MAX + 3] = " ";
+	unsigned n = datetime_clock_text(text + 1, secs, colons, &format);
+	text[n + 1] = ' ';
+	text[n + 2] = '\0';
+	screen_puts(&screen, screen.cols - (n + 2), STATUS_ROW, text, colors.status_fg, colors.status_bg);
+}
+
+void status_clock_poll(void) {
+	draw_clock(false);
+}
+
+// A status line's text, ended where the clock begins.
+static void put_status_text(char *text) {
+	size_t end = (size_t)screen.cols - clock_cols();
+	if (strlen(text) > end) {
+		text[end] = '\0';
+	}
+	screen_clear_line(&screen, STATUS_ROW, colors.status_fg, colors.status_bg);
+	screen_puts(&screen, 0, STATUS_ROW, text, colors.status_fg, colors.status_bg);
+	draw_clock(true);
 }
 
 // The USB stick on the status line: "USB" while one is volume 1 (USB: to
@@ -198,8 +265,7 @@ void draw_cpm_status(void) {
 	}
 	n = strlen(text);
 	snprintf(text + n, sizeof text - n, "%s | %s", usbkbd_count() ? " | kbd" : "", TERM_BUILD_ID);
-	screen_clear_line(&screen, STATUS_ROW, colors.status_fg, colors.status_bg);
-	screen_puts(&screen, 0, STATUS_ROW, text, colors.status_fg, colors.status_bg);
+	put_status_text(text);
 	for (unsigned d = 0; d < DRIVES; ++d) {
 		if (cpm.lit & 1u << d && drives_name(d)) {
 			screen_put(&screen, letter_col[d], STATUS_ROW, (uint8_t)('A' + d), colors.status_bg,
@@ -252,6 +318,5 @@ void draw_status(const status_t *st) {
 		st->type, screen.cols, TERM_BUILD_ID, settings_baud_rate(&st->settings), data_bits, parity, stop_bits,
 		SERIAL_FLOW_CONTROL ? " RTS/CTS" : "", st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "", st->usb,
 		st->settings.local_echo ? " | echo" : "", key);
-	screen_clear_line(&screen, STATUS_ROW, colors.status_fg, colors.status_bg);
-	screen_puts(&screen, 0, STATUS_ROW, text, colors.status_fg, colors.status_bg);
+	put_status_text(text);
 }

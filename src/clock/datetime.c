@@ -1,5 +1,7 @@
 #include "datetime.h"
 
+#include <stdio.h>
+
 // Day counts from 1.3.0000 (Howard Hinnant's civil_from_days and
 // days_from_civil, unsigned): 1.1.1978 is day 722390 of that count, CP/M's
 // day 1.
@@ -55,4 +57,35 @@ uint32_t datetime_to_fat(uint32_t secs) {
 	}
 	return (uint32_t)(t.year - 1980) << 25 | (uint32_t)t.month << 21 | (uint32_t)t.mday << 16 |
 		(uint32_t)t.hour << 11 | (uint32_t)t.min << 5 | t.sec / 2u;
+}
+
+unsigned datetime_clock_text(char out[DATETIME_CLOCK_MAX + 1], uint32_t secs, bool colons,
+	const datetime_clock_t *format) {
+	static const char days[7][4] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+	static const char months[12][4] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
+		"Nov", "Dec"};
+	datetime_t t;
+	datetime_from_secs(secs, &t);
+	unsigned n = 0;
+	if (format->date == DATETIME_DATE_ISO) {
+		n = (unsigned)snprintf(out, DATETIME_CLOCK_MAX + 1, "%04u-%02u-%02u ", t.year % 10000u, t.month % 100u,
+			t.mday % 100u);
+	} else if (format->date == DATETIME_DATE_SHORT) {
+		n = (unsigned)snprintf(out, DATETIME_CLOCK_MAX + 1, "%s %02u %s ", days[t.wday % 7], t.mday % 100u,
+			months[(t.month + 11u) % 12]);
+	}
+	char colon = colons ? ':' : ' ';
+	if (format->twelve_hour) { // 12 AM, 1 AM ... 12 PM, 1 PM ...
+		n += (unsigned)snprintf(out + n, DATETIME_CLOCK_MAX + 1 - n, "%2u", t.hour % 12 ? t.hour % 12u : 12u);
+	} else {
+		n += (unsigned)snprintf(out + n, DATETIME_CLOCK_MAX + 1 - n, "%02u", t.hour % 100u);
+	}
+	n += (unsigned)snprintf(out + n, DATETIME_CLOCK_MAX + 1 - n, "%c%02u", colon, t.min % 100u);
+	if (format->seconds) {
+		n += (unsigned)snprintf(out + n, DATETIME_CLOCK_MAX + 1 - n, "%c%02u", colon, t.sec % 100u);
+	}
+	if (format->twelve_hour) {
+		n += (unsigned)snprintf(out + n, DATETIME_CLOCK_MAX + 1 - n, " %s", t.hour < 12 ? "AM" : "PM");
+	}
+	return n;
 }

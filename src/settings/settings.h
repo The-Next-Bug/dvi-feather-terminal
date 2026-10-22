@@ -40,6 +40,10 @@ typedef struct {
 	// 1 full width), so term_type's values avoid 1: older records come back
 	// as VT100 (0, or 1 rejected as invalid).
 	uint8_t term_type; // SETTINGS_TERM_*: the personality and mode at power-on/RIS
+	// The status line's clock (SET-UP's Clock panel, not its main rows):
+	uint8_t clock;         // SETTINGS_CLOCK_*: 24-hour, 12-hour, or off
+	uint8_t clock_seconds; // 1: with the seconds
+	uint8_t clock_date;    // SETTINGS_DATE_*: the date before the time, or none
 } settings_t;
 
 #define SETTINGS_MODE_TERMINAL 0 // a serial terminal on UART0
@@ -52,9 +56,20 @@ typedef struct {
 #define SETTINGS_STATUS_DEBUG 2 // status_line: core 1 timing, late lines, frame rate, main-loop time
 #define SETTINGS_STATUS_DEBUG_USB 3 // status_line: the USB host's last events (usbkbd_log)
 
+#define SETTINGS_CLOCK_24H 24
+#define SETTINGS_CLOCK_12H 12
+#define SETTINGS_CLOCK_OFF 0
+
+#define SETTINGS_DATE_NONE 0
+#define SETTINGS_DATE_ISO 1   // 2026-10-22
+#define SETTINGS_DATE_SHORT 2 // Thu 22 Oct
+
 // The settings, in settings_t order, with the values each can take (the
-// first choice need not be the default) and their names for SET-UP.
-#define SETTINGS_FIELDS 12
+// first choice need not be the default) and their names for SET-UP. The
+// first SETTINGS_MAIN_FIELDS are SET-UP's rows; the clock's are on its
+// Clock panel (clockpanel.h).
+#define SETTINGS_FIELDS 15
+#define SETTINGS_MAIN_FIELDS 12
 #define SETTINGS_MAX_CHOICES 9
 
 typedef struct {

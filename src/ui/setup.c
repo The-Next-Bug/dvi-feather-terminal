@@ -127,6 +127,9 @@ setup_action_t setup_input(setup_t *u, uint8_t c, uint32_t now_ms) {
 	case 'u':
 	case 'U':
 		return SETUP_FIRMWARE;
+	case 'c':
+	case 'C':
+		return SETUP_CLOCK;
 	default:
 		break;
 	}
@@ -234,6 +237,6 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 	screen_puts(s, LEFT, top + SETUP_ROWS - 3, " Up/Down select  Left/Right change  Return save  Esc cancel",
 		fg, bg);
 	screen_puts(s, LEFT, top + SETUP_ROWS - 2, u->machine_menu
-		? " T demo  U firmware update  R reboot  D drives  M monitor"
-		: " T demo  U firmware update  R reboot", fg, bg);
+		? " T demo  U firmware update  R reboot  C clock  D drives  M monitor"
+		: " T demo  U firmware update  R reboot  C clock", fg, bg);
 }
