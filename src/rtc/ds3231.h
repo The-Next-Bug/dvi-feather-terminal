@@ -1,9 +1,9 @@
 #ifndef DS3231_H
 #define DS3231_H
 
-// The DS3231 (and DS3231M) real-time clock's registers, as plain bytes:
-// the I2C transfers are the platform's (src/platform/rtc.c). The time is
-// kept in 24-hour form; years 2000-2199 (the century bit).
+// The DS3231 (and DS3231M) real-time clock's registers; its driver is
+// rtc_ds3231 (rtc_chip.h). The time is kept in 24-hour form; years
+// 2000-2199 (the century bit).
 
 #include <stdbool.h>
 #include <stdint.h>

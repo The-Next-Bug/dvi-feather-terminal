@@ -1,7 +1,6 @@
 #include <string.h>
 
 #include "datetime.h"
-#include "ds3231.h"
 #include "wallclock.h"
 #include "test.h"
 
@@ -78,57 +77,6 @@ static void test_invalid(void) {
 	uint32_t s;
 	CHECK(datetime_to_secs(&leap, &s));
 	CHECK(datetime_to_secs(&y2000, &s));
-}
-
-static void test_ds3231(void) {
-	// 22.10.2026 13:45:30, a Thursday (day 5 counting Sunday as 1).
-	datetime_t t = at(2026, 10, 22, 13, 45, 30), got;
-	t.wday = 4;
-	uint8_t regs[DS3231_TIME_REGS];
-	ds3231_encode(&t, regs);
-	static const uint8_t want[DS3231_TIME_REGS] = {0x30, 0x45, 0x13, 5, 0x22, 0x10, 0x26};
-	CHECK(memcmp(regs, want, sizeof want) == 0);
-	CHECK(ds3231_decode(regs, &got));
-	CHECK(memcmp(&got, &t, sizeof t) == 0);
-
-	// The century bit: 2100-2199.
-	datetime_t later = at(2105, 3, 1, 0, 0, 0);
-	ds3231_encode(&later, regs);
-	CHECK_EQ(regs[5], 0x83);
-	CHECK_EQ(regs[6], 0x05);
-	CHECK(ds3231_decode(regs, &got));
-	CHECK_EQ(got.year, 2105);
-
-	// 12-hour mode (set by something else): 12 AM is 0, 1 PM is 13.
-	uint8_t twelve[DS3231_TIME_REGS] = {0x00, 0x00, 0x40 | 0x12, 1, 0x01, 0x01, 0x26};
-	CHECK(ds3231_decode(twelve, &got));
-	CHECK_EQ(got.hour, 0);
-	twelve[2] = 0x40 | 0x20 | 0x01;
-	CHECK(ds3231_decode(twelve, &got));
-	CHECK_EQ(got.hour, 13);
-	twelve[2] = 0x40 | 0x20 | 0x12; // 12 PM: noon
-	CHECK(ds3231_decode(twelve, &got));
-	CHECK_EQ(got.hour, 12);
-
-	// A weekday register that disagrees does not matter: it comes from the date.
-	uint8_t wrong_day[DS3231_TIME_REGS] = {0x30, 0x45, 0x13, 7, 0x22, 0x10, 0x26};
-	CHECK(ds3231_decode(wrong_day, &got));
-	CHECK_EQ(got.wday, 4);
-
-	// Not a time: bad BCD, out of range, a date that does not exist.
-	static const uint8_t bad[][DS3231_TIME_REGS] = {
-		{0x5a, 0x00, 0x00, 1, 0x01, 0x01, 0x26},
-		{0x60, 0x00, 0x00, 1, 0x01, 0x01, 0x26},
-		{0x00, 0x00, 0x24, 1, 0x01, 0x01, 0x26},
-		{0x00, 0x00, 0x40, 1, 0x01, 0x01, 0x26}, // 12-hour 0
-		{0x00, 0x00, 0x00, 1, 0x31, 0x04, 0x26}, // 31 April
-		{0x00, 0x00, 0x00, 1, 0x29, 0x02, 0x27},
-		{0x00, 0x00, 0x00, 1, 0x00, 0x01, 0x26},
-		{0x00, 0x00, 0x00, 1, 0x01, 0x13, 0x26},
-	};
-	for (unsigned i = 0; i < sizeof bad / sizeof bad[0]; ++i) {
-		CHECK(!ds3231_decode(bad[i], &got));
-	}
 }
 
 static void test_fat(void) {
@@ -258,7 +206,6 @@ int main(void) {
 	RUN(test_known_days);
 	RUN(test_round_trip);
 	RUN(test_invalid);
-	RUN(test_ds3231);
 	RUN(test_fat);
 	RUN(test_clock_text);
 	RUN(test_wallclock_timer);

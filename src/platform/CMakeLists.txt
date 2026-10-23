@@ -1,9 +1,8 @@
 # The RP2350 underneath: the terminal UART (serial.c), the status LED
 # (led.c), VIDEO_DIAG's UART diagnostics (diag.c), the settings' flash
 # sectors (nvflash.c), the firmware update's staging and commit
-# (fwupdate.c), the PSRAM (extram.c, PSRAM_BANKS builds), the wall
-# clock with the board's real-time clock (rtc.c) and the bell on its DAC
-# (bell.c).
+# (fwupdate.c), the PSRAM (extram.c, PSRAM_BANKS builds) and the bell on
+# its DAC (bell.c).
 add_library(dvt_platform STATIC
   bell.c
   diag.c
@@ -11,7 +10,6 @@ add_library(dvt_platform STATIC
   fwupdate.c
   led.c
   nvflash.c
-  rtc.c
   serial.c
 )
 target_include_directories(dvt_platform PUBLIC ${CMAKE_CURRENT_LIST_DIR})
@@ -20,7 +18,6 @@ target_link_libraries(dvt_platform
     hardware_uart_headers
   PRIVATE
     dvt_board
-    dvt_clock
     dvt_common
     dvt_settings
     fatfs
@@ -28,7 +25,6 @@ target_link_libraries(dvt_platform
     hardware_dma_headers
     hardware_flash_headers
     hardware_gpio_headers
-    hardware_i2c_headers
     hardware_irq_headers
     hardware_pio_headers
     hardware_structs

@@ -67,7 +67,7 @@ CMake or Arm GCC on the dev host. Use the scripts:
 git submodule update --init          # lib/pico-sdk (2.3.1), not its submodules (lib/z80pack is vendored)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool, clang-tidy (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, clock, uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, clock, rtc (the RTC chip drivers on a fake register bus), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimized, no sanitizers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default; any boards/<target>.h) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
@@ -182,8 +182,9 @@ CMakeLists.txt (`src/CMakeLists.txt` lists them); public headers next to
 the sources (the directory is the PUBLIC include path), a header only the
 library's own files share is `<name>_internal.h` (term_internal.h).
 Portable (host-tested): common, clock, screen, term, render, input, settings,
-machine (+ dvt_z80pack, cpm/), disks, ui; RP2350, added only with
-DVT_FIRMWARE: board (header only), platform, usb, storage, video. The
+machine (+ dvt_z80pack, cpm/), disks, ui, rtc's dvt_rtc_chips; RP2350, added only with
+DVT_FIRMWARE: board (header only), platform, usb, storage, video, rtc's
+dvt_rtc (a directory may hold both, the RP2350 one under if(DVT_FIRMWARE)). The
 host tests add the same `src/` without DVT_FIRMWARE, so a pico-sdk
 include in a portable library fails test.sh. RP2350 libraries link the
 SDK's `*_headers` targets (TinyUSB has none: usb/'s dvt_tinyusb_headers
@@ -357,13 +358,19 @@ UF2 in the latter).
 - Clock (bd 1ls.6.1): `src/clock/` (portable, test_clock): datetime.[ch]
   (seconds since 31.12.1977 = CP/M 3's day number x 86400, civil
   conversions without localtime, FAT timestamps; DATETIME_DEFAULT_DAYS
-  17533 = 1.1.2026), ds3231.[ch] (register codec, 24 h, century bit).
+  17533 = 1.1.2026). `src/rtc/` (bd 1ls.19.1): portable dvt_rtc_chips
+  (test_rtc, fake register bus): rtc_chip.h (rtc_bus_t read/write by
+  address and register through function pointers; rtc_chip_t name,
+  start = set up + read -> MISSING / NOT_SET / OK, set (false outside its
+  years), optional start_1hz, output falling as the seconds go up), one
+  file per chip: ds3231.[ch] (register codec, 24 h, century bit, driver
+  rtc_ds3231), BCD in rtc_internal.h. RP2350 dvt_rtc: rtc.[ch] below.
   wallclock.[ch]: a second at a timestamp; wallclock_edge (the chip's
   seconds went up) moves it to the edge, rounding for missed edges,
-  ignoring glitches < 0.5 s, never back. `src/platform/rtc.[ch]`: the
-  DS3231 read once in rtc_init (after nvflash_retime; I2C 100 kHz, 5 ms
-  timeouts), then with BOARD_RTC_SQW_PIN the control register set to the
-  1 Hz square wave (INTCN, RS, EOSC cleared) and a raw GPIO IRQ on its
+  ignoring glitches < 0.5 s, never back. `src/rtc/rtc.[ch]`: the I2C bus
+  for the chip the board header names (RTC_CHIP), read once in rtc_init (after nvflash_retime; I2C 100 kHz, 5 ms
+  timeouts), then with BOARD_RTC_SQW_PIN the chip's start_1hz (DS3231:
+  INTCN, RS, EOSC cleared) and a raw GPIO IRQ on its
   falling edge (bd 1ls.6.2) feeding wallclock_edge, else time_us_64;
   readers disable interrupts around the wallclock. OSF set or no answer ->
   1.1.2026; rtc_set writes the chip and clears OSF (always kept for the

@@ -15,6 +15,7 @@ target_link_libraries(dvt_storage
     dvt_clock
     dvt_disks
     dvt_platform
+    dvt_rtc
     dvt_usb
     hardware_spi_headers
     pico_stdlib_headers

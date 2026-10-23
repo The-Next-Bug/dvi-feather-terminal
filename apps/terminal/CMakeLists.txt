@@ -55,6 +55,8 @@ target_link_libraries(dvi_terminal
   dvt_machine
   dvt_platform
   dvt_render
+  dvt_rtc
+  dvt_rtc_chips
   dvt_screen
   dvt_settings
   dvt_storage
