@@ -14,11 +14,13 @@ add_custom_target(build_info
 
 set(TERMINAL_SOURCES
   cpm_glue.c
+  crash_glue.c
   hwinfo_glue.c
   input_glue.c
   main.c
   setup_glue.c
   status.c
+  usblog_glue.c
 )
 add_executable(dvi_terminal ${TERMINAL_SOURCES})
 add_dependencies(dvi_terminal build_info)
@@ -45,6 +47,9 @@ target_compile_definitions(dvi_terminal PRIVATE
   PICO_PRINTF_SUPPORT_FLOAT=0
   PICO_PRINTF_SUPPORT_EXPONENTIAL=0
 )
+
+# Every panic() goes to crash_glue.c, which shows it (there is no stdio).
+target_link_options(dvi_terminal PRIVATE -Wl,--wrap=panic)
 
 target_link_libraries(dvi_terminal
   dvt_board

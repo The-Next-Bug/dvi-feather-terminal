@@ -36,18 +36,14 @@ gcc="$TOOLCHAIN_DIR/arm-none-eabi/bin/arm-none-eabi-gcc"
 for tool in "$cmake" "$gcc"; do
   [[ -x "$tool" ]] || { echo "error: $tool missing; run scripts/setup-toolchain.sh" >&2; exit 1; }
 done
-for sub in lib/pico-sdk; do
+# lib/tinyusb (not pico-sdk's own copy): without it pico-sdk quietly drops
+# USB support and the link fails later.
+for sub in lib/pico-sdk lib/tinyusb; do
   [[ -f "$sub/.git" || -d "$sub/.git" ]] || {
     echo "error: $sub missing; run: git submodule update --init" >&2
     exit 1
   }
 done
-# The USB keyboard needs it; without it pico-sdk quietly drops USB support
-# and the link fails later.
-[[ -f lib/pico-sdk/lib/tinyusb/src/tusb.h ]] || {
-  echo "error: TinyUSB missing; run: git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb" >&2
-  exit 1
-}
 
 out="$BUILD_DIR/$TARGET"
 mkdir -p "$out"
@@ -73,6 +69,7 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
   echo "cmake=$("$cmake" --version | head -1)"
   echo "picotool=$("$TOOLCHAIN_DIR/picotool/picotool/picotool" version | head -1)"
   echo "pico_sdk=$(git -C lib/pico-sdk describe --tags --always 2>/dev/null) $(git_rev lib/pico-sdk)"
+  echo "tinyusb=$(git -C lib/tinyusb describe --tags --always 2>/dev/null) $(git_rev lib/tinyusb)"
   echo "git_sha=$(git_rev .)"
   echo "git_describe=$(git describe --always --dirty 2>/dev/null || echo unknown)"
   echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"

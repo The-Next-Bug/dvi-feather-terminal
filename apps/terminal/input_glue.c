@@ -76,6 +76,7 @@ void reset_key(void *ctx) {
 // (ESC [ A ...), whatever the host has set: only the host's program gets
 // its own modes.
 void keyboard_poll(void) {
+	crash_heartbeat(); // every loop core 0 waits in comes here
 	kbd_modes_t modes = {.backspace_bs = settings.backspace == 0x08};
 	if (term_started) {
 		modes.newline_mode = term.newline_mode;

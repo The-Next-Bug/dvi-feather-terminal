@@ -47,8 +47,7 @@ done
 cp LICENSE docs/FLASHING.txt docs/THIRD-PARTY.md "$stage/"
 
 # License texts of the third-party code and data in the firmware
-# (docs/THIRD-PARTY.md lists them), from the sources the build used. TinyUSB
-# is pico-sdk's submodule: lib/pico-sdk/lib/tinyusb must be checked out.
+# (docs/THIRD-PARTY.md lists them), from the sources the build used.
 mkdir -p "$stage/licenses"
 license() {
   [[ -f "$1" ]] || { echo "error: license text $1 missing (submodules checked out?)" >&2; exit 1; }
@@ -56,7 +55,7 @@ license() {
 }
 license lib/pico-sdk/LICENSE.TXT pico-sdk-BSD-3-Clause.txt
 license lib/pico-sdk/src/rp2_common/cmsis/stub/CMSIS/LICENSE.txt Apache-2.0.txt
-license lib/pico-sdk/lib/tinyusb/LICENSE tinyusb-MIT.txt
+license lib/tinyusb/LICENSE tinyusb-MIT.txt
 license lib/z80pack/LICENSE z80pack-MIT.txt
 license lib/fatfs/LICENSE.txt FatFs-BSD-1-Clause.txt
 license assets/fonts/Terminus-OFL.txt Terminus-OFL-1.1.txt
@@ -65,8 +64,8 @@ scripts/changelog.sh "$sha" | tee "$stage/CHANGES.md" > "$DIST_DIR/CHANGES.md"
 (cd "$stage" && sha256sum -- *.uf2 *.bin sdcard-*/FIRMWARE.UF2 > SHA256SUMS)
 
 # Source of exactly the commit that was built. The submodules (pico-sdk,
-# z80pack) are not included; pico-sdk's commit is recorded in
-# build-info-*.txt, z80pack's in the source's git tree.
+# TinyUSB) are not included; their commits are recorded in build-info-*.txt
+# and the source's git tree.
 mkdir -p "$stage/source"
 git archive --format=tar "$sha" | tar -x -C "$stage/source"
 

@@ -45,6 +45,7 @@ typedef struct {
 	uint8_t clock_seconds; // 1: with the seconds
 	uint8_t clock_date;    // SETTINGS_DATE_*: the date before the time, or none
 	uint8_t bell;          // SETTINGS_BELL_*: the bell's loudness, or off (bell.c)
+	uint8_t usb_log;       // SETTINGS_USB_LOG_*: the USB host's log kept in USBLOG.TXT on the SD card
 } settings_t;
 
 #define SETTINGS_MODE_TERMINAL 0 // a serial terminal on UART0
@@ -70,12 +71,15 @@ typedef struct {
 #define SETTINGS_BELL_MEDIUM 2
 #define SETTINGS_BELL_HIGH 3
 
+#define SETTINGS_USB_LOG_OFF 0
+#define SETTINGS_USB_LOG_SD 1 // appended to the SD card's USBLOG.TXT (apps/terminal/usblog_glue.c)
+
 // The settings, in settings_t order, with the values each can take (the
 // first choice need not be the default), their names and the SET-UP page
 // they are on: SET-UP's own rows (SETTINGS_MAIN_FIELDS of them, in this
 // order: settings_main_field) or its Clock panel (clockpanel.h).
-#define SETTINGS_FIELDS 16
-#define SETTINGS_MAIN_FIELDS 13
+#define SETTINGS_FIELDS 17
+#define SETTINGS_MAIN_FIELDS 14
 #define SETTINGS_MAX_CHOICES 9
 
 #define SETTINGS_PAGE_MAIN 0
