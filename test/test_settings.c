@@ -116,7 +116,7 @@ static void test_bad_value_keeps_default(void) {
 	settings_encode(&s, 1, rec);
 	CHECK(settings_decode(rec, &out, &seq));
 	CHECK_EQ(out.columns, 80);
-	CHECK_EQ(out.backspace, 0x7f);
+	CHECK_EQ(out.backspace, 0x08);
 	CHECK_EQ(out.local_echo, 0);
 }
 
@@ -138,7 +138,7 @@ static void test_older_record(void) {
 	rec[15] = (uint8_t)(crc >> 24);
 	CHECK(settings_decode(rec, &probe, &seq));
 	CHECK_EQ(probe.columns, 132);
-	CHECK_EQ(probe.backspace, 0x7f);
+	CHECK_EQ(probe.backspace, 0x08);
 	CHECK_EQ(probe.local_echo, 0);
 	CHECK_EQ(settings_baud_rate(&probe), 115200);
 	CHECK_EQ(probe.status_line, 1); // records before it: shown
@@ -203,7 +203,7 @@ static void test_clock_settings(void) {
 	CHECK_EQ(out.clock_seconds, 1);
 	CHECK_EQ(out.clock_date, SETTINGS_DATE_SHORT);
 	// They are not SET-UP's rows: those are the main page's fields, in
-	// order, Bell after Terminal type.
+	// order, Bell after Terminal type, then USB log.
 	unsigned main = 0;
 	for (unsigned f = 0; f < SETTINGS_FIELDS; ++f) {
 		bool clock = f >= offsetof(settings_t, clock) && f <= offsetof(settings_t, clock_date);
@@ -214,7 +214,8 @@ static void test_clock_settings(void) {
 	for (unsigned row = 0; row <= offsetof(settings_t, term_type); ++row) {
 		CHECK_EQ(settings_main_field(row), row);
 	}
-	CHECK_EQ(settings_main_field(SETTINGS_MAIN_FIELDS - 1), offsetof(settings_t, bell));
+	CHECK_EQ(settings_main_field(SETTINGS_MAIN_FIELDS - 2), offsetof(settings_t, bell));
+	CHECK_EQ(settings_main_field(SETTINGS_MAIN_FIELDS - 1), offsetof(settings_t, usb_log));
 }
 
 // Bell: medium unless saved; records from before it (15 bytes) get that.
@@ -235,6 +236,31 @@ static void test_bell_setting(void) {
 	}
 	CHECK(settings_decode(rec, &out, &seq));
 	CHECK_EQ(out.bell, SETTINGS_BELL_MEDIUM);
+}
+
+// USB log: off unless saved; records from before it (16 bytes) get off,
+// and a value it cannot take too.
+static void test_usb_log_setting(void) {
+	settings_t in, out;
+	settings_defaults(&in);
+	CHECK_EQ(in.usb_log, SETTINGS_USB_LOG_OFF);
+	in.usb_log = SETTINGS_USB_LOG_SD;
+	uint8_t rec[SETTINGS_RECORD_SIZE];
+	uint32_t seq;
+	settings_encode(&in, 1, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.usb_log, SETTINGS_USB_LOG_SD);
+	rec[5] = 16;
+	uint32_t crc = crc_of(rec, 16);
+	for (unsigned i = 0; i < 4; ++i) {
+		rec[12 + i] = (uint8_t)(crc >> 8 * i);
+	}
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.usb_log, SETTINGS_USB_LOG_OFF);
+	in.usb_log = 7;
+	settings_encode(&in, 2, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.usb_log, SETTINGS_USB_LOG_OFF);
 }
 
 static void test_term_type(void) {
@@ -325,6 +351,7 @@ int main(void) {
 	RUN(test_bad_value_keeps_default);
 	RUN(test_clock_settings);
 	RUN(test_bell_setting);
+	RUN(test_usb_log_setting);
 	RUN(test_older_record);
 	RUN(test_retired_wide80);
 	RUN(test_term_type);

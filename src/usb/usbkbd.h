@@ -35,4 +35,36 @@ void usbkbd_log(const char *what, uint8_t dev);
 // boot, the name, the device address, xN for repeats).
 void usbkbd_log_text(char *out, size_t size);
 
+// The same events and TinyUSB's own error messages as text for a file (the
+// SD card's USBLOG.TXT): "12.345 name 2" CR LF lines, the time since boot
+// in seconds. n bytes are waiting at the returned pointer; lost: some did
+// not fit since the last usbkbd_log_done. Main loop only, outside FatFs:
+// the text keeps growing past n meanwhile (TinyUSB's interrupt handler).
+const char *usbkbd_log_pending(size_t *n, bool *lost);
+// Drop the first n bytes, once written.
+void usbkbd_log_done(size_t n);
+// At start-up, before anything is logged: keep the text a crash's reboot
+// left unwritten (keep, and it is intact), else start empty.
+void usbkbd_log_restore(bool keep);
+// One line of text for the file (not the status line's events).
+void usbkbd_log_line(const char *line);
+
+// Pause the controller's own interrupt endpoint polls (hub, keyboards)
+// around a transfer on EPX (a USB stick's commands): one started during a
+// poll was lost (bd xv0). Takes ~2 ms; returns what to resume.
+uint32_t usbkbd_polls_pause(void);
+void usbkbd_polls_resume(uint32_t saved);
+
+// Restart the USB host: every device goes and the one on the port is set
+// up again, as at power-on. usbkbd_poll does it by itself when the host
+// looks stuck (a device being set up for over 20 s, or the hub not
+// answering); why is logged.
+void usbkbd_reset(const char *why);
+// Restarts since power-on.
+unsigned usbkbd_resets(void);
+// Have usbkbd_poll restart the host (from inside FatFs or a callback,
+// where it cannot be done at once); one soon after the last waits a while.
+void usbkbd_request_reset(const char *why);
+bool usbkbd_reset_pending(void);
+
 #endif

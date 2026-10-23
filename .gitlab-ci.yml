@@ -25,8 +25,8 @@ stages:
 
 variables:
   GIT_DEPTH: "0"  # full history so git describe works in build-info.txt
-  # Top-level submodules only: of pico-sdk's own, just TinyUSB is needed and
-  # the build job fetches it (the rest, lwIP, mbedtls, btstack, ... are big).
+  # Top-level submodules only (pico-sdk, TinyUSB): pico-sdk's own (its
+  # TinyUSB, lwIP, mbedtls, btstack, ...) are not used.
   GIT_SUBMODULE_STRATEGY: normal
   GIT_SUBMODULE_DEPTH: "1"
   TOOLCHAIN_DIR: /opt/pico-toolchain
@@ -60,7 +60,6 @@ build:
       - TARGET: [pico2-dvi-sock, frankless, feather-rp2350-hstx, feather-rp2350-hstx-psram,
                  feather-rp2350-hstx-adalogger, feather-rp2350-hstx-psram-adalogger]
   script:
-    - git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb
     - scripts/setup-toolchain.sh
     - BUILD_DIR=build scripts/build.sh
     - scripts/lint.sh build/$TARGET
@@ -82,8 +81,6 @@ package:
   stage: package
   needs: [test, build]
   script:
-    # For TinyUSB's license text, which the package ships.
-    - git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb
     - BUILD_DIR=build DIST_DIR=dist scripts/package.sh
   artifacts:
     name: "dvi-terminal-$CI_COMMIT_REF_SLUG"

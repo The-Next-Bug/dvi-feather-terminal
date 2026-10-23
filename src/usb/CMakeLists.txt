@@ -30,3 +30,6 @@ target_link_libraries(dvt_usb
     pico_stdlib_headers
 )
 dvt_compile_options(dvt_usb)
+# usbkbd.c's __wrap_rp2usb_deinit: TinyUSB's tuh_deinit frees the driver's
+# lock before removing the devices (usbkbd_reset).
+target_link_options(dvt_usb INTERFACE -Wl,--wrap=rp2usb_deinit)

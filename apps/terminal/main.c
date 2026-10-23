@@ -260,6 +260,8 @@ int main(void) {
 	apply_line(&settings);
 	diag_mark("serial_init done");
 	led_init();
+	// Before the USB host logs anything: it may keep a crash's log text.
+	const char *previous_crash = crash_init();
 	usbkbd_init(send_key, setup_key, NULL);
 	diag_mark("usbkbd_init done");
 
@@ -299,6 +301,10 @@ int main(void) {
 	snprintf(banner, sizeof banner, "DVI Feather Terminal build %s (%s, %s)\r\n",
 		TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
 	term_puts(&term, banner);
+	if (previous_crash) {
+		snprintf(banner, sizeof banner, "The last run ended with: %s\r\n", previous_crash);
+		term_puts(&term, banner);
+	}
 	if (cpm.on) {
 		// UART input before now was for the terminal, not the Z80.
 		term_puts(&term, "Z80 CP/M machine: " BOARD_UART_NAME " (GP" BOARD_STR(BOARD_UART_TX_PIN) "/GP" BOARD_STR(
@@ -365,6 +371,7 @@ int main(void) {
 		}
 		keyboard_poll();
 		usbmsc_poll(); // a USB stick plugged in or pulled: mount or unmount it
+		usblog_poll();
 		if (setup.open_requested) {
 			setup.open_requested = false;
 			if (!setup.active) {
@@ -388,6 +395,13 @@ int main(void) {
 		// whether or not the width changes.
 		if (term.screen_resets != shown_resets) {
 			shown_resets = term.screen_resets;
+			if (cpm.on) {
+				draw_cpm_status();
+			} else {
+				draw_status(&shown);
+			}
+		}
+		if (crash_redraw_status()) { // a hang report was over it
 			if (cpm.on) {
 				draw_cpm_status();
 			} else {

@@ -64,8 +64,7 @@ Everything installs under `.toolchain/` (git-ignored); there is no system
 CMake or Arm GCC on the dev host. Use the scripts:
 
 ```bash
-git submodule update --init          # lib/pico-sdk (2.3.1), not its submodules (lib/z80pack is vendored)
-git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
+git submodule update --init          # lib/pico-sdk (2.3.1) and lib/tinyusb, not pico-sdk's submodules (lib/z80pack is vendored)
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool, clang-tidy (toolchain.env)
 scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, clock, rtc (the RTC chip drivers on a fake register bus), sdformat (card formats on a sparse disk), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimized, no sanitizers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
@@ -319,11 +318,62 @@ UF2 in the latter).
 - `src/usb/usbkbd.[ch]` + `src/usb/tusb_config.h` (always built): TinyUSB host on the native USB port, boot keyboards (and USB
   sticks, usbmsc.c); keys
   go to the serial TX queue. The board does not power VBUS in host mode
-  (5 V fed into the VBUS pin).
+  (5 V fed into the VBUS pin). TinyUSB is `lib/tinyusb` (our submodule,
+  pinned to master after 0.21.0, bd xv0), not pico-sdk's 0.18: its
+  hcd_rp2040 never completed a transfer the device stopped answering and
+  usbh had no control-transfer timeout, so pulling a stick could leave the
+  host deaf for good. The USB host watchdog (usbkbd_poll, bd xv0): a device
+  set up for over 20 s, or a GET_STATUS probe to the hub (else the first
+  device) every 5 s while quiet failing 3 times or not completing in 10 s,
+  restarts the host (usbkbd_reset: a root-port remove event handled by
+  tuh_task first, then tusb_deinit/tusb_init; the unmount callbacks clear
+  our state, usbmsc_poll unmounts USB:); each restart doubles the delays
+  (up to x16) until 60 s healthy. usbmsc.c asks for a restart
+  (usbkbd_request_reset, done from usbkbd_poll; one within 10 s x backoff
+  of the last waits, "rstwait") after a stick command times out or gets a
+  CSW that is not its own (signature/tag; residue 0 required): TinyUSB has
+  no Bulk-Only reset, the stick stays stuck. Workarounds for TinyUSB
+  master on the RP2350, all in our code (bd xv0, upstream report bd 5bc):
+  tuh_deinit frees hcd_rp2040's spin lock (rp2usb_deinit) before removing
+  the devices, whose hcd_device_close then spun forever with interrupts
+  off (--wrap=rp2usb_deinit in src/usb/CMakeLists.txt, usbkbd_reset frees
+  it; hcd_deinit itself cannot be wrapped: usbh.c has a weak twin); an EPX
+  transfer started while the controller polls the interrupt endpoints by
+  itself (hub, keyboard) "completed" at once with 0 bytes (a stick's CBW;
+  measured: 15 us, buffer control written back 0x4000), so every EPX
+  transfer of ours runs with INT_EP_CTRL cleared for two SOFs first
+  (usbkbd_polls_pause/resume: usbmsc.c's commands per FatFs call, the
+  LEDs, the probe; ~2 ms each) and our control transfers finish before
+  usbkbd_poll returns (control_wait, 20 ms max); CFG_TUH_ENUM_ATTEMPT_MAX 5
+  (a keyboard missed its first requests after a restart). TinyUSB's own
+  control transfers (enumeration, the hub) are not paused: a device that
+  fails to finish being set up is caught by the watchdog. The text log: usbkbd_log
+  events plus TinyUSB's CFG_TUSB_DEBUG=1 messages (the top CMakeLists.txt
+  sets LOG 1; CFG_TUSB_DEBUG_PRINTF = usbkbd_tusb_printf, also called from
+  its IRQ, so the 2 KB buffer is touched with interrupts off), timestamped
+  CR LF lines; `apps/terminal/usblog_glue.c` (cold) appends it every 2 s
+  from the main loop to 0:/USBLOG.TXT (created if missing) while the saved
+  usb_log setting is SETTINGS_USB_LOG_SD, else drops it (terminal mode
+  mounts the card for it, at most once a minute; CP/M mode only uses the
+  monitor's mount; text waits until the card is mounted). The text and its
+  length survive a crash's reboot (__uninitialized_ram, TEXT_MAGIC;
+  usbkbd_log_restore). `apps/terminal/crash_glue.c` (SRAM, bd xv0): there
+  is no stdio, so panic() (--wrap=panic), a hard fault (isr_hardfault) and
+  a hang are reported on the status line: TIMER0 alarm routed to core 0's
+  NMI (EPPB NMI_MASK, gets through interrupts off) checks crash_heartbeat
+  (keyboard_poll) every 250 ms; after 8 s still it shows STUCK with the
+  interrupted PC/LR/exception and the USB registers each second (decode
+  with addr2line against the same build's .elf); panic, hard fault, or 20 s
+  stuck inside an exception reboot after 20 s, keeping the report
+  (__uninitialized_ram) for the next start's banner and USBLOG.TXT. It
+  stands down while nvflash_busy (erase/program, XIP off) and fwupdate
+  clears the NMI mask before the commit. Long blocking operations (card
+  format, the update's file check) show STUCK harmlessly.
 - `src/settings/settings.[ch]` (portable): settings record (magic, seq, CRC-32,
   one byte per setting, append-only) in two flash sectors used in turn.
   Settings (settings_fields[] drives the record, validation and SET-UP
-  labels; append only): columns, backspace (DECBKM RIS value), local_echo,
+  labels; append only): columns, backspace (DECBKM RIS value; default BS
+  0x08, as CP/M wants), local_echo,
   baud, framing, newline (LNM RIS value), colors (hue), palette (mono),
   mode (terminal / CP/M machine), status_line (hidden: status.c
   status_shown() leaves row 24 blank; debug: status.c debug_status_* shows
@@ -341,9 +391,10 @@ UF2 in the latter).
   SETTINGS_MAIN_FIELDS, edited only on the Clock panel (settings_field_t
   .page: SETTINGS_PAGE_CLOCK); then bell (SETTINGS_BELL_* off/low/medium/
   high, default medium), back on SET-UP's main page: SET-UP's rows
-  (SETUP_ITEMS = SETTINGS_MAIN_FIELDS, 13) are the main-page fields in
+  (SETUP_ITEMS = SETTINGS_MAIN_FIELDS, 14) are the main-page fields in
   order, settings_main_field(row) -> field (rows 0-11 = fields 0-11, row 12
-  = bell, field 15); setup_t.no_bell (set by setup_glue.c from
+  = bell, field 15, row 13 = usb_log, field 16: SETTINGS_USB_LOG_OFF/_SD,
+  default off, bd xv0); setup_t.no_bell (set by setup_glue.c from
   bell_present) shows Bell fixed as "off (no bell on this board)"; settings_columns() is 80 for the ADM-3A;
   settings_field_fixed() names what fixes a field, Columns under the
   ADM-3A: SET-UP skips it and shows "80 (ADM-3A)", dmt.39);
@@ -676,7 +727,9 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   board (1ls.8, 1ls.14.1) to 0x2006f6b0; the library restructure (gr1:
   libraries identical, main.c's split outlines what was inlined into
   main(), -648 bytes) to 0x2006f428; the clock (src/clock, rtc.c, 1ls.6.1)
-  to 0x2006fda4 (Frankless with PSRAM banks: 0x20058d94). Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  to 0x2006fda4 (Frankless with PSRAM banks: 0x20058d94); TinyUSB master
+  (bd xv0: its bigger hcd_rp2040 ~5.9 KB, the USB log's 2 KB text and the
+  watchdog) from 0x200709b0 to 0x20073288, ~52 KB free; the USB log setting's SET-UP row (stash) to 0x20073444; crash_glue.c, the stick workarounds to 0x2007401c (~48 KB free). Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, stash_buf 13.4 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit
@@ -714,7 +767,7 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   handler (shared: add more). UART0, SPI1, I2C0, TIMER1, PWM, ADC, TRNG,
   SHA-256, POWMAN's always-on timer free; I2C1 can take more chips (other
   addresses). No spare PLL (PLL_SYS 400 MHz, PLL_USB 48 MHz; bd cpx.1).
-- SRAM: __end__ 0x2005a1d4, ~151 KB free (the Z80 banks are in the
+- SRAM: __end__ 0x2005d78c (bd xv0), ~138 KB free (the Z80 banks are in the
   PSRAM). PSRAM 8 MB: 720 KB banks (15 x 48 KB, port 64's limit), ~7.3 MB
   free (bd g31: RAM disk, scrollback). Flash 16 MB: image 1.04 MB, growth
   room to 8 MB (FWUPDATE_STAGING = half the flash), settings in the top
@@ -737,7 +790,7 @@ SRAM is the tight resource; peripherals and pins are mostly free.
     section_copy_to_ram_rodata.incl (pico_add_linker_script_override_path)
     keeps whole objects' .text and .rodata in flash, run through XIP at
     03h/50 MHz after nvflash_retime: FatFs, TinyUSB's usbh/hub/hid_host/
-    msc_host, monitor, drivepanel, drivecfg, setup, fwpanel, demo, palette, xfer,
+    msc_host, usblog_glue, monitor, drivepanel, drivecfg, setup, fwpanel, demo, palette, xfer,
     usbmsc, lz, diskimg, keyname, settings, uf2, qsort, machine.c's
     .rodata (~51 KB). Hot paths (Z80 core, machine.c code, term, vtparse,
     raster, video, screen, sdcard, drives, serial, keyboard, hcd_rp2040,
@@ -761,14 +814,22 @@ SRAM is the tight resource; peripherals and pins are mostly free.
     budget".
   - Pin functions for CTS/RTS use `GPIO_FUNC_UART` (UART_FUNCSEL_NUM is
     wrong for GPIO 2/3 on RP2350).
-  - TinyUSB 0.18 has one control transfer for the whole host. Never start
-    one (e.g. the keyboard LEDs' SET_REPORT) from a TinyUSB callback: a
-    device still being set up loses its next request, stays half set up,
-    and TinyUSB "enumerates" it for good, so nothing plugged in later (a
-    stick, the keyboard moved to another hub port) is ever set up (qur.3).
-    usbkbd.c queues the LEDs and sends them from usbkbd_poll once every
+  - TinyUSB 0.18 had one control transfer for the whole host: one started
+    from a TinyUSB callback (e.g. the keyboard LEDs' SET_REPORT) made a
+    device still being set up lose its next request, stay half set up,
+    and TinyUSB "enumerate" it for good, so nothing plugged in later (a
+    stick, the keyboard moved to another hub port) was ever set up (qur.3).
+    The pinned master queues control transfers, but usbkbd.c still sends
+    the LEDs (and the watchdog's probe) from usbkbd_poll only once every
     device has had tuh_mount_cb (hubs: tuh_mounted). The monitor's USB:
-    line (usbmsc_info) shows each device, "setting up" and HID n/m.
+    line (usbmsc_info) shows each device, "setting up", HID n/m and the
+    host restarts.
+  - RP2350 USB host: never start an EPX transfer (bulk or control) while
+    the controller may be polling interrupt endpoints by itself; pause
+    them first (usbkbd_polls_pause, bd xv0). Debugging the USB host:
+    SET-UP's USB log setting (USBLOG.TXT; TinyUSB's TU_LOG1 lands there
+    too, so temporary TU_LOG1 lines in lib/tinyusb are the quickest probe)
+    and crash_glue.c's status-line reports.
 - Git: work on a branch, merge to `main` with `git merge --no-ff`, push only
   when the user asks (they usually say "commit and push" / "merge").
   Commit messages end with the Co-Authored-By line. Tags `vX.Y.Z` trigger a

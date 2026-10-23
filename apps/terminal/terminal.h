@@ -9,7 +9,9 @@
 // - cpm_glue.c: CP/M mode, the Z80 machine's and the monitor's platforms;
 // - hwinfo_glue.c: the machine's hardware information (port 12);
 // - status.c: the status line (terminal, CP/M, debug);
-// - input_glue.c: keys from the USB keyboard.
+// - input_glue.c: keys from the USB keyboard;
+// - usblog_glue.c: the USB log on the SD card (USBLOG.TXT);
+// - crash_glue.c: core 0's panics, hard faults and hangs, reported.
 // Everything here is core 0's, from the main loop or the USB stack's
 // callbacks (keys).
 
@@ -163,5 +165,17 @@ void send_key(void *ctx, const uint8_t *data, size_t len);
 void setup_key(void *ctx);
 void reset_key(void *ctx);
 void keyboard_poll(void);
+
+// ---- usblog_glue.c ----
+
+void usblog_poll(void); // each main-loop pass
+
+// ---- crash_glue.c ----
+
+// Before usbkbd_init: the report a crash's reboot kept (NULL if none), also
+// put in the USB log with the log text it kept; starts the hang check.
+const char *crash_init(void);
+void crash_heartbeat(void);     // core 0 is not stuck (keyboard_poll)
+bool crash_redraw_status(void); // a hang report covered the status line
 
 #endif

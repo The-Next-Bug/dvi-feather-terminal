@@ -194,8 +194,9 @@ keyboard, then use the USB port as usual (BOOTSEL).
 
 Keys (US layout) send what a VT100 sends: letters honor Caps Lock, Ctrl
 makes control characters, Alt sends ESC first (meta). Return sends CR (CR LF
-in LNM), Backspace DEL and Ctrl-Backspace BS, or the other way round with
-DECBKM (`CSI ? 67 h`; its power-on value is a SET-UP setting). The cursor
+in LNM), Backspace BS and Ctrl-Backspace DEL, or the other way round with
+DECBKM reset (`CSI ? 67 l`; its power-on value is a SET-UP setting, BS by
+default). The cursor
 keys follow DECCKM (`ESC [ A` / `ESC O A`); F1-F4 are PF1-PF4
 (`ESC O P`..`S`). The keypad follows DECKPAM/DECKPNM while Num Lock is on
 (keypad + is the VT100's keypad comma) and is cursor/editing keys when it is
@@ -266,7 +267,7 @@ shown in reverse video:
 | Setting | Values | |
 |---|---|---|
 | Columns | 80, 132 | the width at power-on and after F11 in CP/M mode. With Terminal type ADM-3A it shows `80 (ADM-3A)` and is skipped; the choice comes back with VT100 or VT52 |
-| Backspace sends | DEL, BS | DECBKM at power-on and after RIS (vttest and CP/M software want BS) |
+| Backspace sends | DEL, BS | DECBKM at power-on and after RIS; default BS (vttest and CP/M software want it) |
 | Local echo | off, on | keys typed are shown on the terminal as well as sent |
 | Baud rate | 300 - 115200 | default 115200 |
 | Data/parity/stop | 8N1, 8E1, 8O1, 8N2, 7E1, 7O1, 7N1, 7N2 | default 8N1 |
@@ -278,6 +279,7 @@ shown in reverse video:
 | Terminal type | VT100, VT52, ADM-3A | what the terminal is at power-on and after a reset: a VT100, a VT100 in VT52 mode, or an ADM-3A (80 columns only); see [Terminal types](#terminal-types). Changing to or from ADM-3A clears the screen |
 | Blank after | never, 1, 5, 10, 30, 60 min | the screen goes black after this long without a key, against burn-in. The next key only wakes it (it is not sent). Output from the host or the Z80 does not wake it; it carries on unseen. The DVI signal is turned off, so the monitor can go into power saving (backlight off); on waking it has to resync, which takes it a few seconds |
 | Bell | off, low, medium, high | how loud BEL beeps (default medium); changing it in SET-UP sounds a beep at the new level. On a board without a bell it shows `off (no bell on this board)` and is skipped. See [The bell](#the-bell) |
+| USB log | off, SD card USBLOG.TXT | keep a log of the USB host in `USBLOG.TXT` on the SD card (default off); see "USB log on the SD card" below |
 
 **Debug status line**: `late T+N | line C/P% | F fps | loop M/Q ms |
 render R/S us | Z MHz`: scanlines not ready in time for the DVI output (in
@@ -294,7 +296,42 @@ repeats): `up`/`down` a device set up or gone, `kbd`/`kbd-` a keyboard,
 `msc`/`msc-` a USB stick, `vol`/`vol?`/`unvol` the stick mounted as `USB:`,
 not mountable, unmounted, `timeout`/`gone`/`ioerr`/`busy` a stick transfer
 over 3 s, its stick pulled, failed, or refused, `led`/`led?` the keyboard
-LEDs sent or refused (busy). The monitor's `USB:` line lists the devices.
+LEDs sent or refused (busy), `stuck`/`probe?`/`probe!`/`nprobe` the USB
+host restarted because it looked stuck, `mscrst` restarted because a USB
+stick stopped answering (`timeout`/`badcsw` before it), `rstwait` a restart
+waiting because the last one was too recent (below). The monitor's `USB:`
+line lists the devices, and how often the host was restarted.
+
+**USB host restarts**: the firmware checks the USB host by itself. When a
+device has been setting up for over 20 seconds, the hub (or the device on
+the port) stops answering a status request sent every 5 seconds, or a USB
+stick stops answering in the middle of a command, it restarts the USB host.
+Every device is dropped and set up again, as at power-on, without resetting
+the terminal or the Z80 machine; the keyboard is gone for about half a
+second. A USB stick in use as `USB:` is unmounted, as when it is pulled,
+and mounted again. If restarting does not help, it waits longer each time
+before the next restart (up to 16 times as long).
+
+**Crash reports**: if the firmware stops (a crash inside the firmware, or
+the main loop stuck for 8 seconds: no clock, no keyboard), the status line
+says so: `PANIC ...`, `HARD FAULT ...` or `STUCK ...` with the code
+addresses involved, which identify the place with the build's
+`dvi_terminal.elf`. After a crash, or 20 seconds stuck inside an interrupt
+handler, the board restarts by itself after 20 seconds; the next start
+shows `The last run ended with: ...` under the banner and adds it to the
+USB log. `STUCK` also shows during long operations that keep the main loop
+busy, such as formatting a card or checking a firmware file; it goes away
+once they finish.
+
+**USB log on the SD card**: with SET-UP's **USB log** set to `SD card
+USBLOG.TXT` (and saved), the USB host keeps a log in `USBLOG.TXT` in the SD
+card's root, created if it is not there. Every few seconds the events
+above, TinyUSB's own error messages and any restart (with the devices it
+saw) are added to the end of the file, each line with the seconds since
+power-on. Each power-on starts with a line giving the firmware and the
+time. Set it back to `off` to stop the log (the file stays). In terminal
+mode the card is mounted for the log; in CP/M mode it is written only while
+the monitor has the card mounted.
 
 **Colors**: green, amber or blue phosphor turns the 16 ANSI colors (default
 text and bold included) into shades of that hue, by brightness (black; dark
@@ -846,8 +883,7 @@ Everything installs under `.toolchain/` in the repo (git-ignored); only
 needed.
 
 ```sh
-git submodule update --init          # pico-sdk (not its submodules; z80pack is vendored)
-git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # the one we need
+git submodule update --init          # pico-sdk and TinyUSB (not pico-sdk's submodules; z80pack is vendored)
 scripts/setup-toolchain.sh           # CMake, Arm GNU Toolchain, picotool, clang-tidy
 scripts/test.sh                      # host unit tests
 scripts/build.sh                     # -> build/pico2-dvi-sock/dvi_terminal.uf2, build-info.txt
@@ -878,7 +914,11 @@ its SHA256 there, and the matching `ARG`s in the CI build image's Dockerfile
 (gitlab.seg9.com `images/build-image`, which installs the toolchain in
 `/opt/pico-toolchain`; until it is rebuilt, CI downloads the new versions in
 every job). pico-sdk is upgraded by moving its submodule (and the image's
-`PICO_SDK_*`, which picotool is built against).
+`PICO_SDK_*`, which picotool is built against). TinyUSB is our own
+submodule (`lib/tinyusb`, the top `CMakeLists.txt` sets `PICO_TINYUSB_PATH`),
+pinned to an upstream master commit after 0.21.0 for its RP2350 host fixes
+(control-transfer timeouts, aborting failed transfers, recovering a stuck
+hub); move it on its own, and check the firmware's `__end__`.
 
 ### Build options
 
@@ -990,7 +1030,8 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | `boards/` | Board headers: pins, flash, crystal per build target; `example.h` is the template (see [Other boards](#other-boards)) |
 | `test/` | Host unit tests (plain CMake + gcc with ASan/UBSan, no pico-sdk) |
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see [Trying it from a PC](#trying-it-from-a-pc)) |
-| `lib/pico-sdk` | Pinned submodule (plus its `lib/tinyusb`) |
+| `lib/pico-sdk` | Pinned submodule (not its own submodules) |
+| `lib/tinyusb` | Pinned submodule: TinyUSB, newer than pico-sdk's 0.18 (its USB host fixes) |
 | `lib/z80pack` | Vendored part of z80pack (Z80 core, z80asm, picosim disk images); `UPSTREAM.md` gives the commit and local changes |
 | `lib/fatfs` | ChaN's FatFs R0.15a, vendored (see its README) |
 | `assets/logo/` | The startup logo (PNG used by the build, JPEG original) |
@@ -1027,7 +1068,7 @@ has the helpers; `src/CMakeLists.txt` lists the libraries.
 | `ui` | portable | `setup` (SET-UP panel), `drivepanel` (SET-UP's Drives panel), `fwpanel` (SET-UP's firmware update), `monitor` (the CP/M machine's monitor), `demo` |
 | `board` | RP2350 | `board.h` (the board header's pins, checked) |
 | `platform` | RP2350 | `serial` (UART with optional RTS/CTS and a TX queue), `led`, `nvflash` (settings sectors, written at the DVI clock), `fwupdate` (firmware update), `extram` (the PSRAM), `diag` (`VIDEO_DIAG`) |
-| `usb` | RP2350 | `usbkbd` (USB keyboards), `tusb_config.h` (TinyUSB host) |
+| `usb` | RP2350 | `usbkbd` (USB keyboards, the USB log, restarting a stuck host), `tusb_config.h` (TinyUSB host) |
 | `storage` | RP2350 | `diskio.c` (FatFs drives: 0 the SD card, 1 a USB stick), `sdcard` (SPI SD card), `usbmsc` (USB sticks) |
 | `video` | RP2350 | `hstx_dvi` (HSTX DVI output), `video` (scanlines on core 1) |
 
@@ -1074,7 +1115,7 @@ are derivatives and stays under that license. The misc-fixed 6x12 font is
 public domain. pico-sdk is BSD-3-Clause, as is the pico-examples HSTX DVI
 example `src/video/hstx_dvi.c` follows.
 
-TinyUSB (in pico-sdk) is MIT; pico-sdk's CMSIS headers are Apache-2.0.
+TinyUSB is MIT; pico-sdk's CMSIS headers are Apache-2.0.
 z80pack is © Udo Munk and others under the MIT license (`lib/z80pack/LICENSE`);
 `src/machine/machine.c` and `src/machine/z80pack/` follow its picosim, and its CPU core
 includes `log.h` (Apache-2.0). FatFs is © ChaN under a 1-clause BSD license

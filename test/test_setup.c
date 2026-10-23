@@ -288,31 +288,49 @@ static void test_clock_key(void) {
 	}
 }
 
-// Bell is SET-UP's last row; without a bell it shows off, fixed, and is
-// skipped.
+// Bell is SET-UP's next to last row; without a bell it shows off, fixed,
+// and is skipped.
 static void test_bell_row(void) {
+	static screen_t s;
+	screen_init(&s, 80, FG, BG);
+	const unsigned top = SCREEN_ROWS - 1 - SETUP_ROWS;
+	open_with(80);
+	send("\x1b[A\x1b[A", 0); // round to the last row, then up one
+	CHECK_EQ(u.item, SETUP_ITEMS - 2);
+	CHECK_EQ(u.values.bell, SETTINGS_BELL_MEDIUM);
+	send(" ", 0);
+	CHECK_EQ(u.values.bell, SETTINGS_BELL_HIGH);
+	setup_draw(&u, &s, top, "", FG, BG, BORDER);
+	const unsigned bell_row = top + SETUP_ITEMS + 1; // under the two preview rows
+	CHECK(row_contains(&s, bell_row, "> Bell") && row_contains(&s, bell_row, "off   low   medium   high"));
+
+	open_with(80);
+	u.no_bell = true;
+	send("\x1b[A\x1b[A", 0);
+	CHECK_EQ(u.item, SETUP_ITEMS - 3); // Bell skipped
+	u.item = SETUP_ITEMS - 2;
+	send(" ", 0);
+	CHECK_EQ(u.values.bell, SETTINGS_BELL_MEDIUM); // unchanged
+	setup_draw(&u, &s, top, "", FG, BG, BORDER);
+	CHECK(row_contains(&s, bell_row, " off  (no bell on this board)"));
+}
+
+// USB log is SET-UP's last row: off unless saved, or the SD card.
+static void test_usb_log_row(void) {
 	static screen_t s;
 	screen_init(&s, 80, FG, BG);
 	const unsigned top = SCREEN_ROWS - 1 - SETUP_ROWS;
 	open_with(80);
 	send("\x1b[A", 0); // round to the last row
 	CHECK_EQ(u.item, SETUP_ITEMS - 1);
-	CHECK_EQ(u.values.bell, SETTINGS_BELL_MEDIUM);
+	CHECK_EQ(u.values.usb_log, SETTINGS_USB_LOG_OFF);
 	send(" ", 0);
-	CHECK_EQ(u.values.bell, SETTINGS_BELL_HIGH);
+	CHECK_EQ(u.values.usb_log, SETTINGS_USB_LOG_SD);
 	setup_draw(&u, &s, top, "", FG, BG, BORDER);
-	const unsigned bell_row = top + SETUP_ITEMS + 2; // under the two preview rows
-	CHECK(row_contains(&s, bell_row, "> Bell") && row_contains(&s, bell_row, "off   low   medium   high"));
-
-	open_with(80);
-	u.no_bell = true;
-	send("\x1b[A", 0);
-	CHECK_EQ(u.item, SETUP_ITEMS - 2); // Bell skipped
-	u.item = SETUP_ITEMS - 1;
+	const unsigned row = top + SETUP_ITEMS + 2; // under the two preview rows
+	CHECK(row_contains(&s, row, "> USB log") && row_contains(&s, row, "SD card USBLOG.TXT"));
 	send(" ", 0);
-	CHECK_EQ(u.values.bell, SETTINGS_BELL_MEDIUM); // unchanged
-	setup_draw(&u, &s, top, "", FG, BG, BORDER);
-	CHECK(row_contains(&s, bell_row, " off  (no bell on this board)"));
+	CHECK_EQ(u.values.usb_log, SETTINGS_USB_LOG_OFF);
 }
 
 // ---- the Clock panel (clockpanel.h, bd 1ls.6.4) ----
@@ -548,7 +566,9 @@ static void test_columns_fixed_by_adm3a(void) {
 	u.item = type;
 	send("\x1b[D", 0);
 	CHECK_EQ(u.values.term_type, SETTINGS_TERM_ADM3A);
-	send("\x1b[B", 0); // from Terminal type to Bell (the last row)
+	send("\x1b[B", 0); // from Terminal type to Bell
+	CHECK_EQ(u.item, SETUP_ITEMS - 2);
+	send("\x1b[B", 0); // USB log (the last row)
 	CHECK_EQ(u.item, SETUP_ITEMS - 1);
 	send("\x1b[B", 0); // round past Columns
 	CHECK_EQ(u.item, 1);
@@ -608,6 +628,7 @@ int main(void) {
 	RUN(test_reboot_key);
 	RUN(test_firmware_key);
 	RUN(test_bell_row);
+	RUN(test_usb_log_row);
 	RUN(test_clock_key);
 	RUN(test_clock_panel_follows);
 	RUN(test_clock_panel_typing);

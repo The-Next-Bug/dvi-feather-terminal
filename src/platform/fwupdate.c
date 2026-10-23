@@ -5,6 +5,7 @@
 
 #include "pico/stdlib.h"
 #include "hardware/flash.h"
+#include "hardware/structs/m33_eppb.h"
 #include "hardware/sync.h"
 #include "hardware/watchdog.h"
 
@@ -171,5 +172,9 @@ void fwupdate_commit(void) {
 		return;
 	}
 	(void)save_and_disable_interrupts(); // for good: the board restarts
+	// Nor an NMI (crash_glue.c's hang check routes a timer to core 0's):
+	// nothing but the copy may run once the old image starts going.
+	eppb_hw->nmi_mask[0] = 0;
+	eppb_hw->nmi_mask[1] = 0;
 	fwupdate_commit_image(staged_len, sector);
 }

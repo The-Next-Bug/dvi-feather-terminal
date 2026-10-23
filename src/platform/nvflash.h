@@ -53,4 +53,8 @@ void nvflash_program(uint32_t offset, const uint8_t *data, uint32_t len);
 // The flash at offset, read uncached (sees what was just written).
 const uint8_t *nvflash_read(uint32_t offset);
 
+// An erase or program is under way (XIP off): set with interrupts off, for
+// crash_glue.c's NMI, which interrupts it anyway and must not draw then.
+extern volatile bool nvflash_busy;
+
 #endif

@@ -10,6 +10,16 @@ set(TOOLCHAIN_DIR "${CMAKE_CURRENT_LIST_DIR}/.toolchain")
 if(NOT DEFINED PICO_SDK_PATH AND NOT DEFINED ENV{PICO_SDK_PATH})
   set(PICO_SDK_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/pico-sdk")
 endif()
+# TinyUSB: our own pin (lib/tinyusb), not pico-sdk's 0.18, whose RP2350
+# host stopped seeing devices for good after a USB stick was pulled: a
+# transfer the device never answered was never completed, and there was no
+# control-transfer timeout (bd xv0).
+if(NOT DEFINED PICO_TINYUSB_PATH AND NOT DEFINED ENV{PICO_TINYUSB_PATH})
+  set(PICO_TINYUSB_PATH "${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb")
+endif()
+# TinyUSB's errors and failed checks (CFG_TUSB_DEBUG 1) go to the USB log
+# (usbkbd.c), which can be written to the SD card (USBLOG.TXT).
+set(LOG 1)
 if(NOT DEFINED PICO_TOOLCHAIN_PATH AND NOT DEFINED ENV{PICO_TOOLCHAIN_PATH}
     AND EXISTS "${TOOLCHAIN_DIR}/arm-none-eabi/bin")
   set(PICO_TOOLCHAIN_PATH "${TOOLCHAIN_DIR}/arm-none-eabi")

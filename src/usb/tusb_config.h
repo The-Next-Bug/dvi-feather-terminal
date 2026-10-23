@@ -9,6 +9,10 @@
 #define CFG_TUH_RPI_PIO_USB 0
 #define CFG_TUH_MAX_SPEED OPT_MODE_DEFAULT_SPEED
 
+// Its messages (CFG_TUSB_DEBUG, set by the top CMakeLists.txt) go to the
+// USB log (usbkbd.c), not printf.
+#define CFG_TUSB_DEBUG_PRINTF usbkbd_tusb_printf
+
 #define CFG_TUH_MEM_SECTION
 #define CFG_TUH_MEM_ALIGN __attribute__((aligned(4)))
 
@@ -24,6 +28,11 @@
 #define CFG_TUH_HID 6
 #define CFG_TUH_HID_EPIN_BUFSIZE 64
 #define CFG_TUH_HID_EPOUT_BUFSIZE 64
+// A device that fails to be set up gets this many tries, each after a
+// fresh port reset (TinyUSB's default is 2): after a host restart
+// (usbkbd_reset) a keyboard behind the hub, never powered off, missed its
+// first requests and was given up on for good (bd xv0).
+#define CFG_TUH_ENUM_ATTEMPT_MAX 5
 // Mass storage: TinyUSB keeps one per device and only ever uses LUN 0 (a
 // multi-slot card reader shows its first slot).
 #define CFG_TUH_MSC 1

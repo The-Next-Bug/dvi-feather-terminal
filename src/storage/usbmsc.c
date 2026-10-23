@@ -16,6 +16,11 @@
 // A stick answers in milliseconds; one that does not in this long is
 // treated as gone for this transfer.
 #define IO_TIMEOUT_US 3000000
+// Sectors per SCSI command (32 KB; TinyUSB splits a data stage over
+// 0xFC00 bytes itself). Build with -DUSBMSC_MAX_SECTORS=1 to compare.
+#ifndef USBMSC_MAX_SECTORS
+#define USBMSC_MAX_SECTORS 64
+#endif
 
 static usbvol_t vol;
 static FATFS fs;
@@ -26,7 +31,7 @@ static FRESULT last_mount = FR_OK;
 static uint32_t last_sector;
 
 // The transfer in flight: done by io_done (from tuh_task), for io_dev.
-static volatile bool io_busy, io_ok;
+static volatile bool io_busy, io_ok, io_bad_csw;
 static uint8_t io_dev;
 
 void tuh_msc_mount_cb(uint8_t dev_addr) {
@@ -105,6 +110,10 @@ const char *usbmsc_info(void) {
 	if (!devices && n < sizeof text) {
 		n += (size_t)snprintf(text + n, sizeof text - n, " no devices");
 	}
+	if (usbkbd_resets() && n < sizeof text) {
+		n += (size_t)snprintf(text + n, sizeof text - n, "\r\n          host restarted %u times (looked stuck)",
+			usbkbd_resets());
+	}
 	if (n < sizeof text) {
 		usbmsc_status_t st = usbmsc_status();
 		if (st.mounted) {
@@ -127,12 +136,24 @@ const char *usbmsc_info(void) {
 
 // ---- FatFs disk I/O for drive 1 (diskio.c) ----
 
+// A CSW that is not this command's, or a short transfer, is a failure:
+// never data the stick did not send.
 static bool io_done(uint8_t dev_addr, tuh_msc_complete_data_t const *data) {
 	if (dev_addr == io_dev) { // not a late one for a transfer given up on
-		io_ok = data->csw->status == MSC_CSW_STATUS_PASSED;
+		const msc_csw_t *csw = data->csw;
+		io_bad_csw = csw->signature != MSC_CSW_SIGNATURE || csw->tag != data->cbw->tag;
+		io_ok = !io_bad_csw && csw->data_residue == 0 && csw->status == MSC_CSW_STATUS_PASSED;
 		io_busy = false;
 	}
 	return true;
+}
+
+// The stick's commands are stuck after a lost or garbled one (TinyUSB has
+// no Bulk-Only reset): the USB host is restarted, from the main loop.
+static DRESULT io_failed(const char *why, uint8_t dev) {
+	usbkbd_log(why, dev);
+	usbkbd_request_reset("mscrst");
+	return RES_ERROR;
 }
 
 // Run the USB stack until the transfer is done, the stick goes or it takes
@@ -141,17 +162,26 @@ static DRESULT io_wait(uint8_t dev) {
 	uint64_t until = time_us_64() + IO_TIMEOUT_US;
 	while (io_busy) {
 		tuh_task();
-		if (usbvol_io_dev(&vol) != dev || time_us_64() > until) {
-			usbkbd_log(usbvol_io_dev(&vol) != dev ? "gone" : "timeout", dev);
+		if (usbvol_io_dev(&vol) != dev) {
+			usbkbd_log("gone", dev);
 			io_dev = 0;
 			io_busy = false;
 			return RES_ERROR;
 		}
+		if (time_us_64() > until) {
+			io_dev = 0;
+			io_busy = false;
+			return io_failed("timeout", dev);
+		}
+	}
+	if (io_bad_csw) {
+		return io_failed("badcsw", dev);
 	}
 	if (!io_ok) {
-		usbkbd_log("ioerr", dev);
+		usbkbd_log("ioerr", dev); // the stick says so: it still answers
+		return RES_ERROR;
 	}
-	return io_ok ? RES_OK : RES_ERROR;
+	return RES_OK;
 }
 
 DSTATUS usbmsc_disk_status(void) {
@@ -162,36 +192,51 @@ DSTATUS usbmsc_disk_initialize(void) {
 	return usbmsc_disk_status();
 }
 
-DRESULT usbmsc_disk_read(BYTE *buff, LBA_t sector, UINT count) {
+// count sectors at sector, USBMSC_MAX_SECTORS per command.
+static DRESULT io_run(bool write, BYTE *buff, LBA_t sector, UINT count);
+
+// The commands run with the controller's own polling paused
+// (usbkbd_polls_pause).
+static DRESULT io(bool write, BYTE *buff, LBA_t sector, UINT count) {
+	uint32_t polls = usbkbd_polls_pause();
+	DRESULT r = io_run(write, buff, sector, count);
+	usbkbd_polls_resume(polls);
+	return r;
+}
+
+static DRESULT io_run(bool write, BYTE *buff, LBA_t sector, UINT count) {
 	uint8_t dev = usbvol_io_dev(&vol);
-	if (!dev) {
+	if (!dev || usbkbd_reset_pending()) { // stuck until the restart: fail at once
 		return RES_NOTRDY;
 	}
 	activity = true;
-	io_dev = dev;
-	io_busy = true;
-	if (!tuh_msc_read10(dev, LUN, buff, (uint32_t)sector, (uint16_t)count, io_done, 0)) {
-		usbkbd_log("busy", dev);
-		io_busy = false;
-		return RES_ERROR;
+	while (count) {
+		uint16_t n = (uint16_t)(count < USBMSC_MAX_SECTORS ? count : USBMSC_MAX_SECTORS);
+		io_dev = dev;
+		io_busy = true;
+		bool sent = write ? tuh_msc_write10(dev, LUN, buff, (uint32_t)sector, n, io_done, 0)
+			: tuh_msc_read10(dev, LUN, buff, (uint32_t)sector, n, io_done, 0);
+		if (!sent) {
+			io_busy = false;
+			return io_failed("busy", dev);
+		}
+		DRESULT r = io_wait(dev);
+		if (r != RES_OK) {
+			return r;
+		}
+		buff += n * SECTOR;
+		sector += n;
+		count -= n;
 	}
-	return io_wait(dev);
+	return RES_OK;
+}
+
+DRESULT usbmsc_disk_read(BYTE *buff, LBA_t sector, UINT count) {
+	return io(false, buff, sector, count);
 }
 
 DRESULT usbmsc_disk_write(const BYTE *buff, LBA_t sector, UINT count) {
-	uint8_t dev = usbvol_io_dev(&vol);
-	if (!dev) {
-		return RES_NOTRDY;
-	}
-	activity = true;
-	io_dev = dev;
-	io_busy = true;
-	if (!tuh_msc_write10(dev, LUN, buff, (uint32_t)sector, (uint16_t)count, io_done, 0)) {
-		usbkbd_log("busy", dev);
-		io_busy = false;
-		return RES_ERROR;
-	}
-	return io_wait(dev);
+	return io(true, (BYTE *)buff, sector, count);
 }
 
 DRESULT usbmsc_disk_ioctl(BYTE cmd, void *buff) {
