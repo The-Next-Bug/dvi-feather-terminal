@@ -300,7 +300,15 @@ UF2 in the latter).
   DMA channels, reloaded by DMA_IRQ_0 with blanking command lists and
   per-line pixels from a callback. `HSTX_MODE` 0 = 800x600@60 with libdvi's
   timing (clk_hstx 200 MHz, above the 150 MHz rating: dmt.8.1), 1 = @56,
-  2 = CVT-RB. `apps/hstx_test/hstx_test.c` -> `hstx_test.uf2`: test pattern.
+  2 = CVT-RB (354 MHz). The cache option is empty by default: the board
+  header's pico_board_cmake_set(BOARD_HSTX_MODE, n), else 0 (top
+  CMakeLists: DVT_HSTX_MODE, HSTX_MODE_USED for build-info.txt; a cache
+  with the old help string is reset to empty so a stale 0 does not win).
+  The Feather headers set 2 (bd 1ls.19.8): at 400 MHz / 1.3 V two
+  Feathers hard faulted at random on either core (quad or serial flash,
+  PSRAM at 100 or 67 MHz, or none: likely their core supply), stable at
+  354 MHz; 132 columns peaks at 98-99% of core 1's line, late 0. The user
+  chose that over a voltage bump past 1.30 V. `apps/hstx_test/hstx_test.c` -> `hstx_test.uf2`: test pattern.
 - `src/video/video.[ch]` (RP2350): core 1 composes scanlines (raster_compose or
   splash_compose) into a ring of 4 line buffers, at most 2 lines ahead of
   the DMA interrupt (also on core 1), latching mode/cursor/splash per

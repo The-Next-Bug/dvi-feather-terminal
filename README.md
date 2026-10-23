@@ -128,10 +128,15 @@ in part):
 |---|---|
 | `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default) |
 | `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS, the Z80 machine's banks in its 8 MB PSRAM (`PSRAM_BANKS`), DS3231M real-time clock, TDA1387 DAC for the bell (U8, hand-fitted) |
-| `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing) |
+| `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing); 800x600 with reduced blanking at 354 MHz (`HSTX_MODE` 2), as it crashes at 400 MHz |
 | `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
 | `feather-rp2350-hstx-adalogger` | `feather-rp2350-hstx` with the Adalogger FeatherWing's PCF8523 real-time clock on I2C1 (SDA/SCL, GP2/3); no RTS/CTS (those were GP2/3) |
 | `feather-rp2350-hstx-psram-adalogger` | `feather-rp2350-hstx-psram` with the Adalogger FeatherWing's PCF8523, as above |
+
+All four Feather targets run at 354 MHz instead of 400: on two Feathers
+the firmware crashed at random at 400 MHz, with or without the PSRAM. The
+video is the same 800x600 at 60 Hz with shorter blanking, which most
+monitors take; the CP/M machine runs about 11% slower.
 
 `src/board/board.h` checks the header when it compiles. A missing setting, a pin
 that cannot carry its signal, or a pin used twice stops the build with an
@@ -887,7 +892,7 @@ every job). pico-sdk is upgraded by moving its submodule (and the image's
 | `STARTUP_DEMO` | OFF | run the demo after the logo |
 | `MACHINE_BANKS` | 2 | Z80 machine: 48 KB banks besides bank 0 (each costs 48 KB of SRAM; a third does not fit) |
 | `PSRAM_BANKS` | OFF | Z80 machine: the banks in the board's QSPI PSRAM (QMI chip select 1) instead, as many as fit up to 15, none in SRAM; set by `boards/feather-rp2350-hstx-psram.h`. Without a PSRAM chip at boot the machine has no banks |
-| `HSTX_MODE` | 0 | 0: 800x600 at 60 Hz; 1: at 56 Hz (clk_hstx 180 MHz); 2: 60 Hz reduced blanking (177 MHz). 1 and 2 are slower fallbacks |
+| `HSTX_MODE` | the board's | 0: 800x600 at 60 Hz (clk_sys 400 MHz, clk_hstx 200 MHz); 1: at 56 Hz (360 / 180 MHz); 2: 60 Hz reduced blanking (354 / 177 MHz). 1 and 2 are slower fallbacks. Empty (the default): the board header's choice, `pico_board_cmake_set(BOARD_HSTX_MODE, n)` (2 on the Feathers), else 0 |
 | `VIDEO_DIAG` | OFF | bring-up diagnostics on UART0 TX: boot markers, core 1 scanline timing, fault reports |
 | `COPY_TO_RAM` | ON | run from SRAM; must stay ON (see [How it works](#how-it-works)) |
 
