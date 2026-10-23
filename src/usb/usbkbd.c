@@ -352,6 +352,21 @@ void __wrap_rp2usb_deinit(void) {
 static void host_start(void) {
 	tusb_rhport_init_t host = {.role = TUSB_ROLE_HOST, .speed = TUSB_SPEED_AUTO};
 	tusb_init(0, &host);
+	// hcd_rp2040's interrupt handler panics on a data sequence error (a
+	// packet from a device with the wrong DATA0/1 PID), which reboots the
+	// board: seen when a stick was plugged in again after hours (bd qo3).
+	// The interrupt stays off; usbkbd_data_seq_error finds the error.
+	hw_clear_bits(&usb_hw->inte, USB_INTE_ERROR_DATA_SEQ_BITS);
+}
+
+bool usbkbd_data_seq_error(void) {
+	if (!(usb_hw->intr & USB_INTR_ERROR_DATA_SEQ_BITS)) {
+		return false;
+	}
+	hw_clear_bits(&usb_hw->sie_status, USB_SIE_STATUS_DATA_SEQ_ERROR_BITS);
+	usbkbd_log("dataseq", 0);
+	usbkbd_request_reset("seqrst");
+	return true;
 }
 
 // Each device TinyUSB knows, for the text log.
@@ -524,6 +539,7 @@ void usbkbd_set_reset_key(kbd_setup_t reset) {
 void usbkbd_poll(const kbd_modes_t *modes) {
 	poll_modes = modes;
 	tuh_task();
+	usbkbd_data_seq_error();
 	if (reset_requested) {
 		if (resets && now_ms() - last_reset_ms < REQUEST_GAP_MS * dog.backoff) {
 			if (!reset_waiting) {

@@ -345,7 +345,13 @@ UF2 in the latter).
   (usbkbd_polls_pause/resume: usbmsc.c's commands per FatFs call, the
   LEDs, the probe; ~2 ms each) and our control transfers finish before
   usbkbd_poll returns (control_wait, 20 ms max); CFG_TUH_ENUM_ATTEMPT_MAX 5
-  (a keyboard missed its first requests after a restart). TinyUSB's own
+  (a keyboard missed its first requests after a restart); hcd_rp2040's
+  IRQ panics on a data sequence error (seen re-plugging a stick after
+  hours, bd qo3), so host_start clears INTE's ERROR_DATA_SEQ and
+  usbkbd_data_seq_error (usbkbd_poll, usbmsc's io_wait) finds the raw
+  INTR bit, fails the stick command and requests a restart ("dataseq",
+  "seqrst"); crash_glue.c keeps a panic's or hard fault's report (the
+  STUCK reports used to overwrite it). TinyUSB's own
   control transfers (enumeration, the hub) are not paused: a device that
   fails to finish being set up is caught by the watchdog. The text log: usbkbd_log
   events plus TinyUSB's CFG_TUSB_DEBUG=1 messages (the top CMakeLists.txt

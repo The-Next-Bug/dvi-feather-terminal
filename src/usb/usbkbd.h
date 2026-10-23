@@ -66,5 +66,9 @@ unsigned usbkbd_resets(void);
 // where it cannot be done at once); one soon after the last waits a while.
 void usbkbd_request_reset(const char *why);
 bool usbkbd_reset_pending(void);
+// A data sequence error since the last call (a packet the controller
+// should not have taken: the transfer under way is not to be trusted, if
+// it ever finishes)? Then the host restart is requested.
+bool usbkbd_data_seq_error(void);
 
 #endif

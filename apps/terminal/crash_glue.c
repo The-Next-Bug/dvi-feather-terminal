@@ -39,6 +39,11 @@
 
 static volatile uint32_t heartbeat;
 static volatile bool redraw_status; // a hang report is on the status line, things move again
+// The report of a panic, a hard fault or the hang reboot is kept: nothing
+// replaces it, least of all a hang report (a panic in an interrupt handler
+// looks stuck there, and its text was lost that way).
+static volatile bool report_final;
+static volatile bool rebooting; // core 0 shows its report until the reboot
 static uint alarm_num;
 static uint32_t seen_beat, still_ms, in_handler_ms, shown_ms;
 
@@ -58,6 +63,9 @@ static uint32_t text_check(const char *s) {
 }
 
 static void keep_report(const char *text) {
+	if (report_final) {
+		return;
+	}
 	snprintf(last.text, sizeof last.text, "%s", text);
 	last.check = text_check(last.text);
 	last.magic = REPORT_MAGIC;
@@ -78,6 +86,8 @@ static void show(const char *text) {
 // Show the report for a while, then reboot (never returns).
 static void __attribute__((noreturn)) report_and_reboot(const char *text) {
 	keep_report(text);
+	report_final = true;
+	rebooting = true;
 	show(text);
 	uint32_t start = time_us_32();
 	while (time_us_32() - start < REBOOT_MS * 1000u) {
@@ -114,6 +124,7 @@ static void __attribute__((used, noreturn)) hardfault_c(const uint32_t *frame) {
 		(unsigned long)*(volatile uint32_t *)0xe000ed28);
 	if (get_core_num() != 0) {
 		keep_report(text); // core 0 still draws; the report shows at the next start
+		report_final = true;
 		while (true) {
 			tight_loop_contents();
 		}
@@ -133,15 +144,17 @@ void __attribute__((naked)) isr_hardfault(void) {
 static void __attribute__((used)) tick_c(const uint32_t *frame) {
 	timer_hw->intr = 1u << alarm_num;
 	timer_hw->alarm[alarm_num] = timer_hw->timerawl + TICK_US;
-	if (nvflash_busy) {
-		return; // XIP is off: drawing may read flash (and the flash work is no hang)
+	if (nvflash_busy || rebooting) {
+		return; // XIP is off: drawing may read flash (and the flash work is no hang); a report is up
 	}
 	uint32_t beat = heartbeat;
 	if (beat != seen_beat) {
 		seen_beat = beat;
 		if (still_ms >= HANG_MS) {
 			redraw_status = true;
-			last.magic = 0; // it went on after all: not how this run ended
+			if (!report_final) {
+				last.magic = 0; // it went on after all: not how this run ended
+			}
 		}
 		still_ms = in_handler_ms = shown_ms = 0;
 		return;
