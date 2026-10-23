@@ -173,6 +173,14 @@ static DRESULT io_wait(uint8_t dev) {
 			io_busy = false;
 			return io_failed("timeout", dev);
 		}
+		if (usbkbd_data_seq_error()) {
+			io_dev = 0;
+			io_busy = false;
+			return RES_ERROR;
+		}
+	}
+	if (usbkbd_data_seq_error()) { // the data may hold a packet sent twice
+		return RES_ERROR;
 	}
 	if (io_bad_csw) {
 		return io_failed("badcsw", dev);
