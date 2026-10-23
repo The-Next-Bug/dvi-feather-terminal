@@ -194,8 +194,9 @@ keyboard, then use the USB port as usual (BOOTSEL).
 
 Keys (US layout) send what a VT100 sends: letters honor Caps Lock, Ctrl
 makes control characters, Alt sends ESC first (meta). Return sends CR (CR LF
-in LNM), Backspace DEL and Ctrl-Backspace BS, or the other way round with
-DECBKM (`CSI ? 67 h`; its power-on value is a SET-UP setting). The cursor
+in LNM), Backspace BS and Ctrl-Backspace DEL, or the other way round with
+DECBKM reset (`CSI ? 67 l`; its power-on value is a SET-UP setting, BS by
+default). The cursor
 keys follow DECCKM (`ESC [ A` / `ESC O A`); F1-F4 are PF1-PF4
 (`ESC O P`..`S`). The keypad follows DECKPAM/DECKPNM while Num Lock is on
 (keypad + is the VT100's keypad comma) and is cursor/editing keys when it is
@@ -266,7 +267,7 @@ shown in reverse video:
 | Setting | Values | |
 |---|---|---|
 | Columns | 80, 132 | the width at power-on and after F11 in CP/M mode. With Terminal type ADM-3A it shows `80 (ADM-3A)` and is skipped; the choice comes back with VT100 or VT52 |
-| Backspace sends | DEL, BS | DECBKM at power-on and after RIS (vttest and CP/M software want BS) |
+| Backspace sends | DEL, BS | DECBKM at power-on and after RIS; default BS (vttest and CP/M software want it) |
 | Local echo | off, on | keys typed are shown on the terminal as well as sent |
 | Baud rate | 300 - 115200 | default 115200 |
 | Data/parity/stop | 8N1, 8E1, 8O1, 8N2, 7E1, 7O1, 7N1, 7N2 | default 8N1 |

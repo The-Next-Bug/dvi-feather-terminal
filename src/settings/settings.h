@@ -25,7 +25,7 @@
 // One byte per setting; the payload stores them in this order (append only).
 typedef struct {
 	uint8_t columns;    // power-on width: 80 or 132
-	uint8_t backspace;  // what Backspace sends at power-on/RIS: 0x7f DEL or 0x08 BS
+	uint8_t backspace;  // what Backspace sends at power-on/RIS: 0x7f DEL or 0x08 BS (default: CP/M wants it)
 	uint8_t local_echo; // 1: keys typed are also shown on the terminal
 	uint8_t baud;       // index: see settings_baud_rate
 	uint8_t framing;    // index: see settings_framing

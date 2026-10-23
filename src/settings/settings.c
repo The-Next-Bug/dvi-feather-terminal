@@ -121,7 +121,7 @@ static uint32_t record_crc(const uint8_t *rec, unsigned len) {
 }
 
 void settings_defaults(settings_t *s) {
-	*s = (settings_t){.columns = 80, .backspace = 0x7f, .local_echo = 0, .baud = BAUD_DEFAULT,
+	*s = (settings_t){.columns = 80, .backspace = 0x08, .local_echo = 0, .baud = BAUD_DEFAULT,
 		.framing = 0, .newline = 0, .colors = 0, .palette = 0, .mode = SETTINGS_MODE_TERMINAL,
 		.status_line = 1, .blank_after = 0, .term_type = SETTINGS_TERM_VT100, .clock = SETTINGS_CLOCK_24H,
 		.clock_seconds = 0, .clock_date = SETTINGS_DATE_NONE, .bell = SETTINGS_BELL_MEDIUM,

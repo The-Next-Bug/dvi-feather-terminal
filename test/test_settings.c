@@ -116,7 +116,7 @@ static void test_bad_value_keeps_default(void) {
 	settings_encode(&s, 1, rec);
 	CHECK(settings_decode(rec, &out, &seq));
 	CHECK_EQ(out.columns, 80);
-	CHECK_EQ(out.backspace, 0x7f);
+	CHECK_EQ(out.backspace, 0x08);
 	CHECK_EQ(out.local_echo, 0);
 }
 
@@ -138,7 +138,7 @@ static void test_older_record(void) {
 	rec[15] = (uint8_t)(crc >> 24);
 	CHECK(settings_decode(rec, &probe, &seq));
 	CHECK_EQ(probe.columns, 132);
-	CHECK_EQ(probe.backspace, 0x7f);
+	CHECK_EQ(probe.backspace, 0x08);
 	CHECK_EQ(probe.local_echo, 0);
 	CHECK_EQ(settings_baud_rate(&probe), 115200);
 	CHECK_EQ(probe.status_line, 1); // records before it: shown

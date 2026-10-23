@@ -372,7 +372,8 @@ UF2 in the latter).
 - `src/settings/settings.[ch]` (portable): settings record (magic, seq, CRC-32,
   one byte per setting, append-only) in two flash sectors used in turn.
   Settings (settings_fields[] drives the record, validation and SET-UP
-  labels; append only): columns, backspace (DECBKM RIS value), local_echo,
+  labels; append only): columns, backspace (DECBKM RIS value; default BS
+  0x08, as CP/M wants), local_echo,
   baud, framing, newline (LNM RIS value), colors (hue), palette (mono),
   mode (terminal / CP/M machine), status_line (hidden: status.c
   status_shown() leaves row 24 blank; debug: status.c debug_status_* shows
