@@ -364,7 +364,12 @@ UF2 in the latter).
   start = set up + read -> MISSING / NOT_SET / OK, set (false outside its
   years), optional start_1hz, output falling as the seconds go up), one
   file per chip: ds3231.[ch] (register codec, 24 h, century bit, driver
-  rtc_ds3231), BCD in rtc_internal.h. RP2350 dvt_rtc: rtc.[ch] below.
+  rtc_ds3231), pcf8523.[ch] (bd 1ls.19.2: time at 03h, OS in the seconds,
+  weekday 0-6, 2000-2099, 12-hour mode from Control_1's 12_24; start
+  clears Control_3's PM to 000, since the power-on 111 has no battery
+  switch-over, and sets CLKOUT off, COF 111; NOT_SET also when STOP; set
+  clears STOP/12_24; battery_low from BLF; no 1 Hz yet), optional
+  battery_low, BCD in rtc_internal.h. RP2350 dvt_rtc: rtc.[ch] below.
   wallclock.[ch]: a second at a timestamp; wallclock_edge (the chip's
   seconds went up) moves it to the edge, rounding for missed edges,
   ignoring glitches < 0.5 s, never back. `src/rtc/rtc.[ch]`: the I2C bus

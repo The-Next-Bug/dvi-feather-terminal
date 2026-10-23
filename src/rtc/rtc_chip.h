@@ -40,8 +40,12 @@ typedef struct {
 	// Optional (NULL: the chip has none): its 1 Hz output on, the output
 	// falling as the seconds go up; false if it did not answer.
 	bool (*start_1hz)(const rtc_bus_t *bus);
+	// Optional (NULL: the chip cannot tell): its backup battery is low;
+	// false if it says not, or did not answer.
+	bool (*battery_low)(const rtc_bus_t *bus);
 } rtc_chip_t;
 
 extern const rtc_chip_t rtc_ds3231;
+extern const rtc_chip_t rtc_pcf8523;
 
 #endif

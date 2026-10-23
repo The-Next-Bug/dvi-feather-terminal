@@ -993,7 +993,7 @@ has the helpers; `src/CMakeLists.txt` lists the libraries.
 |---|---|---|
 | `common` | portable | `crc32`, `lz` (LZ4-format decoder), `scratch` (the shared 4 KB buffer) |
 | `clock` | portable | `datetime` (dates without the C library's `localtime`, FAT timestamps), `wallclock` (the time kept between reads of the RTC) |
-| `rtc` | portable / RP2350 | `rtc_chip.h` (the chip-driver interface, on a register bus), `ds3231` (the DS3231's driver): portable `dvt_rtc_chips`; `rtc` (the wall clock and the board's RTC on I2C): RP2350 `dvt_rtc` |
+| `rtc` | portable / RP2350 | `rtc_chip.h` (the chip-driver interface, on a register bus), `ds3231` and `pcf8523` (the drivers): portable `dvt_rtc_chips`; `rtc` (the wall clock and the board's RTC on I2C): RP2350 `dvt_rtc` |
 | `screen` | portable | `screen` (cell buffer, saved rows), `palette` (the 256-color palette per Colors/Palette setting), `font.h` (glyph codes) |
 | `term` | portable | `term.[ch]` (the terminal) with its personalities `vt100.c`, `vt52.c` and `adm3a.c` (sharing `term_internal.h`), `vtparse` (escape sequence parser) |
 | `render` | portable | `raster` (cells to pixels), `splash` (startup logo); generated font tables and logo (`font_gen.py`, `logo_gen.py`) |

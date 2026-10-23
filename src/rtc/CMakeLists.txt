@@ -1,9 +1,11 @@
 # The real-time clock. dvt_rtc_chips (portable, host-tested): the chip
-# drivers (rtc_chip.h; ds3231.c), on a register bus they are given.
+# drivers (rtc_chip.h; ds3231.c, pcf8523.c), on a register bus they are
+# given.
 # dvt_rtc (RP2350): the wall clock with the board's chip on I2C (rtc.c),
 # kept on the chip's 1 Hz output when the board wires it.
 add_library(dvt_rtc_chips STATIC
   ds3231.c
+  pcf8523.c
 )
 target_include_directories(dvt_rtc_chips PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(dvt_rtc_chips PUBLIC dvt_clock)
