@@ -90,6 +90,15 @@ check "RTC without its pins" "needs BOARD_RTC_I2C" "$sock" "#define BOARD_RTC_DS
 check "RTC pins without a chip" "need a chip" "$sock" "#define BOARD_RTC_I2C 1"
 check "RTC on the SD card" "uses a pin twice" "$sock" "$(rtc 0 4 5)"
 check "RTC SQW on the LED" "uses a pin twice" "$sock" "$(rtc 1 10 11)" "#define BOARD_RTC_SQW_PIN 25"
+pcf() { echo "#define BOARD_RTC_PCF8523 1"; echo "#define BOARD_RTC_I2C $1"; echo "#define BOARD_RTC_SDA_PIN $2"
+  echo "#define BOARD_RTC_SCL_PIN $3"; }
+check "PCF8523 on I2C1 GP2/3" "" "$sock" "#undef BOARD_UART_CTS_PIN" "#undef BOARD_UART_RTS_PIN" "$(pcf 1 2 3)"
+check "PCF8523 on the CTS/RTS pins" "uses a pin twice" "$sock" "$(pcf 1 2 3)"
+check "PCF8523 without its pins" "needs BOARD_RTC_I2C" "$sock" "#define BOARD_RTC_PCF8523 1"
+check "PCF8523 SCL on an SDA pin" "not an SCL pin" "$sock" "$(pcf 1 10 10)"
+check "PCF8523 with a 1 Hz pin" "not supported yet" "$sock" "$(pcf 1 10 11)" "#define BOARD_RTC_SQW_PIN 8"
+check "two RTC chips" "two RTC chips" "$sock" "$(rtc 1 10 11)" "#define BOARD_RTC_PCF8523 1"
+check "RTC SQW without a chip" "need a chip" "$sock" "#define BOARD_RTC_SQW_PIN 8"
 i2s() { echo "#define BOARD_AUDIO_I2S_BCK_PIN $1"; echo "#define BOARD_AUDIO_I2S_WS_PIN $2"
   echo "#define BOARD_AUDIO_I2S_DATA_PIN $3"; }
 check "I2S DAC" "" "$sock" "$(i2s 9 10 11)"

@@ -2,9 +2,10 @@
 #define RTC_H
 
 // The wall clock (seconds since 31.12.1977, datetime.h): the board's
-// real-time clock chip (BOARD_RTC_DS3231) read at start-up, then kept on
-// the chip's 1 Hz output (BOARD_RTC_SQW_PIN: a GPIO interrupt per second,
-// wallclock.h), else by the timer. Without a chip, or with its time not
+// real-time clock chip (BOARD_RTC_DS3231 or BOARD_RTC_PCF8523; drivers in
+// rtc_chip.h) read at start-up, then kept on the chip's 1 Hz output
+// (BOARD_RTC_SQW_PIN: a GPIO interrupt per second, wallclock.h), else by
+// the timer. Without a chip, or with its time not
 // valid (the oscillator stopped: no battery, never set), it starts at
 // 1.1.2026. Setting it writes the chip too. Core 0 only.
 
@@ -26,6 +27,11 @@ uint32_t rtc_now(void);
 uint32_t rtc_fraction_us(void);
 void rtc_set(uint32_t secs);
 rtc_state_t rtc_state(void);
+// The board's chip ("DS3231"), NULL without one.
+const char *rtc_chip_name(void);
+// The chip says its backup battery is low (asks it: not from an
+// interrupt). False if it cannot tell.
+bool rtc_battery_low(void);
 // The time is real: the chip's, read at start-up, or set since.
 bool rtc_valid(void);
 // The chip's 1 Hz output keeps the time (an edge in the last 1.5 s).

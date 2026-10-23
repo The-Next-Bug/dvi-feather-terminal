@@ -11,8 +11,10 @@
 #include "rtc_chip.h"
 #include "wallclock.h"
 
-#ifdef BOARD_RTC_DS3231
+#if defined(BOARD_RTC_DS3231)
 #define RTC_CHIP rtc_ds3231
+#elif defined(BOARD_RTC_PCF8523)
+#define RTC_CHIP rtc_pcf8523
 #endif
 
 #ifdef RTC_CHIP
@@ -133,6 +135,22 @@ void rtc_set(uint32_t secs) {
 
 rtc_state_t rtc_state(void) {
 	return state;
+}
+
+const char *rtc_chip_name(void) {
+#ifdef RTC_CHIP
+	return RTC_CHIP.name;
+#else
+	return NULL;
+#endif
+}
+
+bool rtc_battery_low(void) {
+#ifdef RTC_CHIP
+	return state != RTC_NONE && state != RTC_MISSING && RTC_CHIP.battery_low && RTC_CHIP.battery_low(&bus);
+#else
+	return false;
+#endif
 }
 
 bool rtc_valid(void) {

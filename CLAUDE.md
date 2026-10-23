@@ -100,9 +100,11 @@ optional BOARD_PSRAM_CS_PIN (XIP_CS1: GP0/8/19/47; without PSRAM_BANKS
 main() drives it high first thing so the PSRAM stays off the shared QSPI
 bus; with it, PICO_PSRAM_CS_PIN + PICO_AUTO_DETECT_PSRAM_SIZE in the header
 let the SDK's runtime init set it up),
-optional BOARD_RTC_DS3231 + BOARD_RTC_I2C + BOARD_RTC_SDA/SCL_PIN (GPIO n
+optional BOARD_RTC_DS3231 or BOARD_RTC_PCF8523 (one: BOARD_HAS_RTC;
+bd 1ls.19.3) + BOARD_RTC_I2C + BOARD_RTC_SDA/SCL_PIN (GPIO n
 is I2C (n >> 1) & 1, SDA even, SCL odd) and BOARD_RTC_SQW_PIN (the 1 Hz
-tick; bd 1ls.6.1, 1ls.6.2), optional BOARD_AUDIO_I2S_{BCK,WS,DATA}_PIN (WS
+tick, DS3231 only, needs a chip; bd 1ls.6.1, 1ls.6.2; HWINFO's record
+names the chip, rtc_chip_name, and says "battery low", rtc_battery_low), optional BOARD_AUDIO_I2S_{BCK,WS,DATA}_PIN (WS
 = BCK + 1: PIO side-set) + _NAME (src/platform/bell.c, bd 1ls.7), and the
 planned hardware's pins, named before any driver exists (bd 1ls.4):
 BOARD_BUZZER_PIN, BOARD_NEOPIXEL_PIN, BOARD_SD_CD_PIN, BOARD_BUTTON_PIN,
