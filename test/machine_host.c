@@ -149,9 +149,14 @@ void clear_screen(void) {
 	screen[0] = '\0';
 }
 
+// The callers' budgets are wall-clock seconds for an idle host; on a loaded
+// one (ctest beside a parallel build) the Z80 gets less of it. A run that
+// gets there returns at once, so the slack costs only a failing test's time.
+#define RUN_UNTIL_SLACK 4
+
 machine_state_t run_until_any(const char *const texts[], double seconds, int *which) {
 	size_t from = screen_len;
-	uint64_t end = host_clock_us() + (uint64_t)(seconds * 1e6);
+	uint64_t end = host_clock_us() + (uint64_t)(seconds * RUN_UNTIL_SLACK * 1e6);
 	while (host_clock_us() < end) {
 		machine_state_t st = machine_run(10000);
 		if (screen_len < from) { // the older half was dropped

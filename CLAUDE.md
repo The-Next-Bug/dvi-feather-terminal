@@ -67,7 +67,7 @@ CMake or Arm GCC on the dev host. Use the scripts:
 git submodule update --init          # lib/pico-sdk (2.3.1), not its submodules (lib/z80pack is vendored)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool, clang-tidy (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, clock, uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, clock, rtc (the RTC chip drivers on a fake register bus), sdformat (card formats on a sparse disk), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimized, no sanitizers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default; any boards/<target>.h) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
@@ -100,9 +100,11 @@ optional BOARD_PSRAM_CS_PIN (XIP_CS1: GP0/8/19/47; without PSRAM_BANKS
 main() drives it high first thing so the PSRAM stays off the shared QSPI
 bus; with it, PICO_PSRAM_CS_PIN + PICO_AUTO_DETECT_PSRAM_SIZE in the header
 let the SDK's runtime init set it up),
-optional BOARD_RTC_DS3231 + BOARD_RTC_I2C + BOARD_RTC_SDA/SCL_PIN (GPIO n
+optional BOARD_RTC_DS3231 or BOARD_RTC_PCF8523 (one: BOARD_HAS_RTC;
+bd 1ls.19.3) + BOARD_RTC_I2C + BOARD_RTC_SDA/SCL_PIN (GPIO n
 is I2C (n >> 1) & 1, SDA even, SCL odd) and BOARD_RTC_SQW_PIN (the 1 Hz
-tick; bd 1ls.6.1, 1ls.6.2), optional BOARD_AUDIO_I2S_{BCK,WS,DATA}_PIN (WS
+tick, DS3231 only, needs a chip; bd 1ls.6.1, 1ls.6.2; HWINFO's record
+names the chip, rtc_chip_name, and says "battery low", rtc_battery_low), optional BOARD_AUDIO_I2S_{BCK,WS,DATA}_PIN (WS
 = BCK + 1: PIO side-set) + _NAME (src/platform/bell.c, bd 1ls.7), and the
 planned hardware's pins, named before any driver exists (bd 1ls.4):
 BOARD_BUZZER_PIN, BOARD_NEOPIXEL_PIN, BOARD_SD_CD_PIN, BOARD_BUTTON_PIN,
@@ -150,6 +152,15 @@ banner. nvflash_retime saves and restores QMI M1 around the ROM's
 flash_select_xip_read_mode; the SDK's flash_range_* clean the XIP cache
 (dirty PSRAM lines) and re-run the PSRAM setup themselves. Core 1 never
 touches the PSRAM. Untested on hardware; CI builds it.
+`boards/feather-rp2350-hstx-adalogger.h` and
+`boards/feather-rp2350-hstx-psram-adalogger.h` (bd 1ls.19): the user's
+Feather (PSRAM fitted) with an Adalogger FeatherWing: the base header
+(and the PSRAM one) plus BOARD_RTC_PCF8523 on I2C1 GP2/3 (the Feather's
+SDA/SCL), so BOARD_UART_CTS/RTS_PIN are #undef'd (no SERIAL_FLOW_CONTROL:
+test_board.sh asks the preprocessor which boards lack CTS); the
+pico_board_cmake_set lines restated (and PSRAM_BANKS). No 1 Hz pin: the
+FeatherWing's INT/SQW pad is not wired. Untested on hardware (bd
+1ls.19.6); CI builds both.
 
 The USB host (keyboards, sticks) is always built in (USB_KEYBOARD=OFF
 was removed: bd s0i). Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
@@ -182,8 +193,9 @@ CMakeLists.txt (`src/CMakeLists.txt` lists them); public headers next to
 the sources (the directory is the PUBLIC include path), a header only the
 library's own files share is `<name>_internal.h` (term_internal.h).
 Portable (host-tested): common, clock, screen, term, render, input, settings,
-machine (+ dvt_z80pack, cpm/), disks, ui; RP2350, added only with
-DVT_FIRMWARE: board (header only), platform, usb, storage, video. The
+machine (+ dvt_z80pack, cpm/), disks, ui, rtc's dvt_rtc_chips; RP2350, added only with
+DVT_FIRMWARE: board (header only), platform, usb, storage, video, rtc's
+dvt_rtc (a directory may hold both, the RP2350 one under if(DVT_FIRMWARE)). The
 host tests add the same `src/` without DVT_FIRMWARE, so a pico-sdk
 include in a portable library fails test.sh. RP2350 libraries link the
 SDK's `*_headers` targets (TinyUSB has none: usb/'s dvt_tinyusb_headers
@@ -288,7 +300,15 @@ UF2 in the latter).
   DMA channels, reloaded by DMA_IRQ_0 with blanking command lists and
   per-line pixels from a callback. `HSTX_MODE` 0 = 800x600@60 with libdvi's
   timing (clk_hstx 200 MHz, above the 150 MHz rating: dmt.8.1), 1 = @56,
-  2 = CVT-RB. `apps/hstx_test/hstx_test.c` -> `hstx_test.uf2`: test pattern.
+  2 = CVT-RB (354 MHz). The cache option is empty by default: the board
+  header's pico_board_cmake_set(BOARD_HSTX_MODE, n), else 0 (top
+  CMakeLists: DVT_HSTX_MODE, HSTX_MODE_USED for build-info.txt; a cache
+  with the old help string is reset to empty so a stale 0 does not win).
+  The Feather headers set 2 (bd 1ls.19.8): at 400 MHz / 1.3 V two
+  Feathers hard faulted at random on either core (quad or serial flash,
+  PSRAM at 100 or 67 MHz, or none: likely their core supply), stable at
+  354 MHz; 132 columns peaks at 98-99% of core 1's line, late 0. The user
+  chose that over a voltage bump past 1.30 V. `apps/hstx_test/hstx_test.c` -> `hstx_test.uf2`: test pattern.
 - `src/video/video.[ch]` (RP2350): core 1 composes scanlines (raster_compose or
   splash_compose) into a ring of 4 line buffers, at most 2 lines ahead of
   the DMA interrupt (also on core 1), latching mode/cursor/splash per
@@ -357,13 +377,24 @@ UF2 in the latter).
 - Clock (bd 1ls.6.1): `src/clock/` (portable, test_clock): datetime.[ch]
   (seconds since 31.12.1977 = CP/M 3's day number x 86400, civil
   conversions without localtime, FAT timestamps; DATETIME_DEFAULT_DAYS
-  17533 = 1.1.2026), ds3231.[ch] (register codec, 24 h, century bit).
+  17533 = 1.1.2026). `src/rtc/` (bd 1ls.19.1): portable dvt_rtc_chips
+  (test_rtc, fake register bus): rtc_chip.h (rtc_bus_t read/write by
+  address and register through function pointers; rtc_chip_t name,
+  start = set up + read -> MISSING / NOT_SET / OK, set (false outside its
+  years), optional start_1hz, output falling as the seconds go up), one
+  file per chip: ds3231.[ch] (register codec, 24 h, century bit, driver
+  rtc_ds3231), pcf8523.[ch] (bd 1ls.19.2: time at 03h, OS in the seconds,
+  weekday 0-6, 2000-2099, 12-hour mode from Control_1's 12_24; start
+  clears Control_3's PM to 000, since the power-on 111 has no battery
+  switch-over, and sets CLKOUT off, COF 111; NOT_SET also when STOP; set
+  clears STOP/12_24; battery_low from BLF; no 1 Hz yet), optional
+  battery_low, BCD in rtc_internal.h. RP2350 dvt_rtc: rtc.[ch] below.
   wallclock.[ch]: a second at a timestamp; wallclock_edge (the chip's
   seconds went up) moves it to the edge, rounding for missed edges,
-  ignoring glitches < 0.5 s, never back. `src/platform/rtc.[ch]`: the
-  DS3231 read once in rtc_init (after nvflash_retime; I2C 100 kHz, 5 ms
-  timeouts), then with BOARD_RTC_SQW_PIN the control register set to the
-  1 Hz square wave (INTCN, RS, EOSC cleared) and a raw GPIO IRQ on its
+  ignoring glitches < 0.5 s, never back. `src/rtc/rtc.[ch]`: the I2C bus
+  for the chip the board header names (RTC_CHIP), read once in rtc_init (after nvflash_retime; I2C 100 kHz, 5 ms
+  timeouts), then with BOARD_RTC_SQW_PIN the chip's start_1hz (DS3231:
+  INTCN, RS, EOSC cleared) and a raw GPIO IRQ on its
   falling edge (bd 1ls.6.2) feeding wallclock_edge, else time_us_64;
   readers disable interrupts around the wallclock. OSF set or no answer ->
   1.1.2026; rtc_set writes the chip and clears OSF (always kept for the
@@ -579,7 +610,18 @@ UF2 in the latter).
   qur.27): one is checked, both ask S or U; renamed on its own volume. The
   stick needs nothing at the commit (the rename synced it, xfer_reset
   closes its files). The monitor's U was removed (qur.10):
-  SET-UP's is the only way. `src/settings/uf2.[ch]` (portable; test_uf2 also checks
+  SET-UP's is the only way.
+  Card format (bd 1ls.19.7): the monitor's F (separate from I) asks for
+  FORMAT typed out (line_key, MODE_FORMAT; Esc or anything else: "Not
+  formatted."), then drives_flush, xfer_reset, drives_unmount_all and
+  `src/disks/sdformat.[ch]` (portable, cold, -Os, in flash; test_sdformat
+  on its own sparse disk, 1 MB to 119 GB volumes): sdformat_choose from
+  GET_SECTOR_COUNT: < 2 GiB FM_FAT (FatFs picks FAT12/16 and the
+  cluster), else FM_FAT32 with 4 KB clusters < 4 GiB, 32 KB to 64 GiB,
+  64 KB above; data area aligned 128 / 8192 sectors (FatFs aligns from
+  LBA 0; its MBR partition starts at 63), 2 FATs, no exFAT (LFN off).
+  f_mkfs uses the scratch buffer (Busy. while held); then mount_card,
+  can_resume off. The unreadable-card line ends ": F formats it". `src/settings/uf2.[ch]` (portable; test_uf2 also checks
   build/pico2-dvi-sock/dvi_terminal.uf2 when built): skips other families
   (the E10 block numbers its own sequence); ours in order, ascending
   addresses, PICOBIN marker in the first 4 KB; CRC of the image as flashed

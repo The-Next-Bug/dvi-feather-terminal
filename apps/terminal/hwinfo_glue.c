@@ -73,24 +73,24 @@ static size_t psram_record(uint8_t *buf) {
 }
 
 static size_t rtc_record(uint8_t *buf) {
-#ifdef BOARD_RTC_DS3231
-#define RTC_TEXT "DS3231 on " BOARD_RTC_PINS_TEXT
+#ifdef BOARD_HAS_RTC
 	char text[HWINFO_MAX];
-	const char *tick = "";
+	const char *name = rtc_chip_name(), *tick = "", *battery = rtc_battery_low() ? ", battery low" : "";
 #ifdef BOARD_RTC_SQW_PIN
 	tick = rtc_ticking() ? ", 1 Hz on " GP(BOARD_RTC_SQW_PIN) : ", no 1 Hz on " GP(BOARD_RTC_SQW_PIN);
 #endif
 	switch (rtc_state()) {
 	case RTC_OK:
-		snprintf(text, sizeof text, RTC_TEXT "%s", tick);
+		snprintf(text, sizeof text, "%s on " BOARD_RTC_PINS_TEXT "%s%s", name, tick, battery);
 		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Real-time clock", text);
 	case RTC_NOT_SET:
-		snprintf(text, sizeof text, RTC_TEXT "%s, time not set (battery?): DATE SET under CP/M 3 sets it", tick);
+		snprintf(text, sizeof text, "%s on " BOARD_RTC_PINS_TEXT "%s%s, time not set (battery?): DATE SET under CP/M 3 sets it",
+			name, tick, battery);
 		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Real-time clock", text);
 	default:
-		return hwinfo_record(buf, HWINFO_ST_NOT_FOUND, "Real-time clock", RTC_TEXT " did not answer");
+		snprintf(text, sizeof text, "%s on " BOARD_RTC_PINS_TEXT " did not answer", name);
+		return hwinfo_record(buf, HWINFO_ST_NOT_FOUND, "Real-time clock", text);
 	}
-#undef RTC_TEXT
 #else
 	(void)buf;
 	return 0;

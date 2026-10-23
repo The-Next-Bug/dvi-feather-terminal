@@ -121,9 +121,19 @@
 
 // GPIO n is I2C (n >> 1) & 1 with SDA on even pins, SCL on odd ones.
 #define BOARD_I2C_OF(pin) (((pin) >> 1) & 1)
-#ifdef BOARD_RTC_DS3231
+// The chip: one of BOARD_RTC_DS3231, BOARD_RTC_PCF8523 (src/rtc/).
+#if defined(BOARD_RTC_DS3231) && defined(BOARD_RTC_PCF8523)
+#error "the board header names two RTC chips: BOARD_RTC_DS3231 and BOARD_RTC_PCF8523"
+#endif
+#if defined(BOARD_RTC_DS3231) || defined(BOARD_RTC_PCF8523)
+#define BOARD_HAS_RTC 1
+#endif
+#if defined(BOARD_RTC_PCF8523) && defined(BOARD_RTC_SQW_PIN)
+#error "BOARD_RTC_SQW_PIN: the PCF8523's 1 Hz output is not supported yet"
+#endif
+#ifdef BOARD_HAS_RTC
 #if !defined(BOARD_RTC_I2C) || !defined(BOARD_RTC_SDA_PIN) || !defined(BOARD_RTC_SCL_PIN)
-#error "BOARD_RTC_DS3231 needs BOARD_RTC_I2C, BOARD_RTC_SDA_PIN and BOARD_RTC_SCL_PIN (see boards/example.h)"
+#error "the RTC chip needs BOARD_RTC_I2C, BOARD_RTC_SDA_PIN and BOARD_RTC_SCL_PIN (see boards/example.h)"
 #endif
 #if BOARD_RTC_I2C != 0 && BOARD_RTC_I2C != 1
 #error "BOARD_RTC_I2C must be 0 or 1"
@@ -136,8 +146,8 @@
 #endif
 #define BOARD_RTC_I2C_INST I2C_INSTANCE(BOARD_RTC_I2C)
 #define BOARD_RTC_BITS (BOARD_PIN_BIT(BOARD_RTC_SDA_PIN) | BOARD_PIN_BIT(BOARD_RTC_SCL_PIN))
-#elif defined(BOARD_RTC_I2C) || defined(BOARD_RTC_SDA_PIN) || defined(BOARD_RTC_SCL_PIN)
-#error "BOARD_RTC_I2C and its pins need a chip: BOARD_RTC_DS3231"
+#elif defined(BOARD_RTC_I2C) || defined(BOARD_RTC_SDA_PIN) || defined(BOARD_RTC_SCL_PIN) || defined(BOARD_RTC_SQW_PIN)
+#error "BOARD_RTC_I2C and its pins need a chip: BOARD_RTC_DS3231 or BOARD_RTC_PCF8523"
 #else
 #define BOARD_RTC_BITS 0ull
 #endif
@@ -274,7 +284,7 @@
 #define BOARD_UART_PINS_TEXT                                                                       \
 	BOARD_UART_NAME " on TX (GP" BOARD_STR(BOARD_UART_TX_PIN) ") / RX (GP" BOARD_STR(                 \
 		BOARD_UART_RX_PIN) ")"
-#ifdef BOARD_RTC_DS3231
+#ifdef BOARD_HAS_RTC
 #define BOARD_RTC_PINS_TEXT                                                                        \
 	"I2C" BOARD_STR(BOARD_RTC_I2C) ": GP" BOARD_STR(BOARD_RTC_SDA_PIN) " SDA, GP" BOARD_STR(       \
 		BOARD_RTC_SCL_PIN) " SCL"

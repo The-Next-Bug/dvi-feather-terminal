@@ -65,7 +65,7 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
 {
   echo "target=$TARGET"
   echo "pico_board=$pico_board"
-  echo "hstx_mode=$(sed -n 's/^HSTX_MODE:STRING=//p' "$out/CMakeCache.txt")"
+  echo "hstx_mode=$(sed -n 's/^HSTX_MODE_USED:INTERNAL=//p' "$out/CMakeCache.txt")"
   echo "build_type=$BUILD_TYPE"
   echo "serial_flow_control=$SERIAL_FLOW_CONTROL"
   echo "machine_banks=$(sed -n 's/^MACHINE_BANKS:STRING=//p' "$out/CMakeCache.txt")"

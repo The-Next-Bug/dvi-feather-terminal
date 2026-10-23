@@ -55,6 +55,7 @@ unit_test(settings dvt_settings)
 unit_test(setup dvt_ui)
 unit_test(splash dvt_render)
 unit_test(clock dvt_clock)
+unit_test(rtc dvt_rtc_chips)
 unit_test(uf2 dvt_settings)
 # Also checks the firmware build/pico2-dvi-sock made, if there is one.
 target_compile_definitions(test_uf2 PRIVATE
@@ -68,6 +69,8 @@ target_sources(test_machine PRIVATE machine_host.c diskio_ram.c)
 unit_test(xfer dvt_disks)
 target_sources(test_xfer PRIVATE diskio_ram.c)
 unit_test(usbvol dvt_disks)
+# Its own sparse disk (any card size) as drive 0.
+unit_test(sdformat dvt_disks)
 # The CPU exercisers (minutes): test_cpu is always built, optimized and
 # without the sanitizers (they make it ten times slower), and run only with
 # -DCPU_TESTS=ON (scripts/test.sh: CPU_TESTS=1). Its own copies of the

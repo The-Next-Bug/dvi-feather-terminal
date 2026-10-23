@@ -7,11 +7,13 @@
 #include <string.h>
 
 #include "diskimg.h"
+#include "diskio.h"
 #include "drives.h"
 #include "ff.h"
 #include "lz.h"
 #include "machine.h"
 #include "scratch.h"
+#include "sdformat.h"
 #include "xfer.h"
 
 #define LIST_COLUMNS 5
@@ -23,6 +25,7 @@ typedef enum {
 	MODE_NEW_NAME,  // N: the new disk's name
 	MODE_NEW_FORMAT, // N: its format
 	MODE_OVERWRITE, // "Replace the existing images (Y/N)?"
+	MODE_FORMAT,    // F: FORMAT typed to go on
 } monitor_mode_t;
 
 static const monitor_platform_t *plat;
@@ -121,7 +124,7 @@ static void show_card(void) {
 	} else if (!info) {
 		say("SD card:  none found\r\n");
 	} else if (mount_result != FR_OK) {
-		say("SD card:  %s, no FAT file system (error %d)\r\n", info, (int)mount_result);
+		say("SD card:  %s, no FAT file system (error %d): F formats it\r\n", info, (int)mount_result);
 	} else {
 		say("SD card:  %s, %s\r\n", info, fs_name());
 	}
@@ -154,6 +157,7 @@ static void show_menu(void) {
 	}
 	put("  L       list the disks            N  new blank disk (8\", 4 MB, 8 MB)\r\n");
 	put("  I       install the built-in disks\r\n");
+	put("  F       format the SD card (erases it)\r\n");
 	put("  S       CPU speed test            C  check the card again\r\n");
 	put("  F11 resets the machine; F12 SET-UP (Drives, Mode, firmware update)\r\n> ");
 }
@@ -256,6 +260,51 @@ static void install(bool overwrite) {
 	can_resume = false; // the disks changed under it
 }
 
+// ---- formatting the card ----
+
+static sdformat_t card_format;
+
+static void format_ask(void) {
+	LBA_t sectors = 0;
+	const char *info = plat->card_info();
+	if (!info || disk_ioctl(0, GET_SECTOR_COUNT, &sectors) != RES_OK || !sectors) {
+		say("No card.\r\n");
+		show_menu();
+		return;
+	}
+	sdformat_choose((uint32_t)sectors, &card_format);
+	say("Format the SD card (%s) as %s?\r\n", info, card_format.name);
+	put("Everything on it is lost. Type FORMAT and Return to go on, Esc not to: ");
+	line_len = 0;
+	line[0] = '\0';
+	mode = MODE_FORMAT;
+}
+
+static void format_card(void) {
+	uint8_t *work = scratch_acquire(); // f_mkfs's buffer: 8 sectors a write
+	if (!work) {
+		say("Busy.\r\n");
+		return;
+	}
+	drives_flush();
+	xfer_reset();
+	drives_unmount_all();
+	say("Formatting (a large card takes a while)... ");
+	flush();
+	FRESULT r = sdformat_run("", &card_format, work, SCRATCH_SIZE);
+	scratch_release(work);
+	if (r == FR_OK) {
+		say("done\r\n");
+	} else {
+		say("FAILED (error %d)\r\n", (int)r);
+	}
+	mount_card();
+	can_resume = false; // its disks are gone
+	if (mount_result == FR_OK) {
+		say("I installs the built-in disks.\r\n");
+	}
+}
+
 static bool any_installed(void) {
 	for (unsigned i = 0; i < diskimg_count; ++i) {
 		char path[32];
@@ -326,6 +375,10 @@ static monitor_action_t menu_key(uint8_t c) {
 		say("S\r\n");
 		speed_test();
 		break;
+	case 'F':
+		say("F\r\n");
+		format_ask();
+		return MONITOR_NONE;
 	case 'C':
 		say("C\r\n");
 		mount_card();
@@ -368,6 +421,15 @@ static void name_done(bool canceled) {
 static void line_done(bool canceled) {
 	if (mode == MODE_NAME) {
 		name_done(canceled);
+	} else if (mode == MODE_FORMAT) {
+		mode = MODE_MENU;
+		say("\r\n");
+		if (!canceled && strcmp(line, "FORMAT") == 0) {
+			format_card();
+		} else {
+			say("Not formatted.\r\n");
+		}
+		show_menu();
 	} else if (canceled || !line_len) {
 		mode = MODE_MENU;
 		say("\r\n");
@@ -462,6 +524,7 @@ monitor_action_t monitor_key(uint8_t c, uint32_t now_ms) {
 	}
 	case MODE_NAME:
 	case MODE_NEW_NAME:
+	case MODE_FORMAT:
 		return line_key(c);
 	case MODE_NEW_FORMAT:
 		if (c >= '1' && c <= '3') {

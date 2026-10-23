@@ -566,6 +566,61 @@ static monitor_action_t keys(const char *s) {
 	return a;
 }
 
+// A card with no file system: the monitor points at F, which asks for
+// FORMAT typed out, formats it to suit its size and mounts it; anything
+// else typed, or Esc, leaves the card alone.
+static void test_monitor_format(void) {
+	drives_unmount_all();
+	f_unmount("");
+	diskio_ram_init(VOLUME_SECTORS); // all zeros
+	clear_screen();
+	machine_init(&host_platform);
+	monitor_start(&monitor_platform, false, 0);
+	CHECK(strstr(screen, "RAM, 40 MB, no FAT file system (error 13): F formats it") != NULL);
+	CHECK(strstr(screen, "F       format the SD card (erases it)") != NULL);
+	CHECK(menu_shown());
+
+	clear_screen();
+	CHECK_EQ(keys("f"), MONITOR_NONE);
+	CHECK(strstr(screen, "Format the SD card (RAM, 40 MB) as FAT12/16?") != NULL);
+	CHECK(strstr(screen, "Type FORMAT and Return") != NULL);
+	CHECK_EQ(keys("forma\r"), MONITOR_NONE);
+	CHECK(strstr(screen, "Not formatted.") != NULL);
+	CHECK(menu_shown());
+	CHECK(strstr(screen, "no FAT file system") != NULL);
+	clear_screen();
+	CHECK_EQ(keys("fformat\x1b"), MONITOR_NONE);
+	CHECK(strstr(screen, "Formatting") == NULL);
+	CHECK(menu_shown());
+
+	// The scratch buffer held elsewhere: nothing written.
+	uint8_t *held = scratch_acquire();
+	clear_screen();
+	CHECK_EQ(keys("fformat\r"), MONITOR_NONE);
+	CHECK(strstr(screen, "Busy.") != NULL);
+	CHECK(strstr(screen, "no FAT file system") != NULL);
+	scratch_release(held);
+
+	clear_screen();
+	flushes = 0;
+	CHECK_EQ(keys("fformat\r"), MONITOR_NONE);
+	CHECK(strstr(screen, "FORMAT\r\nFormatting (a large card takes a while)... done\r\n") != NULL);
+	CHECK(flushes >= 1);
+	CHECK(strstr(screen, "I installs the built-in disks.") != NULL);
+	CHECK(strstr(screen, "SD card:  RAM, 40 MB, FAT16") != NULL);
+	CHECK(menu_shown());
+
+	// Formatted again with disks on it: they are gone, and so is drive A.
+	CHECK_EQ(keys("i"), MONITOR_NONE);
+	CHECK(drives_name(0) != NULL);
+	clear_screen();
+	CHECK_EQ(keys("fFORMAT\r"), MONITOR_NONE);
+	CHECK(strstr(screen, "done") != NULL);
+	CHECK(drives_name(0) == NULL);
+	CHECK(!fat_file_exists("/DISKS80/CPM22.DSK"));
+	CHECK(strstr(screen, "R       resume") == NULL);
+}
+
 // A blank card: the monitor offers to install, mounts the new disks, boots.
 static void test_monitor_fresh_card(void) {
 	drives_unmount_all();
@@ -2223,6 +2278,7 @@ int main(void) {
 	RUN(test_worms);
 	RUN(test_bye_halts);
 	RUN(test_no_disk_boot_rom);
+	RUN(test_monitor_format);
 	RUN(test_monitor_fresh_card);
 	RUN(test_monitor_autoboot);
 	RUN(test_monitor_no_firmware_update);

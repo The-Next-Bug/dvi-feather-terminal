@@ -128,8 +128,15 @@ in part):
 |---|---|
 | `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default) |
 | `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS, the Z80 machine's banks in its 8 MB PSRAM (`PSRAM_BANKS`), DS3231M real-time clock, TDA1387 DAC for the bell (U8, hand-fitted) |
-| `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing) |
+| `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing); 800x600 with reduced blanking at 354 MHz (`HSTX_MODE` 2), as it crashes at 400 MHz |
 | `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
+| `feather-rp2350-hstx-adalogger` | `feather-rp2350-hstx` with the Adalogger FeatherWing's PCF8523 real-time clock on I2C1 (SDA/SCL, GP2/3); no RTS/CTS (those were GP2/3) |
+| `feather-rp2350-hstx-psram-adalogger` | `feather-rp2350-hstx-psram` with the Adalogger FeatherWing's PCF8523, as above |
+
+All four Feather targets run at 354 MHz instead of 400: on two Feathers
+the firmware crashed at random at 400 MHz, with or without the PSRAM. The
+video is the same 800x600 at 60 Hz with shorter blanking, which most
+monitors take; the CP/M machine runs about 11% slower.
 
 `src/board/board.h` checks the header when it compiles. A missing setting, a pin
 that cannot carry its signal, or a pin used twice stops the build with an
@@ -468,15 +475,20 @@ rebuilding F83 from its source (`README.80`), `F83 VIEWDRV.BLK` and then
 ### The clock
 
 The machine's clock (ports 65/66) is the board's real-time clock when it
-has one (the Frankless's DS3231M, with a cell in its battery holder),
+has one (the Frankless's DS3231M, with a cell in its battery holder;
+the Adalogger FeatherWing's PCF8523, with a CR1220 in its holder),
 read at power-on and kept by the firmware from there, a second at a time
 on the chip's 1 Hz output (GP8 on the Frankless) so it keeps the chip's
-time instead of drifting. Without one, or while its time is not set, the
-clock starts at 1 Jan 2026 at power-on.
+time instead of drifting. The Adalogger's 1 Hz output is not wired to the
+Feather, so there the firmware's timer keeps it until the next power-on.
+The PCF8523 is the less exact chip (about 2 seconds a day off, either
+way) and keeps the years to 2099. Without an RTC, or while its time is
+not set, the clock starts at 1 Jan 2026 at power-on.
 
 Once the time is real (read from the RTC, or set since power-on), both
 modes' status lines end in it, `13:45` by default, the colons blinking: on
-for the first half of each second, in step with the RTC's 1 Hz output.
+for the first half of each second, in step with the RTC's 1 Hz output
+where it has one.
 
 SET-UP's **C** opens the Clock panel, in either mode:
 
@@ -493,8 +505,9 @@ SET-UP's **C** opens the Clock panel, in either mode:
 - Esc goes back to SET-UP without changes. Without an RTC the panel says
   the time lasts only until power-off.
 Under CP/M 3, `DATE` shows it and `DATE SET` sets it, the RTC's too, so it
-survives power-off; `HWINFO` says whether the RTC answered, whether its
-time was set and whether its 1 Hz output ticks. Files written on the SD card and USB sticks (`XPIP SD:...`,
+survives power-off; `HWINFO` says which RTC it is, whether it answered,
+whether its time was set, whether its 1 Hz output ticks and, for the
+PCF8523, whether its battery is low. Files written on the SD card and USB sticks (`XPIP SD:...`,
 `DRIVES.CFG`, new disk images) get their dates from it.
 
 ### The bell
@@ -710,6 +723,16 @@ A after 3 seconds (any key stops that), or shows its menu:
   They are kept compressed in flash (about 810 KB) to start a blank card
   with; existing files are only replaced if
   you say so.
+- **F**: format the SD card, for a new card or one the monitor cannot
+  read ("no FAT file system"). Everything on the card is lost, so it asks
+  you to type `FORMAT` and Return first (Esc or anything else leaves it
+  alone). The format follows the card's size: up to 2 GB FAT16 (FAT12 on
+  the smallest), FAT32 above it (4 KB clusters below 4 GB, 32 KB up to
+  64 GB, 64 KB beyond), in one partition with the clusters on 4 MB
+  boundaries, as the SD Association lays cards out. Cards over 32 GB get
+  FAT32 rather than exFAT, which the firmware does not read; PCs read
+  FAT32 cards of any size. A large card takes some seconds. Then **I**
+  puts the built-in disks on it.
 - **S**: CPU speed test (a JP loop for a second, in Z80 MHz).
 - **C**: check the card again (after changing it).
 - **R**: resume the CPU, after leaving it from SET-UP.
@@ -869,7 +892,7 @@ every job). pico-sdk is upgraded by moving its submodule (and the image's
 | `STARTUP_DEMO` | OFF | run the demo after the logo |
 | `MACHINE_BANKS` | 2 | Z80 machine: 48 KB banks besides bank 0 (each costs 48 KB of SRAM; a third does not fit) |
 | `PSRAM_BANKS` | OFF | Z80 machine: the banks in the board's QSPI PSRAM (QMI chip select 1) instead, as many as fit up to 15, none in SRAM; set by `boards/feather-rp2350-hstx-psram.h`. Without a PSRAM chip at boot the machine has no banks |
-| `HSTX_MODE` | 0 | 0: 800x600 at 60 Hz; 1: at 56 Hz (clk_hstx 180 MHz); 2: 60 Hz reduced blanking (177 MHz). 1 and 2 are slower fallbacks |
+| `HSTX_MODE` | the board's | 0: 800x600 at 60 Hz (clk_sys 400 MHz, clk_hstx 200 MHz); 1: at 56 Hz (360 / 180 MHz); 2: 60 Hz reduced blanking (354 / 177 MHz). 1 and 2 are slower fallbacks. Empty (the default): the board header's choice, `pico_board_cmake_set(BOARD_HSTX_MODE, n)` (2 on the Feathers), else 0 |
 | `VIDEO_DIAG` | OFF | bring-up diagnostics on UART0 TX: boot markers, core 1 scanline timing, fault reports |
 | `COPY_TO_RAM` | ON | run from SRAM; must stay ON (see [How it works](#how-it-works)) |
 
@@ -992,7 +1015,8 @@ has the helpers; `src/CMakeLists.txt` lists the libraries.
 | Library | | |
 |---|---|---|
 | `common` | portable | `crc32`, `lz` (LZ4-format decoder), `scratch` (the shared 4 KB buffer) |
-| `clock` | portable | `datetime` (dates without the C library's `localtime`, FAT timestamps), `ds3231` (the DS3231's registers) |
+| `clock` | portable | `datetime` (dates without the C library's `localtime`, FAT timestamps), `wallclock` (the time kept between reads of the RTC) |
+| `rtc` | portable / RP2350 | `rtc_chip.h` (the chip-driver interface, on a register bus), `ds3231` and `pcf8523` (the drivers): portable `dvt_rtc_chips`; `rtc` (the wall clock and the board's RTC on I2C): RP2350 `dvt_rtc` |
 | `screen` | portable | `screen` (cell buffer, saved rows), `palette` (the 256-color palette per Colors/Palette setting), `font.h` (glyph codes) |
 | `term` | portable | `term.[ch]` (the terminal) with its personalities `vt100.c`, `vt52.c` and `adm3a.c` (sharing `term_internal.h`), `vtparse` (escape sequence parser) |
 | `render` | portable | `raster` (cells to pixels), `splash` (startup logo); generated font tables and logo (`font_gen.py`, `logo_gen.py`) |
@@ -1002,7 +1026,7 @@ has the helpers; `src/CMakeLists.txt` lists the libraries.
 | `disks` | portable | `drives` (disk images on FatFs), `drivecfg.c` (`DRIVES.CFG`, the image list and the drive sets), `diskimg` (the built-in images; `diskimg_gen.py` compresses them), `xfer` (port 10's files: `/XFER`), `usbvol` (which USB stick is `USB:`) |
 | `ui` | portable | `setup` (SET-UP panel), `drivepanel` (SET-UP's Drives panel), `fwpanel` (SET-UP's firmware update), `monitor` (the CP/M machine's monitor), `demo` |
 | `board` | RP2350 | `board.h` (the board header's pins, checked) |
-| `platform` | RP2350 | `serial` (UART with optional RTS/CTS and a TX queue), `led`, `nvflash` (settings sectors, written at the DVI clock), `fwupdate` (firmware update), `extram` (the PSRAM), `rtc` (the wall clock and the board's RTC on I2C), `diag` (`VIDEO_DIAG`) |
+| `platform` | RP2350 | `serial` (UART with optional RTS/CTS and a TX queue), `led`, `nvflash` (settings sectors, written at the DVI clock), `fwupdate` (firmware update), `extram` (the PSRAM), `diag` (`VIDEO_DIAG`) |
 | `usb` | RP2350 | `usbkbd` (USB keyboards), `tusb_config.h` (TinyUSB host) |
 | `storage` | RP2350 | `diskio.c` (FatFs drives: 0 the SD card, 1 a USB stick), `sdcard` (SPI SD card), `usbmsc` (USB sticks) |
 | `video` | RP2350 | `hstx_dvi` (HSTX DVI output), `video` (scanlines on core 1) |
@@ -1016,7 +1040,8 @@ test pattern). FatFs (`lib/fatfs`, `lib/fatfs.cmake`) and z80pack's CPU
 ## CI and releasing
 
 - `test`: host unit tests (JUnit report).
-- `build`: firmware per target (a matrix, today only `pico2-dvi-sock`);
+- `build`: firmware per target (a matrix: `pico2-dvi-sock`, `frankless` and
+  the four Feather targets);
   UF2/BIN/ELF/disassembly/map and `build-info.txt` artifacts.
 - `package`: ZIP with UF2 and BIN per target, `FLASHING.txt`,
   `THIRD-PARTY.md` and `licenses/`, `CHANGES.md` (commits since the

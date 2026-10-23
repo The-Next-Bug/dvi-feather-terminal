@@ -42,7 +42,16 @@ option(SERIAL_FLOW_CONTROL "RTS/CTS on the terminal UART (the board's BOARD_UART
 option(COPY_TO_RAM "Run the whole program from SRAM instead of flash" ON)
 # Video timing (src/hstx_dvi.h): 800x600 at 60 Hz needs clk_hstx at 200 MHz,
 # beyond its 150 MHz rating; the others are fallbacks with slower clocks.
-set(HSTX_MODE 0 CACHE STRING "HSTX video mode: 0 800x600@60, 1 800x600@56, 2 800x600@60 reduced blanking")
+# Empty: the board header's, pico_board_cmake_set(BOARD_HSTX_MODE, n) (the
+# Feathers: 2, they do not run 400 MHz reliably), else 0.
+set(HSTX_MODE_HELP "HSTX video mode: empty the board's (else 0), 0 800x600@60 (400 MHz), 1 800x600@56 (360 MHz), 2 800x600@60 reduced blanking (354 MHz)")
+set(HSTX_MODE "" CACHE STRING "${HSTX_MODE_HELP}")
+# A build directory from before the board's choice holds 0, which would
+# now override it: start it over at empty.
+get_property(hstx_mode_help CACHE HSTX_MODE PROPERTY HELPSTRING)
+if(NOT hstx_mode_help STREQUAL HSTX_MODE_HELP)
+  set(HSTX_MODE "" CACHE STRING "${HSTX_MODE_HELP}" FORCE)
+endif()
 # Z80 CP/M machine (Mode setting): 48 KB memory banks besides the 64 KB of
 # bank 0. CP/M 2.2 needs none, CP/M 3 one; MP/M wants as many as it was
 # generated for.
@@ -62,6 +71,15 @@ pico_sdk_init()
 if(NOT PICO_PLATFORM MATCHES "^rp2350")
   message(FATAL_ERROR "PICO_BOARD ${PICO_BOARD} is ${PICO_PLATFORM}: only RP2350 boards are supported")
 endif()
+if(NOT HSTX_MODE STREQUAL "")
+  set(DVT_HSTX_MODE ${HSTX_MODE})
+elseif(DEFINED BOARD_HSTX_MODE)
+  set(DVT_HSTX_MODE ${BOARD_HSTX_MODE})
+else()
+  set(DVT_HSTX_MODE 0)
+endif()
+set(HSTX_MODE_USED ${DVT_HSTX_MODE} CACHE INTERNAL "the video mode built (build-info.txt)")
+message(STATUS "HSTX_MODE ${DVT_HSTX_MODE}")
 if(PSRAM_BANKS)
   set(MACHINE_BANKS 0) # all of them in the PSRAM: 96 KB of SRAM free
   message(STATUS "Z80 banks in PSRAM (PSRAM_BANKS)")
@@ -89,7 +107,7 @@ target_compile_definitions(dvt_disks PUBLIC DISKIMG_IN_FLASH=1)
 target_compile_definitions(dvt_z80pack PUBLIC MACHINE_BANKS=${MACHINE_BANKS})
 target_compile_definitions(dvt_board INTERFACE SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>)
 target_compile_definitions(dvt_platform PUBLIC VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}> PSRAM_BANKS=$<BOOL:${PSRAM_BANKS}>)
-target_compile_definitions(dvt_video PUBLIC HSTX_MODE=${HSTX_MODE})
+target_compile_definitions(dvt_video PUBLIC HSTX_MODE=${DVT_HSTX_MODE})
 
 # The programs: the terminal and the HSTX test pattern.
 add_subdirectory(apps/terminal)

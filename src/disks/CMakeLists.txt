@@ -1,8 +1,8 @@
 # Storage the machine sees, over FatFs: the .DSK images on drives A-H
 # (drives.c; drivecfg.c: the image list, DRIVES.CFG, the named sets), the
 # built-in images the monitor installs (diskimg.c, generated data), the file
-# transfer device's /XFER (xfer.c) and which USB stick is volume 1
-# (usbvol.c).
+# transfer device's /XFER (xfer.c), which USB stick is volume 1
+# (usbvol.c) and formatting the card (sdformat.c).
 set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
 include(diskimg.cmake)
 
@@ -10,6 +10,7 @@ add_library(dvt_disks STATIC
   diskimg.c
   drivecfg.c
   drives.c
+  sdformat.c
   usbvol.c
   xfer.c
   ${DISKIMG_SOURCES}
@@ -21,5 +22,5 @@ dvt_compile_options(dvt_disks)
 # Cold code (it runs only while files move, or a USB stick comes or goes):
 # small rather than fast, as all of the firmware's code takes SRAM.
 if(DVT_FIRMWARE)
-  set_property(SOURCE xfer.c usbvol.c APPEND PROPERTY COMPILE_OPTIONS -Os)
+  set_property(SOURCE xfer.c usbvol.c sdformat.c APPEND PROPERTY COMPILE_OPTIONS -Os)
 endif()

@@ -44,7 +44,7 @@ uint64_t host_clock_us(void);
 void clear_screen(void);
 
 // Run until the console shows text (after what was there already) or the
-// machine stops; at most `seconds`.
+// machine stops; at most `seconds` (times a slack for a loaded host).
 machine_state_t run_until(const char *text, double seconds);
 
 // The same for any of texts (NULL-terminated); *which: its index.

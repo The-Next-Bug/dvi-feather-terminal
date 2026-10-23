@@ -144,13 +144,16 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 
 // --- Real-time clock (optional) ---
 //
-// A DS3231 or DS3231M at I2C address 68h on BOARD_RTC_I2C (0/1) and its pins
+// One chip at I2C address 68h: BOARD_RTC_DS3231 (DS3231 or DS3231M) or
+// BOARD_RTC_PCF8523 (the Adalogger FeatherWing's; less exact, about
+// +-2 s/day; years to 2099), on BOARD_RTC_I2C (0/1) and its pins
 // (GPIO n: I2C (n >> 1) & 1, SDA on even, SCL on odd pins); the board's
 // pull-ups (the internal ones are on too). The time is read at start-up and
 // kept by the chip's battery; CP/M 3's DATE SET and SET-UP's Clock panel set
 // it. BOARD_RTC_SQW_PIN, the chip's 1 Hz output, keeps the firmware's clock
-// on the chip's seconds.
+// on the chip's seconds (DS3231 only, so far).
 // #define BOARD_RTC_DS3231 1
+// #define BOARD_RTC_PCF8523 1
 // #define BOARD_RTC_I2C 1
 // #define BOARD_RTC_SDA_PIN 10
 // #define BOARD_RTC_SCL_PIN 11

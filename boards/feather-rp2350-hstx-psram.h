@@ -15,6 +15,8 @@
 #define _BOARDS_FEATHER_RP2350_HSTX_PSRAM_H
 
 pico_board_cmake_set(PSRAM_BANKS, 1)
+// feather-rp2350-hstx.h's video mode (354 MHz), restated.
+pico_board_cmake_set(BOARD_HSTX_MODE, 2)
 
 // CMake follows only #include "boards/..." for these lines, which the
 // compiler cannot find from here: the SDK's adafruit_feather_rp2350.h's,
