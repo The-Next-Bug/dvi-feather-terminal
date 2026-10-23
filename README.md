@@ -130,6 +130,8 @@ in part):
 | `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS, the Z80 machine's banks in its 8 MB PSRAM (`PSRAM_BANKS`), DS3231M real-time clock, TDA1387 DAC for the bell (U8, hand-fitted) |
 | `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing) |
 | `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
+| `feather-rp2350-hstx-adalogger` | `feather-rp2350-hstx` with the Adalogger FeatherWing's PCF8523 real-time clock on I2C1 (SDA/SCL, GP2/3); no RTS/CTS (those were GP2/3) |
+| `feather-rp2350-hstx-psram-adalogger` | `feather-rp2350-hstx-psram` with the Adalogger FeatherWing's PCF8523, as above |
 
 `src/board/board.h` checks the header when it compiles. A missing setting, a pin
 that cannot carry its signal, or a pin used twice stops the build with an
@@ -468,15 +470,20 @@ rebuilding F83 from its source (`README.80`), `F83 VIEWDRV.BLK` and then
 ### The clock
 
 The machine's clock (ports 65/66) is the board's real-time clock when it
-has one (the Frankless's DS3231M, with a cell in its battery holder),
+has one (the Frankless's DS3231M, with a cell in its battery holder;
+the Adalogger FeatherWing's PCF8523, with a CR1220 in its holder),
 read at power-on and kept by the firmware from there, a second at a time
 on the chip's 1 Hz output (GP8 on the Frankless) so it keeps the chip's
-time instead of drifting. Without one, or while its time is not set, the
-clock starts at 1 Jan 2026 at power-on.
+time instead of drifting. The Adalogger's 1 Hz output is not wired to the
+Feather, so there the firmware's timer keeps it until the next power-on.
+The PCF8523 is the less exact chip (about 2 seconds a day off, either
+way) and keeps the years to 2099. Without an RTC, or while its time is
+not set, the clock starts at 1 Jan 2026 at power-on.
 
 Once the time is real (read from the RTC, or set since power-on), both
 modes' status lines end in it, `13:45` by default, the colons blinking: on
-for the first half of each second, in step with the RTC's 1 Hz output.
+for the first half of each second, in step with the RTC's 1 Hz output
+where it has one.
 
 SET-UP's **C** opens the Clock panel, in either mode:
 
@@ -493,8 +500,9 @@ SET-UP's **C** opens the Clock panel, in either mode:
 - Esc goes back to SET-UP without changes. Without an RTC the panel says
   the time lasts only until power-off.
 Under CP/M 3, `DATE` shows it and `DATE SET` sets it, the RTC's too, so it
-survives power-off; `HWINFO` says whether the RTC answered, whether its
-time was set and whether its 1 Hz output ticks. Files written on the SD card and USB sticks (`XPIP SD:...`,
+survives power-off; `HWINFO` says which RTC it is, whether it answered,
+whether its time was set, whether its 1 Hz output ticks and, for the
+PCF8523, whether its battery is low. Files written on the SD card and USB sticks (`XPIP SD:...`,
 `DRIVES.CFG`, new disk images) get their dates from it.
 
 ### The bell

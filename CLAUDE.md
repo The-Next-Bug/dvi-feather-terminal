@@ -152,6 +152,15 @@ banner. nvflash_retime saves and restores QMI M1 around the ROM's
 flash_select_xip_read_mode; the SDK's flash_range_* clean the XIP cache
 (dirty PSRAM lines) and re-run the PSRAM setup themselves. Core 1 never
 touches the PSRAM. Untested on hardware; CI builds it.
+`boards/feather-rp2350-hstx-adalogger.h` and
+`boards/feather-rp2350-hstx-psram-adalogger.h` (bd 1ls.19): the user's
+Feather (PSRAM fitted) with an Adalogger FeatherWing: the base header
+(and the PSRAM one) plus BOARD_RTC_PCF8523 on I2C1 GP2/3 (the Feather's
+SDA/SCL), so BOARD_UART_CTS/RTS_PIN are #undef'd (no SERIAL_FLOW_CONTROL:
+test_board.sh asks the preprocessor which boards lack CTS); the
+pico_board_cmake_set lines restated (and PSRAM_BANKS). No 1 Hz pin: the
+FeatherWing's INT/SQW pad is not wired. Untested on hardware (bd
+1ls.19.6); CI builds both.
 
 The USB host (keyboards, sticks) is always built in (USB_KEYBOARD=OFF
 was removed: bd s0i). Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
