@@ -37,9 +37,22 @@ check() {
   failures=$((failures + 1))
 }
 
+# has_cts BOARD: the header names a CTS pin.
+has_cts() {
+  printf '%s\n' '#define pico_board_cmake_set(var, value)' '#define pico_board_cmake_set_default(var, value)' \
+    "#include \"$1\"" '#ifndef BOARD_UART_CTS_PIN' '#error no CTS' '#endif' |
+    "$CC" -fsyntax-only -I"$ROOT/lib/pico-sdk/src/boards/include" -x c - 2>/dev/null
+}
+
+# A board without CTS/RTS (its pins have another job: the Adalogger's RTC)
+# stops flow control builds at the check.
 for board in "$ROOT"/boards/*.h; do
   for flow in 0 1; do
-    check "$(basename "$board") flow $flow" "" "#define SERIAL_FLOW_CONTROL $flow" "#include \"$board\""
+    expect=""
+    if [[ $flow == 1 ]] && ! has_cts "$board"; then
+      expect="needs BOARD_UART_CTS_PIN"
+    fi
+    check "$(basename "$board") flow $flow" "$expect" "#define SERIAL_FLOW_CONTROL $flow" "#include \"$board\""
   done
 done
 
