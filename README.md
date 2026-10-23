@@ -718,6 +718,16 @@ A after 3 seconds (any key stops that), or shows its menu:
   They are kept compressed in flash (about 810 KB) to start a blank card
   with; existing files are only replaced if
   you say so.
+- **F**: format the SD card, for a new card or one the monitor cannot
+  read ("no FAT file system"). Everything on the card is lost, so it asks
+  you to type `FORMAT` and Return first (Esc or anything else leaves it
+  alone). The format follows the card's size: up to 2 GB FAT16 (FAT12 on
+  the smallest), FAT32 above it (4 KB clusters below 4 GB, 32 KB up to
+  64 GB, 64 KB beyond), in one partition with the clusters on 4 MB
+  boundaries, as the SD Association lays cards out. Cards over 32 GB get
+  FAT32 rather than exFAT, which the firmware does not read; PCs read
+  FAT32 cards of any size. A large card takes some seconds. Then **I**
+  puts the built-in disks on it.
 - **S**: CPU speed test (a JP loop for a second, in Z80 MHz).
 - **C**: check the card again (after changing it).
 - **R**: resume the CPU, after leaving it from SET-UP.

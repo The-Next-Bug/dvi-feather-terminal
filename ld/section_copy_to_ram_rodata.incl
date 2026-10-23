@@ -36,6 +36,7 @@ SECTIONS
         *libdvt_storage.a:usbmsc.c.o(.text* .rodata*)
         *libdvt_common.a:lz.c.o(.text* .rodata*)
         *libdvt_disks.a:diskimg.c.o(.text* .rodata*)
+        *libdvt_disks.a:sdformat.c.o(.text* .rodata*)
         *libdvt_input.a:keyname.c.o(.text* .rodata*)
         *libdvt_settings.a:settings.c.o(.text* .rodata*)
         *libdvt_settings.a:uf2.c.o(.text* .rodata*)

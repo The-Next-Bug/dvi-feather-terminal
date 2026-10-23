@@ -69,6 +69,8 @@ target_sources(test_machine PRIVATE machine_host.c diskio_ram.c)
 unit_test(xfer dvt_disks)
 target_sources(test_xfer PRIVATE diskio_ram.c)
 unit_test(usbvol dvt_disks)
+# Its own sparse disk (any card size) as drive 0.
+unit_test(sdformat dvt_disks)
 # The CPU exercisers (minutes): test_cpu is always built, optimized and
 # without the sanitizers (they make it ten times slower), and run only with
 # -DCPU_TESTS=ON (scripts/test.sh: CPU_TESTS=1). Its own copies of the

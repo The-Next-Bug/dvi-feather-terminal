@@ -67,7 +67,7 @@ CMake or Arm GCC on the dev host. Use the scripts:
 git submodule update --init          # lib/pico-sdk (2.3.1), not its submodules (lib/z80pack is vendored)
 git -C lib/pico-sdk submodule update --init --depth 1 lib/tinyusb   # only nested one used
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool, clang-tidy (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, clock, rtc (the RTC chip drivers on a fake register bus), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, clock, rtc (the RTC chip drivers on a fake register bus), sdformat (card formats on a sparse disk), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimized, no sanitizers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default; any boards/<target>.h) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
@@ -602,7 +602,18 @@ UF2 in the latter).
   qur.27): one is checked, both ask S or U; renamed on its own volume. The
   stick needs nothing at the commit (the rename synced it, xfer_reset
   closes its files). The monitor's U was removed (qur.10):
-  SET-UP's is the only way. `src/settings/uf2.[ch]` (portable; test_uf2 also checks
+  SET-UP's is the only way.
+  Card format (bd 1ls.19.7): the monitor's F (separate from I) asks for
+  FORMAT typed out (line_key, MODE_FORMAT; Esc or anything else: "Not
+  formatted."), then drives_flush, xfer_reset, drives_unmount_all and
+  `src/disks/sdformat.[ch]` (portable, cold, -Os, in flash; test_sdformat
+  on its own sparse disk, 1 MB to 119 GB volumes): sdformat_choose from
+  GET_SECTOR_COUNT: < 2 GiB FM_FAT (FatFs picks FAT12/16 and the
+  cluster), else FM_FAT32 with 4 KB clusters < 4 GiB, 32 KB to 64 GiB,
+  64 KB above; data area aligned 128 / 8192 sectors (FatFs aligns from
+  LBA 0; its MBR partition starts at 63), 2 FATs, no exFAT (LFN off).
+  f_mkfs uses the scratch buffer (Busy. while held); then mount_card,
+  can_resume off. The unreadable-card line ends ": F formats it". `src/settings/uf2.[ch]` (portable; test_uf2 also checks
   build/pico2-dvi-sock/dvi_terminal.uf2 when built): skips other families
   (the E10 block numbers its own sequence); ours in order, ascending
   addresses, PICOBIN marker in the first 4 KB; CRC of the image as flashed
