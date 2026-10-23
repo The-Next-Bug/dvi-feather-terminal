@@ -1040,7 +1040,8 @@ test pattern). FatFs (`lib/fatfs`, `lib/fatfs.cmake`) and z80pack's CPU
 ## CI and releasing
 
 - `test`: host unit tests (JUnit report).
-- `build`: firmware per target (a matrix, today only `pico2-dvi-sock`);
+- `build`: firmware per target (a matrix: `pico2-dvi-sock`, `frankless` and
+  the four Feather targets);
   UF2/BIN/ELF/disassembly/map and `build-info.txt` artifacts.
 - `package`: ZIP with UF2 and BIN per target, `FLASHING.txt`,
   `THIRD-PARTY.md` and `licenses/`, `CHANGES.md` (commits since the
