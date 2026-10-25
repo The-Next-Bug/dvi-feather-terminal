@@ -29,6 +29,10 @@ typedef struct {
 	void (*flush)(void);
 	// What the USB host sees, shown under the card (NULL: no USB host).
 	const char *(*usb_info)(void);
+	// A long operation is still making progress (NULL: nothing to do).
+	// Called after every chunk written, so the caller's hang check does
+	// not take a big disk image for a hang (bd fhu.3).
+	void (*busy)(void);
 } monitor_platform_t;
 
 typedef enum {

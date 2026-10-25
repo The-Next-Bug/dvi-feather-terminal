@@ -175,7 +175,7 @@ void usblog_poll(void); // each main-loop pass
 // Before usbkbd_init: the report a crash's reboot kept (NULL if none), also
 // put in the USB log with the log text it kept; starts the hang check.
 const char *crash_init(void);
-void crash_heartbeat(void);     // core 0 is not stuck (keyboard_poll)
+void crash_heartbeat(void);     // core 0 is not stuck (keyboard_poll, the monitor's long writes)
 bool crash_redraw_status(void); // a hang report covered the status line
 
 #endif

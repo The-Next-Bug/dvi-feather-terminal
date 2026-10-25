@@ -509,9 +509,14 @@ static const char *card_info(void) {
 }
 
 static unsigned flushes;
+static unsigned busies; // monitor_platform_t.busy: the hang check fed during long writes (bd fhu.3)
 
 static void flush(void) {
 	++flushes;
+}
+
+static void busy(void) {
+	++busies;
 }
 
 // The firmware update's platform side, stubbed: the file's first byte says
@@ -550,7 +555,8 @@ static void firmware_commit(void) {
 	++commits;
 }
 
-static const monitor_platform_t monitor_platform = {.write = console_text, .card_info = card_info, .flush = flush};
+static const monitor_platform_t monitor_platform = {.write = console_text, .card_info = card_info, .flush = flush,
+	.busy = busy};
 
 // The whole menu was shown, up to its prompt (lpt.8: it was cut short).
 static bool menu_shown(void) {
@@ -638,8 +644,10 @@ static void test_monitor_fresh_card(void) {
 	CHECK_EQ(monitor_tick(MONITOR_AUTOBOOT_MS), MONITOR_NONE); // nothing to boot
 
 	clear_screen();
+	busies = 0;
 	CHECK_EQ(keys("i"), MONITOR_NONE);
 	CHECK(strstr(screen, "CPM22    written") != NULL);
+	CHECK(busies >= 2 * (8160 * 1024 / 4096)); // CPM32 and F83 alone, 4 KB chunks at most
 	CHECK(strstr(screen, "Set CPM22 written") != NULL);
 	CHECK(strstr(screen, "Set CPM3  written") != NULL);
 	char images[DRIVES][DRIVES_NAME_MAX + 1];
@@ -678,9 +686,11 @@ static void test_monitor_fresh_card(void) {
 	// A new 8 MB disk: progress dots, shown as they come (flush).
 	clear_screen();
 	flushes = 0;
+	busies = 0;
 	CHECK_EQ(keys("nbig\r3"), MONITOR_NONE);
 	CHECK(strstr(screen, "Writing BIG.DSK (8160 KB)... ............................... done") != NULL);
 	CHECK(flushes >= 31);
+	CHECK(busies >= 8160 * 1024 / 4096); // every 4 KB chunk
 	CHECK(menu_shown());
 	CHECK_EQ(drives_image_format("BIG"), DRIVES_HD8);
 
