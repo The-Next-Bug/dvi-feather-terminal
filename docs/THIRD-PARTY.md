@@ -28,9 +28,13 @@ Z80 machine's monitor can write to an SD card:
   derived from z80pack picosim's, MIT). CP/M is © Digital
   Research / Caldera. In 2001 Lineo (Caldera's successor) granted the right
   to use, distribute and modify the CP/M material made available by "The
-  Unofficial CP/M Web Site" (http://www.cpm.z80.de/license.html); z80pack
-  and this firmware redistribute CP/M on that basis. It is not an
-  open-source license: the grant was made to that site and its community.
+  Unofficial CP/M Web Site"; in July 2022 Bryan Sparks for DRDOS, Inc.,
+  the owner of Digital Research's assets, restated it without that limit:
+  "a right to use, distribute, modify, enhance, and otherwise make
+  available in a nonexclusive manner CP/M and its derivatives"
+  (http://www.cpm.z80.de/license.html). z80pack and this firmware
+  redistribute CP/M on that basis. It is a permission statement, not a
+  standard open-source license.
 - `Z80TESTS` (z80pack `cpmsim/disks/library/z80tests.dsk`): Z80 instruction
   exercisers `EXZ80DOC`, `EXZ80ALL` and `PRELIM` (© 1994 Frank D. Cringle,
   GPL-2.0 or later, as modified for z80pack; `EXZ80ALL` is built by us from

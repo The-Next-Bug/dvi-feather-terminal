@@ -418,6 +418,13 @@ the Pico) with the terminal as its console, the USB keyboard as its
 keyboard, disk images on a microSD card, and UART0 as its second serial
 port. Set Mode back to *terminal* for the plain serial terminal.
 
+Digital Research's own sources for CP/M 2.2 and CP/M 3 (CP/M Plus), its
+tools (MAC, RMAC, LINK, GENCPM) and much else are on
+[The Unofficial CP/M Web Site](http://www.cpm.z80.de/) (its
+[source page](http://www.cpm.z80.de/source.html); the site's HTTPS
+certificate has lapsed, so use http). The disks here are built from
+z80pack's binaries for now.
+
 ### SD card
 
 Wire an SPI microSD adapter to SPI0 as in the [Hardware](#hardware) table.
@@ -1127,9 +1134,10 @@ z80pack is © Udo Munk and others under the MIT license (`lib/z80pack/LICENSE`);
 `src/machine/machine.c` and `src/machine/z80pack/` follow its picosim, and its CPU core
 includes `log.h` (Apache-2.0). FatFs is © ChaN under a 1-clause BSD license
 (`lib/fatfs/LICENSE.txt`). The built-in disk images come from z80pack: CP/M
-2.2 and CP/M 3 are Digital Research's, redistributed under the permission Lineo
-(Caldera) gave in 2001 for the CP/M material of "The Unofficial CP/M Web
-Site"; the Z80 exercisers are Frank D. Cringle's, GPL-2.0 or later (their sources are
+2.2 and CP/M 3 are Digital Research's, redistributed under the right to use,
+distribute and modify CP/M and its derivatives that DRDOS, Inc. (Digital
+Research's successor) stated in 2022, widening Lineo's 2001 grant to "The
+Unofficial CP/M Web Site" (http://www.cpm.z80.de/license.html); the Z80 exercisers are Frank D. Cringle's, GPL-2.0 or later (their sources are
 on the same disk image).
 
 [`docs/THIRD-PARTY.md`](docs/THIRD-PARTY.md) lists every third-party
