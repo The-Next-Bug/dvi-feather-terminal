@@ -1557,6 +1557,149 @@ static void test_hwinfo_tool(void) {
 	drives_unmount_all();
 }
 
+// ---- the AY-3-8910 (D8h/D0h) and the tick (68/69; bd 1ls.18.4) ----
+
+// In raw Z80 bytes as test_hwinfo_port: registers written and read back
+// with the bits they keep, a register the chip does
+// not have, the tick; reset silences it; without the platform's hooks the
+// ports read 0xFF, as with no chip.
+static void ay_program(void) {
+	z80.n = 0;
+	emit(1, 0xf3); // DI
+	emit(8, 0x3e, 7, 0xd3, 0xd8, 0x3e, 0x3e, 0xd3, 0xd0); // RC2014: register 7 = 3EH
+	emit(5, 0xdb, 0xd0, 0x32, 0x00, 0xf0); // IN A,(D0H); LD (F000H),A
+	emit(8, 0x3e, 1, 0xd3, 0xd8, 0x3e, 0xff, 0xd3, 0xd0); // register 1 = FFH
+	emit(5, 0xdb, 0xd0, 0x32, 0x01, 0xf0);
+	emit(8, 0x3e, 8, 0xd3, 0xd8, 0x3e, 0xff, 0xd3, 0xd0); // register 8 = FFH
+	emit(5, 0xdb, 0xd0, 0x32, 0x02, 0xf0);
+	emit(4, 0x3e, 20, 0xd3, 0xd8); // register 20
+	emit(5, 0xdb, 0xd0, 0x32, 0x03, 0xf0);
+	emit(10, 0xdb, 68, 0x32, 0x04, 0xf0, 0xdb, 69, 0x32, 0x05, 0xf0); // the tick, low then high
+	run_program();
+}
+
+static void test_ay_ports(void) {
+	extern uint8_t bnk0[65536];
+	machine_init(&host_platform);
+	host_ay_clear();
+	ay_program();
+	CHECK_EQ(bnk0[0xf000], 0x3e);
+	CHECK_EQ(bnk0[0xf001], 0x0f); // 4 bits kept
+	CHECK_EQ(bnk0[0xf002], 0x1f);
+	CHECK_EQ(bnk0[0xf003], 0xff);
+	CHECK_EQ(host_ay_writes, 16 + 3); // the reset's 16, then the program's
+	CHECK(host_ay_log[16][0] == 7 && host_ay_log[16][1] == 0x3e);
+	CHECK(host_ay_log[17][0] == 1 && host_ay_log[17][1] == 0xff);
+	CHECK(host_ay_log[18][0] == 8 && host_ay_log[18][1] == 0xff);
+	uint16_t tick = (uint16_t)(bnk0[0xf004] | bnk0[0xf005] << 8);
+	CHECK((uint16_t)(host_clock_us() / 1000 - tick) < 1000);
+	machine_reset();
+	CHECK_EQ(ay_read(&host_ay, 8), 0);
+	CHECK_EQ(ay_read(&host_ay, 7), 0);
+
+	machine_platform_t none = host_platform;
+	none.sound_write = NULL;
+	none.sound_read = NULL;
+	machine_init(&none);
+	host_ay_clear();
+	ay_program();
+	CHECK_EQ(bnk0[0xf000], 0xff);
+	CHECK_EQ(bnk0[0xf002], 0xff);
+	CHECK_EQ(host_ay_writes, 0);
+	machine_init(&host_platform);
+}
+
+// Channel ch's tone periods as written since host_ay_clear: one when its
+// coarse register is written, 0s (QUIET) left out.
+static unsigned ay_periods(unsigned ch, uint16_t *out, unsigned max) {
+	unsigned n = 0, fine = 0;
+	for (size_t i = 0; i < host_ay_writes && i < HOST_AY_LOG; ++i) {
+		unsigned reg = host_ay_log[i][0], v = host_ay_log[i][1];
+		if (reg == 2 * ch) {
+			fine = v;
+		} else if (reg == 2 * ch + 1 && (fine | v << 8) != 0 && n < max) {
+			out[n++] = (uint16_t)(fine | v << 8);
+		}
+	}
+	return n;
+}
+
+// AYTEST (src/machine/cpm/aytest.asm) under CP/M 2.2: the chip found on
+// RC2014's ports, the scale and the chords' periods and how long they
+// take, the noise sweep, a key stopping the envelopes with the chip
+// silenced; without the chip it says so.
+static void test_aytest_tool(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("AYTEST\r"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "the chip on ports D8h/D0h (RC2014)") != NULL);
+
+	static const uint16_t scale[] = {440, 392, 349, 330, 294, 262, 233, 220};
+	uint16_t got[16];
+	host_ay_clear();
+	clear_screen();
+	uint64_t start = host_clock_us();
+	CHECK(type("1"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(host_clock_us() - start >= 8 * 300000); // 300 ms a note
+	CHECK(strstr(screen, "Scale on A: C D E F G A B C \r\n") != NULL);
+	CHECK_EQ(ay_periods(0, got, 16), 8);
+	CHECK(memcmp(got, scale, sizeof scale) == 0);
+
+	static const uint16_t chord_b[] = {349, 262, 233, 175}, chord_c[] = {294, 220, 196, 147};
+	host_ay_clear();
+	clear_screen();
+	CHECK(type("2"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "Chords on A, B, C: C F G C \r\n") != NULL);
+	CHECK_EQ(ay_periods(1, got, 16), 4);
+	CHECK(memcmp(got, chord_b, sizeof chord_b) == 0);
+	CHECK_EQ(ay_periods(2, got, 16), 4);
+	CHECK(memcmp(got, chord_c, sizeof chord_c) == 0);
+
+	host_ay_clear();
+	CHECK(type("3"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	unsigned want = 31, bad = 0;
+	for (size_t i = 0; i < host_ay_writes; ++i) {
+		if (host_ay_log[i][0] == 6 && host_ay_log[i][1] != 0) {
+			bad += host_ay_log[i][1] != want--;
+		}
+	}
+	CHECK_EQ(bad, 0);
+	CHECK_EQ(want, 0); // 31 down to 1
+
+	// The envelopes take 16 s: a key after the third shape stops them.
+	host_ay_clear();
+	clear_screen();
+	CHECK(type("4"));
+	CHECK_EQ(run_until("Shape  2", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "Shape  0  \\_______\r\n") != NULL && strstr(screen, "Shape  1") != NULL);
+	CHECK(type(" "));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, " -- stopped") != NULL && strstr(screen, "Shape 15") == NULL);
+	CHECK_EQ(ay_read(&host_ay, 8), 0); // silenced
+	CHECK_EQ(ay_read(&host_ay, 7), 0x3f);
+	CHECK(type("q"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+
+	machine_platform_t none = host_platform;
+	none.sound_write = NULL;
+	none.sound_read = NULL;
+	clear_screen();
+	machine_init(&none);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("AYTEST", "No AY-3-8910 on ports D8h/D0h."));
+	machine_init(&host_platform);
+	drives_unmount_all();
+}
+
 // ---- CP/M 3 (picosim's banked system: CPM31, CPM32; bd f8w) ----
 
 // Booted by mounting its disks on A: and B:, no setting: the boot ROM
@@ -1696,6 +1839,11 @@ static void test_cpm3_tools(void) {
 	f_unlink("/XFER/BIG.BIN");
 	CHECK(cpm("HWINFO", "Real-time clock")); // from CPM31, A:
 	hwinfo_report_checks();
+	clear_screen();
+	CHECK(type("AYTEST\r"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(type("q"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	drives_unmount_all();
 }
 
@@ -2302,6 +2450,8 @@ int main(void) {
 	RUN(test_hwinfo_port);
 	RUN(test_clock_ports);
 	RUN(test_hwinfo_tool);
+	RUN(test_ay_ports);
+	RUN(test_aytest_tool);
 	RUN(test_boot_cpm3);
 	RUN(test_cpm3_tools);
 	RUN(test_cpm3_date);

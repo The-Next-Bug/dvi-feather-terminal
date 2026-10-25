@@ -65,6 +65,8 @@ static struct {
 	// Port 12: the selected item's bytes and the next to read.
 	uint8_t hwinfo[HWINFO_MAX];
 	uint8_t hwinfo_len, hwinfo_pos;
+	BYTE ay_select; // the AY's selected register
+	BYTE tick_high; // port 69: the tick's high byte, latched by IN 68
 } m;
 
 // picosim's boot ROM (picosim/roms/bootrom.asm): read drive A track 0
@@ -231,6 +233,33 @@ static void timer_out(BYTE data) {
 	} else {
 		m.timer = false;
 	}
+}
+
+// The millisecond tick: the low byte, the high one latched with it.
+static BYTE tick_low_in(void) {
+	uint64_t ms = plat->clock_us() / 1000u;
+	m.tick_high = (BYTE)(ms >> 8);
+	return (BYTE)ms;
+}
+
+static BYTE tick_high_in(void) {
+	return m.tick_high;
+}
+
+// ---- the AY-3-8910 ----
+
+static void ay_select_out(BYTE data) {
+	m.ay_select = data;
+}
+
+static void ay_write_out(BYTE data) {
+	if (plat->sound_write) {
+		plat->sound_write(m.ay_select, data);
+	}
+}
+
+static BYTE ay_read_in(void) {
+	return plat->sound_read ? plat->sound_read(m.ay_select) : IO_DATA_UNUSED;
 }
 
 static BYTE hwctl_in(void) {
@@ -490,7 +519,10 @@ in_func_t *const port_in[256] = {
 	[65] = clkc_in,
 	[66] = clkd_in,
 	[67] = timer_in,
+	[MACHINE_TICK_LOW] = tick_low_in,
+	[MACHINE_TICK_HIGH] = tick_high_in,
 	[160] = hwctl_in,
+	[MACHINE_AY_DATA] = ay_read_in,
 	[254] = fpsw_in,
 	[255] = fpsw_in,
 };
@@ -511,6 +543,8 @@ out_func_t *const port_out[256] = {
 	[66] = clkd_out,
 	[67] = timer_out,
 	[160] = hwctl_out,
+	[MACHINE_AY_DATA] = ay_write_out,
+	[MACHINE_AY_SELECT] = ay_select_out,
 	[254] = fpsw_out,
 	[255] = fpsw_out,
 };
@@ -573,6 +607,12 @@ void machine_reset(void) {
 	if (plat->xfer) {
 		uint8_t buf[XFER_RECORD];
 		plat->xfer(XFER_RESET, 0, buf);
+	}
+	m.ay_select = 0;
+	if (plat->sound_write) {
+		for (uint8_t r = 0; r < 16; ++r) {
+			plat->sound_write(r, 0);
+		}
 	}
 	reset_cpu();
 	selbnk = 0;

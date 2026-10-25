@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "ay8910.h"
 #include "machine.h"
 
 #define HOST_SCREEN_SIZE 65536
@@ -39,6 +40,14 @@ extern size_t aux_len;
 // 1.1.2026. time_set counts host_time_sets.
 extern uint64_t host_time_offset_us;
 extern unsigned host_time_sets;
+
+// The AY-3-8910 on the sound ports: ay8910.c's chip, and its register
+// writes (register, value) since host_ay_clear, the first HOST_AY_LOG.
+#define HOST_AY_LOG 4096
+extern ay8910_t host_ay;
+extern uint8_t host_ay_log[HOST_AY_LOG][2];
+extern size_t host_ay_writes;
+void host_ay_clear(void);
 
 uint64_t host_clock_us(void);
 void clear_screen(void);

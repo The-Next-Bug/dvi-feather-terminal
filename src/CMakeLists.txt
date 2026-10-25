@@ -4,6 +4,7 @@ include(../lib/fatfs.cmake)
 
 add_subdirectory(common)
 add_subdirectory(clock)
+add_subdirectory(sound)
 add_subdirectory(rtc)
 add_subdirectory(screen)
 add_subdirectory(term)

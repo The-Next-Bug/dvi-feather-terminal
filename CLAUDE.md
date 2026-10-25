@@ -66,7 +66,7 @@ CMake or Arm GCC on the dev host. Use the scripts:
 ```bash
 git submodule update --init          # lib/pico-sdk (2.3.1) and lib/tinyusb, not pico-sdk's submodules (lib/z80pack is vendored)
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool, clang-tidy (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, clock, rtc (the RTC chip drivers on a fake register bus), sdformat (card formats on a sparse disk), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, clock, ay (the AY-3-8910's tones, noise, envelopes, levels), rtc (the RTC chip drivers on a fake register bus), sdformat (card formats on a sparse disk), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimized, no sanitizers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default; any boards/<target>.h) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
@@ -215,7 +215,7 @@ libraries under `src/<name>/`, each a static `dvt_<name>` with its own
 CMakeLists.txt (`src/CMakeLists.txt` lists them); public headers next to
 the sources (the directory is the PUBLIC include path), a header only the
 library's own files share is `<name>_internal.h` (term_internal.h).
-Portable (host-tested): common, clock, screen, term, render, input, settings,
+Portable (host-tested): common, clock, sound, screen, term, render, input, settings,
 machine (+ dvt_z80pack, cpm/), disks, ui, rtc's dvt_rtc_chips; RP2350, added only with
 DVT_FIRMWARE: board (header only), platform, usb, storage, video, rtc's
 dvt_rtc (a directory may hold both, the RP2350 one under if(DVT_FIRMWARE)). The
@@ -514,6 +514,17 @@ UF2 in the latter).
   while it runs is dropped. SET-UP sounds the edited Bell when it changes
   (setup_service) and restores the saved one on cancel. PCM output beyond
   that: bd 1ls.18.
+- Sound (bd 1ls.18): `src/sound/` (portable dvt_sound, test_ay; in SRAM:
+  its render runs in the audio engine's refill IRQ, 1ls.18.2).
+  ay8910.[ch] (1ls.18.3): the AY-3-8910, clock AY_CLOCK_RC2014 1.8432 MHz;
+  generators ticked at f / 8 (tone f / (16 TP), noise and envelope steps
+  f / (16 NP or EP), period 0 = 1, 17-bit LFSR taps 0/3, MAME's envelope
+  logic), each output frame the average of its ticks (no aliasing; mixer
+  off = the held level, sampled-sound trick), Ayumi's measured 16-level
+  DAC (non-const: no flash from the IRQ), mono / ABC / ACB, a ~25 Hz DC
+  blocker (dc_block, off in tests). ay_write only stores the masked byte
+  (a shape write bumps env_writes; ay_render restarts the envelope), so
+  the Z80 writing on core 0 under the IRQ is safe; never two cores.
 - `src/platform/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
   RTS/CTS. `src/ui/demo.[ch]`: opt-in startup demo. `src/platform/diag.[ch]`: VIDEO_DIAG.
 - `src/render/logo_gen.py` + `src/render/logo.cmake`: PNG -> run-length encoded 2-bit
@@ -543,7 +554,11 @@ UF2 in the latter).
   localtime from the platform's time_get (NULL: 1.1.2026 + uptime) and,
   ours, writable through time_set (registers 0-2 a field, 3 latched for
   4's day number; machine.h; CP/M 3's BIOS TIME C=0FFH writes them, so
-  DATE SET works), 60 Hz timer 67, hwctl 160) and boot ROM; bank 0 64 KB +
+  DATE SET works), 60 Hz timer 67, hwctl 160; ours: 68/69 a free-running
+  millisecond tick, IN 68 latching 69's high byte, for timing without
+  interrupts; the AY-3-8910 on RC2014's D8h select / D0h data, through the
+  platform's sound_write/sound_read, NULL: 0xFF, reset writes 0s, bd
+  1ls.18.4; not MSX's A0h-A2h, A0h is hwctl) and boot ROM; bank 0 64 KB +
   MACHINE_BANKS x 48 KB in SRAM, or machine_set_banks's memory (before
   machine_init; NULL: back to the SRAM ones) of up to MACHINE_MAX_BANKS
   (15: IN 64 reports the count in its high nibble) x MACHINE_BANK_SIZE;
@@ -640,6 +655,16 @@ UF2 in the latter).
   no hook -> 0xFF; record truncation), test_hwinfo_tool (CP/M 2.2, and
   without the device) and test_cpm3_tools (CP/M 3), against
   machine_host.c's records.
+  src/machine/cpm/aytest.asm (bd 1ls.18.6) -> AYTEST.COM on CPM22, CPM31
+  and CPM32: finds the AY on D8h/D0h (register 1 reads back 0FH, 2 5AH),
+  a menu (scale on A, chords on A/B/C, noise sweep, the 16 envelope shapes
+  over C4, volume ramp, all), durations from the 68/69 tick (says so
+  without it), a key stops a part (SP back to ITEMSP, QUIET); periods for
+  1.8432 MHz (115200 / f). machine_host.c has an ay8910_t on the ports and
+  logs the writes (host_ay_log): test_ay_ports (raw Z80 bytes, the tick,
+  no hooks -> 0xFF), test_aytest_tool (periods, timing, the stop, no
+  chip), test_cpm3_tools runs it under CP/M 3. The firmware's cpm_glue has
+  no sound hooks until bd 1ls.18.4's glue: AYTEST says no chip there.
   USB sticks (bd qur.3): FatFs volume 1 ("1:", USB: to the tools; ffconf
   FF_VOLUMES 2). `src/storage/diskio.c` (RP2350) dispatches FatFs drives: 0
   sdcard_disk_*, 1 usbmsc_disk_*. `src/storage/usbmsc.[ch]`:

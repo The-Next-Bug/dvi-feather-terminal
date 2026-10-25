@@ -18,6 +18,31 @@ unsigned host_hwinfo_extra;
 void (*host_console_hook)(uint8_t c);
 char aux_sent[256];
 size_t aux_len;
+ay8910_t host_ay;
+uint8_t host_ay_log[HOST_AY_LOG][2];
+size_t host_ay_writes;
+static bool host_ay_ready;
+
+void host_ay_clear(void) {
+	host_ay_writes = 0;
+}
+
+static void sound_write(uint8_t reg, uint8_t value) {
+	if (!host_ay_ready) {
+		ay_init(&host_ay, AY_CLOCK_RC2014, 32000);
+		host_ay_ready = true;
+	}
+	if (host_ay_writes < HOST_AY_LOG) {
+		host_ay_log[host_ay_writes][0] = reg;
+		host_ay_log[host_ay_writes][1] = value;
+	}
+	++host_ay_writes;
+	ay_write(&host_ay, reg, value);
+}
+
+static uint8_t sound_read(uint8_t reg) {
+	return ay_read(&host_ay, reg);
+}
 
 uint64_t host_clock_us(void) {
 	struct timespec ts;
@@ -144,6 +169,8 @@ const machine_platform_t host_platform = {
 	.hwinfo = hwinfo,
 	.time_get = time_get,
 	.time_set = time_set,
+	.sound_write = sound_write,
+	.sound_read = sound_read,
 };
 
 void clear_screen(void) {
