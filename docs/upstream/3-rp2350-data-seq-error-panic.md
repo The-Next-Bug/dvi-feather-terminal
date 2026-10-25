@@ -1,35 +1,24 @@
-# rp2040 host: a data sequence error panics in hcd_rp2040_irq ("Data Seq Error"), taking the whole application down
+<!-- A comment for hathach/tinyusb#3870 (RP2XXX MIDI Host Panics (Data Seq Error)), not a new issue:
+     #3870 asks for exactly this (handle the error without panicking), and #1997 and #3964 hit the same
+     panic. Points at #4213 as a likely way the toggles get out of step. -->
 
-**TinyUSB:** master 13f9a36a8 (the panic is unchanged on master as of 2026-10-23)
-**Hardware:** RP2350 native USB host (full speed), clk_sys 400 MHz, pico-sdk 2.3.1, CFG_TUSB_OS = OPT_OS_PICO.
+Another case of the same panic, on an **RP2350** host this time (the panic is in code the RP2040 and
+RP2350 share; unchanged on master 006af6325, 2026-10-24).
+
+**Setup:** RP2350 native USB host (full speed), clk_sys 400 MHz, pico-sdk 2.3.1, CFG_TUSB_OS = OPT_OS_PICO.
 On-board WCH CH334 hub (1a86:8091); behind it a USB keyboard (7807:dccb, boot keyboard) and a USB stick
 (24a9:205a, MSC bulk-only).
 
-## What happens
+**When:** replugging the stick into the hub, about one replug in five over an afternoon, and once after the
+board had sat idle ~9.5 hours with the stick out. Always while the stick was being set up behind the hub
+(TinyUSB still listed it as being enumerated), never during bulk reads. The whole application goes down,
+the keyboard with it, for one bad packet from one device.
 
-Now and then, plugging the USB stick back into the hub makes the controller report a data sequence error
-(an IN packet with the wrong DATA0/DATA1 PID). `hcd_rp2040_irq()` (src/portable/raspberrypi/rp2040/hcd_rp2040.c)
-answers it with a panic:
+Controller state 20 s after the panic (the controller kept polling the interrupt endpoints): INTS `00400`
+(STALL), SIE_CTRL `20008208`, SIE_STATUS `70800205` (ACK_REC, STALL_REC, NAK_REC, ENDPOINT_ERROR, full
+speed), BUFF_STATUS `0`.
 
-```c
-  if (status & USB_INTS_ERROR_DATA_SEQ_BITS) {
-    usb_hw_clear->sie_status = USB_SIE_STATUS_DATA_SEQ_ERROR_BITS;
-    panic("Data Seq Error \n");
-  }
-```
-
-The application stops dead, from inside the USB interrupt. The keyboard and every other device on the
-bus go with it, although a single bad packet from one device is something a host is expected to survive.
-
-- It happened on about one replug in five over an afternoon of testing, and once after the board had sat
-  idle for ~9.5 hours with the stick unplugged.
-- It happens while the stick is being set up behind the hub (TinyUSB still listed it as being enumerated
-  when we caught the error), not during bulk reads.
-- The controller state 20 s after the panic (the controller kept polling the interrupt endpoints):
-  INTS `00400` (STALL), SIE_CTRL `20008208`, SIE_STATUS `70800205` (ACK_REC, STALL_REC, NAK_REC,
-  ENDPOINT_ERROR, full speed), BUFF_STATUS `0`.
-
-Our USB log around one caught occurrence (with the workaround below; times in seconds):
+Our USB log around one caught occurrence, with the workaround below (seconds):
 
 ```
 931.195 down 2          <- stick unplugged
@@ -42,29 +31,22 @@ Our USB log around one caught occurrence (with the workaround below; times in se
 949.778 up 2            <- stick mounted
 ```
 
-## Suggested fix
+**A likely cause** is #4213: a failed EPX transfer (an RX timeout or STALL while the stick is set up)
+keeps the data toggle it advanced when it armed its buffers, so the next IN on that endpoint expects
+the wrong PID. That fits a device being set up behind a hub. We have not established which endpoint the
+bad packet came from.
 
-Treat a data sequence error as a failed transfer, not a fatal error:
+**Application-side workaround** (the handler is static and registered directly with
+`irq_add_shared_handler`, so it cannot be wrapped): after every `tusb_init()`,
+`hw_clear_bits(&usb_hw->inte, USB_INTE_ERROR_DATA_SEQ_BITS)`, so `hcd_rp2040_irq()` (which reads
+`usb_hw->ints`) never sees it; from the main loop and while waiting on an MSC command, check the raw
+`usb_hw->intr & USB_INTR_ERROR_DATA_SEQ_BITS`, clear `SIE_STATUS.DATA_SEQ_ERROR`, fail any MSC command
+under way, and restart the host. The error then costs a ~3 s host restart instead of the application.
 
-- clear `SIE_STATUS.DATA_SEQ_ERROR`;
-- if EPX is active, stop it the way the RX timeout path does and complete it with `XFER_RESULT_FAILED`
-  (usbh then retries or gives up on the device, as for any other failed transfer);
-- for an interrupt endpoint polled by the controller, fail (or just drop) that endpoint's transfer.
-
-Not established: which endpoint the bad packet came from (EPX doing the stick's enumeration, or one of
-the interrupt endpoints the controller was polling at the time), and what the controller does with the
-transfer afterwards (whether it completes, with what data, or never does).
-
-## Workaround (application side)
-
-The handler is static and registered directly with `irq_add_shared_handler`, so it cannot be wrapped.
-What works:
-
-- after every `tusb_init()`, clear the interrupt enable: `hw_clear_bits(&usb_hw->inte, USB_INTE_ERROR_DATA_SEQ_BITS)`
-  (`hcd_rp2040_irq` reads `usb_hw->ints`, so it never sees the error);
-- from the main loop, and while waiting for an MSC command, check the raw `usb_hw->intr & USB_INTR_ERROR_DATA_SEQ_BITS`;
-  when it is set, clear `SIE_STATUS.DATA_SEQ_ERROR`, fail any MSC command under way (its data may hold a
-  packet received twice), and restart the host (remove the devices, `tusb_deinit()`, `tusb_init()`).
-
-With that, the error costs a ~3 s host restart (the keyboard is set up again, the stick is mounted
-again) instead of the application.
+**Proposed fix** (builds for RP2040 and RP2350; not run on hardware yet, our firmware still masks the
+interrupt): clear the error and, if EPX is receiving, stop it and fail its transfer as for an RX timeout,
+before BUFF_STATUS, so a buffer completed with the wrong PID is not delivered as a success (the ordering
+#3582 proposes). Interrupt endpoints need nothing: their buffer stays armed with the PID they expect.
+https://github.com/arlaneenalra/tinyusb/tree/fix/rp2-hcd-data-seq-no-panic
+(PR: https://github.com/hathach/tinyusb/compare/master...arlaneenalra:tinyusb:fix/rp2-hcd-data-seq-no-panic)
+It pairs with the #4213 fix: https://github.com/arlaneenalra/tinyusb/tree/fix/rp2-hcd-failed-xfer-pid-rollback

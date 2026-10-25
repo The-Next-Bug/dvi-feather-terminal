@@ -1045,7 +1045,7 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | `test/` | Host unit tests (plain CMake + gcc with ASan/UBSan, no pico-sdk) |
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see [Trying it from a PC](#trying-it-from-a-pc)) |
 | `lib/pico-sdk` | Pinned submodule (not its own submodules) |
-| `lib/tinyusb` | Pinned submodule: TinyUSB, newer than pico-sdk's 0.18 (its USB host fixes) |
+| `lib/tinyusb` | Pinned submodule: TinyUSB, newer than pico-sdk's 0.18 (its USB host fixes); for now our fork's `dvt/integration` branch (github.com/arlaneenalra/tinyusb): upstream master plus the RP2350 host fixes proposed upstream (`docs/upstream/`) |
 | `lib/z80pack` | Vendored part of z80pack (Z80 core, z80asm, picosim disk images); `UPSTREAM.md` gives the commit and local changes |
 | `lib/fatfs` | ChaN's FatFs R0.15a, vendored (see its README) |
 | `assets/logo/` | The startup logo (PNG used by the build, JPEG original) |

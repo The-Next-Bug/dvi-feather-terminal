@@ -1,11 +1,16 @@
-# rp2040 host (RP2350): a bulk transfer started on EPX while the controller polls interrupt endpoints "completes" at once with 0 bytes
+# rp2 hcd (RP2350): an EPX transfer started from idle while the controller polls interrupt endpoints "completes" at once with 0 bytes
 
-**TinyUSB:** master 13f9a36a8 (EPX for non-interrupt endpoints, #3561 and later)
+**TinyUSB:** master 006af6325 (2026-10-24; first seen on 13f9a36a8; EPX for non-interrupt endpoints,
+#3561 and later)
 **Hardware:** RP2350 native USB host (full speed), clk_sys 400 MHz, pico-sdk 2.3.1.
 On-board WCH CH334 hub (1a86:8091); behind it a USB keyboard (7807:dccb, boot keyboard, HID interrupt
 endpoints) and a USB stick (24a9:205a, MSC bulk-only).
-**Related:** #3964 (EPX with a hub behind it, RP2040; its "first INQUIRY never completes" shape looks
-like this one).
+**RP2350 only, as far as we know:** all of the evidence below is from the RP2350; we have not run an
+RP2040 host. The RP2350 build switches EPX with STOP_EPX_ON_NAK (`HAS_STOP_EPX_ON_NAK`) and does not
+compile the SOF round-robin.
+**Related:** #3964. Its "first INQUIRY never completes" shape looks like this one, but its explanation
+(the SOF round-robin's `sie_stop_xfer()` + `epx_save_context()` rolling back a packet that was ACKed)
+is RP2040 code, and here no EPX switch took part at all (NAK_POLL `00104010`: STOP_EPX_ON_NAK never set).
 
 ## Symptom
 
@@ -54,10 +59,18 @@ noted for the interrupt-endpoint abort in #4177), running the MSC commands, then
 stick, 64-sector READ10s, plugs and unplugs; read speed ~10x that of 0.18. We do the same around our own
 control transfers (keyboard LEDs, a periodic GET_STATUS).
 
-Not established: whether this is specific to the RP2350, to a low-speed device behind the hub (PRE),
-or to the CH334. A proper fix probably belongs in hcd_rp2040: do not start an EPX transfer while an
+Not established: whether the RP2040 has it too, or whether it needs a low-speed device behind the hub
+(PRE) or the CH334. A proper fix probably belongs in hcd_rp2040: do not start an EPX transfer while an
 interrupt endpoint poll may be in progress (or detect the 0-byte completion of an OUT armed with data
 and recover).
+
+Proposed change, the workaround moved into the driver: an EPX transfer or SETUP started from idle while
+INT_EP_CTRL has bits set clears them and stays pending; `sof_service()` starts it two frames later and
+sets the bits again at once (only the start collides; chained starts are left alone).
+`CFG_TUH_RP2_EPX_PAUSE_INT_POLLS`, default 1 on the RP2350 only. Builds for RP2040 and RP2350; the driver
+version itself has not run on hardware yet (the application-side version above has):
+https://github.com/arlaneenalra/tinyusb/tree/fix/rp2350-hcd-epx-pause-int-polls
+(PR: https://github.com/hathach/tinyusb/compare/master...arlaneenalra:tinyusb:fix/rp2350-hcd-epx-pause-int-polls)
 
 ## Side note: BUFF_CPU_SHOULD_HANDLE
 

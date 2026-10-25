@@ -334,7 +334,11 @@ UF2 in the latter).
   sticks, usbmsc.c); keys
   go to the serial TX queue. The board does not power VBUS in host mode
   (5 V fed into the VBUS pin). TinyUSB is `lib/tinyusb` (our submodule,
-  pinned to master after 0.21.0, bd xv0), not pico-sdk's 0.18: its
+  for now github.com/arlaneenalra/tinyusb's dvt/integration: upstream
+  master after 0.21.0 plus our four proposed hcd/usbh fixes, one fork
+  branch each, until upstream has them: bd 5bc's notes say what to watch
+  and how to switch back; before that pinned to upstream master, bd xv0),
+  not pico-sdk's 0.18: its
   hcd_rp2040 never completed a transfer the device stopped answering and
   usbh had no control-transfer timeout, so pulling a stick could leave the
   host deaf for good. The USB host watchdog (usbkbd_poll, bd xv0): a device
