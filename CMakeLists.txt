@@ -80,14 +80,24 @@ set(MACHINE_BANKS 2 CACHE STRING "Z80 machine: number of 48 KB banks (MMU port 6
 option(PSRAM_BANKS "Z80 machine: banks in the board's PSRAM instead of SRAM" OFF)
 
 # Our workarounds for TinyUSB's RP2350 host bugs (src/usb/usbkbd.c), each
-# fixed in the fork lib/tinyusb builds (PRs #4310-#4313, bd 5bc). ON keeps
-# a workaround; OFF builds test images that rely on TinyUSB's fix instead
-# (hardware validation, bd nxv). USB_RESTART_KEY: H in SET-UP restarts
-# the USB host, for testing the deinit path.
-option(USB_WA_DEINIT "Free the RP2350 driver's lock ourselves after tusb_deinit (TinyUSB #4310)" ON)
-option(USB_WA_DATASEQ "Mask the data sequence error interrupt, restart the host on one (TinyUSB #4312)" ON)
-option(USB_WA_POLL_PAUSE "Pause the interrupt endpoint polls around our EPX transfers (TinyUSB #4313)" ON)
-option(USB_WA_CONTROL_WAIT "Finish our control transfers before usbkbd_poll returns" ON)
+# fixed in the fork lib/tinyusb builds (PRs #4310-#4313, bd 5bc). OFF (the
+# default) relies on TinyUSB's fix; ON builds the workaround back in, for
+# a TinyUSB without the fix or to compare (bd nxv). USB_RESTART_KEY: H in
+# SET-UP restarts the USB host, for testing the deinit path.
+set(USB_WA_DEINIT_HELP "Free the RP2350 driver's lock ourselves after tusb_deinit (TinyUSB #4310)")
+set(USB_WA_DATASEQ_HELP "Mask the data sequence error interrupt, restart the host on one (TinyUSB #4312)")
+set(USB_WA_POLL_PAUSE_HELP "Pause the interrupt endpoint polls around our EPX transfers (TinyUSB #4313)")
+set(USB_WA_CONTROL_WAIT_HELP "Finish our control transfers before usbkbd_poll returns")
+foreach(wa DEINIT DATASEQ POLL_PAUSE CONTROL_WAIT)
+  # A build directory from when these defaulted to ON holds ON (option()
+  # never changes a cached value): those entries, which have the old help
+  # text, go back to the new default. One given with -D keeps its value.
+  get_property(wa_help CACHE USB_WA_${wa} PROPERTY HELPSTRING)
+  if(wa_help STREQUAL "${USB_WA_${wa}_HELP}")
+    set(USB_WA_${wa} OFF CACHE BOOL "${USB_WA_${wa}_HELP} (default OFF)" FORCE)
+  endif()
+  option(USB_WA_${wa} "${USB_WA_${wa}_HELP} (default OFF)" OFF)
+endforeach()
 option(USB_RESTART_KEY "Test builds: H in SET-UP restarts the USB host" OFF)
 
 include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
