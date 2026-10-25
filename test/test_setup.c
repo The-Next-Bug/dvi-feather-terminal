@@ -297,12 +297,12 @@ static void test_bell_row(void) {
 	open_with(80);
 	send("\x1b[A\x1b[A", 0); // round to the last row, then up one
 	CHECK_EQ(u.item, SETUP_ITEMS - 2);
-	CHECK_EQ(u.values.bell, SETTINGS_BELL_MEDIUM);
+	CHECK_EQ(u.values.bell, SETTINGS_BELL_DEFAULT);
 	send(" ", 0);
-	CHECK_EQ(u.values.bell, SETTINGS_BELL_HIGH);
+	CHECK_EQ(u.values.bell, SETTINGS_BELL_DEFAULT + 1);
 	setup_draw(&u, &s, top, "", FG, BG, BORDER);
 	const unsigned bell_row = top + SETUP_ITEMS + 1; // under the two preview rows
-	CHECK(row_contains(&s, bell_row, "> Bell") && row_contains(&s, bell_row, "off   low   medium   high"));
+	CHECK(row_contains(&s, bell_row, "> Bell") && row_contains(&s, bell_row, "< 4 >"));
 
 	open_with(80);
 	u.no_bell = true;
@@ -310,7 +310,7 @@ static void test_bell_row(void) {
 	CHECK_EQ(u.item, SETUP_ITEMS - 3); // Bell skipped
 	u.item = SETUP_ITEMS - 2;
 	send(" ", 0);
-	CHECK_EQ(u.values.bell, SETTINGS_BELL_MEDIUM); // unchanged
+	CHECK_EQ(u.values.bell, SETTINGS_BELL_DEFAULT); // unchanged
 	setup_draw(&u, &s, top, "", FG, BG, BORDER);
 	CHECK(row_contains(&s, bell_row, " off  (no bell on this board)"));
 }

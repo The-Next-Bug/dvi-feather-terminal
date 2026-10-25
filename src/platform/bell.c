@@ -25,12 +25,12 @@ static uint32_t __attribute__((aligned(1u << BELL_RING_BITS))) tone[BELL_PERIOD]
 static PIO pio;
 static uint sm;
 static int dma = -1;
-static uint8_t level = SETTINGS_BELL_MEDIUM;
-// The square wave's amplitude per Bell setting: high a quarter of full
-// scale, each step down half as loud.
-static const uint16_t amplitudes[] = {
-	[SETTINGS_BELL_OFF] = 0, [SETTINGS_BELL_LOW] = 0x0800, [SETTINGS_BELL_MEDIUM] = 0x1000,
-	[SETTINGS_BELL_HIGH] = 0x2000,
+static uint8_t level = SETTINGS_BELL_DEFAULT;
+// The square wave's amplitude per Bell level, 2 dB a step: the default, 3,
+// 1/16 of full scale (-24 dBFS: loud enough on a speaker, safe in
+// headphones), 10 about 1/3 (-10 dBFS).
+static const uint16_t amplitudes[SETTINGS_BELL_MAX + 1] = {
+	0, 0x050c, 0x065a, 0x0800, 0x0a12, 0x0cae, 0x0ff6, 0x1418, 0x194c, 0x1fd9, 0x2818,
 };
 
 static void fill_tone(void) {
@@ -41,22 +41,27 @@ static void fill_tone(void) {
 	}
 }
 
-// Side-set pins: bit 0 BCK, bit 1 WS. 16-bit words, MSB first, WS high
-// for the high half; each bit set up while BCK is low, taken on its rise.
-// A frame is a 32-bit word (pull noblock: X, 0, when the FIFO is empty, so
-// silence and the clocks keep running), Y counting the bits. The pull adds
-// a cycle to the last bit's low half (65 cycles a frame).
+// Side-set pins: bit 0 BCK, bit 1 WS. Philips I2S, as the TDA1387 takes
+// it (bd 1ls.18.1; frank-386's audio_i2s.pio): 16-bit words, MSB first,
+// the high half (left) with WS low, the low half (right) with WS high, WS
+// switching on each half's last bit so the next MSB follows one BCK after
+// it; each bit set up while BCK is low, taken on its rise. With WS and the
+// MSB together the DAC read bit 14 as the sign: twice the amplitude, and
+// samples past half scale wrapped. A frame is a 32-bit word (pull noblock:
+// X, 0, when the FIFO is empty, so silence and the clocks keep running), Y
+// counting the bits. The pull adds a cycle to the last bit's low half (65
+// cycles a frame).
 static uint16_t bell_program[9];
 
 static void build_program(void) {
 	uint16_t *p = bell_program;
-	p[0] = (uint16_t)(pio_encode_out(pio_pins, 1) | pio_encode_sideset(2, 2)); // high half's bits
-	p[1] = (uint16_t)(pio_encode_jmp_y_dec(0) | pio_encode_sideset(2, 3));
-	p[2] = (uint16_t)(pio_encode_out(pio_pins, 1) | pio_encode_sideset(2, 2)); // its last
+	p[0] = (uint16_t)(pio_encode_out(pio_pins, 1) | pio_encode_sideset(2, 0)); // high half's bits
+	p[1] = (uint16_t)(pio_encode_jmp_y_dec(0) | pio_encode_sideset(2, 1));
+	p[2] = (uint16_t)(pio_encode_out(pio_pins, 1) | pio_encode_sideset(2, 2)); // its last, WS up
 	p[3] = (uint16_t)(pio_encode_set(pio_y, 14) | pio_encode_sideset(2, 3));
-	p[4] = (uint16_t)(pio_encode_out(pio_pins, 1) | pio_encode_sideset(2, 0)); // low half's bits
-	p[5] = (uint16_t)(pio_encode_jmp_y_dec(4) | pio_encode_sideset(2, 1));
-	p[6] = (uint16_t)(pio_encode_out(pio_pins, 1) | pio_encode_sideset(2, 0)); // its last
+	p[4] = (uint16_t)(pio_encode_out(pio_pins, 1) | pio_encode_sideset(2, 2)); // low half's bits
+	p[5] = (uint16_t)(pio_encode_jmp_y_dec(4) | pio_encode_sideset(2, 3));
+	p[6] = (uint16_t)(pio_encode_out(pio_pins, 1) | pio_encode_sideset(2, 0)); // its last, WS down
 	p[7] = (uint16_t)(pio_encode_pull(false, false) | pio_encode_sideset(2, 0)); // the next frame (start here)
 	p[8] = (uint16_t)(pio_encode_set(pio_y, 14) | pio_encode_sideset(2, 1));
 }

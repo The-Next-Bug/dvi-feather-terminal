@@ -44,7 +44,7 @@ typedef struct {
 	uint8_t clock;         // SETTINGS_CLOCK_*: 24-hour, 12-hour, or off
 	uint8_t clock_seconds; // 1: with the seconds
 	uint8_t clock_date;    // SETTINGS_DATE_*: the date before the time, or none
-	uint8_t bell;          // SETTINGS_BELL_*: the bell's loudness, or off (bell.c)
+	uint8_t bell;          // 0 (SETTINGS_BELL_OFF) to SETTINGS_BELL_MAX: the bell's level (bell.c)
 	uint8_t usb_log;       // SETTINGS_USB_LOG_*: the USB host's log kept in USBLOG.TXT on the SD card
 } settings_t;
 
@@ -66,10 +66,12 @@ typedef struct {
 #define SETTINGS_DATE_ISO 1   // 2026-10-22
 #define SETTINGS_DATE_SHORT 2 // Thu 22 Oct
 
+// The bell's level, 2 dB a step (bell.c). Records from before the levels
+// held off/low/medium/high as 0-3: they come back as levels 0-3, never
+// louder than the default.
 #define SETTINGS_BELL_OFF 0
-#define SETTINGS_BELL_LOW 1
-#define SETTINGS_BELL_MEDIUM 2
-#define SETTINGS_BELL_HIGH 3
+#define SETTINGS_BELL_DEFAULT 3 // safe in headphones
+#define SETTINGS_BELL_MAX 10
 
 #define SETTINGS_USB_LOG_OFF 0
 #define SETTINGS_USB_LOG_SD 1 // appended to the SD card's USBLOG.TXT (apps/terminal/usblog_glue.c)
@@ -80,7 +82,7 @@ typedef struct {
 // order: settings_main_field) or its Clock panel (clockpanel.h).
 #define SETTINGS_FIELDS 17
 #define SETTINGS_MAIN_FIELDS 14
-#define SETTINGS_MAX_CHOICES 9
+#define SETTINGS_MAX_CHOICES 11
 
 #define SETTINGS_PAGE_MAIN 0
 #define SETTINGS_PAGE_CLOCK 1

@@ -218,14 +218,19 @@ static void test_clock_settings(void) {
 	CHECK_EQ(settings_main_field(SETTINGS_MAIN_FIELDS - 1), offsetof(settings_t, usb_log));
 }
 
-// Bell: medium unless saved; records from before it (15 bytes) get that.
+// Bell: level 3 unless saved; records from before it (15 bytes) get that,
+// and every level up to SETTINGS_BELL_MAX is kept.
 static void test_bell_setting(void) {
 	settings_t in, out;
-	settings_defaults(&in);
-	CHECK_EQ(in.bell, SETTINGS_BELL_MEDIUM);
-	in.bell = SETTINGS_BELL_OFF;
 	uint8_t rec[SETTINGS_RECORD_SIZE];
 	uint32_t seq;
+	settings_defaults(&in);
+	CHECK_EQ(in.bell, SETTINGS_BELL_DEFAULT);
+	in.bell = SETTINGS_BELL_MAX;
+	settings_encode(&in, 1, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.bell, SETTINGS_BELL_MAX);
+	in.bell = SETTINGS_BELL_OFF;
 	settings_encode(&in, 1, rec);
 	CHECK(settings_decode(rec, &out, &seq));
 	CHECK_EQ(out.bell, SETTINGS_BELL_OFF);
@@ -235,7 +240,7 @@ static void test_bell_setting(void) {
 		rec[12 + i] = (uint8_t)(crc >> 8 * i);
 	}
 	CHECK(settings_decode(rec, &out, &seq));
-	CHECK_EQ(out.bell, SETTINGS_BELL_MEDIUM);
+	CHECK_EQ(out.bell, SETTINGS_BELL_DEFAULT);
 }
 
 // USB log: off unless saved; records from before it (16 bytes) get off,

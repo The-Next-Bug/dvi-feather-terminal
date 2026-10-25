@@ -12,7 +12,7 @@
 
 // After video_init: the sample rate comes from clk_sys.
 void bell_init(void);
-// The loudness: SETTINGS_BELL_* (settings.h), off silences it.
+// The loudness: a level, 0 (silent) to SETTINGS_BELL_MAX (settings.h).
 void bell_set_level(uint8_t level);
 // A beep, unless one is still sounding or the bell is off.
 void bell_ring(void);

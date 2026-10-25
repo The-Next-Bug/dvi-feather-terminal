@@ -423,8 +423,9 @@ UF2 in the latter).
   value; then the status line clock's clock (24 / 12 / 0 off),
   clock_seconds, clock_date (SETTINGS_DATE_*), bd 1ls.6.5: after
   SETTINGS_MAIN_FIELDS, edited only on the Clock panel (settings_field_t
-  .page: SETTINGS_PAGE_CLOCK); then bell (SETTINGS_BELL_* off/low/medium/
-  high, default medium), back on SET-UP's main page: SET-UP's rows
+  .page: SETTINGS_PAGE_CLOCK); then bell (level 0 off to SETTINGS_BELL_MAX
+  10, default 3, bd 1ls.18.1; the old off/low/medium/high were 0-3, so old
+  records stay at or below the default), back on SET-UP's main page: SET-UP's rows
   (SETUP_ITEMS = SETTINGS_MAIN_FIELDS, 14) are the main-page fields in
   order, settings_main_field(row) -> field (rows 0-11 = fields 0-11, row 12
   = bell, field 15, row 13 = usb_log, field 16: SETTINGS_USB_LOG_OFF/_SD,
@@ -499,14 +500,17 @@ UF2 in the latter).
 - Bell (bd 1ls.7): term.c's personalities bump term_t.bells on BEL (not
   OSC's terminator); main.c's loop calls bell_ring when it changes.
   `src/platform/bell.[ch]`: a PIO program built at runtime (pio_encode_*,
-  no pioasm: 9 instructions) shifting 16-bit left-justified stereo words
-  (WS high for the high half; at 16 bits the TDA1387's LSB-justified form),
+  no pioasm: 9 instructions) shifting 16-bit stereo words as Philips I2S,
+  which the TDA1387 takes (bd 1ls.18.1, as frank-386's audio_i2s.pio):
+  left in the high half with WS low, WS switching one BCK before each MSB
+  (it once switched with the MSB: the DAC read bit 14 as the sign, the
+  bell twice as loud, PCM past half scale would wrap),
   `pull noblock` taking X = 0 when the FIFO is empty so the DAC's clocks
   never stop; 32 kHz from clk_sys (65 PIO cycles a frame); a beep is one
   DMA run (3200 words, 100 ms) over a 32-word, 128-byte-aligned ring of
   one 1 kHz square-wave period, amplitude from the Bell setting
-  (bell_set_level from apply_settings: high 0x2000 = a quarter of full
-  scale, medium 0x1000, low 0x0800; off: bell_ring does nothing); a BEL
+  (bell_set_level from apply_settings: 2 dB a level, 3 = 0x0800, 1/16 of
+  full scale, headphone-safe; 10 = 0x2818; 0: bell_ring does nothing); a BEL
   while it runs is dropped. SET-UP sounds the edited Bell when it changes
   (setup_service) and restores the saved one on cancel. PCM output beyond
   that: bd 1ls.18.
