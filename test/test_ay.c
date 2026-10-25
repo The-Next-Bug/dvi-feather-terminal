@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "ay8910.h"
+#include "mixer.h"
 #include "test.h"
 
 #define RATE 32000
@@ -259,6 +260,86 @@ static void test_ultrasonic(void) {
 	}
 }
 
+// ---- the mixer (mixer.c, bd 1ls.18.2) ----
+
+static mixer_t mix;
+static uint32_t words[MIXER_MAX_FRAMES];
+
+static int16_t left_of(uint32_t w) {
+	return (int16_t)(w >> 16);
+}
+
+static int16_t right_of(uint32_t w) {
+	return (int16_t)w;
+}
+
+// Silence; a ring: 3200 frames of a 1 kHz square at the amplitude on both
+// sides, then silence; none with the bell off, none twice at once.
+static void test_mixer_bell(void) {
+	mixer_init(&mix);
+	mixer_fill(&mix, words, MIXER_MAX_FRAMES);
+	for (unsigned f = 0; f < MIXER_MAX_FRAMES; ++f) {
+		CHECK_EQ(words[f], 0);
+	}
+	mixer_ring(&mix); // off: amplitude 0
+	CHECK_EQ(mix.bell_left, 0);
+	mix.bell_amp = 0x0800;
+	mixer_ring(&mix);
+	unsigned high = 0, low = 0, bad = 0;
+	for (unsigned block = 0; block < 13; ++block) { // 3328 frames
+		if (block == 1) {
+			mixer_ring(&mix); // sounding: no restart
+		}
+		mixer_fill(&mix, words, MIXER_MAX_FRAMES);
+		for (unsigned f = 0; f < MIXER_MAX_FRAMES; ++f) {
+			unsigned n = block * MIXER_MAX_FRAMES + f;
+			int16_t l = left_of(words[f]), r = right_of(words[f]);
+			bad += l != r;
+			if (n >= MIXER_BELL_FRAMES) {
+				bad += l != 0;
+			} else if (n % MIXER_BELL_PERIOD < MIXER_BELL_PERIOD / 2) {
+				high += l == 0x0800;
+			} else {
+				low += l == -0x0800;
+			}
+		}
+	}
+	CHECK_EQ(bad, 0);
+	CHECK_EQ(high, MIXER_BELL_FRAMES / 2);
+	CHECK_EQ(low, MIXER_BELL_FRAMES / 2);
+}
+
+// The AY scaled by its gain, left in the high half; skipped while idle;
+// clipped, not wrapped, with the bell on top.
+static void test_mixer_ay(void) {
+	mixer_init(&mix);
+	start(AY_CLOCK_RC2014, false);
+	mix.ay = &ay;
+	mix.ay_gain = 16384; // a half
+	ay.stereo = AY_STEREO_ABC;
+	CHECK(ay_idle(&ay));
+	mixer_fill(&mix, words, 4);
+	CHECK_EQ(words[3], 0);
+	ay_write(&ay, AY_MIXER, 0x3f);
+	ay_write(&ay, AY_AMPLITUDE_A, 15); // A: left only
+	CHECK(!ay_idle(&ay));
+	mixer_fill(&mix, words, 4);
+	CHECK_EQ(left_of(words[3]), FULL / 2);
+	CHECK_EQ(right_of(words[3]), 0);
+	ay.stereo = AY_STEREO_MONO;
+	ay_write(&ay, (uint8_t)(AY_AMPLITUDE_A + 1), 15);
+	ay_write(&ay, (uint8_t)(AY_AMPLITUDE_A + 2), 15);
+	mix.ay_gain = 32767;
+	mix.bell_amp = 0x2000;
+	mixer_ring(&mix);
+	mixer_fill(&mix, words, 4);
+	CHECK_EQ(left_of(words[3]), 32767); // 32765 + 8192, clipped
+	mix.ay_gain = 0; // no gain: not rendered
+	mix.bell_left = 0;
+	mixer_fill(&mix, words, 4);
+	CHECK_EQ(words[3], 0);
+}
+
 int main(void) {
 	RUN(test_reset_silent);
 	RUN(test_registers);
@@ -270,5 +351,7 @@ int main(void) {
 	RUN(test_noise);
 	RUN(test_stereo);
 	RUN(test_ultrasonic);
+	RUN(test_mixer_bell);
+	RUN(test_mixer_ay);
 	return tests_done();
 }

@@ -76,5 +76,8 @@ uint8_t ay_read(const ay8910_t *ay, uint8_t reg);
 // frames stereo frames (left, right) into out; three channels at full
 // level in mono reach about 32767.
 void ay_render(ay8910_t *ay, int16_t *out, unsigned frames);
+// Silent and settled: the three amplitudes 0 and the DC blocker at rest,
+// so the engine can skip ay_render (it carries on from there later).
+bool ay_idle(const ay8910_t *ay);
 
 #endif

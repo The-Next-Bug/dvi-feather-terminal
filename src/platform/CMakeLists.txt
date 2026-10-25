@@ -1,10 +1,10 @@
 # The RP2350 underneath: the terminal UART (serial.c), the status LED
 # (led.c), VIDEO_DIAG's UART diagnostics (diag.c), the settings' flash
 # sectors (nvflash.c), the firmware update's staging and commit
-# (fwupdate.c), the PSRAM (extram.c, PSRAM_BANKS builds) and the bell on
-# its DAC (bell.c).
+# (fwupdate.c), the PSRAM (extram.c, PSRAM_BANKS builds) and the audio
+# engine on its DAC: the bell and the AY-3-8910 (audio.c).
 add_library(dvt_platform STATIC
-  bell.c
+  audio.c
   diag.c
   extram.c
   fwupdate.c
@@ -20,6 +20,7 @@ target_link_libraries(dvt_platform
     dvt_board
     dvt_common
     dvt_settings
+    dvt_sound
     fatfs
     hardware_clocks_headers
     hardware_dma_headers

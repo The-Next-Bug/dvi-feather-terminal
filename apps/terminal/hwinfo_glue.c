@@ -187,6 +187,20 @@ static size_t bell_record(uint8_t *buf) {
 #endif
 }
 
+// The emulated AY, heard through the bell's DAC: none without one.
+static size_t sound_record(uint8_t *buf) {
+#if BOARD_AUDIO_I2S
+	if (bell_present()) {
+		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Sound chip",
+			"AY-3-8910 (emulated, 1.8432 MHz) on ports D8h/D0h, through the bell's DAC at 32 kHz");
+	}
+	return hwinfo_record(buf, HWINFO_ST_NOT_FOUND, "Sound chip", "AY-3-8910: the DAC is not set up");
+#else
+	(void)buf;
+	return 0;
+#endif
+}
+
 // Hardware the board header names that has no driver yet (bd 1ls.4):
 // planned, with its pin; nothing for what the board does not have.
 static size_t planned_record(uint8_t item, uint8_t *buf) {
@@ -242,6 +256,8 @@ size_t cpm_hwinfo(uint8_t item, uint8_t *buf) {
 		return led_record(buf);
 	case HWINFO_DRIVES:
 		return drives_record(buf);
+	case HWINFO_SOUND:
+		return sound_record(buf);
 	// Planned (bd 1ls): not driven by this firmware yet.
 	case HWINFO_RTC:
 		return rtc_record(buf);

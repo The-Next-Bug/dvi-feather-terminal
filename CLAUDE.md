@@ -499,23 +499,32 @@ UF2 in the latter).
   SET-UP's save).
 - Bell (bd 1ls.7): term.c's personalities bump term_t.bells on BEL (not
   OSC's terminator); main.c's loop calls bell_ring when it changes.
-  `src/platform/bell.[ch]`: a PIO program built at runtime (pio_encode_*,
+  `src/platform/audio.c` (the audio engine, bd 1ls.18.2; bell.h's API and
+  audio.h's): a PIO program built at runtime (pio_encode_*,
   no pioasm: 9 instructions) shifting 16-bit stereo words as Philips I2S,
   which the TDA1387 takes (bd 1ls.18.1, as frank-386's audio_i2s.pio):
   left in the high half with WS low, WS switching one BCK before each MSB
   (it once switched with the MSB: the DAC read bit 14 as the sign, the
   bell twice as loud, PCM past half scale would wrap),
   `pull noblock` taking X = 0 when the FIFO is empty so the DAC's clocks
-  never stop; 32 kHz from clk_sys (65 PIO cycles a frame); a beep is one
-  DMA run (3200 words, 100 ms) over a 32-word, 128-byte-aligned ring of
-  one 1 kHz square-wave period, amplitude from the Bell setting
+  never stop; 32 kHz from clk_sys (65 PIO cycles a frame); two DMA
+  channels chained to each other over two 256-word blocks (8 ms), each
+  block's end raising DMA_IRQ_1 on core 0 (audio_irq, SRAM: points that
+  channel back at its block, src/sound/mixer.c refills it while the other
+  plays; no channels: silence only, bell_present false). mixer.c: the bell
+  (mixer_ring: 3200 frames, 100 ms, of a 1 kHz square; a BEL while it runs
+  is dropped) plus the AY when attached (audio_attach_ay, CP/M mode: Q15
+  gain, skipped while ay_idle), clipped. Levels from the Bell setting
   (bell_set_level from apply_settings: 2 dB a level, 3 = 0x0800, 1/16 of
-  full scale, headphone-safe; 10 = 0x2818; 0: bell_ring does nothing); a BEL
-  while it runs is dropped. SET-UP sounds the edited Bell when it changes
+  full scale, headphone-safe; 10 = 0x2818; 0 silent): the bell's amplitude,
+  and 3 x that as the AY's gain until it has a setting (bd 1ls.18.5), so
+  one AY channel at 15 is as loud as the bell. Interrupts off for a flash
+  erase repeat the last blocks (a buzz) meanwhile. SET-UP sounds the edited Bell when it changes
   (setup_service) and restores the saved one on cancel. PCM output beyond
   that: bd 1ls.18.
 - Sound (bd 1ls.18): `src/sound/` (portable dvt_sound, test_ay; in SRAM:
   its render runs in the audio engine's refill IRQ, 1ls.18.2).
+  mixer.[ch]: the engine's mix (the bell, the AY), above.
   ay8910.[ch] (1ls.18.3): the AY-3-8910, clock AY_CLOCK_RC2014 1.8432 MHz;
   generators ticked at f / 8 (tone f / (16 TP), noise and envelope steps
   f / (16 NP or EP), period 0 = 1, 17-bit LFSR taps 0/3, MAME's envelope
@@ -663,8 +672,10 @@ UF2 in the latter).
   1.8432 MHz (115200 / f). machine_host.c has an ay8910_t on the ports and
   logs the writes (host_ay_log): test_ay_ports (raw Z80 bytes, the tick,
   no hooks -> 0xFF), test_aytest_tool (periods, timing, the stop, no
-  chip), test_cpm3_tools runs it under CP/M 3. The firmware's cpm_glue has
-  no sound hooks until bd 1ls.18.4's glue: AYTEST says no chip there.
+  chip), test_cpm3_tools runs it under CP/M 3. cpm_glue's sound hooks are
+  audio.c's audio_ay_write/_read (no DAC: dropped / 0xFF, so AYTEST finds
+  no chip); main.c attaches the AY in CP/M mode. HWINFO item 33
+  (HWINFO_SOUND) names it, none without a DAC.
   USB sticks (bd qur.3): FatFs volume 1 ("1:", USB: to the tools; ffconf
   FF_VOLUMES 2). `src/storage/diskio.c` (RP2350) dispatches FatFs drives: 0
   sdcard_disk_*, 1 usbmsc_disk_*. `src/storage/usbmsc.[ch]`:
@@ -824,13 +835,14 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   only: UART0 GP28 TX / GP29 RX (a second serial port, bd qtq), SPI1 GP24
   RX / 25 CS / 26 SCK / 27 TX, I2C0 GP24/25 or GP28/29, ADC0-3 GP26-29,
   PWM slices 4-6, PIO.
-- PIO: one SM and 9 of 32 instructions (bell.c, block picked at runtime,
-  normally PIO0); 11 SMs free. DMA: 3 of 16 channels (video 2, bell 1),
-  DMA_IRQ_0 core 1's; IRQ_1-3 free. IO_IRQ_BANK0 has the RTC tick's raw
+- PIO: one SM and 9 of 32 instructions (audio.c, block picked at runtime,
+  normally PIO0); 11 SMs free. DMA: 4 of 16 channels (video 2, audio 2),
+  DMA_IRQ_0 core 1's, DMA_IRQ_1 core 0's (audio); IRQ_2-3 free. IO_IRQ_BANK0 has the RTC tick's raw
   handler (shared: add more). UART0, SPI1, I2C0, TIMER1, PWM, ADC, TRNG,
   SHA-256, POWMAN's always-on timer free; I2C1 can take more chips (other
   addresses). No spare PLL (PLL_SYS 400 MHz, PLL_USB 48 MHz; bd cpx.1).
-- SRAM: __end__ 0x2005d78c (bd xv0), ~138 KB free (the Z80 banks are in the
+- SRAM: __end__ 0x2005d78c (bd xv0); 0x2005f428 with the audio engine and
+  the AY (bd 1ls.18, +7.2 KB), ~131 KB free (the Z80 banks are in the
   PSRAM). PSRAM 8 MB: 720 KB banks (15 x 48 KB, port 64's limit), ~7.3 MB
   free (bd g31: RAM disk, scrollback). Flash 16 MB: image 1.04 MB, growth
   room to 8 MB (FWUPDATE_STAGING = half the flash), settings in the top

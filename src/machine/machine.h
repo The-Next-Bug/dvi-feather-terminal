@@ -162,6 +162,7 @@ typedef struct {
 // 29-31 were card detect, user button, battery: dropped (bd 1ls.22); not
 // to be reused, older HWINFO users may know them.
 #define HWINFO_DRIVES 32       // the disk images on drives A-H
+#define HWINFO_SOUND 33        // the AY-3-8910 on the Z80's ports (bd 1ls.18.4)
 
 #define HWINFO_ST_NONE 0      // no record
 #define HWINFO_ST_PRESENT 1   // there and in use

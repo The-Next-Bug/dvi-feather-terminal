@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "pico/stdlib.h"
+#include "audio.h"
 
 #include "board.h"
 #include "led.h"
@@ -94,6 +95,8 @@ const machine_platform_t cpm_platform = {
 	.hwinfo = cpm_hwinfo,
 	.time_get = rtc_now,
 	.time_set = rtc_set,
+	.sound_write = audio_ay_write,
+	.sound_read = audio_ay_read,
 };
 
 static void cpm_write(const char *text) {

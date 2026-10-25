@@ -34,6 +34,7 @@
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
 
+#include "audio.h"
 #include "bell.h"
 #include "board.h"
 #include "diag.h"
@@ -332,6 +333,7 @@ int main(void) {
 		(void)psram;
 #endif
 		machine_init(&cpm_platform);
+		audio_attach_ay(true);
 		usbkbd_set_reset_key(reset_key);
 		monitor_start(&cpm_monitor, true, to_ms_since_boot(get_absolute_time()));
 	} else {

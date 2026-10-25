@@ -128,6 +128,16 @@ static int16_t dc_block(ay8910_t *ay, unsigned side, int32_t x) {
 	return (int16_t)(y > 32767 ? 32767 : y < -32768 ? -32768 : y);
 }
 
+bool ay_idle(const ay8910_t *ay) {
+	const uint8_t *a = ay->regs + AY_AMPLITUDE_A;
+	for (unsigned side = 0; side < 2; ++side) {
+		if (ay->dc_y[side] > 2 || ay->dc_y[side] < -2) {
+			return false;
+		}
+	}
+	return (a[0] | a[1] | a[2]) == 0;
+}
+
 void ay_render(ay8910_t *ay, int16_t *out, unsigned frames) {
 	if (ay->env_seen != ay->env_writes) {
 		ay->env_seen = ay->env_writes;
