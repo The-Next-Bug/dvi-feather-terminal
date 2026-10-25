@@ -79,6 +79,17 @@ set(MACHINE_BANKS 2 CACHE STRING "Z80 machine: number of 48 KB banks (MMU port 6
 # (boards/feather-rp2350-hstx-psram.h).
 option(PSRAM_BANKS "Z80 machine: banks in the board's PSRAM instead of SRAM" OFF)
 
+# Our workarounds for TinyUSB's RP2350 host bugs (src/usb/usbkbd.c), each
+# fixed in the fork lib/tinyusb builds (PRs #4310-#4313, bd 5bc). ON keeps
+# a workaround; OFF builds test images that rely on TinyUSB's fix instead
+# (hardware validation, bd nxv). USB_RESTART_KEY: H in SET-UP restarts
+# the USB host, for testing the deinit path.
+option(USB_WA_DEINIT "Free the RP2350 driver's lock ourselves after tusb_deinit (TinyUSB #4310)" ON)
+option(USB_WA_DATASEQ "Mask the data sequence error interrupt, restart the host on one (TinyUSB #4312)" ON)
+option(USB_WA_POLL_PAUSE "Pause the interrupt endpoint polls around our EPX transfers (TinyUSB #4313)" ON)
+option(USB_WA_CONTROL_WAIT "Finish our control transfers before usbkbd_poll returns" ON)
+option(USB_RESTART_KEY "Test builds: H in SET-UP restarts the USB host" OFF)
+
 include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
 project(dvi_feather_terminal C CXX ASM)
@@ -125,6 +136,11 @@ target_compile_definitions(dvt_z80pack PUBLIC MACHINE_BANKS=${MACHINE_BANKS})
 target_compile_definitions(dvt_board INTERFACE SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>)
 target_compile_definitions(dvt_platform PUBLIC VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}> PSRAM_BANKS=$<BOOL:${PSRAM_BANKS}>)
 target_compile_definitions(dvt_video PUBLIC HSTX_MODE=${DVT_HSTX_MODE})
+target_compile_definitions(dvt_usb PRIVATE
+  USB_WA_DEINIT=$<BOOL:${USB_WA_DEINIT}>
+  USB_WA_DATASEQ=$<BOOL:${USB_WA_DATASEQ}>
+  USB_WA_POLL_PAUSE=$<BOOL:${USB_WA_POLL_PAUSE}>
+  USB_WA_CONTROL_WAIT=$<BOOL:${USB_WA_CONTROL_WAIT}>)
 
 # The programs: the terminal and the HSTX test pattern.
 add_subdirectory(apps/terminal)

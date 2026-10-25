@@ -81,6 +81,9 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
   echo "build_type=$BUILD_TYPE"
   echo "serial_flow_control=$SERIAL_FLOW_CONTROL"
   echo "machine_banks=$(sed -n 's/^MACHINE_BANKS:STRING=//p' "$out/CMakeCache.txt")"
+  # TinyUSB workarounds kept (ON) or built out for testing (bd nxv)
+  echo "usb_workarounds=$(for o in DEINIT DATASEQ POLL_PAUSE CONTROL_WAIT; do
+    printf '%s=%s ' "$o" "$(sed -n "s/^USB_WA_$o:BOOL=//p" "$out/CMakeCache.txt")"; done)restart_key=$(sed -n 's/^USB_RESTART_KEY:BOOL=//p' "$out/CMakeCache.txt")"
   echo "compiler=$("$gcc" --version | head -1)"
   echo "cmake=$("$cmake" --version | head -1)"
   echo "picotool=$("$TOOLCHAIN_DIR/picotool/picotool/picotool" version | head -1)"

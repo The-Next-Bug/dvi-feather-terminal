@@ -188,6 +188,15 @@ SRAM), `STARTUP_DEMO` (default OFF),
 panic() text),
 `COPY_TO_RAM` (default ON; must stay ON, see below), `MACHINE_BANKS` (Z80
 machine: 48 KB banks besides bank 0, default 2; each costs 48 KB of SRAM).
+TinyUSB workaround switches (bd nxv, default ON = keep ours; OFF = rely on
+the fork's fix, for hardware tests; dvt_usb only, usbkbd.c): USB_WA_DEINIT
+(--wrap=rp2usb_deinit, remove-before-deinit in usbkbd_reset; #4310),
+USB_WA_DATASEQ (INTE mask in host_start, usbkbd_data_seq_error's raw INTR
+check + restart, which then returns false; #4312), USB_WA_POLL_PAUSE
+(usbkbd_polls_pause/resume become no-ops; #4313), USB_WA_CONTROL_WAIT
+(control_wait returns at once); USB_RESTART_KEY (default OFF): H in SET-UP
+calls usbkbd_request_reset("hkey"). build-info.txt's usb_workarounds line
+records them. Test images: BUILD_DIR=build/wa-<variant> CMAKE_ARGS=...
 
 Always run `scripts/test.sh`, a firmware build and `scripts/lint.sh` before handing work
 back. Hardware checks are done by the user (no board is attached to the
