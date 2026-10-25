@@ -10,6 +10,7 @@
 #include "hardware/structs/qmi.h"
 #include "hardware/sync.h"
 
+#include "audio.h"
 #include "board.h"
 
 volatile bool nvflash_busy;
@@ -131,6 +132,7 @@ void __no_inline_not_in_flash_func(nvflash_retime)(void) {
 // some handlers' code is in flash (the USB host's, ld/, bd qur.24).
 static void write_sector(uint32_t offset, const uint8_t *page) {
 	uint32_t irq = save_and_disable_interrupts();
+	audio_silence(); // the DMA replays its blocks meanwhile
 	nvflash_busy = true;
 	flash_range_erase(offset, FLASH_SECTOR_SIZE);
 	flash_range_program(offset, page, FLASH_PAGE_SIZE);
@@ -150,6 +152,7 @@ const uint8_t *nvflash_sector(unsigned i) {
 
 void nvflash_erase(uint32_t offset, uint32_t len) {
 	uint32_t irq = save_and_disable_interrupts();
+	audio_silence(); // the DMA replays its blocks meanwhile
 	nvflash_busy = true;
 	flash_range_erase(offset, len);
 	nvflash_retime();
@@ -159,6 +162,7 @@ void nvflash_erase(uint32_t offset, uint32_t len) {
 
 void nvflash_program(uint32_t offset, const uint8_t *data, uint32_t len) {
 	uint32_t irq = save_and_disable_interrupts();
+	audio_silence(); // the DMA replays its blocks meanwhile
 	nvflash_busy = true;
 	flash_range_program(offset, data, len);
 	nvflash_retime();

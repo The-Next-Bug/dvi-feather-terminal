@@ -10,6 +10,7 @@
 #include "hardware/clocks.h"
 #include "hardware/structs/sysinfo.h"
 
+#include "audio.h"
 #include "bell.h"
 #include "board.h"
 #include "extram.h"
@@ -179,6 +180,9 @@ static size_t bell_record(uint8_t *buf) {
 	if (bell_present()) {
 		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Bell", BELL_PINS ": a beep on BEL");
 	}
+	if (!audio_fitted()) {
+		return hwinfo_record(buf, HWINFO_ST_ABSENT, "Bell", BELL_PINS ": not fitted (SET-UP's Sound DAC)");
+	}
 	return hwinfo_record(buf, HWINFO_ST_NOT_FOUND, "Bell", BELL_PINS ": no PIO or DMA channel free");
 #undef BELL_PINS
 #else
@@ -193,6 +197,9 @@ static size_t sound_record(uint8_t *buf) {
 	if (bell_present()) {
 		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Sound chip",
 			"AY-3-8910 (emulated, 1.8432 MHz) on ports D8h/D0h, through the bell's DAC at 32 kHz");
+	}
+	if (!audio_fitted()) {
+		return hwinfo_record(buf, HWINFO_ST_ABSENT, "Sound chip", "AY-3-8910: the DAC is not fitted (SET-UP)");
 	}
 	return hwinfo_record(buf, HWINFO_ST_NOT_FOUND, "Sound chip", "AY-3-8910: the DAC is not set up");
 #else

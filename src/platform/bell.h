@@ -11,10 +11,9 @@
 #include <stdint.h>
 
 // After video_init: the sample rate comes from clk_sys. Starts the whole
-// audio engine.
+// audio engine, unless the Sound DAC setting says not fitted.
 void bell_init(void);
-// The loudness: a level, 0 (silent) to SETTINGS_BELL_MAX (settings.h);
-// for now the AY's too.
+// The loudness: a level, 0 (silent) to SETTINGS_BELL_MAX (settings.h).
 void bell_set_level(uint8_t level);
 // A beep, unless one is still sounding or the bell is off.
 void bell_ring(void);

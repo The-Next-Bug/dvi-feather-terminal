@@ -59,8 +59,11 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 	{"Date", 3, {SETTINGS_DATE_NONE, SETTINGS_DATE_ISO, SETTINGS_DATE_SHORT},
 		{"off", "2026-10-22", "Thu 22 Oct"}, SETTINGS_PAGE_CLOCK},
 	{"Bell", SETTINGS_BELL_MAX + 1, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
-		{"off", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}, SETTINGS_PAGE_MAIN},
+		{"off", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}, SETTINGS_PAGE_CLOCK},
 	{"USB log", 2, {SETTINGS_USB_LOG_OFF, SETTINGS_USB_LOG_SD}, {"off", "SD card USBLOG.TXT"}, SETTINGS_PAGE_MAIN},
+	{"Sound chip", SETTINGS_SOUND_MAX + 1, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+		{"off", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}, SETTINGS_PAGE_CLOCK},
+	{"Sound DAC", 2, {1, 0}, {"fitted", "not fitted"}, SETTINGS_PAGE_CLOCK},
 };
 
 unsigned settings_main_field(unsigned row) {
@@ -125,7 +128,7 @@ void settings_defaults(settings_t *s) {
 		.framing = 0, .newline = 0, .colors = 0, .palette = 0, .mode = SETTINGS_MODE_TERMINAL,
 		.status_line = 1, .blank_after = 0, .term_type = SETTINGS_TERM_VT100, .clock = SETTINGS_CLOCK_24H,
 		.clock_seconds = 0, .clock_date = SETTINGS_DATE_NONE, .bell = SETTINGS_BELL_DEFAULT,
-		.usb_log = SETTINGS_USB_LOG_OFF};
+		.usb_log = SETTINGS_USB_LOG_OFF, .sound_level = SETTINGS_SOUND_DEFAULT, .sound_dac = 1};
 }
 
 void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_RECORD_SIZE]) {

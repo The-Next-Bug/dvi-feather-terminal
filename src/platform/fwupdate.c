@@ -9,6 +9,7 @@
 #include "hardware/sync.h"
 #include "hardware/watchdog.h"
 
+#include "audio.h"
 #include "crc32.h"
 #include "ff.h"
 #include "nvflash.h"
@@ -172,6 +173,7 @@ void fwupdate_commit(void) {
 		return;
 	}
 	(void)save_and_disable_interrupts(); // for good: the board restarts
+	audio_silence();
 	// Nor an NMI (crash_glue.c's hang check routes a timer to core 0's):
 	// nothing but the copy may run once the old image starts going.
 	eppb_hw->nmi_mask[0] = 0;

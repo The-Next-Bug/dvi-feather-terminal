@@ -147,6 +147,8 @@ void apply_settings(const settings_t *s) {
 	colors = settings_colors(s);
 	show_palette(s);
 	bell_set_level(s->bell);
+	audio_set_ay_level(s->sound_level);
+	audio_set_fitted(s->sound_dac != 0);
 }
 
 // Wait until `until`, UART0 receiving something (copied into buf) or a key
@@ -255,6 +257,7 @@ int main(void) {
 	// The wall clock from the board's RTC (I2C clocked from clk_peri, final
 	// now).
 	rtc_init();
+	audio_set_fitted(settings.sound_dac != 0); // not started at all when not fitted
 	bell_init(); // its sample rate from clk_sys, final now
 	show_palette(&settings);
 	// After video_init: the baud divisor depends on the final clk_peri.

@@ -3,6 +3,7 @@
 
 #include "ay8910.h"
 #include "mixer.h"
+#include "tune.h"
 #include "test.h"
 
 #define RATE 32000
@@ -340,6 +341,72 @@ static void test_mixer_ay(void) {
 	CHECK_EQ(words[3], 0);
 }
 
+// ---- the demo's tune (tune.c) ----
+
+static uint8_t tune_regs[AY_REGS];
+static unsigned shape_writes;
+
+static void tune_write(uint8_t reg, uint8_t value) {
+	CHECK(reg < AY_REGS);
+	tune_regs[reg] = value;
+	shape_writes += reg == AY_ENVELOPE_SHAPE;
+}
+
+static uint16_t tone_of(unsigned ch) {
+	return (uint16_t)(tune_regs[2 * ch] | tune_regs[2 * ch + 1] << 8);
+}
+
+// The first notes on A (E5 B4 C5) with the envelope restarted for each,
+// the bass on B, the beat's noise tick on C and its end; round two starts
+// as round one.
+static void test_tune(void) {
+	CHECK_EQ(tune_period(24), 1761); // C2
+	CHECK_EQ(tune_period(5 * 12 + 4), 1398 >> 3); // E5
+	tune_t t;
+	memset(tune_regs, 0xff, sizeof tune_regs);
+	shape_writes = 0;
+	tune_start(&t, TUNE_KOROBEINIKI, tune_write, 1000);
+	CHECK_EQ(tune_regs[AY_MIXER], 0x1c);
+	tune_poll(&t, 1000);
+	CHECK_EQ(tone_of(0), 1398 >> 3); // E5
+	CHECK_EQ(tune_regs[AY_AMPLITUDE_A], AY_AMPLITUDE_ENVELOPE);
+	CHECK_EQ(tone_of(1), 1398); // E2
+	CHECK_EQ(tune_regs[AY_AMPLITUDE_A + 2], 5); // the tick
+	tune_poll(&t, 1000 + TUNE_TICK_MS);
+	CHECK_EQ(tune_regs[AY_AMPLITUDE_A + 2], 0);
+	CHECK_EQ(shape_writes, 1);
+	tune_poll(&t, 1000 + TUNE_EIGHTH_MS); // E5 still (a quarter); bass E3
+	CHECK_EQ(tone_of(0), 1398 >> 3);
+	CHECK_EQ(tone_of(1), 1398 >> 1);
+	tune_poll(&t, 1000 + 2 * TUNE_EIGHTH_MS);
+	CHECK_EQ(tone_of(0), 933 >> 2); // B4
+	tune_poll(&t, 1000 + 3 * TUNE_EIGHTH_MS);
+	CHECK_EQ(tone_of(0), 1761 >> 3); // C5
+	CHECK_EQ(shape_writes, 3);
+	// A round is 64 eighths; then E5 again, with E2 under it.
+	tune_poll(&t, 1000 + 63 * TUNE_EIGHTH_MS);
+	CHECK(tone_of(0) != 1398 >> 3);
+	tune_poll(&t, 1000 + 64 * TUNE_EIGHTH_MS);
+	CHECK_EQ(tone_of(0), 1398 >> 3);
+	CHECK_EQ(tone_of(1), 1398);
+	CHECK_EQ(t.eighths, 65);
+	CHECK(tune_poll(&t, 1000 + 1000 * TUNE_EIGHTH_MS)); // it loops
+
+	// The chime: C5 E5 G5 C6, 80 ms a step, C6 for six; then over, silent.
+	tune_start(&t, TUNE_CHIME, tune_write, 0);
+	CHECK(tune_poll(&t, 0));
+	CHECK_EQ(tone_of(0), 1761 >> 3);
+	CHECK(tune_poll(&t, 160));
+	CHECK_EQ(tone_of(0), 1175 >> 3); // G5
+	CHECK(tune_poll(&t, 240));
+	CHECK_EQ(tone_of(0), 1761 >> 4); // C6
+	CHECK(tune_poll(&t, 8 * 80));
+	CHECK_EQ(tune_regs[AY_AMPLITUDE_A], AY_AMPLITUDE_ENVELOPE);
+	CHECK(!tune_poll(&t, 9 * 80));
+	CHECK_EQ(tune_regs[AY_AMPLITUDE_A], 0);
+	CHECK_EQ(tune_regs[AY_AMPLITUDE_A + 2], 0); // no ticks in it
+}
+
 int main(void) {
 	RUN(test_reset_silent);
 	RUN(test_registers);
@@ -353,5 +420,6 @@ int main(void) {
 	RUN(test_ultrasonic);
 	RUN(test_mixer_bell);
 	RUN(test_mixer_ay);
+	RUN(test_tune);
 	return tests_done();
 }

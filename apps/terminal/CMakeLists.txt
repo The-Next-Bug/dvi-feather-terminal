@@ -65,6 +65,7 @@ target_link_libraries(dvi_terminal
   dvt_rtc_chips
   dvt_screen
   dvt_settings
+  dvt_sound
   dvt_storage
   dvt_term
   dvt_ui

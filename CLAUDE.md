@@ -425,12 +425,14 @@ UF2 in the latter).
   SETTINGS_MAIN_FIELDS, edited only on the Clock panel (settings_field_t
   .page: SETTINGS_PAGE_CLOCK); then bell (level 0 off to SETTINGS_BELL_MAX
   10, default 3, bd 1ls.18.1; the old off/low/medium/high were 0-3, so old
-  records stay at or below the default), back on SET-UP's main page: SET-UP's rows
-  (SETUP_ITEMS = SETTINGS_MAIN_FIELDS, 14) are the main-page fields in
-  order, settings_main_field(row) -> field (rows 0-11 = fields 0-11, row 12
-  = bell, field 15, row 13 = usb_log, field 16: SETTINGS_USB_LOG_OFF/_SD,
-  default off, bd xv0); setup_t.no_bell (set by setup_glue.c from
-  bell_present) shows Bell fixed as "off (no bell on this board)"; settings_columns() is 80 for the ADM-3A;
+  records stay at or below the default; on the Clock and sound panel since
+  1ls.18.5), usb_log (field 16: SETTINGS_USB_LOG_OFF/_SD, default off, bd
+  xv0), sound_level (the AY's, 0-10, default 7) and sound_dac (1 fitted,
+  default; 0: audio.c gives the PIO, DMA, IRQ and pins back, the AY's ports
+  read 0xFF), both on the panel. SET-UP's rows (SETUP_ITEMS =
+  SETTINGS_MAIN_FIELDS, 13) are the main-page fields in order,
+  settings_main_field(row) -> field (rows 0-11 = fields 0-11, row 12 =
+  usb_log); settings_columns() is 80 for the ADM-3A;
   settings_field_fixed() names what fixes a field, Columns under the
   ADM-3A: SET-UP skips it and shows "80 (ADM-3A)", dmt.39);
   settings_colors() gives the status
@@ -491,12 +493,16 @@ UF2 in the latter).
   only its cells on a minute*2+colon change; put_status_text cuts the
   line's text before it; its text and width from datetime_clock_text with
   the clock settings, 7-24 columns). Users: cpm_glue's machine platform
-  (time_get/time_set), get_fattime. SET-UP's C: `src/ui/clockpanel.[ch]`
-  (portable, cold, test_setup; bd 1ls.6.4): Date/Time follow rtc_now until
-  digits are typed over them (fixed positions, no sscanf), the three clock
-  settings as choices, a sample row; Return -> setup_glue.c clock_service
+  (time_get/time_set), get_fattime. SET-UP's C, the Clock and sound panel:
+  `src/ui/clockpanel.[ch]` (portable, cold, test_setup; bd 1ls.6.4,
+  1ls.18.5; 16 rows): Date/Time follow rtc_now until digits are typed over
+  them (fixed positions, no sscanf), the three clock settings as choices, a
+  sample row, then Bell, Sound chip and Sound DAC (field_of's table; without
+  a DAC on the board, has_dac, all three fixed, Sound DAC not fitted the
+  first two, shown off and skipped); Return -> setup_glue.c clock_service
   (main loop: rtc_set if typed, the settings into setup.ui.values for
-  SET-UP's save).
+  SET-UP's save). setup_service previews the panel's Bell (rung) and Sound
+  chip levels while it is open, else SET-UP's; cancel restores the saved.
 - Bell (bd 1ls.7): term.c's personalities bump term_t.bells on BEL (not
   OSC's terminator); main.c's loop calls bell_ring when it changes.
   `src/platform/audio.c` (the audio engine, bd 1ls.18.2; bell.h's API and
@@ -511,20 +517,35 @@ UF2 in the latter).
   channels chained to each other over two 256-word blocks (8 ms), each
   block's end raising DMA_IRQ_1 on core 0 (audio_irq, SRAM: points that
   channel back at its block, src/sound/mixer.c refills it while the other
-  plays; no channels: silence only, bell_present false). mixer.c: the bell
+  plays; no channels: silence only, bell_present false). Each channel reads
+  its 1 KB block as a ring (aligned), so with interrupts off it replays the
+  block instead of running on through SRAM (that was a burst of noise on
+  every settings save); nvflash's writes and fwupdate's commit call
+  audio_silence (zeroes both, SRAM) first. check_sram_only.py follows
+  audio_irq (OPTIONAL_ROOTS: boards without a DAC have none). mixer.c: the bell
   (mixer_ring: 3200 frames, 100 ms, of a 1 kHz square; a BEL while it runs
   is dropped) plus the AY when attached (audio_attach_ay, CP/M mode: Q15
   gain, skipped while ay_idle), clipped. Levels from the Bell setting
   (bell_set_level from apply_settings: 2 dB a level, 3 = 0x0800, 1/16 of
-  full scale, headphone-safe; 10 = 0x2818; 0 silent): the bell's amplitude,
-  and 3 x that as the AY's gain until it has a setting (bd 1ls.18.5), so
-  one AY channel at 15 is as loud as the bell. Interrupts off for a flash
+  full scale, headphone-safe; 10 = 0x2818; 0 silent): the bell's amplitude.
+  The AY's gain from Sound chip (audio_set_ay_level, ay_gains: Q15, 2 dB a
+  level, 10 unity, three channels at 15 just full scale; default 7). Interrupts off for a flash
   erase repeat the last blocks (a buzz) meanwhile. SET-UP sounds the edited Bell when it changes
   (setup_service) and restores the saved one on cancel. PCM output beyond
   that: bd 1ls.18.
 - Sound (bd 1ls.18): `src/sound/` (portable dvt_sound, test_ay; in SRAM:
   its render runs in the audio engine's refill IRQ, 1ls.18.2).
   mixer.[ch]: the engine's mix (the bell, the AY), above.
+  tune.[ch]: pieces (TUNE_*) of notes and steps: Korobeiniki (public
+  domain; 64 eighths at 200 ms, looped) for SET-UP's T demo, melody on A
+  with envelope shape 0 restarted per note, octave bass on B, a 40 ms noise
+  tick on C each beat; the chime (C5 E5 G5 C6, 80 ms steps, once, ~0.7 s)
+  for a new Sound chip level in the Clock and sound panel; tune_poll false
+  when a piece ends. setup_glue.c's ay_play/ay_service/ay_give_back borrow
+  the AY for them (bell_present; the demo only with Sound chip > 0; the Z80
+  is stopped under SET-UP): its 16 registers saved and written back after
+  (piece over, demo over, SET-UP closed), attached only meanwhile in
+  terminal mode. test_ay's test_tune.
   ay8910.[ch] (1ls.18.3): the AY-3-8910, clock AY_CLOCK_RC2014 1.8432 MHz;
   generators ticked at f / 8 (tone f / (16 TP), noise and envelope steps
   f / (16 NP or EP), period 0 = 1, 17-bit LFSR taps 0/3, MAME's envelope
