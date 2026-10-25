@@ -78,6 +78,9 @@ static void progress_start(uint32_t step) {
 static void progress(void *ctx, uint32_t done, uint32_t total) {
 	(void)ctx;
 	(void)total;
+	if (plat->busy) {
+		plat->busy();
+	}
 	if (dots < done / progress_step) {
 		for (; dots < done / progress_step; ++dots) {
 			put(".");

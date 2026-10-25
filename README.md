@@ -121,8 +121,8 @@ setting explained:
   crystal (a pico-sdk board header; the SDK's own boards can be included,
   as the DVI Sock's does).
 
-Board headers so far (the DVI Sock is checked on hardware, the Frankless
-in part):
+Board headers so far (the DVI Sock and the Feather with PSRAM and the
+Adalogger FeatherWing are checked on hardware, the Frankless in part):
 
 | Target | Board |
 |---|---|
@@ -132,6 +132,13 @@ in part):
 | `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
 | `feather-rp2350-hstx-adalogger` | `feather-rp2350-hstx` with the Adalogger FeatherWing's PCF8523 real-time clock on I2C1 (SDA/SCL, GP2/3); no RTS/CTS (those were GP2/3) |
 | `feather-rp2350-hstx-psram-adalogger` | `feather-rp2350-hstx-psram` with the Adalogger FeatherWing's PCF8523, as above |
+
+Experimental headers for boards that are not here, from their schematics
+and never run on one, are in `boards/experimental/` (the stock MicroFRANK,
+`microfrank`, and the 7West PicoTop Rev2, `picotop-rev2`). CI does not
+build them and releases leave them out; `EXPERIMENTAL=1
+TARGET=<target> scripts/build.sh` builds one
+([boards/experimental/README.md](boards/experimental/README.md)).
 
 All four Feather targets run at 354 MHz instead of 400: on two Feathers
 the firmware crashed at random at 400 MHz, with or without the PSRAM. The
@@ -410,6 +417,13 @@ computer: a Z80 emulated on core 0 (z80pack's CPU core, as in its
 the Pico) with the terminal as its console, the USB keyboard as its
 keyboard, disk images on a microSD card, and UART0 as its second serial
 port. Set Mode back to *terminal* for the plain serial terminal.
+
+Digital Research's own sources for CP/M 2.2 and CP/M 3 (CP/M Plus), its
+tools (MAC, RMAC, LINK, GENCPM) and much else are on
+[The Unofficial CP/M Web Site](http://www.cpm.z80.de/) (its
+[source page](http://www.cpm.z80.de/source.html); the site's HTTPS
+certificate has lapsed, so use http). The disks here are built from
+z80pack's binaries for now.
 
 ### SD card
 
@@ -1031,7 +1045,7 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | `test/` | Host unit tests (plain CMake + gcc with ASan/UBSan, no pico-sdk) |
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see [Trying it from a PC](#trying-it-from-a-pc)) |
 | `lib/pico-sdk` | Pinned submodule (not its own submodules) |
-| `lib/tinyusb` | Pinned submodule: TinyUSB, newer than pico-sdk's 0.18 (its USB host fixes) |
+| `lib/tinyusb` | Pinned submodule: TinyUSB, newer than pico-sdk's 0.18 (its USB host fixes); for now our fork's `dvt/integration` branch (github.com/arlaneenalra/tinyusb): upstream master plus the RP2350 host fixes proposed upstream (`docs/upstream/`) |
 | `lib/z80pack` | Vendored part of z80pack (Z80 core, z80asm, picosim disk images); `UPSTREAM.md` gives the commit and local changes |
 | `lib/fatfs` | ChaN's FatFs R0.15a, vendored (see its README) |
 | `assets/logo/` | The startup logo (PNG used by the build, JPEG original) |
@@ -1120,9 +1134,10 @@ z80pack is © Udo Munk and others under the MIT license (`lib/z80pack/LICENSE`);
 `src/machine/machine.c` and `src/machine/z80pack/` follow its picosim, and its CPU core
 includes `log.h` (Apache-2.0). FatFs is © ChaN under a 1-clause BSD license
 (`lib/fatfs/LICENSE.txt`). The built-in disk images come from z80pack: CP/M
-2.2 and CP/M 3 are Digital Research's, redistributed under the permission Lineo
-(Caldera) gave in 2001 for the CP/M material of "The Unofficial CP/M Web
-Site"; the Z80 exercisers are Frank D. Cringle's, GPL-2.0 or later (their sources are
+2.2 and CP/M 3 are Digital Research's, redistributed under the right to use,
+distribute and modify CP/M and its derivatives that DRDOS, Inc. (Digital
+Research's successor) stated in 2022, widening Lineo's 2001 grant to "The
+Unofficial CP/M Web Site" (http://www.cpm.z80.de/license.html); the Z80 exercisers are Frank D. Cringle's, GPL-2.0 or later (their sources are
 on the same disk image).
 
 [`docs/THIRD-PARTY.md`](docs/THIRD-PARTY.md) lists every third-party

@@ -33,7 +33,14 @@ endif()
 # the RP2040 ran out of SRAM and could not run the USB keyboard at the DVI
 # clock (bd dmt.20, dmt.29).
 set(PICO_BOARD pico2-dvi-sock CACHE STRING "Board: boards/<PICO_BOARD>.h (an RP2350 board)")
-list(APPEND PICO_BOARD_HEADER_DIRS "${CMAKE_CURRENT_LIST_DIR}/boards")
+list(APPEND PICO_BOARD_HEADER_DIRS "${CMAKE_CURRENT_LIST_DIR}/boards"
+  "${CMAKE_CURRENT_LIST_DIR}/boards/experimental")
+# Boards nobody here has: never run on one, not built by CI
+# (boards/experimental/README.md; scripts/build.sh wants EXPERIMENTAL=1).
+if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/boards/${PICO_BOARD}.h"
+    AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/boards/experimental/${PICO_BOARD}.h")
+  message(WARNING "PICO_BOARD ${PICO_BOARD} is experimental: untested on hardware")
+endif()
 option(STARTUP_LOGO "Show the logo (LOGO_IMAGE) for a few seconds at power-on/reset" ON)
 # Monitors take a few seconds to lock onto the signal after power-on, which
 # comes out of this.
@@ -71,6 +78,17 @@ set(MACHINE_BANKS 2 CACHE STRING "Z80 machine: number of 48 KB banks (MMU port 6
 # it on with pico_board_cmake_set(PSRAM_BANKS, 1)
 # (boards/feather-rp2350-hstx-psram.h).
 option(PSRAM_BANKS "Z80 machine: banks in the board's PSRAM instead of SRAM" OFF)
+
+# Our workarounds for TinyUSB's RP2350 host bugs (src/usb/usbkbd.c), each
+# fixed in the fork lib/tinyusb builds (PRs #4310-#4313, bd 5bc). ON keeps
+# a workaround; OFF builds test images that rely on TinyUSB's fix instead
+# (hardware validation, bd nxv). USB_RESTART_KEY: H in SET-UP restarts
+# the USB host, for testing the deinit path.
+option(USB_WA_DEINIT "Free the RP2350 driver's lock ourselves after tusb_deinit (TinyUSB #4310)" ON)
+option(USB_WA_DATASEQ "Mask the data sequence error interrupt, restart the host on one (TinyUSB #4312)" ON)
+option(USB_WA_POLL_PAUSE "Pause the interrupt endpoint polls around our EPX transfers (TinyUSB #4313)" ON)
+option(USB_WA_CONTROL_WAIT "Finish our control transfers before usbkbd_poll returns" ON)
+option(USB_RESTART_KEY "Test builds: H in SET-UP restarts the USB host" OFF)
 
 include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
@@ -118,6 +136,11 @@ target_compile_definitions(dvt_z80pack PUBLIC MACHINE_BANKS=${MACHINE_BANKS})
 target_compile_definitions(dvt_board INTERFACE SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>)
 target_compile_definitions(dvt_platform PUBLIC VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}> PSRAM_BANKS=$<BOOL:${PSRAM_BANKS}>)
 target_compile_definitions(dvt_video PUBLIC HSTX_MODE=${DVT_HSTX_MODE})
+target_compile_definitions(dvt_usb PRIVATE
+  USB_WA_DEINIT=$<BOOL:${USB_WA_DEINIT}>
+  USB_WA_DATASEQ=$<BOOL:${USB_WA_DATASEQ}>
+  USB_WA_POLL_PAUSE=$<BOOL:${USB_WA_POLL_PAUSE}>
+  USB_WA_CONTROL_WAIT=$<BOOL:${USB_WA_CONTROL_WAIT}>)
 
 # The programs: the terminal and the HSTX test pattern.
 add_subdirectory(apps/terminal)

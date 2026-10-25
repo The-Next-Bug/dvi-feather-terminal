@@ -40,6 +40,7 @@ target_compile_definitions(dvi_terminal PRIVATE
   STARTUP_LOGO=$<BOOL:${STARTUP_LOGO}>
   LOGO_MS=${LOGO_MS}
   STARTUP_DEMO=$<BOOL:${STARTUP_DEMO}>
+  USB_RESTART_KEY=$<BOOL:${USB_RESTART_KEY}>
   # The compose loop needs very little stack.
   PICO_CORE1_STACK_SIZE=0x200
   # Nothing prints floating point: its printf code (and the soft-float it

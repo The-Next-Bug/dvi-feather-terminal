@@ -1,7 +1,9 @@
 # rp2040 host: tuh_deinit() hangs with a device attached (hcd_deinit frees rp2usb_lock before remove_device_tree)
 
-**TinyUSB:** master 13f9a36a8 (also present since rp2usb_deinit() was added to hcd_deinit())
-**Port:** rp2040 hcd (native USB), seen on RP2350, pico-sdk 2.3.1, CFG_TUSB_OS = OPT_OS_PICO
+**TinyUSB:** master 006af6325 (2026-10-24; first seen on 13f9a36a8). Present since #3796 added
+`rp2usb_deinit()` to `hcd_deinit()`; #3721's `osal_spin_deinit()` does not change the order.
+**Port:** rp2040 hcd (native USB; RP2040 and RP2350 share it), seen on RP2350, pico-sdk 2.3.1,
+CFG_TUSB_OS = OPT_OS_PICO
 
 ## What happens
 
@@ -35,6 +37,10 @@ Remove the devices before tearing down the controller: in `tuh_deinit()` call
 `hcd_device_close()` can also stop an EPX transfer still under way: `sie_stop_xfer()` waits for
 STOP_TRANS to clear, which a controller already reset might never do). Alternatively free the lock
 after the devices are gone.
+
+Proposed change (7 lines in usbh.c, builds for RP2040 and RP2350):
+https://github.com/arlaneenalra/tinyusb/tree/fix/tuh-deinit-close-devices-first
+(PR: https://github.com/hathach/tinyusb/compare/master...arlaneenalra:tinyusb:fix/tuh-deinit-close-devices-first)
 
 ## Workaround (application side)
 

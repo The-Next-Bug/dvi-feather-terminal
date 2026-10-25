@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# src/board/board.h's compile-time checks: every boards/*.h passes them,
+# src/board/board.h's compile-time checks: every boards/*.h (and
+# boards/experimental/*.h) passes them,
 # and pin mistakes stop the build with the right message. board.h only
 # needs pico.h for the board header, so a stub stands in for the SDK.
 set -euo pipefail
@@ -46,7 +47,7 @@ has_cts() {
 
 # A board without CTS/RTS (its pins have another job: the Adalogger's RTC)
 # stops flow control builds at the check.
-for board in "$ROOT"/boards/*.h; do
+for board in "$ROOT"/boards/*.h "$ROOT"/boards/experimental/*.h; do
   for flow in 0 1; do
     expect=""
     if [[ $flow == 1 ]] && ! has_cts "$board"; then
@@ -119,12 +120,11 @@ check "I2S WS not after BCK" "must be BOARD_AUDIO_I2S_BCK_PIN + 1" "$sock" "$(i2
 check "I2S without DATA" "needs BOARD_AUDIO_I2S_BCK_PIN" "$sock" "#define BOARD_AUDIO_I2S_BCK_PIN 9" \
   "#define BOARD_AUDIO_I2S_WS_PIN 10"
 check "I2S on the SD card" "uses a pin twice" "$sock" "$(i2s 4 5 8)"
-check "planned hardware" "" "$sock" "#define BOARD_BUZZER_PIN 8" "#define BOARD_NEOPIXEL_PIN 9" \
-  "#define BOARD_SD_CD_PIN 10" "#define BOARD_BUTTON_PIN 11" "#define BOARD_BATTERY_ADC_PIN 26" \
-  "#define BOARD_CHARGER_STAT_PIN 27"
-check "button on the LED" "uses a pin twice" "$sock" "#define BOARD_BUTTON_PIN 25"
-check "battery not on an ADC pin" "not an ADC pin" "$sock" "#define BOARD_BATTERY_ADC_PIN 22"
-check "battery on GP40 of an RP2350A" "not an ADC pin" "$sock" "#define BOARD_BATTERY_ADC_PIN 40"
+check "planned hardware" "" "$sock" "#define BOARD_NEOPIXEL_PIN 9"
+check "NeoPixel on the LED" "uses a pin twice" "$sock" "#define BOARD_NEOPIXEL_PIN 25"
+for pin in BUZZER SD_CD BUTTON BATTERY_ADC CHARGER_STAT; do
+  check "dropped BOARD_${pin}_PIN" "were dropped" "$sock" "#define BOARD_${pin}_PIN 9"
+done
 check "no LED" "" "$sock" "#undef PICO_DEFAULT_LED_PIN"
 check "DVI drive 8 mA" "" "$sock" "#define BOARD_DVI_DRIVE_MA 8"
 check "DVI drive 6 mA" "must be 2, 4, 8 or 12" "$sock" "#define BOARD_DVI_DRIVE_MA 6"

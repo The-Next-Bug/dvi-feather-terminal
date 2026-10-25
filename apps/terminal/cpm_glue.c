@@ -122,6 +122,7 @@ const monitor_platform_t cpm_monitor = {
 	.card_pins = BOARD_SD_PINS_TEXT,
 	.flush = cpm_flush,
 	.usb_info = usbmsc_info,
+	.busy = crash_heartbeat, // writing an 8 MB image takes longer than HANG_MS
 };
 
 // F11: reset the machine and boot from drive A, as the reset button of a

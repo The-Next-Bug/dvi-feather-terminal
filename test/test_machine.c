@@ -509,9 +509,14 @@ static const char *card_info(void) {
 }
 
 static unsigned flushes;
+static unsigned busies; // monitor_platform_t.busy: the hang check fed during long writes (bd fhu.3)
 
 static void flush(void) {
 	++flushes;
+}
+
+static void busy(void) {
+	++busies;
 }
 
 // The firmware update's platform side, stubbed: the file's first byte says
@@ -550,7 +555,8 @@ static void firmware_commit(void) {
 	++commits;
 }
 
-static const monitor_platform_t monitor_platform = {.write = console_text, .card_info = card_info, .flush = flush};
+static const monitor_platform_t monitor_platform = {.write = console_text, .card_info = card_info, .flush = flush,
+	.busy = busy};
 
 // The whole menu was shown, up to its prompt (lpt.8: it was cut short).
 static bool menu_shown(void) {
@@ -638,8 +644,10 @@ static void test_monitor_fresh_card(void) {
 	CHECK_EQ(monitor_tick(MONITOR_AUTOBOOT_MS), MONITOR_NONE); // nothing to boot
 
 	clear_screen();
+	busies = 0;
 	CHECK_EQ(keys("i"), MONITOR_NONE);
 	CHECK(strstr(screen, "CPM22    written") != NULL);
+	CHECK(busies >= 2 * (8160 * 1024 / 4096)); // CPM32 and F83 alone, 4 KB chunks at most
 	CHECK(strstr(screen, "Set CPM22 written") != NULL);
 	CHECK(strstr(screen, "Set CPM3  written") != NULL);
 	char images[DRIVES][DRIVES_NAME_MAX + 1];
@@ -678,9 +686,11 @@ static void test_monitor_fresh_card(void) {
 	// A new 8 MB disk: progress dots, shown as they come (flush).
 	clear_screen();
 	flushes = 0;
+	busies = 0;
 	CHECK_EQ(keys("nbig\r3"), MONITOR_NONE);
 	CHECK(strstr(screen, "Writing BIG.DSK (8160 KB)... ............................... done") != NULL);
 	CHECK(flushes >= 31);
+	CHECK(busies >= 8160 * 1024 / 4096); // every 4 KB chunk
 	CHECK(menu_shown());
 	CHECK_EQ(drives_image_format("BIG"), DRIVES_HD8);
 
@@ -1349,7 +1359,7 @@ static void test_hwinfo_port(void) {
 	CHECK(memcmp(bnk0 + at, id, 16) == 0);
 	static const uint8_t board[16] = "host-board";
 	CHECK(memcmp(bnk0 + at + 16, board, 16) == 0); // its 0, then 0s
-	CHECK(memcmp(bnk0 + at + 32, "\x04Real-time clock", 16) == 0); // the first 16 bytes
+	CHECK(memcmp(bnk0 + at + 32, "\x01Real-time clock", 16) == 0); // the first 16 bytes
 	static const uint8_t none[16];
 	CHECK(memcmp(bnk0 + at + 48, none, 16) == 0);
 
@@ -1473,14 +1483,16 @@ static void hwinfo_report_checks(void) {
 	CHECK(strstr(screen, "CPU              yes      RP2350A at 400 MHz, 4 MB flash\r\n") != NULL);
 	CHECK(strstr(screen, "PSRAM            missing  none answered on CS1 (GP8)\r\n") != NULL);
 	CHECK(strstr(screen, "USB stick        no       none\r\n") != NULL);
-	CHECK(strstr(screen, "Real-time clock  planned  not supported yet\r\n") != NULL);
+	CHECK(strstr(screen, "Real-time clock  yes      DS3231 on I2C1: GP10 SDA, GP11 SCL\r\n") != NULL);
+	CHECK(strstr(screen, "RGB status LED   planned  GP21: not supported yet\r\n") != NULL);
 	CHECK(strstr(screen, "Future thing     ?        a status HWINFO does not know\r\n") != NULL);
 	// Wrapped at 79 columns, the rest under the detail column.
 	CHECK(strstr(screen, "SD card          yes      SDHC/SDXC, 29.7 GB; SPI0: GP4 MISO, GP5 CS, GP6 SCK,\r\n"
 		"                          GP7 MOSI\r\n") != NULL);
 	// In item order.
-	const char *cpu = strstr(screen, "CPU "), *rtc = strstr(screen, "Real-time"), *future = strstr(screen, "Future");
-	CHECK(cpu && rtc && future && cpu < rtc && rtc < future);
+	const char *cpu = strstr(screen, "CPU "), *rtc = strstr(screen, "Real-time"), *rgb = strstr(screen, "RGB status"),
+		*future = strstr(screen, "Future");
+	CHECK(cpu && rtc && rgb && future && cpu < rtc && rtc < rgb && rgb < future);
 }
 
 static void test_hwinfo_tool(void) {
@@ -1515,7 +1527,7 @@ static void test_hwinfo_tool(void) {
 		++lines;
 	}
 	CHECK_EQ(lines, 23); // the command's echo and 22 of HWINFO's
-	CHECK(strstr(screen, "Extra 12 ") != NULL && strstr(screen, "Extra 13 ") == NULL);
+	CHECK(strstr(screen, "Extra 11 ") != NULL && strstr(screen, "Extra 12 ") == NULL);
 	clear_screen();
 	CHECK(type(" "));
 	CHECK_EQ(run_until("-- More --", 10), MACHINE_RUNNING);
@@ -1525,12 +1537,12 @@ static void test_hwinfo_tool(void) {
 		++lines;
 	}
 	CHECK_EQ(lines, 23);
-	CHECK(strstr(screen, "Extra 13 ") != NULL && strstr(screen, "Extra 35 ") != NULL && strstr(screen, "Extra 36 ") == NULL);
+	CHECK(strstr(screen, "Extra 12 ") != NULL && strstr(screen, "Extra 34 ") != NULL && strstr(screen, "Extra 35 ") == NULL);
 	// Q stops it.
 	clear_screen();
 	CHECK(type("q"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
-	CHECK(strstr(screen, "Extra 36") == NULL && strstr(screen, "Future") == NULL);
+	CHECK(strstr(screen, "Extra 35") == NULL && strstr(screen, "Future") == NULL);
 	// The last page ends without one.
 	clear_screen();
 	CHECK(type("HWINFO\r"));

@@ -4,6 +4,8 @@
 #
 # Environment overrides:
 #   TARGET          board: boards/<TARGET>.h (default: pico2-dvi-sock)
+#   EXPERIMENTAL    1 to build a board in boards/experimental/ (untested,
+#                   not built by CI: boards/experimental/README.md)
 #   BUILD_DIR       output root; the build lands in BUILD_DIR/TARGET (default: build)
 #   BUILD_TYPE      CMake build type (default: Release)
 #   TOOLCHAIN_DIR   toolchain location (default: <repo>/.toolchain)
@@ -23,12 +25,25 @@ SERIAL_FLOW_CONTROL="${SERIAL_FLOW_CONTROL:-OFF}"
 TOOLCHAIN_DIR="${TOOLCHAIN_DIR:-$ROOT/.toolchain}"
 
 # Targets: one per board header, boards/<TARGET>.h (pins, flash, crystal;
-# boards/example.h is the template for a new board).
-[[ -f "boards/$TARGET.h" ]] || {
-  echo "error: unknown TARGET '$TARGET': no boards/$TARGET.h; targets:" \
-    $(basename -s .h boards/*.h) >&2
-  exit 1
-}
+# boards/example.h is the template for a new board). Headers for boards
+# nobody here has are in boards/experimental/, built only on request.
+experimental=no
+if [[ ! -f "boards/$TARGET.h" ]]; then
+  if [[ -f "boards/experimental/$TARGET.h" ]]; then
+    [[ "${EXPERIMENTAL:-}" == 1 ]] || {
+      echo "error: boards/experimental/$TARGET.h is experimental (never run on" \
+        "the board); build it with EXPERIMENTAL=1" >&2
+      exit 1
+    }
+    experimental=yes
+    echo "warning: building experimental board $TARGET: untested on hardware" >&2
+  else
+    echo "error: unknown TARGET '$TARGET': no boards/$TARGET.h; targets:" \
+      $(basename -s .h boards/*.h) "(experimental:" \
+      $(basename -s .h boards/experimental/*.h)")" >&2
+    exit 1
+  fi
+fi
 pico_board="$TARGET"
 
 cmake="$TOOLCHAIN_DIR/cmake/bin/cmake"
@@ -61,10 +76,14 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
 {
   echo "target=$TARGET"
   echo "pico_board=$pico_board"
+  echo "experimental=$experimental"
   echo "hstx_mode=$(sed -n 's/^HSTX_MODE_USED:INTERNAL=//p' "$out/CMakeCache.txt")"
   echo "build_type=$BUILD_TYPE"
   echo "serial_flow_control=$SERIAL_FLOW_CONTROL"
   echo "machine_banks=$(sed -n 's/^MACHINE_BANKS:STRING=//p' "$out/CMakeCache.txt")"
+  # TinyUSB workarounds kept (ON) or built out for testing (bd nxv)
+  echo "usb_workarounds=$(for o in DEINIT DATASEQ POLL_PAUSE CONTROL_WAIT; do
+    printf '%s=%s ' "$o" "$(sed -n "s/^USB_WA_$o:BOOL=//p" "$out/CMakeCache.txt")"; done)restart_key=$(sed -n 's/^USB_RESTART_KEY:BOOL=//p' "$out/CMakeCache.txt")"
   echo "compiler=$("$gcc" --version | head -1)"
   echo "cmake=$("$cmake" --version | head -1)"
   echo "picotool=$("$TOOLCHAIN_DIR/picotool/picotool/picotool" version | head -1)"

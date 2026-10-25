@@ -254,7 +254,25 @@ static bool usb_quiet(void) {
 // scheduled can still run in the next frame: two SOFs (~2 ms).
 #define POLLS_PAUSE_TIMEOUT_US 5000
 
+// USB_WA_*: each workaround for a TinyUSB RP2350 host bug can be built out
+// (top CMakeLists.txt) to test TinyUSB's own fix on hardware (bd nxv).
+#ifndef USB_WA_DEINIT
+#define USB_WA_DEINIT 1
+#endif
+#ifndef USB_WA_DATASEQ
+#define USB_WA_DATASEQ 1
+#endif
+#ifndef USB_WA_POLL_PAUSE
+#define USB_WA_POLL_PAUSE 1
+#endif
+#ifndef USB_WA_CONTROL_WAIT
+#define USB_WA_CONTROL_WAIT 1
+#endif
+
 uint32_t usbkbd_polls_pause(void) {
+#if !USB_WA_POLL_PAUSE
+	return 0; // TinyUSB's driver pauses them itself (#4313)
+#endif
 	uint32_t saved = usb_hw->int_ep_ctrl;
 	hw_clear_bits(&usb_hw->int_ep_ctrl, saved);
 	uint32_t frame = usb_hw->sof_rd;
@@ -266,6 +284,10 @@ uint32_t usbkbd_polls_pause(void) {
 }
 
 void usbkbd_polls_resume(uint32_t saved) {
+#if !USB_WA_POLL_PAUSE
+	(void)saved;
+	return;
+#endif
 	uint32_t on = 0;
 	for (unsigned i = 1; i <= USB_HOST_INTERRUPT_ENDPOINTS; ++i) {
 		if ((saved & (1u << i)) && usb_hw->int_ep_addr_ctrl[i - 1]) { // not closed meanwhile
@@ -285,6 +307,10 @@ void usbkbd_polls_resume(uint32_t saved) {
 static volatile bool leds_busy;
 
 static void control_wait(volatile bool *busy) {
+#if !USB_WA_CONTROL_WAIT
+	(void)busy;
+	return; // left to finish in later tuh_task calls
+#endif
 	uint64_t until = time_us_64() + CONTROL_WAIT_US;
 	while (*busy && time_us_64() < until) {
 		tuh_task();
@@ -341,6 +367,7 @@ static void send_leds(bool quiet) {
 // usbkbd_reset frees the lock itself once the devices are gone
 // (--wrap=rp2usb_deinit, src/usb/CMakeLists.txt; hcd_deinit has a weak
 // twin in usbh.c, so its call there cannot be wrapped).
+#if USB_WA_DEINIT
 static bool lock_free_later;
 void __real_rp2usb_deinit(void);
 void __wrap_rp2usb_deinit(void) {
@@ -348,6 +375,7 @@ void __wrap_rp2usb_deinit(void) {
 		__real_rp2usb_deinit();
 	}
 }
+#endif
 
 static void host_start(void) {
 	tusb_rhport_init_t host = {.role = TUSB_ROLE_HOST, .speed = TUSB_SPEED_AUTO};
@@ -356,10 +384,16 @@ static void host_start(void) {
 	// packet from a device with the wrong DATA0/1 PID), which reboots the
 	// board: seen when a stick was plugged in again after hours (bd qo3).
 	// The interrupt stays off; usbkbd_data_seq_error finds the error.
+	// Without USB_WA_DATASEQ TinyUSB handles it (#4312).
+#if USB_WA_DATASEQ
 	hw_clear_bits(&usb_hw->inte, USB_INTE_ERROR_DATA_SEQ_BITS);
+#endif
 }
 
 bool usbkbd_data_seq_error(void) {
+#if !USB_WA_DATASEQ
+	return false; // the driver clears the error itself; ours could catch it first and restart the host
+#endif
 	if (!(usb_hw->intr & USB_INTR_ERROR_DATA_SEQ_BITS)) {
 		return false;
 	}
@@ -389,12 +423,16 @@ void usbkbd_reset(const char *why) {
 	// the controller still runs: tuh_deinit removes them only after
 	// resetting it, where stopping a transfer still under way could wait
 	// for good.
+#if USB_WA_DEINIT
 	hcd_event_device_remove(0, false);
 	tuh_task();
 	lock_free_later = true;
 	tusb_deinit(0);
 	lock_free_later = false;
 	__real_rp2usb_deinit();
+#else
+	tusb_deinit(0); // TinyUSB's fix (#4310): its devices go after the controller is stopped
+#endif
 	memset(keyboards, 0, sizeof keyboards);
 	memset(ready, 0, sizeof ready);
 	kbd_release_all(&kbd);
@@ -523,12 +561,8 @@ void usbkbd_init(kbd_output_t output, kbd_setup_t setup, void *ctx) {
 	kbd_init(&kbd, output, ctx);
 	kbd_set_setup_key(&kbd, setup);
 	led_report = kbd_leds(&kbd);
-#ifdef BOARD_USB_VBUS_EN_PIN
-	// The board switches the port's 5 V; the RP2350 cannot supply it.
-	gpio_init(BOARD_USB_VBUS_EN_PIN);
-	gpio_put(BOARD_USB_VBUS_EN_PIN, BOARD_USB_VBUS_EN_LEVEL);
-	gpio_set_dir(BOARD_USB_VBUS_EN_PIN, GPIO_OUT);
-#endif
+	// A board's BOARD_USB_VBUS_EN_PIN is on already: main() sets it before
+	// the video.
 	host_start();
 }
 

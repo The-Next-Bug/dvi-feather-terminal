@@ -31,5 +31,8 @@ target_link_libraries(dvt_usb
 )
 dvt_compile_options(dvt_usb)
 # usbkbd.c's __wrap_rp2usb_deinit: TinyUSB's tuh_deinit frees the driver's
-# lock before removing the devices (usbkbd_reset).
-target_link_options(dvt_usb INTERFACE -Wl,--wrap=rp2usb_deinit)
+# lock before removing the devices (usbkbd_reset). Not with USB_WA_DEINIT
+# OFF (the top CMakeLists.txt), which relies on TinyUSB's fix (#4310).
+if(USB_WA_DEINIT)
+  target_link_options(dvt_usb INTERFACE -Wl,--wrap=rp2usb_deinit)
+endif()

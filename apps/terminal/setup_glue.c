@@ -22,6 +22,7 @@
 #include "sdcard.h"
 #include "term_build.h"
 #include "terminal.h"
+#include "usbkbd.h"
 #include "usbmsc.h"
 #include "video.h"
 #include "xfer.h"
@@ -200,6 +201,12 @@ void setup_feed(const uint8_t *data, size_t len) {
 			drives_feed(data[i], now);
 			continue;
 		}
+#if USB_RESTART_KEY
+		if (data[i] == 'h' || data[i] == 'H') { // test builds (bd nxv): restart the USB host
+			usbkbd_request_reset("hkey");
+			continue;
+		}
+#endif
 		setup_action_t a = setup_input(&setup.ui, data[i], now);
 		if (a == SETUP_REDRAW) {
 			setup_draw_panel();
