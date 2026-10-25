@@ -33,7 +33,14 @@ endif()
 # the RP2040 ran out of SRAM and could not run the USB keyboard at the DVI
 # clock (bd dmt.20, dmt.29).
 set(PICO_BOARD pico2-dvi-sock CACHE STRING "Board: boards/<PICO_BOARD>.h (an RP2350 board)")
-list(APPEND PICO_BOARD_HEADER_DIRS "${CMAKE_CURRENT_LIST_DIR}/boards")
+list(APPEND PICO_BOARD_HEADER_DIRS "${CMAKE_CURRENT_LIST_DIR}/boards"
+  "${CMAKE_CURRENT_LIST_DIR}/boards/experimental")
+# Boards nobody here has: never run on one, not built by CI
+# (boards/experimental/README.md; scripts/build.sh wants EXPERIMENTAL=1).
+if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/boards/${PICO_BOARD}.h"
+    AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/boards/experimental/${PICO_BOARD}.h")
+  message(WARNING "PICO_BOARD ${PICO_BOARD} is experimental: untested on hardware")
+endif()
 option(STARTUP_LOGO "Show the logo (LOGO_IMAGE) for a few seconds at power-on/reset" ON)
 # Monitors take a few seconds to lock onto the signal after power-on, which
 # comes out of this.

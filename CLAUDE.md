@@ -89,7 +89,7 @@ GP12-19), optional BOARD_DVI_DRIVE_MA / _SLEW_FAST, BOARD_UART (0/1) +
 BOARD_UART_{TX,RX,CTS,RTS}_PIN (terminal UART, also VIDEO_DIAG; CTS/RTS
 optional; the header points PICO_DEFAULT_UART* at them for hstx_test's
 stdio, before including an SDK board), BOARD_SD_SPI + BOARD_SD_{MISO,CS,SCK,MOSI}_PIN,
-optional BOARD_USB_VBUS_EN_PIN / _LEVEL, optional PICO_DEFAULT_LED_PIN
+optional BOARD_USB_VBUS_EN_PIN / _LEVEL (on first thing in main()), optional PICO_DEFAULT_LED_PIN
 (src/platform/led.[ch], bd 1ls.8: off while the screen is on; flashes on/off
 >= 40 ms each on disk_read/disk_write and serial_read/serial_write data;
 with the screen blanked a 100 ms heartbeat each second from led_poll in
@@ -106,9 +106,11 @@ tick, DS3231 only, needs a chip; bd 1ls.6.1, 1ls.6.2; HWINFO's record
 names the chip, rtc_chip_name, and says "battery low", rtc_battery_low), optional BOARD_AUDIO_I2S_{BCK,WS,DATA}_PIN (WS
 = BCK + 1: PIO side-set) + _NAME (src/platform/bell.c, bd 1ls.7), and the
 planned hardware's pins, named before any driver exists (bd 1ls.4):
-BOARD_BUZZER_PIN, BOARD_NEOPIXEL_PIN, BOARD_SD_CD_PIN, BOARD_BUTTON_PIN,
-BOARD_BATTERY_ADC_PIN (ADC pins only), BOARD_CHARGER_STAT_PIN. All count
-in board.h's used-once check. apps/terminal/hwinfo_glue.c gives no record
+BOARD_NEOPIXEL_PIN. All count in board.h's used-once check. Dropped
+hardware (bd 1ls.22: BOARD_BUZZER_PIN, BOARD_SD_CD_PIN, BOARD_BUTTON_PIN,
+BOARD_BATTERY_ADC_PIN, BOARD_CHARGER_STAT_PIN) is an #error in board.h, its
+HWINFO items 29-31 retired; dropping a feature later: remove its record,
+pin bits, checks and docs the same way. apps/terminal/hwinfo_glue.c gives no record
 (0 bytes, HWINFO skips it) for hardware the header does not name, PLANNED
 for what it names without a driver.
 `src/board/board.h` (RP2350 code only) #errors on missing settings, wrong
@@ -134,7 +136,7 @@ HSTX Port on the SDK's adafruit_feather_rp2350.h (8 MB flash, LED GP7,
 PSRAM CS GP8 on some), DVI from the 22-pin FPC per Adafruit's
 CircuitPython pins.c (CLK 14/15, D0 18/19, D1 16/17, D2 12/13, + even),
 UART0 GP0/1 (CTS/RTS GP2/3 = STEMMA QT SDA/SCL), SD SPI0 MISO 20 / SCK 22 /
-MOSI 23 / CS 10 (Adalogger FeatherWing); untested on hardware; CI builds it.
+MOSI 23 / CS 10 (Adalogger FeatherWing); run on the user's Feather; CI builds it.
 `boards/feather-rp2350-hstx-psram.h` (bd 1ls.17): the user's Feather with
 an APS6404L 8 MB PSRAM on CS1 GP8; `pico_board_cmake_set(PSRAM_BANKS, 1)`
 plus the SDK header's three CMake lines restated (CMake follows only
@@ -150,7 +152,8 @@ as min(15, size / 48 KB) banks (machine_set_banks) and says so under the
 banner. nvflash_retime saves and restores QMI M1 around the ROM's
 flash_select_xip_read_mode; the SDK's flash_range_* clean the XIP cache
 (dirty PSRAM lines) and re-run the PSRAM setup themselves. Core 1 never
-touches the PSRAM. Untested on hardware; CI builds it.
+touches the PSRAM. The Z80 banks in PSRAM work on the user's Feather (bd
+1ls.17, 2026-10-25); CI builds it.
 `boards/feather-rp2350-hstx-adalogger.h` and
 `boards/feather-rp2350-hstx-psram-adalogger.h` (bd 1ls.19): the user's
 Feather (PSRAM fitted) with an Adalogger FeatherWing: the base header
@@ -158,8 +161,20 @@ Feather (PSRAM fitted) with an Adalogger FeatherWing: the base header
 SDA/SCL), so BOARD_UART_CTS/RTS_PIN are #undef'd (no SERIAL_FLOW_CONTROL:
 test_board.sh asks the preprocessor which boards lack CTS); the
 pico_board_cmake_set lines restated (and PSRAM_BANKS). No 1 Hz pin: the
-FeatherWing's INT/SQW pad is not wired. Untested on hardware (bd
-1ls.19.6); CI builds both.
+FeatherWing's INT/SQW pad is not wired. Brought up on the user's Feather
+(bd 1ls.19.6); CI builds both.
+`boards/experimental/` (README.md there): headers for boards the user does
+not and will not have, from schematics, never run: `microfrank.h` (stock
+MicroFRANK, bd 1ls.3.2/59u: UART0 GP0/1 no CTS/RTS, SD SPI0 GP4-7, PSRAM_BANKS
+with ESP-PSRAM64H CS1 GP8, TDA1387 BCK 10 / WS 11 / DATA 9 per
+frank-kickstart BOARD_M2, LED 25, no RTC) and `picotop-rev2.h` (bd c0j:
+UART0 GP0/1 no CTS/RTS, SD SPI0 20-23, BOARD_USB_VBUS_EN_PIN 29 also the
+HDMI +5V, which main() turns on before video_init, bd gy1; buzzer 10,
+button 11, SD CD 24, battery ADC 28, charger STAT 2/3 and the RV-3028 on
+I2C1 6/7 only in its comments: no drivers, those features dropped). Not in CI's matrix;
+scripts/build.sh refuses them without EXPERIMENTAL=1 and writes
+experimental=yes into build-info.txt, which package.sh skips; CMake finds
+them through PICO_BOARD_HEADER_DIRS and warns; test_board.sh checks them.
 
 The USB host (keyboards, sticks) is always built in (USB_KEYBOARD=OFF
 was removed: bd s0i). Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
@@ -596,9 +611,9 @@ UF2 in the latter).
   rest (NULL: port 12 reads 0xFF, as on older firmware or picosim).
   Items 1/2 firmware and board text; 16+ a record per piece of hardware
   at a fixed number (status yes/no/missing/planned, name, detail): planned
-  hardware (RTC, bell, NeoPixel, SD detect, button, battery) is listed as
-  HWINFO_ST_PLANNED until its bead lands, and its driver should then
-  report the real state there. `apps/terminal/hwinfo_glue.c` (cold, in
+  hardware (now only the NeoPixel, 1ls.15) is listed as HWINFO_ST_PLANNED
+  until its bead lands, and its driver should then report the real state
+  there; 29-31 (card detect, button, battery) are retired (bd 1ls.22). `apps/terminal/hwinfo_glue.c` (cold, in
   flash via ld/) builds them from board.h and runtime state; 32 lists the
   mounted images (HWINFO cannot ask port 8: that would unlock hard disks
   for BIOSes that never ask, f8w.7). src/machine/cpm/hwinfo.asm (1ls.10)

@@ -172,15 +172,8 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 // #define BOARD_AUDIO_I2S_DATA_PIN 11
 // #define BOARD_AUDIO_I2S_NAME "TDA1387"
 //
-// Planned (no driver yet): a buzzer, an RGB status LED (WS2812), the SD
-// slot's card detect switch, a user button, the battery's voltage (an ADC
-// pin: GP26-29) and the charger's status.
-// #define BOARD_BUZZER_PIN 10
+// Planned (no driver yet): an RGB status LED (WS2812).
 // #define BOARD_NEOPIXEL_PIN 21
-// #define BOARD_SD_CD_PIN 22
-// #define BOARD_BUTTON_PIN 24
-// #define BOARD_BATTERY_ADC_PIN 26
-// #define BOARD_CHARGER_STAT_PIN 27
 
 // --- LED ---
 //

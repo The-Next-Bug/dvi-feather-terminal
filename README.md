@@ -121,8 +121,8 @@ setting explained:
   crystal (a pico-sdk board header; the SDK's own boards can be included,
   as the DVI Sock's does).
 
-Board headers so far (the DVI Sock is checked on hardware, the Frankless
-in part):
+Board headers so far (the DVI Sock and the Feather with PSRAM and the
+Adalogger FeatherWing are checked on hardware, the Frankless in part):
 
 | Target | Board |
 |---|---|
@@ -132,6 +132,13 @@ in part):
 | `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
 | `feather-rp2350-hstx-adalogger` | `feather-rp2350-hstx` with the Adalogger FeatherWing's PCF8523 real-time clock on I2C1 (SDA/SCL, GP2/3); no RTS/CTS (those were GP2/3) |
 | `feather-rp2350-hstx-psram-adalogger` | `feather-rp2350-hstx-psram` with the Adalogger FeatherWing's PCF8523, as above |
+
+Experimental headers for boards that are not here, from their schematics
+and never run on one, are in `boards/experimental/` (the stock MicroFRANK,
+`microfrank`, and the 7West PicoTop Rev2, `picotop-rev2`). CI does not
+build them and releases leave them out; `EXPERIMENTAL=1
+TARGET=<target> scripts/build.sh` builds one
+([boards/experimental/README.md](boards/experimental/README.md)).
 
 All four Feather targets run at 354 MHz instead of 400: on two Feathers
 the firmware crashed at random at 400 MHz, with or without the PSRAM. The

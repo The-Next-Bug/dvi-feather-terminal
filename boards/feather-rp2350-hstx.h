@@ -2,8 +2,8 @@
 // flash, optional 8 MB PSRAM, and a 22-pin FPC connector on the HSTX pins
 // for Adafruit's DVI breakout (a 22-pin cable to an HDMI socket). Pins from
 // the pico-sdk's adafruit_feather_rp2350.h and Adafruit's CircuitPython
-// board (ports/raspberrypi/boards/adafruit_feather_rp2350/pins.c); not yet
-// tried on the board. boards/example.h explains each setting.
+// board (ports/raspberrypi/boards/adafruit_feather_rp2350/pins.c); run on
+// the board (bd 1ls.19.6). boards/example.h explains each setting.
 //
 // No SD slot: the SD card goes on SPI0 at the Feather's SCK/MOSI/MISO with
 // CS on D10, where the Adalogger FeatherWing puts it (or an SD breakout

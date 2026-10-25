@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Package finished builds into a release ZIP: for every target built under
-# BUILD_DIR, its UF2, BIN and build-info, and the UF2 again as
+# BUILD_DIR (but experimental boards: boards/experimental/README.md), its UF2, BIN and build-info, and the UF2 again as
 # sdcard-<target>/FIRMWARE.UF2 (for the CP/M monitor's update from the
 # card); plus flashing instructions, the third-party notices and license texts, CHANGES.md (from the git history since the previous tag), SHA256SUMS and the
 # source of the built commit. CHANGES.md is also written next to the ZIP for
@@ -20,10 +20,18 @@ cd "$ROOT"
 BUILD_DIR="${BUILD_DIR:-build}"
 DIST_DIR="${DIST_DIR:-dist}"
 
-infos=("$BUILD_DIR"/*/build-info.txt)
-[[ -f "${infos[0]}" ]] || { echo "error: no builds in $BUILD_DIR; run scripts/build.sh" >&2; exit 1; }
-
 info() { sed -n "s/^$2=//p" "$1"; }
+infos=()
+for f in "$BUILD_DIR"/*/build-info.txt; do
+  [[ -f "$f" ]] || continue
+  if [[ "$(info "$f" experimental)" == yes ]]; then
+    echo "skipping experimental build $(dirname "$f")" >&2
+    continue
+  fi
+  infos+=("$f")
+done
+((${#infos[@]})) || { echo "error: no builds in $BUILD_DIR; run scripts/build.sh" >&2; exit 1; }
+
 rev="$(info "${infos[0]}" git_describe)"
 sha="$(info "${infos[0]}" git_sha)"
 for f in "${infos[@]}"; do

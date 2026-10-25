@@ -138,11 +138,10 @@ typedef struct {
 #define HWINFO_USB_STICK 24    // the stick in use (USB: to the transfer tools)
 #define HWINFO_LED 25          // the status LED
 #define HWINFO_RTC 26          // a real-time clock (bd 1ls.6.1)
-#define HWINFO_BELL 27         // a DAC or buzzer for BEL (bd 1ls.7)
+#define HWINFO_BELL 27         // a DAC for BEL (bd 1ls.7)
 #define HWINFO_NEOPIXEL 28     // an RGB status LED (planned: bd 1ls.15)
-#define HWINFO_SD_DETECT 29    // the card slot's detect switch (planned: bd 1ls.11)
-#define HWINFO_BUTTON 30       // a user button (planned: bd 1ls.12)
-#define HWINFO_BATTERY 31      // battery and charger (planned: bd 1ls.13)
+// 29-31 were card detect, user button, battery: dropped (bd 1ls.22); not
+// to be reused, older HWINFO users may know them.
 #define HWINFO_DRIVES 32       // the disk images on drives A-H
 
 #define HWINFO_ST_NONE 0      // no record

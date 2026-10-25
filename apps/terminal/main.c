@@ -225,6 +225,14 @@ int main(void) {
 	gpio_put(BOARD_PSRAM_CS_PIN, 1);
 	gpio_set_dir(BOARD_PSRAM_CS_PIN, GPIO_OUT);
 #endif
+#ifdef BOARD_USB_VBUS_EN_PIN
+	// The board switches the USB port's 5 V (the RP2350 cannot supply it),
+	// on the PicoTop also the HDMI connector's +5V, which some monitors
+	// want before they look at the signal: so before video_init (bd gy1).
+	gpio_init(BOARD_USB_VBUS_EN_PIN);
+	gpio_put(BOARD_USB_VBUS_EN_PIN, BOARD_USB_VBUS_EN_LEVEL);
+	gpio_set_dir(BOARD_USB_VBUS_EN_PIN, GPIO_OUT);
+#endif
 	diag_init();
 	// Read the settings while the flash is still in its boot-time setup.
 	nvflash_init();

@@ -181,8 +181,6 @@ static size_t bell_record(uint8_t *buf) {
 	}
 	return hwinfo_record(buf, HWINFO_ST_NOT_FOUND, "Bell", BELL_PINS ": no PIO or DMA channel free");
 #undef BELL_PINS
-#elif defined(BOARD_BUZZER_PIN)
-	return hwinfo_record(buf, HWINFO_ST_PLANNED, "Bell", "buzzer on " GP(BOARD_BUZZER_PIN) ": not supported yet");
 #else
 	(void)buf;
 	return 0;
@@ -196,28 +194,6 @@ static size_t planned_record(uint8_t item, uint8_t *buf) {
 #ifdef BOARD_NEOPIXEL_PIN
 	case HWINFO_NEOPIXEL:
 		return hwinfo_record(buf, HWINFO_ST_PLANNED, "RGB status LED", GP(BOARD_NEOPIXEL_PIN) ": not supported yet");
-#endif
-#ifdef BOARD_SD_CD_PIN
-	case HWINFO_SD_DETECT:
-		return hwinfo_record(buf, HWINFO_ST_PLANNED, "SD card detect", GP(BOARD_SD_CD_PIN) ": not supported yet");
-#endif
-#ifdef BOARD_BUTTON_PIN
-	case HWINFO_BUTTON:
-		return hwinfo_record(buf, HWINFO_ST_PLANNED, "User button", GP(BOARD_BUTTON_PIN) ": not supported yet");
-#endif
-#if defined(BOARD_BATTERY_ADC_PIN) || defined(BOARD_CHARGER_STAT_PIN)
-	case HWINFO_BATTERY:
-		return hwinfo_record(buf, HWINFO_ST_PLANNED, "Battery",
-#ifdef BOARD_BATTERY_ADC_PIN
-			"voltage on " GP(BOARD_BATTERY_ADC_PIN)
-#ifdef BOARD_CHARGER_STAT_PIN
-			", "
-#endif
-#endif
-#ifdef BOARD_CHARGER_STAT_PIN
-			"charger status on " GP(BOARD_CHARGER_STAT_PIN)
-#endif
-			": not supported yet");
 #endif
 	default:
 		(void)buf;
@@ -272,9 +248,6 @@ size_t cpm_hwinfo(uint8_t item, uint8_t *buf) {
 	case HWINFO_BELL:
 		return bell_record(buf);
 	case HWINFO_NEOPIXEL:
-	case HWINFO_SD_DETECT:
-	case HWINFO_BUTTON:
-	case HWINFO_BATTERY:
 		return planned_record(item, buf);
 	default:
 		return 0;

@@ -523,12 +523,8 @@ void usbkbd_init(kbd_output_t output, kbd_setup_t setup, void *ctx) {
 	kbd_init(&kbd, output, ctx);
 	kbd_set_setup_key(&kbd, setup);
 	led_report = kbd_leds(&kbd);
-#ifdef BOARD_USB_VBUS_EN_PIN
-	// The board switches the port's 5 V; the RP2350 cannot supply it.
-	gpio_init(BOARD_USB_VBUS_EN_PIN);
-	gpio_put(BOARD_USB_VBUS_EN_PIN, BOARD_USB_VBUS_EN_LEVEL);
-	gpio_set_dir(BOARD_USB_VBUS_EN_PIN, GPIO_OUT);
-#endif
+	// A board's BOARD_USB_VBUS_EN_PIN is on already: main() sets it before
+	// the video.
 	host_start();
 }
 
