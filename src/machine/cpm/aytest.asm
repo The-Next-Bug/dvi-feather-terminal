@@ -560,13 +560,16 @@ NAME:	LD	A,(HL)
 	LD	A,' '
 	JP	PUTC
 
-;	A to the console; keeps AF, BC, DE, HL.
+;	A to the console; keeps AF, BC, DE, HL. Through direct console I/O
+;	(6), as the keys are read: CP/M 2.2's console output (2) takes a key
+;	typed meanwhile into a buffer of its own, which 6 never sees, so a
+;	key that came while a line was going out did not stop the part.
 PUTC:	PUSH	AF
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
 	LD	E,A
-	LD	C,2
+	LD	C,6
 	CALL	BDOS
 	POP	HL
 	POP	DE

@@ -1755,6 +1755,97 @@ static void test_aytest_tool(void) {
 	drives_unmount_all();
 }
 
+// A PSG file's register writes (register, value) in order, at most max,
+// and in frames[i] the frame write i is in; the count.
+static size_t psg_writes(const char *name, uint8_t (*out)[2], unsigned *frames, size_t max) {
+	char path[512];
+	snprintf(path, sizeof path, "%s/%s", TUNES_DIR, name);
+	FILE *f = fopen(path, "rb");
+	CHECK(f != NULL);
+	if (!f) {
+		return 0;
+	}
+	static uint8_t data[65536];
+	size_t len = fread(data, 1, sizeof data, f);
+	fclose(f);
+	CHECK(len > 16 && memcmp(data, "PSG\x1a", 4) == 0);
+	size_t n = 0;
+	unsigned frame = 0;
+	for (size_t i = 16; i < len && data[i] != 0xfd && n < max;) {
+		if (data[i] == 0xff) {
+			++frame;
+			++i;
+		} else if (data[i] == 0xfe) {
+			frame += 4u * data[i + 1];
+			i += 2;
+		} else {
+			out[n][0] = data[i];
+			out[n][1] = data[i + 1];
+			frames[n++] = frame;
+			i += 2;
+		}
+	}
+	return n;
+}
+
+// AYPLAY (src/machine/cpm/ayplay.asm, bd 1ls.18.10) under CP/M 2.2: the
+// usage lists the tunes; JACQUES in ABC plays the file's writes in order
+// at 50 frames a second, shows the time, stops on Q with the chip
+// silenced and the layout put back; a missing file, a bad option.
+static void test_ayplay_tool(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(cpm("AYPLAY", "PSG files here:"));
+	CHECK(strstr(screen, "  KOROBEIN.PSG\r\n") != NULL && strstr(screen, "  JACQUES.PSG\r\n") != NULL
+		&& strstr(screen, "  ODE.PSG\r\n") != NULL);
+
+	static uint8_t want[8192][2];
+	static unsigned frames[8192];
+	size_t n = psg_writes("jacques.psg", want, frames, 8192);
+	CHECK(n > 100);
+	clear_screen();
+	host_ay_clear();
+	CHECK(type("AYPLAY JACQUES ABC\r"));
+	CHECK_EQ(run_until("(Q stops)", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "Playing JACQUES.PSG in ABC stereo (Q stops)") != NULL);
+	CHECK_EQ(ay_stereo(&host_ay), AY_STEREO_ABC);
+	uint64_t start = host_clock_us();
+	CHECK_EQ(run_until("  0:02", 10), MACHINE_RUNNING);
+	uint64_t took = host_clock_us() - start;
+	CHECK(type("q"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, " -- stopped") != NULL);
+	// The probe's 2, the layout, QUIET's 15; at the end QUIET and the
+	// layout put back.
+	const size_t first = 2 + 1 + 15;
+	CHECK(host_ay_writes > first + 16 && host_ay_writes < HOST_AY_LOG);
+	size_t played = host_ay_writes - first - 16;
+	CHECK(played > 20 && played < n);
+	size_t bad = 0;
+	for (size_t i = 0; i < played && i < n; ++i) {
+		bad += host_ay_log[first + i][0] != want[i][0] || host_ay_log[first + i][1] != want[i][1];
+	}
+	CHECK_EQ(bad, 0);
+	// Two seconds shown after 100 frames, in about 2 s: the writes up to
+	// there played (the stop comes a little later), none much past it.
+	CHECK(frames[played] >= 100 && frames[played - 1] < 125);
+	CHECK(took > 1500000 && took < 2600000);
+	CHECK(host_ay_log[host_ay_writes - 1][0] == MACHINE_AY_STEREO && host_ay_log[host_ay_writes - 1][1] == 0);
+	CHECK_EQ(ay_read(&host_ay, 8), 0);
+	CHECK_EQ(ay_read(&host_ay, 7), 0x3f);
+
+	CHECK(cpm("AYPLAY NOPE", "No such file."));
+	CHECK(cpm("AYPLAY ODE LOUD", "Unknown option."));
+	CHECK(cpm("AYPLAY AYPLAY.COM", "Not a PSG file."));
+	machine_init(&host_platform);
+	drives_unmount_all();
+}
+
 // ---- CP/M 3 (picosim's banked system: CPM31, CPM32; bd f8w) ----
 
 // Booted by mounting its disks on A: and B:, no setting: the boot ROM
@@ -2539,6 +2630,7 @@ int main(void) {
 	RUN(test_hwinfo_tool);
 	RUN(test_ay_ports);
 	RUN(test_aytest_tool);
+	RUN(test_ayplay_tool);
 	RUN(test_boot_cpm3);
 	RUN(test_cpm3_tools);
 	RUN(test_cpm3_date);

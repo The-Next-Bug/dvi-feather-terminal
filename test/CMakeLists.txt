@@ -67,6 +67,8 @@ unit_test(lz dvt_disks)
 target_sources(test_lz PRIVATE diskio_ram.c)
 unit_test(machine dvt_ui dvt_term dvt_clock dvt_sound)
 target_sources(test_machine PRIVATE machine_host.c diskio_ram.c)
+# AYPLAY's tunes as built for the disks, to compare its writes with.
+target_compile_definitions(test_machine PRIVATE TUNES_DIR="${CMAKE_BINARY_DIR}/src/disks/generated/tunes")
 unit_test(xfer dvt_disks)
 target_sources(test_xfer PRIVATE diskio_ram.c)
 unit_test(usbvol dvt_disks)
