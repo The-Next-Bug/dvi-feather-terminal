@@ -56,12 +56,12 @@ find_program(HOST_CC NAMES cc gcc clang REQUIRED)
 file(GLOB _z80asm_sources "${Z80PACK_DIR}/z80asm/*.[ch]")
 add_custom_command(
   OUTPUT ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin ${CPM_OUT}/worms.com ${CPM_OUT}/xls.com ${CPM_OUT}/xpip.com ${CPM_OUT}/xera.com ${CPM_OUT}/termtest.com
-    ${CPM_OUT}/altscr.com ${CPM_OUT}/mem.com ${CPM_OUT}/hwinfo.com ${CPM_OUT}/aytest.com ${CPM_OUT}/ayplay.com
+    ${CPM_OUT}/altscr.com ${CPM_OUT}/mem.com ${CPM_OUT}/hwinfo.com ${CPM_OUT}/aytest.com ${CPM_OUT}/ayplay.com ${CPM_OUT}/aytrack.com
   COMMAND ${CMAKE_COMMAND} -E env CC=${HOST_CC} ${CPM_DIR}/build.sh ${CPM_OUT}
   DEPENDS ${CPM_DIR}/build.sh ${CPM_DIR}/boot.asm ${CPM_DIR}/bios.asm ${CPM_DIR}/worms.asm
     ${CPM_DIR}/xls.asm ${CPM_DIR}/xpip.asm ${CPM_DIR}/xera.asm ${CPM_DIR}/xfer.inc
     ${CPM_DIR}/termtest.asm ${CPM_DIR}/altscr.asm ${CPM_DIR}/mem.asm ${CPM_DIR}/hwinfo.asm
-    ${CPM_DIR}/aytest.asm ${CPM_DIR}/ayplay.asm
+    ${CPM_DIR}/aytest.asm ${CPM_DIR}/ayplay.asm ${CPM_DIR}/aytrack.asm
     ${_z80asm_sources}
   COMMENT "Assembling the CP/M 2.2 boot loader and BIOS, and our CP/M programs"
   VERBATIM)
@@ -137,6 +137,7 @@ set(DISKIMG_FILES --delete CPM22 XDIR.COM
   --file CPM22 HWINFO.COM ${CPM_OUT}/hwinfo.com
   --file CPM22 AYTEST.COM ${CPM_OUT}/aytest.com
   --file CPM22 AYPLAY.COM ${CPM_OUT}/ayplay.com
+  --file CPM22 AYTRACK.COM ${CPM_OUT}/aytrack.com
   --file CPM22 KOROBEIN.PSG ${TUNES_OUT}/korobein.psg
   --file CPM22 JACQUES.PSG ${TUNES_OUT}/jacques.psg
   --file CPM22 ODE.PSG ${TUNES_OUT}/ode.psg
@@ -152,6 +153,7 @@ set(DISKIMG_FILES --delete CPM22 XDIR.COM
   --file CPM32 HWINFO.COM ${CPM_OUT}/hwinfo.com
   --file CPM32 AYTEST.COM ${CPM_OUT}/aytest.com
   --file CPM32 AYPLAY.COM ${CPM_OUT}/ayplay.com
+  --file CPM32 AYTRACK.COM ${CPM_OUT}/aytrack.com
   --file CPM32 KOROBEIN.PSG ${TUNES_OUT}/korobein.psg
   --file CPM32 JACQUES.PSG ${TUNES_OUT}/jacques.psg
   --file CPM32 ODE.PSG ${TUNES_OUT}/ode.psg)
@@ -176,7 +178,7 @@ add_custom_command(
     ${DISKIMG_IMAGES}
   DEPENDS ${DISKIMG_GEN} ${_diskimg_files} ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin ${CPM_OUT}/worms.com
     ${CPM_OUT}/xls.com ${CPM_OUT}/xpip.com ${CPM_OUT}/xera.com ${CPM_OUT}/termtest.com
-    ${CPM_OUT}/altscr.com ${CPM_OUT}/mem.com ${CPM_OUT}/hwinfo.com ${CPM_OUT}/aytest.com ${CPM_OUT}/ayplay.com ${Z80PACK_DIR}/picosim/srccpm2/cpm.bin ${CPM_DIR}/ccpbdos.rel
+    ${CPM_OUT}/altscr.com ${CPM_OUT}/mem.com ${CPM_OUT}/hwinfo.com ${CPM_OUT}/aytest.com ${CPM_OUT}/ayplay.com ${CPM_OUT}/aytrack.com ${Z80PACK_DIR}/picosim/srccpm2/cpm.bin ${CPM_DIR}/ccpbdos.rel
     ${CPM3_OUT}/cpm3.sys ${CPM3_OUT}/vt100dyn.com ${CPM3_OUT}/profile.sub
     ${CPM3_OUT}/readme.txt ${GENERATED}/cpm32.dsk ${GENERATED}/f83.dsk ${_f83_paths} ${TUNES}
   COMMENT "Compressing the built-in CP/M disk images"

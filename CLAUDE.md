@@ -739,7 +739,27 @@ UF2 in the latter).
   frame per note, noise drums; only changed registers written: sparse,
   ~50 writes in 100 frames). test_ayplay_tool (TUNES_DIR = the built
   tunes): the listing, JACQUES ABC's writes in order and on time against
-  the file, the stop, missing file, bad option, not PSG. cpm_glue's sound hooks are
+  the file, the stop, missing file, bad option, not PSG.
+  src/machine/cpm/aytrack.asm (bd 1ls.18.11) -> AYTRACK.COM on CPM22 and
+  CPM32: a tracker on the VT100 screen (ESC [ row;col H, 7m reverse; keys
+  decoded from ESC [ A-D / 2~ 3~ by RDKEY, waiting a little after ESC);
+  the song at a fixed SONG = 3000H (the program ends ~12B9H; check the
+  .lis when it grows), saved raw as NAME.AYT (26 records: "AYT1", speed,
+  order count, 64 orders, 8 x 18-byte instruments: 16 volumes, mode bit 0
+  tone / 1 noise, noise period; 16 x 32 rows x 3 x (note 12-95 = octave x
+  12 + semitone, 0 empty, FFh off; instrument)). One player (PINIT,
+  ROWST, FRAME, ADVANC; per channel period, instrument, step, FFh
+  silent) drives the chip from the main loop on the 68/69 tick
+  (PLAYTK: Space the song from the selected order, Return the pattern,
+  looping; '>' markers on the rows and orders) and, OUTMOD 1, ^E's PSG
+  export (once through, PENDF), only changed registers either way;
+  PREVIEW plays an entered note or an edited instrument for 0.5 s
+  (blocking) when nothing plays. Tab: pattern / orders / instruments
+  (FOCUS, DOKEY then PATKEY/ORDKEY/INSKEY). test_aytrack_tool on a real
+  term_t (rows checked as drawn): notes, orders, instruments, playing,
+  save, export, reload, AYPLAY of the export. Ideas left out of the
+  first version: copy/paste of patterns, effects (arpeggio, slides),
+  the envelope generator, more than 8 instruments. cpm_glue's sound hooks are
   audio.c's audio_ay_write/_read (no DAC: dropped / 0xFF, so AYTEST finds
   no chip); main.c attaches the AY in CP/M mode. HWINFO item 33
   (HWINFO_SOUND) names it, none without a DAC.

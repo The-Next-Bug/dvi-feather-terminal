@@ -2511,6 +2511,167 @@ static void test_altscr(void) {
 	host_console_hook = NULL;
 }
 
+// ---- AYTRACK (src/machine/cpm/aytrack.asm, bd 1ls.18.11) through the terminal ----
+
+// Run the machine for about seconds of wall time.
+static void run_for(double seconds) {
+	uint64_t end = host_clock_us() + (uint64_t)(seconds * 1e6);
+	while (host_clock_us() < end) {
+		machine_run(10000);
+	}
+}
+
+// Channel ch's tone periods as the chip had them after each write since
+// host_ay_clear (fine or coarse; a fine one followed by its coarse counts
+// once), repeats left out.
+static unsigned ay_tones(unsigned ch, uint16_t *out, unsigned max) {
+	unsigned n = 0;
+	uint16_t period = 0;
+	for (size_t i = 0; i < host_ay_writes && i < HOST_AY_LOG; ++i) {
+		unsigned reg = host_ay_log[i][0], v = host_ay_log[i][1];
+		if (reg == 2 * ch) {
+			period = (uint16_t)((period & 0xf00) | v);
+			if (i + 1 < host_ay_writes && i + 1 < HOST_AY_LOG && host_ay_log[i + 1][0] == 2 * ch + 1) {
+				continue; // its coarse next: one change
+			}
+		} else if (reg == 2 * ch + 1) {
+			period = (uint16_t)((period & 0xff) | (v & 0x0f) << 8);
+		} else {
+			continue;
+		}
+		if (period != 0 && (n == 0 || out[n - 1] != period) && n < max) {
+			out[n++] = period;
+		}
+	}
+	return n;
+}
+
+// AYTRACK under CP/M 2.2 on a real term_t: a new song; three notes on A
+// with the piano keys; the order list (insert, a pattern); the
+// instruments' table; Return plays the pattern (the notes' periods on the
+// chip), Return stops; the octave, a note off, a volume edited, Space
+// playing the song; ^S saves, ^E exports, ^Q Y quits; the song loads
+// again; AYPLAY plays the export.
+static void test_aytrack_tool(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	host_cpr_reply = NULL;
+	screen_init(&tscreen, 80, PALETTE_TEXT, PALETTE_BACKGROUND);
+	term_init(&tterm, &tscreen, 0, 24);
+	host_console_hook = console_to_term;
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("AYTRACK TEST\r"));
+	CHECK_EQ(run_until("New song", 10), MACHINE_RUNNING);
+	run_for(0.5); // drawn, then the message again
+	TROW_IS(0, " AYTRACK  TEST.AYT  Pattern 0  Speed 06  Octave 4  Inst 0  Stopped");
+	TROW_HAS(1, " Row  A      B      C");
+	TROW_HAS(2, "  00  ... .  ... .  ... .");
+	TROW_HAS(2, " 00 0");                          // the order list
+	TROW_HAS(2, ">0 FEDCBBAAA9998888 T  00");      // instrument 0
+	TROW_HAS(6, " 4 A631000000000000 N  01");      // the hi-hat
+
+	clear_screen();
+	CHECK(type("zcb"));
+	CHECK_EQ(run_until("\x1b[6;", 10), MACHINE_RUNNING); // the cursor's row 3 drawn
+	run_for(2); // each note previewed for half a second
+	TROW_HAS(2, "  00  C-4 0  ... .  ... .");
+	TROW_HAS(3, "  01  E-4 0");
+	TROW_HAS(4, "  02  G-4 0");
+
+	// The orders: Tab, I (a copy after it), 1 its pattern.
+	clear_screen();
+	CHECK(type("\ti1"));
+	run_for(0.5);
+	TROW_HAS(2, " 00 0");
+	TROW_HAS(3, " 01 1");
+	TROW_HAS(0, "Pattern 1");
+	CHECK(type("\x1b[A")); // back to order 0: pattern 0 on screen
+	run_for(0.3);
+	TROW_HAS(0, "Pattern 0");
+	TROW_HAS(2, "  00  C-4 0");
+	CHECK(type("\t\t")); // the instruments, then the pattern again
+	run_for(0.3);
+
+	host_ay_clear();
+	CHECK(type("\r"));
+	CHECK_EQ(run_until("Playing the pattern", 10), MACHINE_RUNNING);
+	run_for(1);
+	static const uint16_t notes[] = {440, 349, 293};
+	uint16_t got[16];
+	CHECK(ay_tones(0, got, 16) >= 3);
+	CHECK(memcmp(got, notes, sizeof notes) == 0);
+	CHECK(type("\r"));
+	CHECK_EQ(run_until("Stopped", 10), MACHINE_RUNNING);
+	run_for(0.2);
+	CHECK_EQ(ay_read(&host_ay, 8), 0);
+
+	// ] a higher octave; = a note off (row 3); the instruments: a volume
+	// typed into instrument 0's first step; Space plays the song, its
+	// order marked; Space stops.
+	CHECK(type("]"));
+	run_for(0.2);
+	TROW_HAS(0, "Octave 5");
+	CHECK(type("["));
+	CHECK(type("=")); // the cursor is on row 3, after the notes
+	run_for(0.3);
+	TROW_HAS(5, "  03  === .");
+	CHECK(type("\t\t7"));
+	run_for(1);
+	TROW_HAS(2, ">0 7EDCBBAAA9998888 T  00");
+	CHECK(type("\t"));
+	CHECK(type(" "));
+	CHECK_EQ(run_until("Playing the song", 10), MACHINE_RUNNING);
+	run_for(0.3);
+	TROW_HAS(2, ">00 0");
+	CHECK(type(" "));
+	CHECK_EQ(run_until("Stopped", 10), MACHINE_RUNNING);
+
+	clear_screen();
+	CHECK(type("\x13"));
+	CHECK_EQ(run_until("Saved TEST.AYT", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("\x05"));
+	CHECK_EQ(run_until("Exported TEST.PSG", 30), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("\x11"));
+	CHECK_EQ(run_until("Y/N", 10), MACHINE_RUNNING);
+	CHECK(type("y"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("DIR TEST.*", "TEST     AYT"));
+	CHECK(strstr(screen, "TEST     PSG") != NULL);
+
+	clear_screen();
+	CHECK(type("AYTRACK TEST\r"));
+	CHECK_EQ(run_until("Loaded", 10), MACHINE_RUNNING);
+	run_for(0.5);
+	TROW_HAS(2, "  00  C-4 0");
+	TROW_HAS(3, " 01 1");
+	CHECK(type("\x11y"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+
+	// The export: pattern 0, then the empty pattern 1, 32 rows each at
+	// speed 6: 7.7 s; its first notes as the tracker played them.
+	host_ay_clear();
+	clear_screen();
+	CHECK(type("AYPLAY TEST\r"));
+	CHECK_EQ(run_until("Playing TEST.PSG", 10), MACHINE_RUNNING);
+	CHECK_EQ(run_until("A>", 15), MACHINE_RUNNING);
+	CHECK(strstr(screen, "0:07") != NULL);
+	// (AYPLAY's probe writes register 1 first: the notes are found after.)
+	unsigned n = ay_tones(0, got, 16), at = 0;
+	while (at + 3 <= n && memcmp(got + at, notes, sizeof notes) != 0) {
+		++at;
+	}
+	CHECK(at + 3 <= n);
+	host_console_hook = NULL;
+	machine_init(&host_platform);
+	drives_unmount_all();
+}
+
 // ---- F83 (lib/f83, bd xdu) ----
 
 // Type each line and wait for its text.
@@ -2639,6 +2800,7 @@ int main(void) {
 	RUN(test_mem_banks);
 	RUN(test_termtest);
 	RUN(test_altscr);
+	RUN(test_aytrack_tool);
 	RUN(test_f83);
 	drives_unmount_all();
 	f_unmount("");

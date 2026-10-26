@@ -51,8 +51,8 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
   [Z80 CP/M machine](#z80-cpm-machine).
 - **Sound** (boards with an I2S DAC, such as the Frankless): BEL beeps,
   and the Z80 machine has an AY-3-8910 sound chip (emulated, in mono or
-  stereo) with a test program, a PSG tune player with three tunes and
-  Forth words for it. See [Sound](#sound).
+  stereo) with a test program, a tracker, a PSG tune player with three
+  tunes and Forth words for it. See [Sound](#sound).
 - **Demo**: a test screen of colors, fonts and line drawing that alternates
   between 80 and 132 columns every 5 seconds. **T** in SET-UP shows it
   until a key is pressed; with `-DSTARTUP_DEMO=ON` it also runs after the
@@ -474,7 +474,7 @@ instead of reading a hard disk as a floppy and writing over it).
   images mounted on it). `CPM32` is an 8 MB disk (picosim's second
   floppy's files, with room to spare). The BIOS sets `SETDEF`'s defaults
   at every cold boot: programs are found on the default drive, then A:,
-  then B:, so `XLS`, `XPIP`, `XERA`, `MEM`, `HWINFO`, `AYTEST`, `AYPLAY` and `WORMS` on `CPM32` run
+  then B:, so `XLS`, `XPIP`, `XERA`, `MEM`, `HWINFO`, `AYTEST`, `AYPLAY`, `AYTRACK` and `WORMS` on `CPM32` run
   from any drive; COM files before SUB files; temporary files on B:, not
   the nearly full A:. `README.TXT` on `CPM31` describes them and how to
   change them with a `SETDEF` line in `PROFILE.SUB`. CP/M 3 shows the
@@ -634,6 +634,32 @@ by `src/machine/cpm/tunes/psg_gen.py`): `KOROBEIN` (Korobeiniki, the
 Tetris theme), `JACQUES` (Frere Jacques as a round in three voices: in
 ABC it moves from left to right) and `ODE` (Ode to Joy). PSG files from
 elsewhere play too, copied in with `XPIP`.
+
+`CPM22` and `CPM32` also carry `AYTRACK` (`src/machine/cpm/aytrack.asm`),
+a tracker to write tunes with: `AYTRACK [NAME]` (default `SONG`) edits
+`NAME.AYT`, a song of up to 16 patterns of 32 rows, each row a note and an
+instrument on channels A, B and C, played in the order list's order (up to
+64), with 8 instruments (16 volume steps, one a frame, the last held; tone,
+noise or both; a noise period) and a speed (frames a row, at 50 a second).
+The screen shows the pattern, the order list and the instruments; Tab moves
+between them:
+
+- **Pattern**: the arrows move; the keys `Z S X D C V G B H N J M` play
+  and enter a note in the octave shown (`[` `]` change it), `Q 2 W 3 E R 5
+  T 6 Y 7 U` the next octave up, with the instrument shown; `=` is a note
+  off, `.` or Delete clears; in the instrument column `0`-`7`. `^N` and
+  `^P` show the next or previous pattern.
+- **Orders**: Up/Down select (and show) an entry, `0`-`F` sets its
+  pattern, `I` inserts a copy after it, `X` deletes it.
+- **Instruments**: the arrows select an instrument and a field, `0`-`F`
+  sets a volume (then the next), the mode (`1` tone, `2` noise, `3` both)
+  or the noise period (two digits); the instrument is heard on each
+  change.
+- Anywhere: Space plays the song from the selected order, Return the
+  pattern on screen, both looping while you edit (Space or Return again
+  stops); `<` `>` the speed; `^S` saves `NAME.AYT`, `^E` writes the song
+  once through as `NAME.PSG` for `AYPLAY`; `^Q` quits (unsaved changes are
+  lost).
 
 In [Forth](#forth-f83), `AY.BLK` on the `F83` disk has words for the
 chip and examples.
@@ -831,7 +857,7 @@ A after 3 seconds (any key stops that), or shows its menu:
 - **N**: make a new blank disk: name, then 8" floppy, 4 MB or 8 MB
   (an 8 MB one takes a few seconds to write).
 - **I**: install the built-in disk images onto the card: `CPM22` (CP/M 2.2
-  with its tools, `MEM`, `HWINFO`, `AYTEST`, `AYPLAY` and its tunes: boots), `Z80TESTS` (`TERMTEST`, `ALTSCR`, and the Z80 instruction exercisers
+  with its tools, `MEM`, `HWINFO`, `AYTEST`, `AYPLAY` and its tunes, `AYTRACK`: boots), `Z80TESTS` (`TERMTEST`, `ALTSCR`, and the Z80 instruction exercisers
   `EXZ80DOC` and `EXZ80ALL`, about 10 minutes each at full speed, and the
   `CPUTEST` diagnostics; `PRELIM` needs an emulator that runs block moves
   in one go, as z80pack's cpmsim does, and wrecks CP/M here: reset after
@@ -1147,7 +1173,7 @@ has the helpers; `src/CMakeLists.txt` lists the libraries.
 | `render` | portable | `raster` (cells to pixels), `splash` (startup logo); generated font tables and logo (`font_gen.py`, `logo_gen.py`) |
 | `input` | portable | `keyboard` (HID keys to VT100 codes), `keyname` (key names for the status line), `blank` (screen blanking timer) |
 | `settings` | portable | `settings` (settings records), `uf2` (UF2 file checks for the firmware update) |
-| `machine` | portable | `machine` (the Z80 machine: z80pack glue; `z80pack/` holds its configuration headers), `cpm/` (the CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA, TERMTEST, ALTSCR, MEM, HWINFO, AYTEST and AYPLAY, `tunes/` (AYPLAY's PSG tunes, made at build time), `f83/` (F83's VIEWDRV.BLK and AY.BLK), and in `cpm3/` CP/M 3's banked BIOS, made into `CPM3.SYS` at build time; see its README) |
+| `machine` | portable | `machine` (the Z80 machine: z80pack glue; `z80pack/` holds its configuration headers), `cpm/` (the CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA, TERMTEST, ALTSCR, MEM, HWINFO, AYTEST, AYPLAY and AYTRACK, `tunes/` (AYPLAY's PSG tunes, made at build time), `f83/` (F83's VIEWDRV.BLK and AY.BLK), and in `cpm3/` CP/M 3's banked BIOS, made into `CPM3.SYS` at build time; see its README) |
 | `sound` | portable | `ay8910` (the AY-3-8910), `mixer` (the bell and the AY into the DAC's stream), `tune` (SET-UP's demo tune and chime) |
 | `disks` | portable | `drives` (disk images on FatFs), `drivecfg.c` (`DRIVES.CFG`, the image list and the drive sets), `diskimg` (the built-in images; `diskimg_gen.py` compresses them), `xfer` (port 10's files: `/XFER`), `usbvol` (which USB stick is `USB:`) |
 | `ui` | portable | `setup` (SET-UP panel), `drivepanel` (SET-UP's Drives panel), `fwpanel` (SET-UP's firmware update), `monitor` (the CP/M machine's monitor), `demo` |
