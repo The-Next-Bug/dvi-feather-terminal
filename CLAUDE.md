@@ -190,7 +190,11 @@ panic() text),
 `COPY_TO_RAM` (default ON; must stay ON, see below), `MACHINE_BANKS` (Z80
 machine: 48 KB banks besides bank 0, default 2; each costs 48 KB of SRAM).
 TinyUSB workaround switches (bd nxv; default OFF since 2026-10-25 = rely
-on the fork's fixes; ON builds ours back in; dvt_usb only, usbkbd.c): USB_WA_DEINIT
+on the fork's fixes; ON builds ours back in; dvt_usb only, usbkbd.c;
+USB_WA_POLL_PAUSE defaults to ON again since 2026-10-26, bd 008: without
+it a stick read during a firmware update came back stale, badcsw and
+"blocks out of order"; the cache entry follows each switch's default via
+its help text): USB_WA_DEINIT
 (--wrap=rp2usb_deinit, remove-before-deinit in usbkbd_reset; #4310),
 USB_WA_DATASEQ (INTE mask in host_start, usbkbd_data_seq_error's raw INTR
 check + restart, which then returns false; #4312), USB_WA_POLL_PAUSE
@@ -364,7 +368,8 @@ UF2 in the latter).
   no Bulk-Only reset, the stick stays stuck. Workarounds for TinyUSB
   master on the RP2350, all in our code (bd xv0, upstream report bd 5bc;
   since 2026-10-25 built only with their USB_WA_* switch ON, as the fork
-  has the fixes; the INT_EP_CTRL pause, control_wait, the data-seq mask
+  has the fixes, except the INT_EP_CTRL pause, ON by default again (bd
+  008); the INT_EP_CTRL pause, control_wait, the data-seq mask
   and the deinit wrap below; CFG_TUH_ENUM_ATTEMPT_MAX, the watchdog and
   the stick checks stay):
   tuh_deinit frees hcd_rp2040's spin lock (rp2usb_deinit) before removing

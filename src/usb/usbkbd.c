@@ -256,6 +256,8 @@ static bool usb_quiet(void) {
 
 // USB_WA_*: each workaround for a TinyUSB RP2350 host bug, built in only
 // on request (top CMakeLists.txt): lib/tinyusb has the fixes (bd 5bc, nxv).
+// POLL_PAUSE is on by default again (bd 008): a stick read went stale
+// without it.
 #ifndef USB_WA_DEINIT
 #define USB_WA_DEINIT 0
 #endif
@@ -263,7 +265,7 @@ static bool usb_quiet(void) {
 #define USB_WA_DATASEQ 0
 #endif
 #ifndef USB_WA_POLL_PAUSE
-#define USB_WA_POLL_PAUSE 0
+#define USB_WA_POLL_PAUSE 1
 #endif
 #ifndef USB_WA_CONTROL_WAIT
 #define USB_WA_CONTROL_WAIT 0
