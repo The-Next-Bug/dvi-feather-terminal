@@ -11,6 +11,7 @@
 #include "hardware/structs/sysinfo.h"
 
 #include "audio.h"
+#include "ay8910.h"
 #include "bell.h"
 #include "board.h"
 #include "extram.h"
@@ -191,12 +192,18 @@ static size_t bell_record(uint8_t *buf) {
 #endif
 }
 
-// The emulated AY, heard through the bell's DAC: none without one.
+// The emulated AY, heard through the bell's DAC, and its stereo layout
+// (bd 1ls.18.9): none without a DAC.
 static size_t sound_record(uint8_t *buf) {
 #if BOARD_AUDIO_I2S
 	if (bell_present()) {
-		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Sound chip",
-			"AY-3-8910 (emulated, 1.8432 MHz) on ports D8h/D0h, through the bell's DAC at 32 kHz");
+		static const char *const layouts[] = {"mono", "ABC stereo", "ACB stereo"};
+		uint8_t reg = audio_ay_read(AY_STEREO_REG);
+		unsigned in_use = (reg >> 4 & 3) - 1u;
+		char text[HWINFO_MAX];
+		snprintf(text, sizeof text, "AY-3-8910 (emulated, 1.8432 MHz) on ports D8h/D0h, 32 kHz; %s (%s)",
+			layouts[in_use < 3 ? in_use : 0], reg & 3 ? "the program's" : "SET-UP's");
+		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Sound chip", text);
 	}
 	if (!audio_fitted()) {
 		return hwinfo_record(buf, HWINFO_ST_ABSENT, "Sound chip", "AY-3-8910: the DAC is not fitted (SET-UP)");

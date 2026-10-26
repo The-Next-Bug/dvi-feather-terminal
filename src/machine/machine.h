@@ -14,7 +14,8 @@
 // and our own 8: the format of a drive (OUT the drive, IN its format, IN
 // again its mount count), for our 8-drive BIOSes in src/machine/cpm; 10: the
 // file transfer device; 12: the hardware information device; 68/69 a
-// millisecond tick; and the AY-3-8910 sound chip on D8h/D0h (all below).
+// millisecond tick; and the AY-3-8910 sound chip on D8h/D0h, with our
+// stereo register 16 (all below).
 //
 // The CPU runs in slices (machine_run) from the platform's main loop;
 // while it waits (HALT, the speed limit) it calls the platform's idle hook,

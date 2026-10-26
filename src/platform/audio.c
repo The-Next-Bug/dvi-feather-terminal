@@ -14,6 +14,7 @@
 #include "hardware/irq.h"
 #include "hardware/pio.h"
 #include "hardware/pio_instructions.h"
+#include "hardware/timer.h"
 #include "mixer.h"
 
 #define FRAME_CYCLES 65 // PIO cycles a stereo frame (audio_program)
@@ -37,6 +38,7 @@ static pio_program_t program;
 static bool ready;   // bell_init has run: the clocks are final
 static bool fitted = true; // the Sound DAC setting
 static bool ay_attached;
+static volatile uint32_t busy_us; // in audio_irq, since boot
 static uint8_t level = SETTINGS_BELL_DEFAULT, ay_level = SETTINGS_SOUND_DEFAULT;
 static uint8_t stereo = SETTINGS_STEREO_MONO;
 // The square wave's amplitude per Bell level, 2 dB a step: the default, 3,
@@ -59,13 +61,20 @@ static bool running(void) {
 
 // A block played: refill it (its channel is back at its start, the other
 // is playing now).
+// The time it takes is counted (timerawl: no SDK call, nothing in flash).
 static void __not_in_flash_func(audio_irq)(void) {
+	uint32_t start = timer_hw->timerawl;
 	for (unsigned i = 0; i < 2; ++i) {
 		if (dma_irqn_get_channel_status(1, (uint)dma[i])) {
 			dma_irqn_acknowledge_channel(1, (uint)dma[i]);
 			mixer_fill(&mix, blocks[i], BLOCK);
 		}
 	}
+	busy_us += timer_hw->timerawl - start;
+}
+
+uint32_t audio_busy_us(void) {
+	return busy_us;
 }
 
 void __not_in_flash_func(audio_silence)(void) {
@@ -292,6 +301,10 @@ void audio_set_ay_level(uint8_t l) {
 }
 
 void audio_silence(void) {
+}
+
+uint32_t audio_busy_us(void) {
+	return 0;
 }
 
 void audio_set_stereo(uint8_t layout) {

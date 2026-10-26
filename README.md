@@ -49,6 +49,10 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
   2.2 or banked CP/M 3 (both built in) from a microSD card, on
   [z80pack](https://github.com/udo-munk/z80pack)'s CPU core. See
   [Z80 CP/M machine](#z80-cpm-machine).
+- **Sound** (boards with an I2S DAC, such as the Frankless): BEL beeps,
+  and the Z80 machine has an AY-3-8910 sound chip (emulated, in mono or
+  stereo) with a test program, a PSG tune player with three tunes and
+  Forth words for it. See [Sound](#sound).
 - **Demo**: a test screen of colors, fonts and line drawing that alternates
   between 80 and 132 columns every 5 seconds. **T** in SET-UP shows it
   until a key is pressed; with `-DSTARTUP_DEMO=ON` it also runs after the
@@ -127,7 +131,7 @@ Adalogger FeatherWing are checked on hardware, the Frankless in part):
 | Target | Board |
 |---|---|
 | `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default) |
-| `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS, the Z80 machine's banks in its 8 MB PSRAM (`PSRAM_BANKS`), DS3231M real-time clock, TDA1387 DAC for the bell (U8, hand-fitted) |
+| `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS, the Z80 machine's banks in its 8 MB PSRAM (`PSRAM_BANKS`), DS3231M real-time clock, TDA1387 DAC for the bell and the sound chip (U8, hand-fitted) |
 | `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing); 800x600 with reduced blanking at 354 MHz (`HSTX_MODE` 2), as it crashes at 400 MHz |
 | `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
 | `feather-rp2350-hstx-adalogger` | `feather-rp2350-hstx` with the Adalogger FeatherWing's PCF8523 real-time clock on I2C1 (SDA/SCL, GP2/3); no RTS/CTS (those were GP2/3) |
@@ -285,15 +289,16 @@ shown in reverse video:
 | Status line | shown, hidden, debug, debug usb | hidden: row 24 stays blank (the text area is still 24 rows; the boot logo's build line and CP/M's drive lights are not shown). debug: video timing instead; debug usb: the USB host's last events (both below, refreshed four times a second) |
 | Terminal type | VT100, VT52, ADM-3A | what the terminal is at power-on and after a reset: a VT100, a VT100 in VT52 mode, or an ADM-3A (80 columns only); see [Terminal types](#terminal-types). Changing to or from ADM-3A clears the screen |
 | Blank after | never, 1, 5, 10, 30, 60 min | the screen goes black after this long without a key, against burn-in. The next key only wakes it (it is not sent). Output from the host or the Z80 does not wake it; it carries on unseen. The DVI signal is turned off, so the monitor can go into power saving (backlight off); on waking it has to resync, which takes it a few seconds |
-| Bell | off, low, medium, high | how loud BEL beeps (default medium); changing it in SET-UP sounds a beep at the new level. On a board without a bell it shows `off (no bell on this board)` and is skipped. See [The bell](#the-bell) |
 | USB log | off, SD card USBLOG.TXT | keep a log of the USB host in `USBLOG.TXT` on the SD card (default off); see "USB log on the SD card" below |
 
-**Debug status line**: `late T+N | line C/P% | F fps | loop M/Q ms |
-render R/S us | Z MHz`: scanlines not ready in time for the DVI output (in
+**Debug status line**: `late T+N|line C/P%|Ffps|loop M/Qms|render
+R/Sus|Z MHz|snd A%`: scanlines not ready in time for the DVI output (in
 all, + since the last refresh); core 1's longest scanline as a share of
 the time a scanline lasts (now / peak since debug came on); frames a
 second; core 0's longest main-loop pass and longest single-line render
-(now / peak); in CP/M mode, the Z80's speed. `late` should stay 0.
+(now / peak); in CP/M mode, the Z80's speed; on a board with a DAC, the
+share of core 0's time the sound takes (mixing the bell and the sound
+chip). `late` should stay 0.
 
 **Debug usb status line**: `1234s | usb: 1s led1 1s msc2 1s up2 10s vol2`:
 the seconds since power-on (if they stop, the main loop has stopped:
@@ -377,7 +382,7 @@ It opens from:
 | **T** | show the demo screen in the edited colors until a key is pressed |
 | **R** | reboot the board, as at power-on (unsaved changes are dropped; CP/M drives are written back first). The last resort when the terminal is stuck |
 | **U** | [update the firmware](#updating-the-firmware-from-the-sd-card-or-a-usb-stick) from `FIRMWARE.UF2` on the SD card or a USB stick, in either mode |
-| **C** | the [Clock panel](#the-clock): set the date and time, choose how the status line shows them |
+| **C** | the Clock and sound panel: set the date and time, choose how the status line shows them ([The clock](#the-clock)); the Bell, the sound chip's level and stereo, whether the DAC is fitted ([Sound](#sound)) |
 | **D** | CP/M mode: the [Drives panel](#running-cpm) |
 | **M** | CP/M mode: back to the [monitor](#the-monitor) |
 
@@ -469,7 +474,7 @@ instead of reading a hard disk as a floppy and writing over it).
   images mounted on it). `CPM32` is an 8 MB disk (picosim's second
   floppy's files, with room to spare). The BIOS sets `SETDEF`'s defaults
   at every cold boot: programs are found on the default drive, then A:,
-  then B:, so `XLS`, `XPIP`, `XERA`, `MEM`, `HWINFO` and `WORMS` on `CPM32` run
+  then B:, so `XLS`, `XPIP`, `XERA`, `MEM`, `HWINFO`, `AYTEST`, `AYPLAY` and `WORMS` on `CPM32` run
   from any drive; COM files before SUB files; temporary files on B:, not
   the nearly full A:. `README.TXT` on `CPM31` describes them and how to
   change them with a `SETDEF` line in `PROFILE.SUB`. CP/M 3 shows the
@@ -523,6 +528,14 @@ start F83 from its own drive (`B:`, then `F83`), as above. After
 rebuilding F83 from its source (`README.80`), `F83 VIEWDRV.BLK` and then
 `1 LOAD` patch and save the new `F83.COM` the same way.
 
+`AY.BLK` (`src/machine/cpm/f83/ay.fth`) has words for the
+[sound chip](#sound): `F83 AY.BLK`, then `1 LOAD`, then for example
+`SCALE`, `CHORDS`, `SIREN`, `DRUM`, `PAN` (A, B and C in each stereo
+layout) or `TUNE`. The words: `AY!` `AY@` `AY?` `TONE` `VOLUME` `NOISE`
+`VOICES` `ENVELOPE` `QUIET` `STEREO`, `HZ>PERIOD` `NOTE>PERIOD` `NOTE`,
+`TICKS` `WAIT`. Each screen's shadow (its number + 7) explains it, and
+`VIEW` shows a word's source.
+
 ### The clock
 
 The machine's clock (ports 65/66) is the board's real-time clock when it
@@ -541,7 +554,8 @@ modes' status lines end in it, `13:45` by default, the colons blinking: on
 for the first half of each second, in step with the RTC's 1 Hz output
 where it has one.
 
-SET-UP's **C** opens the Clock panel, in either mode:
+SET-UP's **C** opens the Clock and sound panel, in either mode (its sound
+rows: [Sound](#sound)):
 
 - **Date** and **Time** show the clock as it runs. Typing digits over
   them (Left/Right move the cursor, Backspace goes back) and Return sets
@@ -561,15 +575,68 @@ whether its time was set, whether its 1 Hz output ticks and, for the
 PCF8523, whether its battery is low. Files written on the SD card and USB sticks (`XPIP SD:...`,
 `DRIVES.CFG`, new disk images) get their dates from it.
 
-### The bell
+### Sound
 
 On a board with a DAC (`BOARD_AUDIO_I2S_*` in its header: the Frankless's
-TDA1387), BEL from the host or from a CP/M program sounds a short beep:
-100 ms of 1 kHz, a new BEL while one sounds adding nothing, as loud as
-SET-UP's Bell setting says (high is a quarter of the DAC's full scale,
-each step down half as loud; off is silent). Other boards stay silent.
-Ctrl-G at a CP/M prompt is no test: CP/M echoes it as `^G`; F83's
-`7 EMIT` or a host's `printf '\a'` sends a real BEL.
+TDA1387), the firmware plays a continuous 32 kHz stereo stream to it. Other
+boards stay silent, and their sound settings show `off (no DAC on this
+board)`.
+
+**The bell**: BEL from the host or from a CP/M program sounds a short
+beep: 100 ms of 1 kHz, a new BEL while one sounds adding nothing. Ctrl-G at
+a CP/M prompt is no test: CP/M echoes it as `^G`; F83's `7 EMIT` or a
+host's `printf '\a'` sends a real BEL.
+
+**The sound chip**: the Z80 machine has a General Instrument AY-3-8910
+(three square-wave tones, noise and an envelope; emulated, clocked at
+1.8432 MHz) on RC2014's ports: `OUT (D8h)` selects a register, `OUT
+(D0h)` writes it, `IN (D0h)` reads it. A tone of f Hz has period 115200 /
+f. Programs written for RC2014's YM2149 sound board use those ports.
+
+The sound rows of SET-UP's Clock and sound panel (**C**):
+
+| Setting | Values | |
+|---|---|---|
+| Bell | off, 1 - 10 | how loud BEL beeps, 2 dB a step (default 3, safe in headphones); a beep sounds at each new level |
+| Sound chip | off, 1 - 10 | the AY's level, 2 dB a step (default 7; 10: three channels at full volume just reach the DAC's full scale); a chime sounds at each new level |
+| Stereo | mono, ABC, ACB | where the AY's channels are heard: all in both ears, or A left, B center, C right (ABC, as on the ZX Spectrum 128 and Amstrad CPC), or A left, C center, B right. Mono by default: a channel in one ear only tires on headphones |
+| Sound DAC | fitted, not fitted | not fitted: no sound at all (the DAC's pins, PIO and DMA are given back), and the AY's ports read FFh as with no chip |
+
+A program can pick the layout itself through register 16, which the
+firmware adds (a real AY ignores it): write 0 for the Stereo setting's, 1
+mono, 2 ABC, 3 ACB. Reading it gives that in bits 0-1 and the layout in
+use (1-3) in bits 4-5; FFh means older firmware or a real chip, so no
+stereo. A machine reset (F11) puts it back to 0.
+
+`CPM22`, `CPM31` and `CPM32` carry `AYTEST` (`src/machine/cpm/aytest.asm`),
+a menu of the chip's parts: a scale, chords on A, B and C, a noise sweep,
+the 16 envelope shapes, a volume ramp, A, B and C in turn (to hear the
+stereo layout), or all of them; a key stops a part, `Q`, `Esc` or `^C`
+the program. With the stereo register, **S** steps the layout (the
+Stereo setting's, mono, ABC, ACB); the one AYTEST found is put back when
+it ends.
+
+`CPM22` and `CPM32` carry `AYPLAY` (`src/machine/cpm/ayplay.asm`), which
+plays PSG files, the AY's register writes frame by frame (as emulators
+record them):
+
+```
+A>AYPLAY JACQUES ABC
+Playing JACQUES.PSG in ABC stereo (Q stops)
+  0:07
+```
+
+`AYPLAY` alone lists the `.PSG` files on the drive. After the name:
+`MONO`, `ABC` or `ACB` for the layout (else the Stereo setting's), `LOOP`
+to play it until stopped. `Q`, `Esc` or `^C` stops it. Three tunes come
+with it, our arrangements of public-domain melodies (made at build time
+by `src/machine/cpm/tunes/psg_gen.py`): `KOROBEIN` (Korobeiniki, the
+Tetris theme), `JACQUES` (Frere Jacques as a round in three voices: in
+ABC it moves from left to right) and `ODE` (Ode to Joy). PSG files from
+elsewhere play too, copied in with `XPIP`.
+
+In [Forth](#forth-f83), `AY.BLK` on the `F83` disk has words for the
+chip and examples.
 
 ### HWINFO
 
@@ -764,7 +831,7 @@ A after 3 seconds (any key stops that), or shows its menu:
 - **N**: make a new blank disk: name, then 8" floppy, 4 MB or 8 MB
   (an 8 MB one takes a few seconds to write).
 - **I**: install the built-in disk images onto the card: `CPM22` (CP/M 2.2
-  with its tools, `MEM` and `HWINFO`: boots), `Z80TESTS` (`TERMTEST`, `ALTSCR`, and the Z80 instruction exercisers
+  with its tools, `MEM`, `HWINFO`, `AYTEST`, `AYPLAY` and its tunes: boots), `Z80TESTS` (`TERMTEST`, `ALTSCR`, and the Z80 instruction exercisers
   `EXZ80DOC` and `EXZ80ALL`, about 10 minutes each at full speed, and the
   `CPUTEST` diagnostics; `PRELIM` needs an emulator that runs block moves
   in one go, as z80pack's cpmsim does, and wrecks CP/M here: reset after
@@ -853,8 +920,11 @@ The machine is picosim's:
 | 10 | file transfer: files in the `/XFER` folder of the SD card or a USB stick, a 128-byte record at a time by DMA, for `XLS`, `XPIP` and `XERA` (ours; `src/machine/machine.h` has the commands) |
 | 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II uses as many as it was generated for, see [Other operating systems](#other-operating-systems)), or with `PSRAM_BANKS` up to 15 in the PSRAM; reads the number of banks in the high nibble (so 15 at most) and the selected one in the low |
 | 65/66 | clock: the board's real-time clock, or without one 1 Jan 2026 at power-on; writing it is ours (CP/M 3's `DATE SET`), see [The clock](#the-clock) |
+| 12 | hardware information, for `HWINFO` (ours; see [HWINFO](#hwinfo)) |
 | 67 | 60 Hz timer interrupt |
+| 68/69 | a millisecond count, low byte then high (ours: for timing without interrupts, as the CPU has no fixed speed) |
 | 160 | hardware control |
+| D8h/D0h | the AY-3-8910 sound chip: register select, data (RC2014's; with the firmware's stereo register 16, see [Sound](#sound)) |
 
 The CPU runs unthrottled in 10 ms slices between the keyboard, disk and
 screen work: the monitor's speed test (a JP loop) measured 48.84 MHz (Z80
@@ -1031,7 +1101,7 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | SRAM (520 KB) | about 475 KB: code 170 KB, data 20 KB, buffers 285 KB (Z80 memory 160 KB, raster memory 60 KB, the current fonts 20 KB, screen 13 KB, ...) | about 37 KB, plus most of the two 4 KB scratch banks. A third Z80 bank (48 KB) does not fit |
 | Flash (4 MB) | firmware 496 KB; firmware-update staging area (upper 2 MB, used only during an update); settings (2 sectors); the last sector is left blank | about 1.5 MB below 2 MB for the firmware to grow into |
 | Clocks | clk_sys 400 MHz at 1.3 V, HSTX 200 MHz, USB 48 MHz | |
-| Peripherals | HSTX (DVI), 2 DMA channels, UART0, SPI0 (SD card), USB (host), TIMER0, watchdog | 14 DMA channels, all three PIO blocks, UART1, SPI1, I2C0/1, PWM, ADC, TIMER1, TRNG, SHA-256, the QMI's second chip select (PSRAM) |
+| Peripherals | HSTX (DVI), 2 DMA channels, UART0, SPI0 (SD card), USB (host), TIMER0, watchdog; with a DAC (Frankless) also a PIO state machine, 2 DMA channels and DMA_IRQ_1 for the sound | 14 DMA channels (12 with a DAC), all three PIO blocks (but a state machine), UART1, SPI1, I2C0/1, PWM, ADC, TIMER1, TRNG, SHA-256, the QMI's second chip select (PSRAM) |
 | GPIO | GP0/1 UART0, GP2/3 RTS/CTS (flow control builds only), GP4-7 SD card, GP12-19 DVI Sock | GP8-11, GP20-22, GP26-28 (GP26-28 can be analog inputs), and GP2/3 without flow control |
 
 ## Project layout
@@ -1077,11 +1147,12 @@ has the helpers; `src/CMakeLists.txt` lists the libraries.
 | `render` | portable | `raster` (cells to pixels), `splash` (startup logo); generated font tables and logo (`font_gen.py`, `logo_gen.py`) |
 | `input` | portable | `keyboard` (HID keys to VT100 codes), `keyname` (key names for the status line), `blank` (screen blanking timer) |
 | `settings` | portable | `settings` (settings records), `uf2` (UF2 file checks for the firmware update) |
-| `machine` | portable | `machine` (the Z80 machine: z80pack glue; `z80pack/` holds its configuration headers), `cpm/` (the CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA, TERMTEST, ALTSCR, MEM and HWINFO, and in `cpm3/` CP/M 3's banked BIOS, made into `CPM3.SYS` at build time; see its README) |
+| `machine` | portable | `machine` (the Z80 machine: z80pack glue; `z80pack/` holds its configuration headers), `cpm/` (the CP/M 2.2 BIOS, boot loader, WORMS, XLS, XPIP, XERA, TERMTEST, ALTSCR, MEM, HWINFO, AYTEST and AYPLAY, `tunes/` (AYPLAY's PSG tunes, made at build time), `f83/` (F83's VIEWDRV.BLK and AY.BLK), and in `cpm3/` CP/M 3's banked BIOS, made into `CPM3.SYS` at build time; see its README) |
+| `sound` | portable | `ay8910` (the AY-3-8910), `mixer` (the bell and the AY into the DAC's stream), `tune` (SET-UP's demo tune and chime) |
 | `disks` | portable | `drives` (disk images on FatFs), `drivecfg.c` (`DRIVES.CFG`, the image list and the drive sets), `diskimg` (the built-in images; `diskimg_gen.py` compresses them), `xfer` (port 10's files: `/XFER`), `usbvol` (which USB stick is `USB:`) |
 | `ui` | portable | `setup` (SET-UP panel), `drivepanel` (SET-UP's Drives panel), `fwpanel` (SET-UP's firmware update), `monitor` (the CP/M machine's monitor), `demo` |
 | `board` | RP2350 | `board.h` (the board header's pins, checked) |
-| `platform` | RP2350 | `serial` (UART with optional RTS/CTS and a TX queue), `led`, `nvflash` (settings sectors, written at the DVI clock), `fwupdate` (firmware update), `extram` (the PSRAM), `diag` (`VIDEO_DIAG`) |
+| `platform` | RP2350 | `serial` (UART with optional RTS/CTS and a TX queue), `led`, `audio` (the sound: I2S to the DAC by PIO and DMA, the bell), `nvflash` (settings sectors, written at the DVI clock), `fwupdate` (firmware update), `extram` (the PSRAM), `diag` (`VIDEO_DIAG`) |
 | `usb` | RP2350 | `usbkbd` (USB keyboards, the USB log, restarting a stuck host), `tusb_config.h` (TinyUSB host) |
 | `storage` | RP2350 | `diskio.c` (FatFs drives: 0 the SD card, 1 a USB stick), `sdcard` (SPI SD card), `usbmsc` (USB sticks) |
 | `video` | RP2350 | `hstx_dvi` (HSTX DVI output), `video` (scanlines on core 1) |

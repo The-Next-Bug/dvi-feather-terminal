@@ -433,7 +433,9 @@ UF2 in the latter).
   1ls.18.5), usb_log (field 16: SETTINGS_USB_LOG_OFF/_SD, default off, bd
   xv0), sound_level (the AY's, 0-10, default 7) and sound_dac (1 fitted,
   default; 0: audio.c gives the PIO, DMA, IRQ and pins back, the AY's ports
-  read 0xFF), both on the panel. SET-UP's rows (SETUP_ITEMS =
+  read 0xFF), sound_stereo (field 19, SETTINGS_STEREO_* = AY_STEREO_*: mono
+  default, ABC, ACB; bd 1ls.18.9; audio_set_stereo from apply_settings),
+  all on the panel. SET-UP's rows (SETUP_ITEMS =
   SETTINGS_MAIN_FIELDS, 13) are the main-page fields in order,
   settings_main_field(row) -> field (rows 0-11 = fields 0-11, row 12 =
   usb_log); settings_columns() is 80 for the ADM-3A;
@@ -499,14 +501,15 @@ UF2 in the latter).
   the clock settings, 7-24 columns). Users: cpm_glue's machine platform
   (time_get/time_set), get_fattime. SET-UP's C, the Clock and sound panel:
   `src/ui/clockpanel.[ch]` (portable, cold, test_setup; bd 1ls.6.4,
-  1ls.18.5; 16 rows): Date/Time follow rtc_now until digits are typed over
+  1ls.18.5; 17 rows): Date/Time follow rtc_now until digits are typed over
   them (fixed positions, no sscanf), the three clock settings as choices, a
-  sample row, then Bell, Sound chip and Sound DAC (field_of's table; without
-  a DAC on the board, has_dac, all three fixed, Sound DAC not fitted the
-  first two, shown off and skipped); Return -> setup_glue.c clock_service
+  sample row, then Bell, Sound chip, Stereo and Sound DAC (field_of's table;
+  without a DAC on the board, has_dac, all four fixed, Sound DAC not fitted
+  the first three, shown off and skipped); Return -> setup_glue.c clock_service
   (main loop: rtc_set if typed, the settings into setup.ui.values for
-  SET-UP's save). setup_service previews the panel's Bell (rung) and Sound
-  chip levels while it is open, else SET-UP's; cancel restores the saved.
+  SET-UP's save). setup_service previews the panel's Bell (rung), Sound
+  chip and Stereo (both with the chime, on A) while it is open, else
+  SET-UP's; cancel restores the saved.
 - Bell (bd 1ls.7): term.c's personalities bump term_t.bells on BEL (not
   OSC's terminator); main.c's loop calls bell_ring when it changes.
   `src/platform/audio.c` (the audio engine, bd 1ls.18.2; bell.h's API and
@@ -547,16 +550,24 @@ UF2 in the latter).
   for a new Sound chip level in the Clock and sound panel; tune_poll false
   when a piece ends. setup_glue.c's ay_play/ay_service/ay_give_back borrow
   the AY for them (bell_present; the demo only with Sound chip > 0; the Z80
-  is stopped under SET-UP): its 16 registers saved and written back after
-  (piece over, demo over, SET-UP closed), attached only meanwhile in
-  terminal mode. test_ay's test_tune.
+  is stopped under SET-UP): its 16 registers and AY_STEREO_REG saved (that
+  set to 0, so the edited Stereo is heard) and written back after (piece
+  over, demo over, SET-UP closed), attached only meanwhile in terminal
+  mode. test_ay's test_tune.
   ay8910.[ch] (1ls.18.3): the AY-3-8910, clock AY_CLOCK_RC2014 1.8432 MHz;
   generators ticked at f / 8 (tone f / (16 TP), noise and envelope steps
   f / (16 NP or EP), period 0 = 1, 17-bit LFSR taps 0/3, MAME's envelope
   logic), each output frame the average of its ticks (no aliasing; mixer
   off = the held level, sampled-sound trick), Ayumi's measured 16-level
-  DAC (non-const: no flash from the IRQ), mono / ABC / ACB, a ~25 Hz DC
-  blocker (dc_block, off in tests). ay_write only stores the masked byte
+  DAC (non-const: no flash from the IRQ), mono / ABC / ACB (ay8910_t.stereo,
+  SET-UP's; AY_STEREO_REG 16, ours, bd 1ls.18.9: bits 0-1 written, 0 =
+  .stereo, 1-3 = AY_STEREO_* + 1; read back with the layout in use + 1 in
+  bits 4-5; ay_reset clears it; ay_stereo() the effective one; 17-255
+  ignored, read 0xFF), a ~25 Hz DC blocker (dc_block, off in tests).
+  audio.c's audio_irq adds its time to busy_us (timerawl, SRAM):
+  audio_busy_us for the debug status line's "snd A%" (status.c, us a ms
+  = per mille; the line's separators and units are tight to fit 80
+  columns). ay_write only stores the masked byte
   (a shape write bumps env_writes; ay_render restarts the envelope), so
   the Z80 writing on core 0 under the IRQ is safe; never two cores.
 - `src/platform/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
@@ -591,8 +602,9 @@ UF2 in the latter).
   DATE SET works), 60 Hz timer 67, hwctl 160; ours: 68/69 a free-running
   millisecond tick, IN 68 latching 69's high byte, for timing without
   interrupts; the AY-3-8910 on RC2014's D8h select / D0h data, through the
-  platform's sound_write/sound_read, NULL: 0xFF, reset writes 0s, bd
-  1ls.18.4; not MSX's A0h-A2h, A0h is hwctl) and boot ROM; bank 0 64 KB +
+  platform's sound_write/sound_read, NULL: 0xFF, reset writes 0s to
+  registers 0-16 (MACHINE_AY_STEREO 16 back to SET-UP's), bd 1ls.18.4/.9;
+  not MSX's A0h-A2h, A0h is hwctl) and boot ROM; bank 0 64 KB +
   MACHINE_BANKS x 48 KB in SRAM, or machine_set_banks's memory (before
   machine_init; NULL: back to the SRAM ones) of up to MACHINE_MAX_BANKS
   (15: IN 64 reports the count in its high nibble) x MACHINE_BANK_SIZE;
@@ -641,7 +653,17 @@ UF2 in the latter).
   by f83/build.sh under CP/M 2.2 in cpmrun (cpm3/build.sh's, an output
   of that step): at boot VIEW-DRIVE puts 0050H (CP/M 3's load drive,
   only if BDOS 12 >= 30H and 1-16) into each VIEW-FILES FCB's drive
-  byte, so VIEW works with F83 found through CP/M 3's search path. Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
+  byte, so VIEW works with F83 found through CP/M 3's search path.
+  AY.BLK (bd 1ls.18.7, src/machine/cpm/f83/ay.fth, on the disk only, not
+  loaded): AY! AY@ AY? TONE VOLUME NOISE VOICES ENVELOPE QUIET STEREO,
+  HZ>PERIOD NOTE>PERIOD NOTE, TICKS WAIT, examples SCALE CHORDS SIREN DRUM
+  PAN TUNE (PLAY a note/eighths table); 7 VIEWS AY.BLK. f83/build.sh's
+  .fth converter: "---" between screens, "===" starts the shadow half
+  (screen n's shadow at n + half; both halves padded alike: AY.BLK 7 + 7,
+  shadows at n + 7), code lines <= 63 columns (a screen has no line ends:
+  column 64 ran CHORD's ";" into the next ":" as ";:"), \ lines 64.
+  test_f83 loads it, AY?, the periods, STEREO read back, VIEW, a shadow,
+  SCALE's writes (fine before coarse, as ay_periods pairs them). Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
   default, A:, B:; order COM,SUB; temporary drive B:; no display: f8w.9),
   so PROFILE.SUB (src/machine/cpm/cpm3/profile.sub) only loads VT100DYN, whose
   help text build.sh patches away; README.TXT (src/machine/cpm/cpm3/readme.txt)
@@ -697,7 +719,27 @@ UF2 in the latter).
   1.8432 MHz (115200 / f). machine_host.c has an ay8910_t on the ports and
   logs the writes (host_ay_log): test_ay_ports (raw Z80 bytes, the tick,
   no hooks -> 0xFF), test_aytest_tool (periods, timing, the stop, no
-  chip), test_cpm3_tools runs it under CP/M 3. cpm_glue's sound hooks are
+  chip), test_cpm3_tools runs it under CP/M 3. Its menu shows the stereo
+  layout (register 16; none when it reads 0xFF) and S steps it (0-3, the
+  start's put back on exit), item 6 plays A, B, C in turn with where each
+  is heard, 7 all. AYTEST and AYPLAY print through BDOS 6, as they read
+  keys: CP/M 2.2's BDOS 2 takes a key typed during output into its own
+  buffer, which 6 never sees (a key during a line did not stop the part;
+  test_aytest_tool failed under a loaded ctest).
+  src/machine/cpm/ayplay.asm (bd 1ls.18.10) -> AYPLAY.COM on CPM22 and
+  CPM32: AYPLAY [d:]NAME[.PSG] [MONO|ABC|ACB] [LOOP] (command-tail words;
+  none: the usage and the .PSG files, BDOS 17/18); PSG ("PSG" 1Ah + 12
+  bytes; register + value, FFh frame end, FEh n = n x 4 frames, FDh end)
+  read a record at a time (any size), frames every 20 ms on the 68/69
+  tick (more than 200 ms behind: resynced), m:ss shown, Q/ESC/^C stop
+  (QUIET, the layout found put back); LOOP reopens the file.
+  src/machine/cpm/tunes/psg_gen.py renders KOROBEIN, JACQUES (a 3-voice
+  round, entries 2 bars apart) and ODE.PSG at build time from note lists
+  (equal temperament for 1.8432 MHz, per-frame volume decay, a silent last
+  frame per note, noise drums; only changed registers written: sparse,
+  ~50 writes in 100 frames). test_ayplay_tool (TUNES_DIR = the built
+  tunes): the listing, JACQUES ABC's writes in order and on time against
+  the file, the stop, missing file, bad option, not PSG. cpm_glue's sound hooks are
   audio.c's audio_ay_write/_read (no DAC: dropped / 0xFF, so AYTEST finds
   no chip); main.c attaches the AY in CP/M mode. HWINFO item 33
   (HWINFO_SOUND) names it, none without a DAC.
@@ -828,14 +870,17 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   main(), -648 bytes) to 0x2006f428; the clock (src/clock, rtc.c, 1ls.6.1)
   to 0x2006fda4 (Frankless with PSRAM banks: 0x20058d94); TinyUSB master
   (bd xv0: its bigger hcd_rp2040 ~5.9 KB, the USB log's 2 KB text and the
-  watchdog) from 0x200709b0 to 0x20073288, ~52 KB free; the USB log setting's SET-UP row (stash) to 0x20073444; crash_glue.c, the stick workarounds to 0x2007401c (~48 KB free). Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+  watchdog) from 0x200709b0 to 0x20073288, ~52 KB free; the USB log setting's SET-UP row (stash) to 0x20073444; crash_glue.c, the stick workarounds to 0x2007401c (~48 KB free); the
+sound (bd 1ls.18: dvt_sound, the settings and panel rows; no DAC on the
+Sock, so no audio engine running) to 0x20074840, ~45.9 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, stash_buf 13.4 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit
   (the PSRAM build has none in SRAM: __end__ 0x20057b88).
 - Flash (4 MB): image 0-0x7e108 (504 KB at v0.6.1; the 4 KB LZ window costs 32 KB;
   ~875 KB with the CP/M 3 disks, f8w.1: ~610 KB of compressed images in all;
-  1.05 MB with F83, xdu: ~810 KB of images); free to 2 MB (image growth;
+  1.05 MB with F83, xdu: ~810 KB of images; 1.12 MB with the sound, bd
+  1ls.18: AYTEST, AYPLAY, its tunes, AY.BLK); free to 2 MB (image growth;
   fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used
   only during an update, up to the new image's length); settings
   0x3fd000-0x3fefff; last sector left blank (E10). New persistent storage
@@ -867,14 +912,16 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   SHA-256, POWMAN's always-on timer free; I2C1 can take more chips (other
   addresses). No spare PLL (PLL_SYS 400 MHz, PLL_USB 48 MHz; bd cpx.1).
 - SRAM: __end__ 0x2005d78c (bd xv0); 0x2005f428 with the audio engine and
-  the AY (bd 1ls.18, +7.2 KB), ~131 KB free (the Z80 banks are in the
+  the AY (bd 1ls.18, +7.2 KB), 0x2005f800 with stereo and the busy count
+  (1ls.18.9/.8), ~130 KB free (the Z80 banks are in the
   PSRAM). PSRAM 8 MB: 720 KB banks (15 x 48 KB, port 64's limit), ~7.3 MB
   free (bd g31: RAM disk, scrollback). Flash 16 MB: image 1.04 MB, growth
   room to 8 MB (FWUPDATE_STAGING = half the flash), settings in the top
   12 KB.
 - Core 1: video only (62% of a line at 80 columns, 87-92% at 132, qur.22's
   Sock figures). Core 0: main loop + the Z80 unthrottled, so new core 0
-  work costs Z80 speed.
+  work costs Z80 speed; the audio engine's refill IRQ (mixer, AY render)
+  is the debug status line's "snd A%" (not measured yet: bd 1ls.18.8).
 
 ## Conventions & Patterns
 

@@ -9,6 +9,8 @@
 
 #include "pico/stdlib.h"
 
+#include "audio.h"
+#include "bell.h"
 #include "datetime.h"
 #include "keyname.h"
 #include "palette.h"
@@ -121,6 +123,7 @@ static struct {
 	uint32_t line_peak;              // compose cycles, since the debug line came on
 	uint32_t render_peak_us;         // likewise
 	uint32_t pass_start_us, pass_max_us, pass_peak_us; // main-loop passes
+	uint32_t audio_us;               // audio_busy_us at the last refresh
 } debug_status;
 
 bool debug_status_on(void) {
@@ -145,12 +148,13 @@ static unsigned percent(uint32_t part, uint32_t whole) {
 	return whole ? (unsigned)((part * 100 + whole / 2) / whole) : 0;
 }
 
-// " late T+N | line C/P% | F fps | loop M/Q ms | render R/S us | Z MHz":
-// late lines in all (+ since the last refresh); the longest scanline
-// compose as a share of a line's time, this refresh / the peak; frames a
-// second; the longest main-loop pass and the longest line render on core 0
-// (core 1 can show that line half drawn meanwhile), now / peak; in CP/M
-// mode the Z80's speed.
+// " late T+N|line C/P%|Ffps|loop M/Qms|render R/Sus|Z MHz|snd A%": late
+// lines in all (+ since the last refresh); the longest scanline compose as
+// a share of a line's time, this refresh / the peak; frames a second; the
+// longest main-loop pass and the longest line render on core 0 (core 1 can
+// show that line half drawn meanwhile), now / peak; in CP/M mode the Z80's
+// speed; with a DAC, core 0's time in the audio engine's interrupt since
+// the last refresh (bd 1ls.18.8). Tight: it fits 80 columns.
 void debug_status_refresh(void) {
 	uint32_t now = to_ms_since_boot(get_absolute_time());
 	video_stats_t st = video_stats();
@@ -174,15 +178,22 @@ void debug_status_refresh(void) {
 	unsigned fps = ms ? (unsigned)(((st.frames - debug_status.frames) * 1000 + ms / 2) / ms) : 0;
 	char *t = debug_status.text;
 	size_t size = sizeof debug_status.text;
-	int n = snprintf(t, size, " late %lu+%lu | line %u/%u%% | %u fps | loop %lu/%lu ms | render %lu/%lu us",
+	int n = snprintf(t, size, " late %lu+%lu|line %u/%u%%|%ufps|loop %lu/%lums|render %lu/%luus",
 		(unsigned long)st.late, (unsigned long)(ms ? st.late - debug_status.late : 0),
 		percent(st.max_line_cycles, st.cycles_budget), percent(debug_status.line_peak, st.cycles_budget), fps,
 		(unsigned long)((pass_us + 500) / 1000), (unsigned long)((debug_status.pass_peak_us + 500) / 1000),
 		(unsigned long)st.max_render_us, (unsigned long)debug_status.render_peak_us);
 	if (cpm.on && cpm.running && n > 0 && (size_t)n < size) {
-		snprintf(t + n, size - (size_t)n, " | %lu.%02lu MHz", (unsigned long)(cpm.khz / 1000),
+		n += snprintf(t + n, size - (size_t)n, "|%lu.%02luMHz", (unsigned long)(cpm.khz / 1000),
 			(unsigned long)(cpm.khz % 1000 / 10));
 	}
+	uint32_t audio_us = audio_busy_us();
+	if (bell_present() && ms && n > 0 && (size_t)n < size) {
+		uint32_t per_mille = (audio_us - debug_status.audio_us) / ms; // us a ms
+		snprintf(t + n, size - (size_t)n, "|snd %lu.%lu%%", (unsigned long)(per_mille / 10),
+			(unsigned long)(per_mille % 10));
+	}
+	debug_status.audio_us = audio_us;
 	debug_status.last_ms = now;
 	debug_status.frames = st.frames;
 	debug_status.late = st.late;

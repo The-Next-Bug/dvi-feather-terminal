@@ -26,6 +26,19 @@ hold an 8" floppy, a 4 MB or an 8 MB hard disk image (`src/disks/drives.h`).
    `termtest.asm` (the terminal types, page by page) and `altscr.asm`
    (the alternate screen) go onto the `Z80TESTS` disk the same way
    (`--file Z80TESTS TERMTEST.COM`, `ALTSCR.COM`).
+4. `aytest.asm` and `ayplay.asm` (the AY-3-8910 on ports D8h/D0h: a test
+   menu, a PSG player) go onto `CPM22` and `CPM32` (AYTEST on `CPM31`
+   too), with AYPLAY's tunes: `tunes/psg_gen.py` renders our arrangements
+   of public-domain melodies (note lists, a volume envelope per frame)
+   into `KOROBEIN.PSG`, `JACQUES.PSG` and `ODE.PSG`. Both programs print
+   through BDOS 6, as they read keys: CP/M 2.2's console output (BDOS 2)
+   takes a key typed meanwhile into a buffer BDOS 6 never sees.
+5. `f83/` holds F83's block files as text: `viewdrv.fth` (loaded into
+   `F83.COM`) and `ay.fth` (`AY.BLK`, the AY words). `f83/build.sh` turns
+   them into 1 KB screens of 16 x 64 characters: a screen has no line
+   ends, so a code line must stay within 63 columns (a 64th runs into the
+   next line's first word); a `===` line starts the shadow screens, which
+   F83 finds at the screen's number + half the file.
 
 `ccpbdos.rel` has one bit per byte of the 5632-byte CCP+BDOS, set where the
 byte is the high byte of an address inside them. It was made once by running
@@ -59,8 +72,8 @@ replace this one.
 
 picosim's banked CP/M 3 disks are built in as `CPM31` (boot disk), `CPM32`
 (picosim's second floppy's files on an 8 MB disk, `diskimg_gen.py --convert`,
-with WORMS, XLS, XPIP, XERA, MEM and HWINFO added by `--file CPM32`; HWINFO
-also on `CPM31`) and
+with WORMS, XLS, XPIP, XERA, MEM, HWINFO, AYTEST, AYPLAY and its tunes
+added by `--file CPM32`; HWINFO and AYTEST also on `CPM31`) and
 `CPM3GEN` (bd f8w). `CPM31` gets our `PROFILE.SUB` (`cpm3/profile.sub`:
 VT100DYN only, its help text patched away by `cpm3/build.sh`) and
 `README.TXT` (`cpm3/readme.txt`): our BIOS sets SETDEF's defaults (search

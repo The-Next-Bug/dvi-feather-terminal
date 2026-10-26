@@ -21,6 +21,9 @@ void audio_set_ay_level(uint8_t level);
 // The Stereo setting (SETTINGS_STEREO_* = AY_STEREO_*): the AY's layout
 // unless the program picks one (MACHINE_AY_STEREO).
 void audio_set_stereo(uint8_t layout);
+// Microseconds core 0 has spent in the refill interrupt since boot
+// (wrapping): the engine's cost, for the debug status line.
+uint32_t audio_busy_us(void);
 // Zero what the DMA is sending, with interrupts off (nvflash's writes,
 // fwupdate's commit): silence until the interrupt refills the blocks.
 void audio_silence(void);
