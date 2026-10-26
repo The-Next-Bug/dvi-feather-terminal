@@ -3,7 +3,8 @@
 
 // SET-UP's Clock and sound panel (C, bd 1ls.6.4): the date and time, how
 // the status line shows them (bd 1ls.6.5), and the sound: the Bell's and
-// the AY's levels and whether the board's DAC is fitted (bd 1ls.18.5).
+// the AY's levels, the AY's stereo layout (bd 1ls.18.9) and whether the
+// board's DAC is fitted (bd 1ls.18.5).
 // Portable C, host-tested; the terminal (apps/terminal/setup_glue.c) opens
 // it over SET-UP's rows.
 //
@@ -23,9 +24,9 @@
 #include "settings.h"
 
 // In a box: the title line, Date, Time, a gap, the three clock settings,
-// what the status line shows, a gap, the three sound settings, message, 2
+// what the status line shows, a gap, the four sound settings, message, 2
 // help lines, the bottom line.
-#define CLOCKPANEL_ROWS 16
+#define CLOCKPANEL_ROWS 17
 #define CLOCKPANEL_ESC_TIMEOUT_MS 100
 
 typedef enum {
@@ -38,7 +39,7 @@ typedef enum {
 #define CLOCKPANEL_DATE 0
 #define CLOCKPANEL_TIME 1
 #define CLOCKPANEL_BELL 5 // the first sound line
-#define CLOCKPANEL_LINES 8 // Date, Time, the clock settings', then the sound settings' rows
+#define CLOCKPANEL_LINES 9 // Date, Time, the clock settings', then the sound settings' rows
 
 typedef struct {
 	settings_t values;    // SET-UP's edited settings, the clock's changed here

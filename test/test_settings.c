@@ -269,6 +269,26 @@ static void test_sound_settings(void) {
 	CHECK_EQ(out.sound_dac, 1);
 }
 
+// Stereo: mono unless saved; records from before it (19 bytes) get mono.
+static void test_stereo_setting(void) {
+	settings_t in, out;
+	uint8_t rec[SETTINGS_RECORD_SIZE];
+	uint32_t seq;
+	settings_defaults(&in);
+	CHECK_EQ(in.sound_stereo, SETTINGS_STEREO_MONO);
+	in.sound_stereo = SETTINGS_STEREO_ACB;
+	settings_encode(&in, 1, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.sound_stereo, SETTINGS_STEREO_ACB);
+	rec[5] = 19;
+	uint32_t crc = crc_of(rec, 19);
+	for (unsigned i = 0; i < 4; ++i) {
+		rec[12 + i] = (uint8_t)(crc >> 8 * i);
+	}
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.sound_stereo, SETTINGS_STEREO_MONO);
+}
+
 // USB log: off unless saved; records from before it (16 bytes) get off,
 // and a value it cannot take too.
 static void test_usb_log_setting(void) {
@@ -383,6 +403,7 @@ int main(void) {
 	RUN(test_clock_settings);
 	RUN(test_bell_setting);
 	RUN(test_sound_settings);
+	RUN(test_stereo_setting);
 	RUN(test_usb_log_setting);
 	RUN(test_older_record);
 	RUN(test_retired_wide80);

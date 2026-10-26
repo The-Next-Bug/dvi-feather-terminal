@@ -148,6 +148,7 @@ void apply_settings(const settings_t *s) {
 	show_palette(s);
 	bell_set_level(s->bell);
 	audio_set_ay_level(s->sound_level);
+	audio_set_stereo(s->sound_stereo);
 	audio_set_fitted(s->sound_dac != 0);
 }
 

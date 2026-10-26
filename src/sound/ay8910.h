@@ -43,12 +43,20 @@
 #define AY_STEREO_ABC 1
 #define AY_STEREO_ACB 2
 
+// Ours, not the chip's (bd 1ls.18.9): register 16 picks the layout for a
+// program, which a real AY ignores. Written: bits 0-1, 0 the layout set
+// outside (ay8910_t.stereo: SET-UP's Stereo), else AY_STEREO_* + 1; the
+// other bits ignored. Read: those bits, and the layout in use + 1 in bits
+// 4-5 (a chip without it reads 0xFF). The chip's reset sets it to 0.
+#define AY_STEREO_REG 16
+
 typedef struct {
 	uint8_t regs[AY_REGS];
 	uint8_t env_writes; // bumped by each write to AY_ENVELOPE_SHAPE
 	// The renderer's.
 	uint8_t env_seen;
-	uint8_t stereo;   // AY_STEREO_*
+	uint8_t stereo;   // AY_STEREO_*: the layout unless AY_STEREO_REG picks one
+	uint8_t stereo_reg; // AY_STEREO_REG's bits 0-1
 	bool dc_block;    // take out the chip's DC level (on; off for the tests)
 	uint32_t tick_step; // generator ticks per output frame, 16.16
 	uint32_t tick_frac;
@@ -68,9 +76,11 @@ typedef struct {
 // A chip clocked at clock_hz (at most 8 x rate x 65535) rendering rate
 // frames a second (at most clock_hz / 8), reset, mono, DC blocked.
 void ay_init(ay8910_t *ay, uint32_t clock_hz, uint32_t rate);
-// The chip's reset: every register 0 (silent), the generators restarted.
+// The chip's reset: every register 0 (silent, AY_STEREO_REG too), the
+// generators restarted.
 void ay_reset(ay8910_t *ay);
-// Registers 16-255 are ignored (read 0xFF): the chip answers only 0-15.
+// Registers 17-255 are ignored (read 0xFF): the chip answers only 0-15,
+// and AY_STEREO_REG is ours.
 void ay_write(ay8910_t *ay, uint8_t reg, uint8_t value);
 uint8_t ay_read(const ay8910_t *ay, uint8_t reg);
 // frames stereo frames (left, right) into out; three channels at full
@@ -79,5 +89,7 @@ void ay_render(ay8910_t *ay, int16_t *out, unsigned frames);
 // Silent and settled: the three amplitudes 0 and the DC blocker at rest,
 // so the engine can skip ay_render (it carries on from there later).
 bool ay_idle(const ay8910_t *ay);
+// The layout in use (AY_STEREO_*).
+uint8_t ay_stereo(const ay8910_t *ay);
 
 #endif

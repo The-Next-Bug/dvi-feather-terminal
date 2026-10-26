@@ -38,6 +38,7 @@ static bool ready;   // bell_init has run: the clocks are final
 static bool fitted = true; // the Sound DAC setting
 static bool ay_attached;
 static uint8_t level = SETTINGS_BELL_DEFAULT, ay_level = SETTINGS_SOUND_DEFAULT;
+static uint8_t stereo = SETTINGS_STEREO_MONO;
 // The square wave's amplitude per Bell level, 2 dB a step: the default, 3,
 // 1/16 of full scale (-24 dBFS: loud enough on a speaker, safe in
 // headphones), 10 about 1/3 (-10 dBFS).
@@ -142,6 +143,7 @@ static void start(void) {
 
 	mixer_init(&mix);
 	ay_init(&ay, AY_CLOCK_RC2014, MIXER_RATE);
+	ay.stereo = stereo;
 	apply_levels();
 	mix.ay = ay_attached ? &ay : NULL;
 	for (unsigned i = 0; i < 2; ++i) {
@@ -225,6 +227,11 @@ void audio_set_ay_level(uint8_t l) {
 	}
 }
 
+void audio_set_stereo(uint8_t layout) {
+	stereo = layout;
+	ay.stereo = layout; // a plain store: the renderer reads it per block
+}
+
 void bell_ring(void) {
 	if (running()) {
 		mixer_ring(&mix);
@@ -285,6 +292,10 @@ void audio_set_ay_level(uint8_t l) {
 }
 
 void audio_silence(void) {
+}
+
+void audio_set_stereo(uint8_t layout) {
+	(void)layout;
 }
 
 void audio_ay_write(uint8_t reg, uint8_t value) {

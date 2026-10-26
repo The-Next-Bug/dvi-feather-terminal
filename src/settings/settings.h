@@ -49,6 +49,7 @@ typedef struct {
 	// The sound (the Clock and sound panel, with Bell; bd 1ls.18.5):
 	uint8_t sound_level;   // 0 (off) to SETTINGS_SOUND_MAX: the AY-3-8910's level (audio.c)
 	uint8_t sound_dac;     // 1: the board's DAC is fitted; 0: no sound at all, no AY on the ports
+	uint8_t sound_stereo;  // SETTINGS_STEREO_*: the AY's channels left and right (bd 1ls.18.9)
 } settings_t;
 
 #define SETTINGS_MODE_TERMINAL 0 // a serial terminal on UART0
@@ -79,6 +80,13 @@ typedef struct {
 #define SETTINGS_SOUND_DEFAULT 7
 #define SETTINGS_SOUND_MAX 10
 
+// The AY's layout, ay8910.h's AY_STEREO_* (a program can pick another
+// through MACHINE_AY_STEREO). Mono by default: A and C each in one ear
+// only tires on headphones.
+#define SETTINGS_STEREO_MONO 0
+#define SETTINGS_STEREO_ABC 1 // A left, B center, C right
+#define SETTINGS_STEREO_ACB 2 // A left, C center, B right
+
 #define SETTINGS_USB_LOG_OFF 0
 #define SETTINGS_USB_LOG_SD 1 // appended to the SD card's USBLOG.TXT (apps/terminal/usblog_glue.c)
 
@@ -86,7 +94,7 @@ typedef struct {
 // first choice need not be the default), their names and the SET-UP page
 // they are on: SET-UP's own rows (SETTINGS_MAIN_FIELDS of them, in this
 // order: settings_main_field) or its Clock panel (clockpanel.h).
-#define SETTINGS_FIELDS 19
+#define SETTINGS_FIELDS 20
 #define SETTINGS_MAIN_FIELDS 13
 #define SETTINGS_MAX_CHOICES 11
 

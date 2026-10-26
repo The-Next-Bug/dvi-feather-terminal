@@ -15,7 +15,8 @@
 static unsigned field_of(unsigned line) {
 	static const uint8_t fields[CLOCKPANEL_LINES - 2] = {
 		offsetof(settings_t, clock), offsetof(settings_t, clock_seconds), offsetof(settings_t, clock_date),
-		offsetof(settings_t, bell), offsetof(settings_t, sound_level), offsetof(settings_t, sound_dac),
+		offsetof(settings_t, bell), offsetof(settings_t, sound_level), offsetof(settings_t, sound_stereo),
+		offsetof(settings_t, sound_dac),
 	};
 	return fields[line - 2];
 }

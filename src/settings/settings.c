@@ -64,6 +64,8 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 	{"Sound chip", SETTINGS_SOUND_MAX + 1, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 		{"off", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}, SETTINGS_PAGE_CLOCK},
 	{"Sound DAC", 2, {1, 0}, {"fitted", "not fitted"}, SETTINGS_PAGE_CLOCK},
+	{"Stereo", 3, {SETTINGS_STEREO_MONO, SETTINGS_STEREO_ABC, SETTINGS_STEREO_ACB},
+		{"mono", "ABC", "ACB"}, SETTINGS_PAGE_CLOCK},
 };
 
 unsigned settings_main_field(unsigned row) {
@@ -128,7 +130,8 @@ void settings_defaults(settings_t *s) {
 		.framing = 0, .newline = 0, .colors = 0, .palette = 0, .mode = SETTINGS_MODE_TERMINAL,
 		.status_line = 1, .blank_after = 0, .term_type = SETTINGS_TERM_VT100, .clock = SETTINGS_CLOCK_24H,
 		.clock_seconds = 0, .clock_date = SETTINGS_DATE_NONE, .bell = SETTINGS_BELL_DEFAULT,
-		.usb_log = SETTINGS_USB_LOG_OFF, .sound_level = SETTINGS_SOUND_DEFAULT, .sound_dac = 1};
+		.usb_log = SETTINGS_USB_LOG_OFF, .sound_level = SETTINGS_SOUND_DEFAULT, .sound_dac = 1,
+		.sound_stereo = SETTINGS_STEREO_MONO};
 }
 
 void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_RECORD_SIZE]) {

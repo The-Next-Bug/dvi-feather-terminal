@@ -334,9 +334,9 @@ static void clock_open_at(uint32_t secs) {
 	clockpanel_open(&cp, &v, secs, true, true);
 }
 
-// The sound rows under the clock's: Bell, Sound chip, Sound DAC. The DAC
-// not fitted fixes the first two at off (skipped); without a DAC on the
-// board all three are.
+// The sound rows under the clock's: Bell, Sound chip, Stereo, Sound DAC.
+// The DAC not fitted fixes the first three at off (skipped); without a DAC
+// on the board all four are.
 static void test_clock_panel_sound(void) {
 	static screen_t s;
 	screen_init(&s, 80, FG, BG);
@@ -345,6 +345,8 @@ static void test_clock_panel_sound(void) {
 	CHECK_EQ(clock_send("\x1b[A"), CLOCKPANEL_REDRAW); // Up from Date: Sound DAC
 	CHECK_EQ(cp.line, (unsigned)CLOCKPANEL_LINES - 1);
 	CHECK_EQ(clock_send("\x1b[A "), CLOCKPANEL_REDRAW);
+	CHECK_EQ(cp.values.sound_stereo, SETTINGS_STEREO_ABC);
+	CHECK_EQ(clock_send("\x1b[A "), CLOCKPANEL_REDRAW);
 	CHECK_EQ(cp.values.sound_level, SETTINGS_SOUND_DEFAULT + 1);
 	CHECK_EQ(clock_send("\x1b[A\x1b[C"), CLOCKPANEL_REDRAW);
 	CHECK_EQ(cp.values.bell, SETTINGS_BELL_DEFAULT + 1);
@@ -352,15 +354,17 @@ static void test_clock_panel_sound(void) {
 	CHECK(row_contains(&s, top, "SET-UP  Clock and sound"));
 	CHECK(row_contains(&s, top + 9, "> Bell") && row_contains(&s, top + 9, " off   1   2   3"));
 	CHECK(row_contains(&s, top + 10, "Sound chip") && row_contains(&s, top + 10, "9   10"));
-	CHECK(row_contains(&s, top + 11, "Sound DAC") && row_contains(&s, top + 11, " fitted   not fitted"));
-	// Not fitted: Bell and Sound chip off, skipped.
-	CHECK_EQ(clock_send("\x1b[B\x1b[B "), CLOCKPANEL_REDRAW);
+	CHECK(row_contains(&s, top + 11, "Stereo") && row_contains(&s, top + 11, " mono   ABC   ACB"));
+	CHECK(row_contains(&s, top + 12, "Sound DAC") && row_contains(&s, top + 12, " fitted   not fitted"));
+	// Not fitted: Bell, Sound chip and Stereo off, skipped.
+	CHECK_EQ(clock_send("\x1b[B\x1b[B\x1b[B "), CLOCKPANEL_REDRAW);
 	CHECK_EQ(cp.values.sound_dac, 0);
 	CHECK_EQ(clock_send("\x1b[A"), CLOCKPANEL_REDRAW);
 	CHECK_EQ(cp.line, 4u); // Date's format
 	clockpanel_draw(&cp, &s, top, FG, BG, BORDER);
 	CHECK(row_contains(&s, top + 9, " off  (the DAC is not fitted)"));
 	CHECK(row_contains(&s, top + 10, " off  (the DAC is not fitted)"));
+	CHECK(row_contains(&s, top + 11, " mono  (the DAC is not fitted)"));
 	CHECK_EQ(cp.values.bell, SETTINGS_BELL_DEFAULT + 1); // kept for when it is
 	// No DAC on the board: all three.
 	settings_t v;
@@ -370,7 +374,7 @@ static void test_clock_panel_sound(void) {
 	CHECK_EQ(cp.line, 4u);
 	clockpanel_draw(&cp, &s, top, FG, BG, BORDER);
 	CHECK(row_contains(&s, top + 9, " off  (no DAC on this board)"));
-	CHECK(row_contains(&s, top + 11, " not fitted  (no DAC on this board)"));
+	CHECK(row_contains(&s, top + 12, " not fitted  (no DAC on this board)"));
 }
 
 // Date and Time follow the clock until typed in; Return then sets nothing.
@@ -457,11 +461,11 @@ static void test_clock_panel_format(void) {
 	CHECK(row_contains(&s, top + 7, "Thu 22 Oct  1:45:30 PM"));
 	// Down past the sound rows wraps to Date; Up from Date to the last row
 	// (Sound DAC), then up to Date's format.
-	CHECK_EQ(clock_send("\x1b[B\x1b[B\x1b[B\x1b[B"), CLOCKPANEL_REDRAW);
+	CHECK_EQ(clock_send("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B"), CLOCKPANEL_REDRAW);
 	CHECK_EQ(cp.line, (unsigned)CLOCKPANEL_DATE);
 	CHECK_EQ(clock_send("\x1b[A"), CLOCKPANEL_REDRAW);
 	CHECK_EQ(cp.line, (unsigned)CLOCKPANEL_LINES - 1);
-	CHECK_EQ(clock_send("\x1b[A\x1b[A\x1b[A\x1b[D"), CLOCKPANEL_REDRAW);
+	CHECK_EQ(clock_send("\x1b[A\x1b[A\x1b[A\x1b[A\x1b[D"), CLOCKPANEL_REDRAW);
 	CHECK_EQ(cp.values.clock_date, SETTINGS_DATE_ISO);
 	// Off: the sample says so; Space on Date does nothing.
 	CHECK_EQ(clock_send("\x1b[A\x1b[A "), CLOCKPANEL_REDRAW);

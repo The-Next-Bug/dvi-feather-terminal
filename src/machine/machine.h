@@ -64,7 +64,7 @@ typedef struct {
 	// clock cannot be set, as on picosim.
 	void (*time_set)(uint32_t secs);
 	// The AY-3-8910 (below): write or read a register (the chip ignores
-	// 16-255 and reads 0xFF there). Both or neither; NULL: its ports read
+	// 17-255 and reads 0xFF there; 16 is ours, MACHINE_AY_STEREO). Both or neither; NULL: its ports read
 	// 0xFF, as with no chip fitted.
 	void (*sound_write)(uint8_t reg, uint8_t value);
 	uint8_t (*sound_read)(uint8_t reg);
@@ -72,10 +72,18 @@ typedef struct {
 
 // The AY-3-8910 (bd 1ls.18.4): ports as on Ed Brindley's RC2014 YM2149
 // board: OUT D8h selects a register, OUT D0h writes it, IN D0h reads it.
-// Reset (machine_reset) writes 0 to its registers: silence. Not the MSX's
+// Reset (machine_reset) writes 0 to its registers: silence, and the
+// layout back to SET-UP's. Not the MSX's
 // A0h-A2h: A0h is picosim's hardware control port (160).
 #define MACHINE_AY_SELECT 0xd8
 #define MACHINE_AY_DATA 0xd0
+// Register 16, ours (bd 1ls.18.9; a real AY ignores it): the stereo
+// layout. Write 0 for SET-UP's Stereo setting, 1 mono (A, B and C in both
+// ears), 2 ABC (A left, B center, C right), 3 ACB (A left, C center, B
+// right); bits 2-7 are ignored. Read: what was written in bits 0-1, the
+// layout in use (1-3, as written) in bits 4-5, so 0xFF (older firmware, or
+// a real chip) means no stereo.
+#define MACHINE_AY_STEREO 16
 
 // Ports 68/69, ours: a free-running millisecond count of the platform's
 // clock, for timing without interrupts (F83, AYTEST): IN 68 its low byte,

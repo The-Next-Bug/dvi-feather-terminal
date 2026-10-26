@@ -6,9 +6,12 @@
 ;	ports (D8h selects a register, D0h writes and reads it): a register
 ;	written must read back, with the bits it keeps. Then a menu: a scale on
 ;	channel A, chords on A, B and C, a noise sweep, the 16 envelope
-;	shapes over a tone, a volume ramp, or all of them; a key stops what
-;	is playing (back to the menu, the chip silenced), Q, ESC or ^C at
-;	the menu ends the program. Durations come from the firmware's
+;	shapes over a tone, a volume ramp, A, B and C in turn (to hear the
+;	stereo layout), or all of them; a key stops what is playing (back to
+;	the menu, the chip silenced), Q, ESC or ^C at the menu ends the
+;	program. With the firmware's stereo register (16, ours; bd 1ls.18.9)
+;	the menu shows the layout in use and S steps it: SET-UP's, mono,
+;	ABC, ACB; the program puts back the one it found when it ends. Durations come from the firmware's
 ;	millisecond tick (ports 68/69), as the Z80 runs at no fixed speed;
 ;	without it AYTEST says so. Periods are for the 1.8432 MHz clock
 ;	(RC2014's): a tone of f Hz has period 115200 / f.
@@ -26,6 +29,7 @@ AMPA	EQU	8
 ENVF	EQU	11
 ENVC	EQU	12
 SHAPE	EQU	13
+STEREO	EQU	16		;ours: the layout (machine.h MACHINE_AY_STEREO)
 ENVBIT	EQU	10H		;an amplitude: the envelope's
 CR	EQU	0DH
 LF	EQU	0AH
@@ -38,7 +42,15 @@ START:	LD	SP,STACK
 	LD	HL,SNOAY
 	CALL	PUTS
 	JP	0
-FOUND:	CALL	TICKOK
+FOUND:	LD	A,STEREO	;0FFH without it
+	CALL	AYR
+	CP	0FFH
+	JR	Z,F1
+	AND	3		;what to put back
+	LD	(ST0),A
+	LD	A,1
+	LD	(HASST),A
+F1:	CALL	TICKOK
 	JR	Z,MENU
 	LD	HL,SNOTICK
 	CALL	PUTS
@@ -51,12 +63,37 @@ MENU:	CALL	QUIET
 	CALL	PUTS
 	LD	HL,SMENU
 	CALL	PUTS
+	LD	A,(HASST)
+	OR	A
+	JR	Z,MN1
+	LD	HL,SSTER	;the layout in use, and whose
+	CALL	PUTS
+	CALL	INUSE
+	ADD	A,A
+	LD	L,A
+	LD	H,0
+	LD	DE,LNAMES
+	ADD	HL,DE
+	LD	A,(HL)
+	INC	HL
+	LD	H,(HL)
+	LD	L,A
+	CALL	PUTS
+	LD	A,STEREO
+	CALL	AYR
+	AND	3
+	LD	HL,SSETUP
+	JR	Z,MN0
+	LD	HL,SHERE
+MN0:	CALL	PUTS
+MN1:	LD	HL,SCHOICE
+	CALL	PUTS
 M1:	CALL	GETKEY
 	CP	'1'
 	JR	C,M2
-	CP	'7'
+	CP	'8'
 	JR	NC,M2
-	CALL	PUTC		;1-6: echo it, play it
+	CALL	PUTC		;1-7: echo it, play it
 	PUSH	AF
 	CALL	CRLF
 	POP	AF
@@ -74,6 +111,8 @@ M1:	CALL	GETKEY
 	CALL	JPHL
 	JR	MENU
 M2:	AND	5FH		;upper case (^C, ESC as they were)
+	CP	'S'
+	JR	Z,STER
 	CP	'Q'
 	JR	Z,QUIT
 	CP	3
@@ -81,18 +120,39 @@ M2:	AND	5FH		;upper case (^C, ESC as they were)
 	CP	1BH
 	JR	NZ,M1
 QUIT:	CALL	QUIET
-	CALL	CRLF
+	LD	A,(HASST)
+	OR	A
+	JR	Z,QT1
+	LD	A,(ST0)		;the layout as found
+	LD	E,A
+	LD	A,STEREO
+	CALL	AYW
+QT1:	CALL	CRLF
 	JP	0
+
+;	S: the next layout (SET-UP's, mono, ABC, ACB).
+STER:	LD	A,(HASST)
+	OR	A
+	JR	Z,M1
+	LD	A,STEREO
+	CALL	AYR
+	INC	A
+	AND	3
+	LD	E,A
+	LD	A,STEREO
+	CALL	AYW
+	JP	MENU
 
 JPHL:	JP	(HL)
 
-ITEMS:	DW	SCALE,CHORDS,NOISES,ENVS,VOLS,ALL
+ITEMS:	DW	SCALE,CHORDS,NOISES,ENVS,VOLS,PAN,ALL
 
 ALL:	CALL	SCALE
 	CALL	CHORDS
 	CALL	NOISES
 	CALL	ENVS
-	JP	VOLS
+	CALL	VOLS
+	JP	PAN
 
 ;	---- the parts ----
 
@@ -262,6 +322,87 @@ VSTEP:	LD	A,AMPA
 	CALL	AYW
 	LD	HL,150
 	JP	WAIT
+
+;	A4 on A, then B, then C, a second each, with where the layout in
+;	use puts it.
+PAN:	LD	HL,SPAN
+	CALL	PUTS
+	CALL	QUIET
+	CALL	INUSE		;its three places: WHERE + 6 x the layout
+	LD	L,A
+	ADD	A,A
+	ADD	A,L
+	ADD	A,A
+	LD	L,A
+	LD	H,0
+	LD	DE,WHERE
+	ADD	HL,DE
+	LD	(WHEREP),HL
+	LD	B,0
+PN1:	PUSH	BC
+	LD	A,'A'		;the channel and its place
+	ADD	A,B
+	CALL	PUTC
+	LD	A,' '
+	CALL	PUTC
+	LD	HL,(WHEREP)
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	INC	HL
+	LD	(WHEREP),HL
+	EX	DE,HL
+	CALL	PUTS
+	LD	A,' '
+	CALL	PUTC
+	CALL	PUTC
+	LD	A,B		;the mixer: this channel's tone only
+	LD	C,1
+	OR	A
+	JR	Z,PN3
+PN2:	SLA	C
+	DEC	A
+	JR	NZ,PN2
+PN3:	LD	A,C
+	CPL
+	AND	3FH
+	LD	E,A
+	LD	A,MIXER
+	CALL	AYW
+	LD	DE,262		;A4
+	CALL	TONE
+	LD	A,AMPA
+	ADD	A,B
+	LD	E,13
+	CALL	AYW
+	LD	HL,1000
+	CALL	WAIT
+	LD	A,AMPA
+	ADD	A,B
+	LD	E,0
+	CALL	AYW
+	POP	BC
+	INC	B
+	LD	A,B
+	CP	3
+	JR	C,PN1
+	JP	CRLF
+
+;	A = the layout in use: 0 mono, 1 ABC, 2 ACB (mono without the
+;	stereo register). Keeps BC, DE, HL.
+INUSE:	LD	A,(HASST)
+	OR	A
+	RET	Z
+	LD	A,STEREO
+	CALL	AYR
+	RRCA
+	RRCA
+	RRCA
+	RRCA
+	AND	3
+	RET	Z		;not expected: as mono
+	DEC	A
+	RET
 
 ;	---- the chip ----
 
@@ -494,9 +635,23 @@ SRC:	DB	'ports D8h/D0h (RC2014)',0
 SMENU:	DB	CR,LF
 	DB	'  1 Scale on A          2 Chords on A, B, C',CR,LF
 	DB	'  3 Noise sweep         4 Envelope shapes',CR,LF
-	DB	'  5 Volume ramp         6 All of them',CR,LF
-	DB	'  Q Quit (a key stops what is playing)',CR,LF
-	DB	'Choice: ',0
+	DB	'  5 Volume ramp         6 A, B, C in turn (stereo)',CR,LF
+	DB	'  7 All of them         Q Quit (a key stops what is playing)',CR,LF,0
+SSTER:	DB	'  S Stereo: ',0
+SSETUP:	DB	' (SET-UP',27H,'s)',CR,LF,0
+SHERE:	DB	' (picked here)',CR,LF,0
+SCHOICE: DB	'Choice: ',0
+LNAMES:	DW	SMONO,SABC,SACB
+SMONO:	DB	'mono',0
+SABC:	DB	'ABC (A left, B center, C right)',0
+SACB:	DB	'ACB (A left, C center, B right)',0
+;	Where A, B and C are heard, per layout.
+WHERE:	DW	SBOTH,SBOTH,SBOTH,SLEFT,SCENT,SRIGHT,SLEFT,SRIGHT,SCENT
+SBOTH:	DB	'both',0
+SLEFT:	DB	'left',0
+SCENT:	DB	'center',0
+SRIGHT:	DB	'right',0
+SPAN:	DB	'A, B, C in turn: ',0
 SSCALE:	DB	'Scale on A: ',0
 SCHORD:	DB	'Chords on A, B, C: ',0
 SNOISE:	DB	'Noise on A, period 31 to 1',0
@@ -508,6 +663,9 @@ SNOAY:	DB	'No AY-3-8910 on ports D8h/D0h.',CR,LF,0
 SNOTICK: DB	'No millisecond tick on ports 68/69: newer DVI Feather',CR,LF
 	DB	'Terminal firmware has it.',CR,LF,0
 
+HASST:	DB	0		;1: the stereo register is there
+ST0:	DB	0		;its layout when AYTEST started
+
 SELP:	DS	1		;the chip's ports: select, write, read
 DATP:	DS	1
 RDP:	DS	1
@@ -515,6 +673,7 @@ PORTN:	DS	2		;their name
 ITEMSP:	DS	2		;the menu's stack, for a key's stop
 T0:	DS	2
 WDUR:	DS	2
+WHEREP:	DS	2
 	DS	64
 STACK:
 	END	START

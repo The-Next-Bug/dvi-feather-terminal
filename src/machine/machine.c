@@ -610,7 +610,7 @@ void machine_reset(void) {
 	}
 	m.ay_select = 0;
 	if (plat->sound_write) {
-		for (uint8_t r = 0; r < 16; ++r) {
+		for (uint8_t r = 0; r <= MACHINE_AY_STEREO; ++r) {
 			plat->sound_write(r, 0);
 		}
 	}

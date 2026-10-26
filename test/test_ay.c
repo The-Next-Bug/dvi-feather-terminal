@@ -53,8 +53,8 @@ static void test_registers(void) {
 		ay_write(&ay, (uint8_t)r, 0xff);
 		CHECK_EQ(ay_read(&ay, (uint8_t)r), kept[r]);
 	}
-	ay_write(&ay, 16, 0x12);
-	CHECK_EQ(ay_read(&ay, 16), 0xff);
+	ay_write(&ay, 17, 0x12);
+	CHECK_EQ(ay_read(&ay, 17), 0xff);
 	ay_reset(&ay);
 	CHECK_EQ(ay_read(&ay, AY_MIXER), 0);
 }
@@ -249,6 +249,31 @@ static void test_stereo(void) {
 	CHECK_EQ(buf[2], 3 * FULL);
 }
 
+// AY_STEREO_REG: 0 follows ay.stereo, 1-3 pick the layout; read back with
+// the layout in use in bits 4-5; the chip's reset clears it.
+static void test_stereo_reg(void) {
+	start(AY_CLOCK_RC2014, false);
+	ay.stereo = AY_STEREO_ACB;
+	CHECK_EQ(ay_read(&ay, AY_STEREO_REG), 0x30);
+	CHECK_EQ(ay_stereo(&ay), AY_STEREO_ACB);
+	ay_write(&ay, AY_STEREO_REG, 0xfe); // only bits 0-1: ABC
+	CHECK_EQ(ay_read(&ay, AY_STEREO_REG), 0x22);
+	CHECK_EQ(ay_stereo(&ay), AY_STEREO_ABC);
+	ay_write(&ay, AY_MIXER, 0x3f);
+	ay_write(&ay, AY_AMPLITUDE_A, 15);
+	render(2);
+	CHECK_EQ(buf[2], FULL); // A left only
+	CHECK_EQ(buf[3], 0);
+	ay_write(&ay, AY_STEREO_REG, 1);
+	CHECK_EQ(ay_read(&ay, AY_STEREO_REG), 0x11);
+	render(2);
+	CHECK_EQ(buf[2], FULL);
+	CHECK_EQ(buf[3], FULL);
+	ay_write(&ay, AY_STEREO_REG, 2);
+	ay_reset(&ay);
+	CHECK_EQ(ay_read(&ay, AY_STEREO_REG), 0x30); // back to ay.stereo
+}
+
 // A tone far above the output rate averages to half its level.
 static void test_ultrasonic(void) {
 	start(AY_CLOCK_RC2014, false);
@@ -417,6 +442,7 @@ int main(void) {
 	RUN(test_envelope_rate);
 	RUN(test_noise);
 	RUN(test_stereo);
+	RUN(test_stereo_reg);
 	RUN(test_ultrasonic);
 	RUN(test_mixer_bell);
 	RUN(test_mixer_ay);

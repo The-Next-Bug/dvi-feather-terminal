@@ -18,6 +18,9 @@ void audio_set_fitted(bool on);
 bool audio_fitted(void);
 // The Sound chip setting: the AY's level, 0 (silent) to SETTINGS_SOUND_MAX.
 void audio_set_ay_level(uint8_t level);
+// The Stereo setting (SETTINGS_STEREO_* = AY_STEREO_*): the AY's layout
+// unless the program picks one (MACHINE_AY_STEREO).
+void audio_set_stereo(uint8_t layout);
 // Zero what the DMA is sending, with interrupts off (nvflash's writes,
 // fwupdate's commit): silence until the interrupt refills the blocks.
 void audio_silence(void);

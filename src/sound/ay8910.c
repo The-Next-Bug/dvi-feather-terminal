@@ -58,6 +58,7 @@ static void env_restart(ay8910_t *ay) {
 
 void ay_reset(ay8910_t *ay) {
 	memset(ay->regs, 0, sizeof ay->regs);
+	ay->stereo_reg = 0;
 	memset(ay->tone_count, 0, sizeof ay->tone_count);
 	ay->tone_out = 0;
 	ay->noise_count = 0;
@@ -71,6 +72,10 @@ void ay_reset(ay8910_t *ay) {
 }
 
 void ay_write(ay8910_t *ay, uint8_t reg, uint8_t value) {
+	if (reg == AY_STEREO_REG) {
+		ay->stereo_reg = value & 3;
+		return;
+	}
 	if (reg >= AY_REGS) {
 		return;
 	}
@@ -81,7 +86,15 @@ void ay_write(ay8910_t *ay, uint8_t reg, uint8_t value) {
 }
 
 uint8_t ay_read(const ay8910_t *ay, uint8_t reg) {
+	if (reg == AY_STEREO_REG) {
+		return (uint8_t)(ay->stereo_reg | (ay_stereo(ay) + 1) << 4);
+	}
 	return reg < AY_REGS ? ay->regs[reg] : 0xff;
+}
+
+uint8_t ay_stereo(const ay8910_t *ay) {
+	uint8_t s = ay->stereo_reg ? (uint8_t)(ay->stereo_reg - 1) : ay->stereo;
+	return s <= AY_STEREO_ACB ? s : AY_STEREO_MONO;
 }
 
 static void env_tick(ay8910_t *ay, uint16_t period) {
@@ -159,7 +172,7 @@ void ay_render(ay8910_t *ay, int16_t *out, unsigned frames) {
 	// A channel sounds while (its tone is high or off) and (the noise
 	// is high or off for it).
 	uint8_t tone_off = r[AY_MIXER] & 7, noise_off = (r[AY_MIXER] >> 3) & 7;
-	const uint16_t(*pan)[3] = pans[ay->stereo <= AY_STEREO_ACB ? ay->stereo : AY_STEREO_MONO];
+	const uint16_t(*pan)[3] = pans[ay_stereo(ay)];
 
 	for (unsigned f = 0; f < frames; ++f) {
 		ay->tick_frac += ay->tick_step;

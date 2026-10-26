@@ -243,6 +243,7 @@ void setup_enter(bool from_host) {
 	setup.ui.machine_menu = cpm.on;
 	setup.bell_heard = current.bell;
 	setup.sound_heard = current.sound_level;
+	setup.stereo_heard = current.sound_stereo;
 	setup.active = true;
 	setup.drives_open = false;
 	setup.drives_work = DRIVEPANEL_NONE;
@@ -275,6 +276,7 @@ static void setup_leave(bool apply) {
 		show_palette(&settings); // back from SET-UP's preview
 		bell_set_level(settings.bell);
 		audio_set_ay_level(settings.sound_level);
+		audio_set_stereo(settings.sound_stereo);
 		return;
 	}
 	apply_settings(&setup.ui.values);
@@ -344,13 +346,15 @@ static void clock_service(void) {
 	const settings_t *v = &setup.clock.values;
 	settings_t *u = &setup.ui.values;
 	bool changed = v->clock != u->clock || v->clock_seconds != u->clock_seconds || v->clock_date != u->clock_date
-		|| v->bell != u->bell || v->sound_level != u->sound_level || v->sound_dac != u->sound_dac;
+		|| v->bell != u->bell || v->sound_level != u->sound_level || v->sound_dac != u->sound_dac
+		|| v->sound_stereo != u->sound_stereo;
 	u->clock = v->clock;
 	u->clock_seconds = v->clock_seconds;
 	u->clock_date = v->clock_date;
 	u->bell = v->bell;
 	u->sound_level = v->sound_level;
 	u->sound_dac = v->sound_dac;
+	u->sound_stereo = v->sound_stereo;
 	setup.ui.message = set && changed ? "Clock set; Return here saves the clock and sound settings"
 		: set ? "Clock set"
 		: changed ? "Return here saves the clock and sound settings"
@@ -367,11 +371,12 @@ void draw_demo(unsigned cols, const char *what) {
 }
 
 // SET-UP's sounds on the AY (tune.c): the demo's tune, and the chime for a
-// new Sound chip level. The Z80 is stopped while SET-UP is open, so they
-// borrow its chip, attached meanwhile in terminal mode; its registers are
+// new Sound chip level or Stereo. The Z80 is stopped while SET-UP is open,
+// so they borrow its chip, attached meanwhile in terminal mode, in the
+// edited Stereo (the program's AY_STEREO_REG set aside); its registers are
 // put back when the piece ends (the chime), the demo ends or SET-UP closes.
 static tune_t ay_tune;
-static uint8_t ay_saved[AY_REGS];
+static uint8_t ay_saved[AY_STEREO_REG + 1];
 static bool ay_borrowed;
 
 static void ay_play(uint8_t piece) {
@@ -379,9 +384,10 @@ static void ay_play(uint8_t piece) {
 		return;
 	}
 	if (!ay_borrowed) {
-		for (uint8_t r = 0; r < AY_REGS; ++r) {
+		for (uint8_t r = 0; r <= AY_STEREO_REG; ++r) {
 			ay_saved[r] = audio_ay_read(r);
 		}
+		audio_ay_write(AY_STEREO_REG, 0);
 		audio_attach_ay(true);
 		ay_borrowed = true;
 	}
@@ -393,7 +399,7 @@ static void ay_give_back(void) {
 		return;
 	}
 	ay_borrowed = false;
-	for (uint8_t r = 0; r < AY_REGS; ++r) {
+	for (uint8_t r = 0; r <= AY_STEREO_REG; ++r) {
 		audio_ay_write(r, ay_saved[r]);
 	}
 	audio_attach_ay(cpm.on);
@@ -470,6 +476,13 @@ void setup_service(void) {
 		audio_set_ay_level(setup.sound_heard);
 		if (setup.clock_open && setup.sound_heard != 0) {
 			ay_play(TUNE_CHIME); // heard at the new level
+		}
+	}
+	if (v->sound_stereo != setup.stereo_heard) {
+		setup.stereo_heard = v->sound_stereo;
+		audio_set_stereo(setup.stereo_heard);
+		if (setup.clock_open && v->sound_level != 0) {
+			ay_play(TUNE_CHIME); // on A: from the left in ABC and ACB
 		}
 	}
 	ay_service();

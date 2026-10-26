@@ -1561,7 +1561,7 @@ static void test_hwinfo_tool(void) {
 
 // In raw Z80 bytes as test_hwinfo_port: registers written and read back
 // with the bits they keep, a register the chip does
-// not have, the tick; reset silences it; without the platform's hooks the
+// not have, the tick, our stereo register (MACHINE_AY_STEREO); reset silences it; without the platform's hooks the
 // ports read 0xFF, as with no chip.
 static void ay_program(void) {
 	z80.n = 0;
@@ -1575,6 +1575,8 @@ static void ay_program(void) {
 	emit(4, 0x3e, 20, 0xd3, 0xd8); // register 20
 	emit(5, 0xdb, 0xd0, 0x32, 0x03, 0xf0);
 	emit(10, 0xdb, 68, 0x32, 0x04, 0xf0, 0xdb, 69, 0x32, 0x05, 0xf0); // the tick, low then high
+	emit(8, 0x3e, 16, 0xd3, 0xd8, 0x3e, 0x07, 0xd3, 0xd0); // the stereo register = 7: ACB
+	emit(5, 0xdb, 0xd0, 0x32, 0x06, 0xf0);
 	run_program();
 }
 
@@ -1587,15 +1589,19 @@ static void test_ay_ports(void) {
 	CHECK_EQ(bnk0[0xf001], 0x0f); // 4 bits kept
 	CHECK_EQ(bnk0[0xf002], 0x1f);
 	CHECK_EQ(bnk0[0xf003], 0xff);
-	CHECK_EQ(host_ay_writes, 16 + 3); // the reset's 16, then the program's
-	CHECK(host_ay_log[16][0] == 7 && host_ay_log[16][1] == 0x3e);
-	CHECK(host_ay_log[17][0] == 1 && host_ay_log[17][1] == 0xff);
-	CHECK(host_ay_log[18][0] == 8 && host_ay_log[18][1] == 0xff);
+	CHECK_EQ(bnk0[0xf006], 0x33); // ACB picked and in use
+	CHECK_EQ(host_ay_writes, 17 + 4); // the reset's 16 and the stereo register, then the program's
+	CHECK(host_ay_log[16][0] == MACHINE_AY_STEREO && host_ay_log[16][1] == 0);
+	CHECK(host_ay_log[17][0] == 7 && host_ay_log[17][1] == 0x3e);
+	CHECK(host_ay_log[18][0] == 1 && host_ay_log[18][1] == 0xff);
+	CHECK(host_ay_log[19][0] == 8 && host_ay_log[19][1] == 0xff);
+	CHECK(host_ay_log[20][0] == MACHINE_AY_STEREO && host_ay_log[20][1] == 7);
 	uint16_t tick = (uint16_t)(bnk0[0xf004] | bnk0[0xf005] << 8);
 	CHECK((uint16_t)(host_clock_us() / 1000 - tick) < 1000);
 	machine_reset();
 	CHECK_EQ(ay_read(&host_ay, 8), 0);
 	CHECK_EQ(ay_read(&host_ay, 7), 0);
+	CHECK_EQ(ay_read(&host_ay, MACHINE_AY_STEREO), 0x10); // the setting's again: mono
 
 	machine_platform_t none = host_platform;
 	none.sound_write = NULL;
@@ -1605,6 +1611,7 @@ static void test_ay_ports(void) {
 	ay_program();
 	CHECK_EQ(bnk0[0xf000], 0xff);
 	CHECK_EQ(bnk0[0xf002], 0xff);
+	CHECK_EQ(bnk0[0xf006], 0xff); // no stereo either
 	CHECK_EQ(host_ay_writes, 0);
 	machine_init(&host_platform);
 }
@@ -1624,10 +1631,17 @@ static unsigned ay_periods(unsigned ch, uint16_t *out, unsigned max) {
 	return n;
 }
 
+// A chip without our stereo register (older firmware): it reads 0xFF.
+static uint8_t old_sound_read(uint8_t reg) {
+	return reg == MACHINE_AY_STEREO ? 0xff : host_platform.sound_read(reg);
+}
+
 // AYTEST (src/machine/cpm/aytest.asm) under CP/M 2.2: the chip found on
 // RC2014's ports, the scale and the chords' periods and how long they
 // take, the noise sweep, a key stopping the envelopes with the chip
-// silenced; without the chip it says so.
+// silenced, the stereo layout stepped by S and A, B, C in turn, put back
+// at the end; without the stereo register no S; without the chip it says
+// so.
 static void test_aytest_tool(void) {
 	drives_unmount_all();
 	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
@@ -1639,6 +1653,7 @@ static void test_aytest_tool(void) {
 	CHECK(type("AYTEST\r"));
 	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
 	CHECK(strstr(screen, "the chip on ports D8h/D0h (RC2014)") != NULL);
+	CHECK(strstr(screen, "S Stereo: mono (SET-UP's)\r\nChoice: ") != NULL);
 
 	static const uint16_t scale[] = {440, 392, 349, 330, 294, 262, 233, 220};
 	uint16_t got[16];
@@ -1686,6 +1701,46 @@ static void test_aytest_tool(void) {
 	CHECK(strstr(screen, " -- stopped") != NULL && strstr(screen, "Shape 15") == NULL);
 	CHECK_EQ(ay_read(&host_ay, 8), 0); // silenced
 	CHECK_EQ(ay_read(&host_ay, 7), 0x3f);
+
+	// S: mono picked here, then ABC; A, B and C in turn where ABC puts them.
+	clear_screen();
+	CHECK(type("s"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "S Stereo: mono (picked here)") != NULL);
+	CHECK_EQ(ay_read(&host_ay, MACHINE_AY_STEREO), 0x11);
+	clear_screen();
+	CHECK(type("S"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "S Stereo: ABC (A left, B center, C right) (picked here)") != NULL);
+	CHECK_EQ(ay_stereo(&host_ay), AY_STEREO_ABC);
+	host_ay_clear();
+	clear_screen();
+	start = host_clock_us();
+	CHECK(type("6"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(host_clock_us() - start >= 3 * 1000000); // a second each
+	CHECK(strstr(screen, "A, B, C in turn: A left  B center  C right  \r\n") != NULL);
+	for (unsigned ch = 0; ch < 3; ++ch) {
+		CHECK_EQ(ay_periods(ch, got, 16), 1);
+		CHECK_EQ(got[0], 262);
+	}
+	CHECK(type("q"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK_EQ(ay_read(&host_ay, MACHINE_AY_STEREO), 0x10); // SET-UP's again, as found
+
+	// Older firmware: no S line, A, B, C in turn as mono.
+	machine_platform_t old = host_platform;
+	old.sound_read = old_sound_read;
+	machine_init(&old);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("AYTEST\r"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "S Stereo") == NULL);
+	clear_screen();
+	CHECK(type("s6"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "A, B, C in turn: A both  B both  C both  \r\n") != NULL);
 	CHECK(type("q"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 
