@@ -941,7 +941,8 @@ Sock, so no audio engine running) to 0x20074840, ~45.9 KB free. Scratch X: core 
 - Core 1: video only (62% of a line at 80 columns, 87-92% at 132, qur.22's
   Sock figures). Core 0: main loop + the Z80 unthrottled, so new core 0
   work costs Z80 speed; the audio engine's refill IRQ (mixer, AY render)
-  is the debug status line's "snd A%" (not measured yet: bd 1ls.18.8).
+  is the debug status line's "snd A%": 6-7% on the Frankless, playing or
+  idle (the AY is rendered every refill, silent or not; bd 1ls.18.12).
 
 ## Conventions & Patterns
 
