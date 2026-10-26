@@ -89,11 +89,12 @@ add_custom_command(
 set(F83_SRC "${CPM_DIR}/f83")
 set(F83_OUT "${GENERATED}/f83")
 add_custom_command(
-  OUTPUT ${F83_OUT}/f83.com ${F83_OUT}/viewdrv.blk
+  OUTPUT ${F83_OUT}/f83.com ${F83_OUT}/viewdrv.blk ${F83_OUT}/ay.blk
   COMMAND ${CMAKE_COMMAND} -E make_directory ${F83_OUT}
   COMMAND ${CMAKE_COMMAND} -E env CPMRUN=${CPM3_OUT}/cpmrun PYTHON=${Python3_EXECUTABLE}
     ${F83_SRC}/build.sh ${F83_OUT}
-  DEPENDS ${F83_SRC}/build.sh ${F83_SRC}/f83.run ${F83_SRC}/viewdrv.fth ${F83_DIR}/F83.COM
+  DEPENDS ${F83_SRC}/build.sh ${F83_SRC}/f83.run ${F83_SRC}/viewdrv.fth ${F83_SRC}/ay.fth
+    ${F83_DIR}/F83.COM
     ${CPM3_OUT}/cpmrun ${DISKIMG_GEN} ${Z80PACK_DIR}/picosim/disks/cpm22.dsk
     ${Z80PACK_DIR}/picosim/disks/empty.dsk
   COMMENT "Patching F83.COM's VIEW (F83 on the Z80 machine)"
@@ -134,8 +135,9 @@ set(DISKIMG_FILES --delete CPM22 XDIR.COM
   --file CPM32 MEM.COM ${CPM_OUT}/mem.com
   --file CPM32 HWINFO.COM ${CPM_OUT}/hwinfo.com
   --file CPM32 AYTEST.COM ${CPM_OUT}/aytest.com)
-set(_f83_paths ${F83_OUT}/f83.com ${F83_OUT}/viewdrv.blk)
-list(APPEND DISKIMG_FILES --file F83 F83.COM ${F83_OUT}/f83.com --file F83 VIEWDRV.BLK ${F83_OUT}/viewdrv.blk)
+set(_f83_paths ${F83_OUT}/f83.com ${F83_OUT}/viewdrv.blk ${F83_OUT}/ay.blk)
+list(APPEND DISKIMG_FILES --file F83 F83.COM ${F83_OUT}/f83.com --file F83 VIEWDRV.BLK ${F83_OUT}/viewdrv.blk
+  --file F83 AY.BLK ${F83_OUT}/ay.blk)
 foreach(_file IN LISTS F83_FILES)
   list(APPEND DISKIMG_FILES --file F83 ${_file} ${F83_DIR}/${_file})
   list(APPEND _f83_paths ${F83_DIR}/${_file})

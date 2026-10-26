@@ -2464,6 +2464,38 @@ static void test_f83(void) {
 	f83_lines(cpm22, sizeof cpm22 / sizeof cpm22[0]);
 	CHECK(strstr(screen, "Open error") == NULL);
 
+	// AY.BLK (bd 1ls.18.7): the words load; the chip found, the notes'
+	// periods, the stereo register, SCALE's writes.
+	clear_screen();
+	CHECK(type("F83 AY.BLK\r"));
+	CHECK_EQ(run_until("Version 2.1.0", 10), MACHINE_RUNNING);
+	static const char *const ay[][2] = {
+		{"1 LOAD\r", "AY words loaded: SCALE CHORDS SIREN DRUM PAN TUNE"},
+		{"AY? .\r", "-1  ok"},
+		{"440 HZ>PERIOD .\r", "261  ok"},
+		{"48 NOTE>PERIOD . 57 NOTE>PERIOD . 24 NOTE>PERIOD .\r", "440 261 1761  ok"},
+		{"2 STEREO 16 AY@ .\r", "34  ok"},
+		{"0 STEREO 16 AY@ .\r", "16  ok"},
+		{"VIEW TONE\r", ": TONE"},
+		{"10 LIST\r", "NOTE>PERIOD   note n's period"}, // screen 3's shadow
+	};
+	f83_lines(ay, sizeof ay / sizeof ay[0]);
+	CHECK_EQ(ay_stereo(&host_ay), AY_STEREO_MONO);
+	host_ay_clear();
+	static const char *const scale[][2] = {{"SCALE\r", "SCALE  ok"}}; // not VIEW's " ok"
+	f83_lines(scale, 1);
+	static const uint16_t want[] = {440, 392, 349, 329, 293, 261, 233, 220}; // C4 to C5
+	uint16_t got[16];
+	CHECK_EQ(ay_periods(0, got, 16), 8);
+	CHECK(memcmp(got, want, sizeof want) == 0);
+	CHECK_EQ(ay_read(&host_ay, 8), 0); // QUIET at the end
+	static const char *const bye[][2] = {
+		{"' CHORDS ' SIREN ' DRUM ' PAN ' TUNE 2DROP 2DROP DROP\r", " ok"},
+		{"BYE\r", "B>"},
+	};
+	f83_lines(bye, sizeof bye / sizeof bye[0]);
+	CHECK(strstr(screen, "Open error") == NULL);
+
 	drives_unmount_all();
 	CHECK_EQ(diskimg_install(diskimg_find("CPM31"), true, window, NULL, NULL), DISKIMG_WRITTEN);
 	CHECK_EQ(drives_mount(0, "CPM31"), DRIVES_OK);
