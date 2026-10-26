@@ -254,19 +254,19 @@ static bool usb_quiet(void) {
 // scheduled can still run in the next frame: two SOFs (~2 ms).
 #define POLLS_PAUSE_TIMEOUT_US 5000
 
-// USB_WA_*: each workaround for a TinyUSB RP2350 host bug can be built out
-// (top CMakeLists.txt) to test TinyUSB's own fix on hardware (bd nxv).
+// USB_WA_*: each workaround for a TinyUSB RP2350 host bug, built in only
+// on request (top CMakeLists.txt): lib/tinyusb has the fixes (bd 5bc, nxv).
 #ifndef USB_WA_DEINIT
-#define USB_WA_DEINIT 1
+#define USB_WA_DEINIT 0
 #endif
 #ifndef USB_WA_DATASEQ
-#define USB_WA_DATASEQ 1
+#define USB_WA_DATASEQ 0
 #endif
 #ifndef USB_WA_POLL_PAUSE
-#define USB_WA_POLL_PAUSE 1
+#define USB_WA_POLL_PAUSE 0
 #endif
 #ifndef USB_WA_CONTROL_WAIT
-#define USB_WA_CONTROL_WAIT 1
+#define USB_WA_CONTROL_WAIT 0
 #endif
 
 uint32_t usbkbd_polls_pause(void) {
