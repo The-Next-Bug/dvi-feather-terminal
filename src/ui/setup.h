@@ -37,7 +37,7 @@ typedef enum {
 	SETUP_DEMO,    // T: show the demo screen (demo.h) until a key
 	SETUP_REBOOT,  // R: restart the board (unsaved changes are dropped)
 	SETUP_FIRMWARE, // U: the firmware update panel (fwpanel.h)
-	SETUP_CLOCK,    // C: the Clock panel (clockpanel.h)
+	SETUP_CLOCK,    // C: the Clock and sound panel (clockpanel.h)
 } setup_action_t;
 
 typedef struct {
@@ -47,7 +47,6 @@ typedef struct {
 	uint32_t esc_ms;     // when the ESC arrived
 	const char *message; // shown in the panel until the next key; NULL: none
 	bool machine_menu;   // offer M for the Z80 machine's menu (set after setup_open)
-	bool no_bell;        // the board has no bell: Bell shows off, fixed (set after setup_open)
 } setup_t;
 
 void setup_open(setup_t *u, const settings_t *values);

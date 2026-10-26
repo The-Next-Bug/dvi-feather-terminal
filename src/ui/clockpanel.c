@@ -13,7 +13,26 @@
 
 // The settings field of line (2 ..), settings_fields' index.
 static unsigned field_of(unsigned line) {
-	return (unsigned)offsetof(settings_t, clock) + line - 2;
+	static const uint8_t fields[CLOCKPANEL_LINES - 2] = {
+		offsetof(settings_t, clock), offsetof(settings_t, clock_seconds), offsetof(settings_t, clock_date),
+		offsetof(settings_t, bell), offsetof(settings_t, sound_level), offsetof(settings_t, sound_stereo),
+		offsetof(settings_t, sound_dac),
+	};
+	return fields[line - 2];
+}
+
+// Why a sound line cannot be changed (no DAC), else NULL.
+static const char *fixed_why(const clockpanel_t *p, unsigned line) {
+	if (line < CLOCKPANEL_BELL) {
+		return NULL;
+	}
+	if (!p->has_dac) {
+		return "no DAC on this board";
+	}
+	if (field_of(line) != offsetof(settings_t, sound_dac) && !p->values.sound_dac) {
+		return "the DAC is not fitted";
+	}
+	return NULL;
 }
 
 static char *text_of(clockpanel_t *p) {
@@ -28,10 +47,11 @@ static void show_time(clockpanel_t *p, uint32_t secs) {
 	p->shown_secs = secs;
 }
 
-void clockpanel_open(clockpanel_t *p, const settings_t *values, uint32_t now_secs, bool has_rtc) {
+void clockpanel_open(clockpanel_t *p, const settings_t *values, uint32_t now_secs, bool has_rtc, bool has_dac) {
 	memset(p, 0, sizeof *p);
 	p->values = *values;
 	p->has_rtc = has_rtc;
+	p->has_dac = has_dac;
 	show_time(p, now_secs);
 }
 
@@ -49,6 +69,9 @@ static void move_cursor(clockpanel_t *p, int dir) {
 }
 
 static void change(clockpanel_t *p, int step) {
+	if (fixed_why(p, p->line)) {
+		return;
+	}
 	const settings_field_t *it = &settings_fields[field_of(p->line)];
 	uint8_t *value = settings_field(&p->values, field_of(p->line));
 	unsigned i = 0;
@@ -59,8 +82,11 @@ static void change(clockpanel_t *p, int step) {
 	*value = it->values[i];
 }
 
+// The next line that can be changed (Date and Time always can).
 static void select_line(clockpanel_t *p, int dir) {
-	p->line = (p->line + CLOCKPANEL_LINES + (unsigned)dir) % CLOCKPANEL_LINES;
+	do {
+		p->line = (p->line + CLOCKPANEL_LINES + (unsigned)dir) % CLOCKPANEL_LINES;
+	} while (fixed_why(p, p->line));
 	p->cursor = 0;
 }
 
@@ -184,7 +210,8 @@ static void draw_entry(const clockpanel_t *p, screen_t *s, unsigned row, unsigne
 	}
 }
 
-// A clock setting: every choice, the current one reversed (as SET-UP).
+// A setting: every choice, the current one reversed (as SET-UP); one that
+// cannot change, off (or not fitted) and why.
 static void draw_choices(const clockpanel_t *p, screen_t *s, unsigned row, unsigned line, uint8_t fg, uint8_t bg) {
 	unsigned f = field_of(line);
 	const settings_field_t *it = &settings_fields[f];
@@ -193,6 +220,16 @@ static void draw_choices(const clockpanel_t *p, screen_t *s, unsigned row, unsig
 	draw_name(s, row, it->name, p->line == line, fg, bg);
 	unsigned col = VALUE_COL;
 	char text[SCREEN_MAX_COLS + 1];
+	const char *fixed = fixed_why(p, line);
+	if (fixed) {
+		// Off, or the DAC not fitted.
+		const char *label = it->labels[f == offsetof(settings_t, sound_dac) ? 1 : 0];
+		snprintf(text, sizeof text, " %s ", label);
+		screen_puts(s, col, row, text, bg, fg);
+		snprintf(text, sizeof text, "(%s)", fixed);
+		screen_puts(s, col + (unsigned)strlen(label) + 3, row, text, fg, bg);
+		return;
+	}
 	for (unsigned c = 0; c < it->n_choices; ++c) {
 		snprintf(text, sizeof text, " %s ", it->labels[c]);
 		bool on = it->values[c] == value;
@@ -202,13 +239,14 @@ static void draw_choices(const clockpanel_t *p, screen_t *s, unsigned row, unsig
 }
 
 void clockpanel_draw(const clockpanel_t *p, screen_t *s, unsigned top, uint8_t fg, uint8_t bg, uint8_t border) {
-	screen_frame(s, top, CLOCKPANEL_ROWS, p->has_rtc ? "SET-UP  Clock" : "SET-UP  Clock (no RTC: until power-off)",
-		fg, bg, border);
+	screen_frame(s, top, CLOCKPANEL_ROWS,
+		p->has_rtc ? "SET-UP  Clock and sound" : "SET-UP  Clock (no RTC: until power-off) and sound", fg, bg, border);
 	draw_entry(p, s, top + 1, CLOCKPANEL_DATE, "Date", p->date, fg, bg);
 	draw_entry(p, s, top + 2, CLOCKPANEL_TIME, "Time", p->time, fg, bg);
 	screen_puts(s, VALUE_COL + 11, top + 2, p->edited ? "  (Return sets the clock)" : "", fg, bg);
 	for (unsigned line = 2; line < CLOCKPANEL_LINES; ++line) {
-		draw_choices(p, s, top + 2 + line, line, fg, bg);
+		// The sound's rows under what the status line shows, after a gap.
+		draw_choices(p, s, top + 2 + line + (line >= CLOCKPANEL_BELL ? 2 : 0), line, fg, bg);
 	}
 	// What the status line will show, at the time above.
 	char text[SCREEN_MAX_COLS + 1], clock[DATETIME_CLOCK_MAX + 1] = "no clock";
@@ -221,9 +259,9 @@ void clockpanel_draw(const clockpanel_t *p, screen_t *s, unsigned top, uint8_t f
 			p->values.clock_date};
 		datetime_clock_text(clock, secs, true, &format);
 	}
-	draw_name(s, top + 2 + CLOCKPANEL_LINES, "Status line shows", false, fg, bg);
+	draw_name(s, top + 2 + CLOCKPANEL_BELL, "Status line shows", false, fg, bg);
 	snprintf(text, sizeof text, " %s", clock);
-	screen_puts(s, VALUE_COL, top + 2 + CLOCKPANEL_LINES, text, fg, bg);
+	screen_puts(s, VALUE_COL, top + 2 + CLOCKPANEL_BELL, text, fg, bg);
 	if (p->message) {
 		screen_puts(s, LEFT + 3, top + CLOCKPANEL_ROWS - 4, p->message, fg, bg);
 	}

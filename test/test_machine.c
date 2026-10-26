@@ -1557,6 +1557,295 @@ static void test_hwinfo_tool(void) {
 	drives_unmount_all();
 }
 
+// ---- the AY-3-8910 (D8h/D0h) and the tick (68/69; bd 1ls.18.4) ----
+
+// In raw Z80 bytes as test_hwinfo_port: registers written and read back
+// with the bits they keep, a register the chip does
+// not have, the tick, our stereo register (MACHINE_AY_STEREO); reset silences it; without the platform's hooks the
+// ports read 0xFF, as with no chip.
+static void ay_program(void) {
+	z80.n = 0;
+	emit(1, 0xf3); // DI
+	emit(8, 0x3e, 7, 0xd3, 0xd8, 0x3e, 0x3e, 0xd3, 0xd0); // RC2014: register 7 = 3EH
+	emit(5, 0xdb, 0xd0, 0x32, 0x00, 0xf0); // IN A,(D0H); LD (F000H),A
+	emit(8, 0x3e, 1, 0xd3, 0xd8, 0x3e, 0xff, 0xd3, 0xd0); // register 1 = FFH
+	emit(5, 0xdb, 0xd0, 0x32, 0x01, 0xf0);
+	emit(8, 0x3e, 8, 0xd3, 0xd8, 0x3e, 0xff, 0xd3, 0xd0); // register 8 = FFH
+	emit(5, 0xdb, 0xd0, 0x32, 0x02, 0xf0);
+	emit(4, 0x3e, 20, 0xd3, 0xd8); // register 20
+	emit(5, 0xdb, 0xd0, 0x32, 0x03, 0xf0);
+	emit(10, 0xdb, 68, 0x32, 0x04, 0xf0, 0xdb, 69, 0x32, 0x05, 0xf0); // the tick, low then high
+	emit(8, 0x3e, 16, 0xd3, 0xd8, 0x3e, 0x07, 0xd3, 0xd0); // the stereo register = 7: ACB
+	emit(5, 0xdb, 0xd0, 0x32, 0x06, 0xf0);
+	run_program();
+}
+
+static void test_ay_ports(void) {
+	extern uint8_t bnk0[65536];
+	machine_init(&host_platform);
+	host_ay_clear();
+	ay_program();
+	CHECK_EQ(bnk0[0xf000], 0x3e);
+	CHECK_EQ(bnk0[0xf001], 0x0f); // 4 bits kept
+	CHECK_EQ(bnk0[0xf002], 0x1f);
+	CHECK_EQ(bnk0[0xf003], 0xff);
+	CHECK_EQ(bnk0[0xf006], 0x33); // ACB picked and in use
+	CHECK_EQ(host_ay_writes, 17 + 4); // the reset's 16 and the stereo register, then the program's
+	CHECK(host_ay_log[16][0] == MACHINE_AY_STEREO && host_ay_log[16][1] == 0);
+	CHECK(host_ay_log[17][0] == 7 && host_ay_log[17][1] == 0x3e);
+	CHECK(host_ay_log[18][0] == 1 && host_ay_log[18][1] == 0xff);
+	CHECK(host_ay_log[19][0] == 8 && host_ay_log[19][1] == 0xff);
+	CHECK(host_ay_log[20][0] == MACHINE_AY_STEREO && host_ay_log[20][1] == 7);
+	uint16_t tick = (uint16_t)(bnk0[0xf004] | bnk0[0xf005] << 8);
+	CHECK((uint16_t)(host_clock_us() / 1000 - tick) < 1000);
+	machine_reset();
+	CHECK_EQ(ay_read(&host_ay, 8), 0);
+	CHECK_EQ(ay_read(&host_ay, 7), 0);
+	CHECK_EQ(ay_read(&host_ay, MACHINE_AY_STEREO), 0x10); // the setting's again: mono
+
+	machine_platform_t none = host_platform;
+	none.sound_write = NULL;
+	none.sound_read = NULL;
+	machine_init(&none);
+	host_ay_clear();
+	ay_program();
+	CHECK_EQ(bnk0[0xf000], 0xff);
+	CHECK_EQ(bnk0[0xf002], 0xff);
+	CHECK_EQ(bnk0[0xf006], 0xff); // no stereo either
+	CHECK_EQ(host_ay_writes, 0);
+	machine_init(&host_platform);
+}
+
+// Channel ch's tone periods as written since host_ay_clear: one when its
+// coarse register is written, 0s (QUIET) left out.
+static unsigned ay_periods(unsigned ch, uint16_t *out, unsigned max) {
+	unsigned n = 0, fine = 0;
+	for (size_t i = 0; i < host_ay_writes && i < HOST_AY_LOG; ++i) {
+		unsigned reg = host_ay_log[i][0], v = host_ay_log[i][1];
+		if (reg == 2 * ch) {
+			fine = v;
+		} else if (reg == 2 * ch + 1 && (fine | v << 8) != 0 && n < max) {
+			out[n++] = (uint16_t)(fine | v << 8);
+		}
+	}
+	return n;
+}
+
+// A chip without our stereo register (older firmware): it reads 0xFF.
+static uint8_t old_sound_read(uint8_t reg) {
+	return reg == MACHINE_AY_STEREO ? 0xff : host_platform.sound_read(reg);
+}
+
+// AYTEST (src/machine/cpm/aytest.asm) under CP/M 2.2: the chip found on
+// RC2014's ports, the scale and the chords' periods and how long they
+// take, the noise sweep, a key stopping the envelopes with the chip
+// silenced, the stereo layout stepped by S and A, B, C in turn, put back
+// at the end; without the stereo register no S; without the chip it says
+// so.
+static void test_aytest_tool(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("AYTEST\r"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "the chip on ports D8h/D0h (RC2014)") != NULL);
+	CHECK(strstr(screen, "S Stereo: mono (SET-UP's)\r\nChoice: ") != NULL);
+
+	static const uint16_t scale[] = {440, 392, 349, 330, 294, 262, 233, 220};
+	uint16_t got[16];
+	host_ay_clear();
+	clear_screen();
+	uint64_t start = host_clock_us();
+	CHECK(type("1"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(host_clock_us() - start >= 8 * 300000); // 300 ms a note
+	CHECK(strstr(screen, "Scale on A: C D E F G A B C \r\n") != NULL);
+	CHECK_EQ(ay_periods(0, got, 16), 8);
+	CHECK(memcmp(got, scale, sizeof scale) == 0);
+
+	static const uint16_t chord_b[] = {349, 262, 233, 175}, chord_c[] = {294, 220, 196, 147};
+	host_ay_clear();
+	clear_screen();
+	CHECK(type("2"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "Chords on A, B, C: C F G C \r\n") != NULL);
+	CHECK_EQ(ay_periods(1, got, 16), 4);
+	CHECK(memcmp(got, chord_b, sizeof chord_b) == 0);
+	CHECK_EQ(ay_periods(2, got, 16), 4);
+	CHECK(memcmp(got, chord_c, sizeof chord_c) == 0);
+
+	host_ay_clear();
+	CHECK(type("3"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	unsigned want = 31, bad = 0;
+	for (size_t i = 0; i < host_ay_writes; ++i) {
+		if (host_ay_log[i][0] == 6 && host_ay_log[i][1] != 0) {
+			bad += host_ay_log[i][1] != want--;
+		}
+	}
+	CHECK_EQ(bad, 0);
+	CHECK_EQ(want, 0); // 31 down to 1
+
+	// The envelopes take 16 s: a key after the third shape stops them.
+	host_ay_clear();
+	clear_screen();
+	CHECK(type("4"));
+	CHECK_EQ(run_until("Shape  2", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "Shape  0  \\_______\r\n") != NULL && strstr(screen, "Shape  1") != NULL);
+	CHECK(type(" "));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, " -- stopped") != NULL && strstr(screen, "Shape 15") == NULL);
+	CHECK_EQ(ay_read(&host_ay, 8), 0); // silenced
+	CHECK_EQ(ay_read(&host_ay, 7), 0x3f);
+
+	// S: mono picked here, then ABC; A, B and C in turn where ABC puts them.
+	clear_screen();
+	CHECK(type("s"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "S Stereo: mono (picked here)") != NULL);
+	CHECK_EQ(ay_read(&host_ay, MACHINE_AY_STEREO), 0x11);
+	clear_screen();
+	CHECK(type("S"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "S Stereo: ABC (A left, B center, C right) (picked here)") != NULL);
+	CHECK_EQ(ay_stereo(&host_ay), AY_STEREO_ABC);
+	host_ay_clear();
+	clear_screen();
+	start = host_clock_us();
+	CHECK(type("6"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(host_clock_us() - start >= 3 * 1000000); // a second each
+	CHECK(strstr(screen, "A, B, C in turn: A left  B center  C right  \r\n") != NULL);
+	for (unsigned ch = 0; ch < 3; ++ch) {
+		CHECK_EQ(ay_periods(ch, got, 16), 1);
+		CHECK_EQ(got[0], 262);
+	}
+	CHECK(type("q"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK_EQ(ay_read(&host_ay, MACHINE_AY_STEREO), 0x10); // SET-UP's again, as found
+
+	// Older firmware: no S line, A, B, C in turn as mono.
+	machine_platform_t old = host_platform;
+	old.sound_read = old_sound_read;
+	machine_init(&old);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("AYTEST\r"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "S Stereo") == NULL);
+	clear_screen();
+	CHECK(type("s6"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "A, B, C in turn: A both  B both  C both  \r\n") != NULL);
+	CHECK(type("q"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+
+	machine_platform_t none = host_platform;
+	none.sound_write = NULL;
+	none.sound_read = NULL;
+	clear_screen();
+	machine_init(&none);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("AYTEST", "No AY-3-8910 on ports D8h/D0h."));
+	machine_init(&host_platform);
+	drives_unmount_all();
+}
+
+// A PSG file's register writes (register, value) in order, at most max,
+// and in frames[i] the frame write i is in; the count.
+static size_t psg_writes(const char *name, uint8_t (*out)[2], unsigned *frames, size_t max) {
+	char path[512];
+	snprintf(path, sizeof path, "%s/%s", TUNES_DIR, name);
+	FILE *f = fopen(path, "rb");
+	CHECK(f != NULL);
+	if (!f) {
+		return 0;
+	}
+	static uint8_t data[65536];
+	size_t len = fread(data, 1, sizeof data, f);
+	fclose(f);
+	CHECK(len > 16 && memcmp(data, "PSG\x1a", 4) == 0);
+	size_t n = 0;
+	unsigned frame = 0;
+	for (size_t i = 16; i < len && data[i] != 0xfd && n < max;) {
+		if (data[i] == 0xff) {
+			++frame;
+			++i;
+		} else if (data[i] == 0xfe) {
+			frame += 4u * data[i + 1];
+			i += 2;
+		} else {
+			out[n][0] = data[i];
+			out[n][1] = data[i + 1];
+			frames[n++] = frame;
+			i += 2;
+		}
+	}
+	return n;
+}
+
+// AYPLAY (src/machine/cpm/ayplay.asm, bd 1ls.18.10) under CP/M 2.2: the
+// usage lists the tunes; JACQUES in ABC plays the file's writes in order
+// at 50 frames a second, shows the time, stops on Q with the chip
+// silenced and the layout put back; a missing file, a bad option.
+static void test_ayplay_tool(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(cpm("AYPLAY", "PSG files here:"));
+	CHECK(strstr(screen, "  KOROBEIN.PSG\r\n") != NULL && strstr(screen, "  JACQUES.PSG\r\n") != NULL
+		&& strstr(screen, "  ODE.PSG\r\n") != NULL);
+
+	static uint8_t want[8192][2];
+	static unsigned frames[8192];
+	size_t n = psg_writes("jacques.psg", want, frames, 8192);
+	CHECK(n > 100);
+	clear_screen();
+	host_ay_clear();
+	CHECK(type("AYPLAY JACQUES ABC\r"));
+	CHECK_EQ(run_until("(Q stops)", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, "Playing JACQUES.PSG in ABC stereo (Q stops)") != NULL);
+	CHECK_EQ(ay_stereo(&host_ay), AY_STEREO_ABC);
+	uint64_t start = host_clock_us();
+	CHECK_EQ(run_until("  0:02", 10), MACHINE_RUNNING);
+	uint64_t took = host_clock_us() - start;
+	CHECK(type("q"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(strstr(screen, " -- stopped") != NULL);
+	// The probe's 2, the layout, QUIET's 15; at the end QUIET and the
+	// layout put back.
+	const size_t first = 2 + 1 + 15;
+	CHECK(host_ay_writes > first + 16 && host_ay_writes < HOST_AY_LOG);
+	size_t played = host_ay_writes - first - 16;
+	CHECK(played > 20 && played < n);
+	size_t bad = 0;
+	for (size_t i = 0; i < played && i < n; ++i) {
+		bad += host_ay_log[first + i][0] != want[i][0] || host_ay_log[first + i][1] != want[i][1];
+	}
+	CHECK_EQ(bad, 0);
+	// Two seconds shown after 100 frames, in about 2 s: the writes up to
+	// there played (the stop comes a little later), none much past it.
+	CHECK(frames[played] >= 100 && frames[played - 1] < 125);
+	CHECK(took > 1500000 && took < 2600000);
+	CHECK(host_ay_log[host_ay_writes - 1][0] == MACHINE_AY_STEREO && host_ay_log[host_ay_writes - 1][1] == 0);
+	CHECK_EQ(ay_read(&host_ay, 8), 0);
+	CHECK_EQ(ay_read(&host_ay, 7), 0x3f);
+
+	CHECK(cpm("AYPLAY NOPE", "No such file."));
+	CHECK(cpm("AYPLAY ODE LOUD", "Unknown option."));
+	CHECK(cpm("AYPLAY AYPLAY.COM", "Not a PSG file."));
+	machine_init(&host_platform);
+	drives_unmount_all();
+}
+
 // ---- CP/M 3 (picosim's banked system: CPM31, CPM32; bd f8w) ----
 
 // Booted by mounting its disks on A: and B:, no setting: the boot ROM
@@ -1696,6 +1985,11 @@ static void test_cpm3_tools(void) {
 	f_unlink("/XFER/BIG.BIN");
 	CHECK(cpm("HWINFO", "Real-time clock")); // from CPM31, A:
 	hwinfo_report_checks();
+	clear_screen();
+	CHECK(type("AYTEST\r"));
+	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
+	CHECK(type("q"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	drives_unmount_all();
 }
 
@@ -2217,6 +2511,170 @@ static void test_altscr(void) {
 	host_console_hook = NULL;
 }
 
+// ---- AYTRACK (src/machine/cpm/aytrack.asm, bd 1ls.18.11) through the terminal ----
+
+// Run the machine for about seconds of wall time.
+static void run_for(double seconds) {
+	uint64_t end = host_clock_us() + (uint64_t)(seconds * 1e6);
+	while (host_clock_us() < end) {
+		machine_run(10000);
+	}
+}
+
+// Channel ch's tone periods as the chip had them after each write since
+// host_ay_clear (fine or coarse; a fine one followed by its coarse counts
+// once), repeats left out.
+static unsigned ay_tones(unsigned ch, uint16_t *out, unsigned max) {
+	unsigned n = 0;
+	uint16_t period = 0;
+	for (size_t i = 0; i < host_ay_writes && i < HOST_AY_LOG; ++i) {
+		unsigned reg = host_ay_log[i][0], v = host_ay_log[i][1];
+		if (reg == 2 * ch) {
+			period = (uint16_t)((period & 0xf00) | v);
+			if (i + 1 < host_ay_writes && i + 1 < HOST_AY_LOG && host_ay_log[i + 1][0] == 2 * ch + 1) {
+				continue; // its coarse next: one change
+			}
+		} else if (reg == 2 * ch + 1) {
+			period = (uint16_t)((period & 0xff) | (v & 0x0f) << 8);
+		} else {
+			continue;
+		}
+		if (period != 0 && (n == 0 || out[n - 1] != period) && n < max) {
+			out[n++] = period;
+		}
+	}
+	return n;
+}
+
+// AYTRACK under CP/M 2.2 on a real term_t: a new song; three notes on A
+// with the piano keys; the order list (insert, a pattern); the
+// instruments' table; Return plays the pattern (the notes' periods on the
+// chip), Return stops; the octave, a note off, a volume edited, Space
+// playing the song; ^S saves, ^E exports, ^Q Y quits; the song loads
+// again; AYPLAY plays the export.
+static void test_aytrack_tool(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	host_cpr_reply = NULL;
+	screen_init(&tscreen, 80, PALETTE_TEXT, PALETTE_BACKGROUND);
+	term_init(&tterm, &tscreen, 0, 24);
+	host_console_hook = console_to_term;
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("AYTRACK TEST\r"));
+	CHECK_EQ(run_until("New song", 10), MACHINE_RUNNING);
+	run_for(0.5); // drawn, then the message again
+	TROW_IS(0, " AYTRACK  TEST.AYT  Pattern 0  Speed 06  Octave 4  Inst 0  Stopped");
+	TROW_HAS(1, " Row  A      B      C");
+	TROW_HAS(2, "  00  ... .  ... .  ... .");
+	TROW_HAS(2, " 00 0");                          // the order list
+	TROW_HAS(2, ">0 FEDCBBAAA9998888 T  00");      // instrument 0
+	TROW_HAS(6, " 4 A631000000000000 N  01");      // the hi-hat
+	TROW_HAS(12, "C  C# D  D# E  F  F# G  G# A  A# B"); // the keys' notes
+	TROW_HAS(13, "Z  S  X  D  C  V  G  B  H  N  J  M");
+	TROW_HAS(14, "Q  2  W  3  E  R  5  T  6  Y  7  U");
+
+	clear_screen();
+	CHECK(type("zcb"));
+	CHECK_EQ(run_until("\x1b[6;", 10), MACHINE_RUNNING); // the cursor's row 3 drawn
+	run_for(2); // each note previewed for half a second
+	TROW_HAS(2, "  00  C-4 0  ... .  ... .");
+	TROW_HAS(3, "  01  E-4 0");
+	TROW_HAS(4, "  02  G-4 0");
+
+	// The orders: Tab, I (a copy after it), 1 its pattern.
+	clear_screen();
+	CHECK(type("\ti1"));
+	run_for(0.5);
+	TROW_HAS(2, " 00 0");
+	TROW_HAS(3, " 01 1");
+	TROW_HAS(0, "Pattern 1");
+	CHECK(type("\x1b[A")); // back to order 0: pattern 0 on screen
+	run_for(0.3);
+	TROW_HAS(0, "Pattern 0");
+	TROW_HAS(2, "  00  C-4 0");
+	CHECK(type("\t\t")); // the instruments, then the pattern again
+	run_for(0.3);
+
+	host_ay_clear();
+	CHECK(type("\r"));
+	CHECK_EQ(run_until("Playing the pattern", 10), MACHINE_RUNNING);
+	run_for(1);
+	static const uint16_t notes[] = {440, 349, 293};
+	uint16_t got[16];
+	CHECK(ay_tones(0, got, 16) >= 3);
+	CHECK(memcmp(got, notes, sizeof notes) == 0);
+	CHECK(type("\r"));
+	CHECK_EQ(run_until("Stopped", 10), MACHINE_RUNNING);
+	run_for(0.2);
+	CHECK_EQ(ay_read(&host_ay, 8), 0);
+
+	// ] a higher octave; = a note off (row 3); the instruments: a volume
+	// typed into instrument 0's first step; Space plays the song, its
+	// order marked; Space stops.
+	CHECK(type("]"));
+	run_for(0.2);
+	TROW_HAS(0, "Octave 5");
+	CHECK(type("["));
+	CHECK(type("=")); // the cursor is on row 3, after the notes
+	run_for(0.3);
+	TROW_HAS(5, "  03  === .");
+	CHECK(type("\t\t7"));
+	run_for(1);
+	TROW_HAS(2, ">0 7EDCBBAAA9998888 T  00");
+	CHECK(type("\t"));
+	CHECK(type(" "));
+	CHECK_EQ(run_until("Playing the song", 10), MACHINE_RUNNING);
+	run_for(0.3);
+	TROW_HAS(2, ">00 0");
+	CHECK(type(" "));
+	CHECK_EQ(run_until("Stopped", 10), MACHINE_RUNNING);
+
+	clear_screen();
+	CHECK(type("\x13"));
+	CHECK_EQ(run_until("Saved TEST.AYT", 10), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("\x05"));
+	CHECK_EQ(run_until("Exported TEST.PSG", 30), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("\x11"));
+	CHECK_EQ(run_until("Y/N", 10), MACHINE_RUNNING);
+	CHECK(type("y"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("DIR TEST.*", "TEST     AYT"));
+	CHECK(strstr(screen, "TEST     PSG") != NULL);
+
+	clear_screen();
+	CHECK(type("AYTRACK TEST\r"));
+	CHECK_EQ(run_until("Loaded", 10), MACHINE_RUNNING);
+	run_for(0.5);
+	TROW_HAS(2, "  00  C-4 0");
+	TROW_HAS(3, " 01 1");
+	CHECK(type("\x11y"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+
+	// The export: pattern 0, then the empty pattern 1, 32 rows each at
+	// speed 6: 7.7 s; its first notes as the tracker played them.
+	host_ay_clear();
+	clear_screen();
+	CHECK(type("AYPLAY TEST\r"));
+	CHECK_EQ(run_until("Playing TEST.PSG", 10), MACHINE_RUNNING);
+	CHECK_EQ(run_until("A>", 15), MACHINE_RUNNING);
+	CHECK(strstr(screen, "0:07") != NULL);
+	// (AYPLAY's probe writes register 1 first: the notes are found after.)
+	unsigned n = ay_tones(0, got, 16), at = 0;
+	while (at + 3 <= n && memcmp(got + at, notes, sizeof notes) != 0) {
+		++at;
+	}
+	CHECK(at + 3 <= n);
+	host_console_hook = NULL;
+	machine_init(&host_platform);
+	drives_unmount_all();
+}
+
 // ---- F83 (lib/f83, bd xdu) ----
 
 // Type each line and wait for its text.
@@ -2261,6 +2719,38 @@ static void test_f83(void) {
 	f83_lines(cpm22, sizeof cpm22 / sizeof cpm22[0]);
 	CHECK(strstr(screen, "Open error") == NULL);
 
+	// AY.BLK (bd 1ls.18.7): the words load; the chip found, the notes'
+	// periods, the stereo register, SCALE's writes.
+	clear_screen();
+	CHECK(type("F83 AY.BLK\r"));
+	CHECK_EQ(run_until("Version 2.1.0", 10), MACHINE_RUNNING);
+	static const char *const ay[][2] = {
+		{"1 LOAD\r", "AY words loaded: SCALE CHORDS SIREN DRUM PAN TUNE"},
+		{"AY? .\r", "-1  ok"},
+		{"440 HZ>PERIOD .\r", "261  ok"},
+		{"48 NOTE>PERIOD . 57 NOTE>PERIOD . 24 NOTE>PERIOD .\r", "440 261 1761  ok"},
+		{"2 STEREO 16 AY@ .\r", "34  ok"},
+		{"0 STEREO 16 AY@ .\r", "16  ok"},
+		{"VIEW TONE\r", ": TONE"},
+		{"10 LIST\r", "NOTE>PERIOD   note n's period"}, // screen 3's shadow
+	};
+	f83_lines(ay, sizeof ay / sizeof ay[0]);
+	CHECK_EQ(ay_stereo(&host_ay), AY_STEREO_MONO);
+	host_ay_clear();
+	static const char *const scale[][2] = {{"SCALE\r", "SCALE  ok"}}; // not VIEW's " ok"
+	f83_lines(scale, 1);
+	static const uint16_t want[] = {440, 392, 349, 329, 293, 261, 233, 220}; // C4 to C5
+	uint16_t got[16];
+	CHECK_EQ(ay_periods(0, got, 16), 8);
+	CHECK(memcmp(got, want, sizeof want) == 0);
+	CHECK_EQ(ay_read(&host_ay, 8), 0); // QUIET at the end
+	static const char *const bye[][2] = {
+		{"' CHORDS ' SIREN ' DRUM ' PAN ' TUNE 2DROP 2DROP DROP\r", " ok"},
+		{"BYE\r", "B>"},
+	};
+	f83_lines(bye, sizeof bye / sizeof bye[0]);
+	CHECK(strstr(screen, "Open error") == NULL);
+
 	drives_unmount_all();
 	CHECK_EQ(diskimg_install(diskimg_find("CPM31"), true, window, NULL, NULL), DISKIMG_WRITTEN);
 	CHECK_EQ(drives_mount(0, "CPM31"), DRIVES_OK);
@@ -2302,6 +2792,9 @@ int main(void) {
 	RUN(test_hwinfo_port);
 	RUN(test_clock_ports);
 	RUN(test_hwinfo_tool);
+	RUN(test_ay_ports);
+	RUN(test_aytest_tool);
+	RUN(test_ayplay_tool);
 	RUN(test_boot_cpm3);
 	RUN(test_cpm3_tools);
 	RUN(test_cpm3_date);
@@ -2310,6 +2803,7 @@ int main(void) {
 	RUN(test_mem_banks);
 	RUN(test_termtest);
 	RUN(test_altscr);
+	RUN(test_aytrack_tool);
 	RUN(test_f83);
 	drives_unmount_all();
 	f_unmount("");

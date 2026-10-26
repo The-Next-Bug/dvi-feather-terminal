@@ -25,6 +25,8 @@ import sys
 
 ROOTS = ('fwupdate_commit_image', 'core1_main', 'dma_irq', 'video_init', 'nvflash_retime', 'nvflash_erase',
          'nvflash_program', 'nvflash_read', 'nvflash_write')
+# Roots only some boards have: audio.c's refill interrupt (boards with a DAC).
+OPTIONAL_ROOTS = ('audio_irq',)
 FLASH_LO, FLASH_HI = 0x10000000, 0x11000000
 # Calls a function makes between two others are roots too: main() between
 # video_init (the clock change) and nvflash_retime.
@@ -71,6 +73,7 @@ def main():
             continue
         i = calls.index(start)
         roots += calls[i + 1:calls.index(end, i)]
+    roots += [r for r in OPTIONAL_ROOTS if r in funcs]
     for root in roots:
         if root not in funcs:
             sys.exit(f'check_sram_only: {root} not found in the disassembly')

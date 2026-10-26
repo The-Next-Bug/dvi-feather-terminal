@@ -1,17 +1,21 @@
 #ifndef CLOCKPANEL_H
 #define CLOCKPANEL_H
 
-// SET-UP's Clock panel (C, bd 1ls.6.4): the date and time, and how the
-// status line shows them (bd 1ls.6.5). Portable C, host-tested; the
-// terminal (apps/terminal/setup_glue.c) opens it over SET-UP's rows.
+// SET-UP's Clock and sound panel (C, bd 1ls.6.4): the date and time, how
+// the status line shows them (bd 1ls.6.5), and the sound: the Bell's and
+// the AY's levels, the AY's stereo layout (bd 1ls.18.9) and whether the
+// board's DAC is fitted (bd 1ls.18.5).
+// Portable C, host-tested; the terminal (apps/terminal/setup_glue.c) opens
+// it over SET-UP's rows.
 //
 // Up/Down select a row. Date and Time follow the clock until edited:
 // digits overwrite the one under the cursor and move on, Left/Right and
 // Backspace move it; Return then sets the clock to them (seconds as typed).
-// The status line rows (SET-UP's clock settings, settings.h) step through
-// their choices with Left/Right or Space; Return keeps them in SET-UP's
-// edited settings, which SET-UP's Return saves. Escape goes back without
-// changes.
+// The settings' rows (settings.h's SETTINGS_PAGE_CLOCK fields) step
+// through their choices with Left/Right or Space; Return keeps them in
+// SET-UP's edited settings, which SET-UP's Return saves. Escape goes back
+// without changes. Without a DAC (has_dac false, or Sound DAC not fitted)
+// the sound rows show off, fixed, and are skipped.
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -20,8 +24,9 @@
 #include "settings.h"
 
 // In a box: the title line, Date, Time, a gap, the three clock settings,
-// what the status line shows, message, 2 help lines, the bottom line.
-#define CLOCKPANEL_ROWS 12
+// what the status line shows, a gap, the four sound settings, message, 2
+// help lines, the bottom line.
+#define CLOCKPANEL_ROWS 17
 #define CLOCKPANEL_ESC_TIMEOUT_MS 100
 
 typedef enum {
@@ -33,7 +38,8 @@ typedef enum {
 
 #define CLOCKPANEL_DATE 0
 #define CLOCKPANEL_TIME 1
-#define CLOCKPANEL_LINES 5 // Date, Time, then the clock settings' rows
+#define CLOCKPANEL_BELL 5 // the first sound line
+#define CLOCKPANEL_LINES 9 // Date, Time, the clock settings', then the sound settings' rows
 
 typedef struct {
 	settings_t values;    // SET-UP's edited settings, the clock's changed here
@@ -44,13 +50,14 @@ typedef struct {
 	unsigned line;        // CLOCKPANEL_DATE, _TIME, then 2.. the settings
 	unsigned cursor;      // in the Date or Time text
 	bool has_rtc;         // the board keeps the time over power-off
+	bool has_dac;         // the board has a DAC (BOARD_AUDIO_I2S)
 	uint8_t esc;          // 0, 1 after ESC, 2 inside ESC [ / ESC O
 	uint32_t esc_ms;
 	const char *message;
 } clockpanel_t;
 
 // With SET-UP's edited settings and the clock now.
-void clockpanel_open(clockpanel_t *p, const settings_t *values, uint32_t now_secs, bool has_rtc);
+void clockpanel_open(clockpanel_t *p, const settings_t *values, uint32_t now_secs, bool has_rtc, bool has_dac);
 
 clockpanel_action_t clockpanel_input(clockpanel_t *p, uint8_t c, uint32_t now_ms);
 // Call regularly: a lone ESC becomes CLOCKPANEL_CANCEL after the timeout,

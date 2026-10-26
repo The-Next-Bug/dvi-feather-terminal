@@ -56,11 +56,12 @@ find_program(HOST_CC NAMES cc gcc clang REQUIRED)
 file(GLOB _z80asm_sources "${Z80PACK_DIR}/z80asm/*.[ch]")
 add_custom_command(
   OUTPUT ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin ${CPM_OUT}/worms.com ${CPM_OUT}/xls.com ${CPM_OUT}/xpip.com ${CPM_OUT}/xera.com ${CPM_OUT}/termtest.com
-    ${CPM_OUT}/altscr.com ${CPM_OUT}/mem.com ${CPM_OUT}/hwinfo.com
+    ${CPM_OUT}/altscr.com ${CPM_OUT}/mem.com ${CPM_OUT}/hwinfo.com ${CPM_OUT}/aytest.com ${CPM_OUT}/ayplay.com ${CPM_OUT}/aytrack.com
   COMMAND ${CMAKE_COMMAND} -E env CC=${HOST_CC} ${CPM_DIR}/build.sh ${CPM_OUT}
   DEPENDS ${CPM_DIR}/build.sh ${CPM_DIR}/boot.asm ${CPM_DIR}/bios.asm ${CPM_DIR}/worms.asm
     ${CPM_DIR}/xls.asm ${CPM_DIR}/xpip.asm ${CPM_DIR}/xera.asm ${CPM_DIR}/xfer.inc
     ${CPM_DIR}/termtest.asm ${CPM_DIR}/altscr.asm ${CPM_DIR}/mem.asm ${CPM_DIR}/hwinfo.asm
+    ${CPM_DIR}/aytest.asm ${CPM_DIR}/ayplay.asm ${CPM_DIR}/aytrack.asm
     ${_z80asm_sources}
   COMMENT "Assembling the CP/M 2.2 boot loader and BIOS, and our CP/M programs"
   VERBATIM)
@@ -88,14 +89,27 @@ add_custom_command(
 set(F83_SRC "${CPM_DIR}/f83")
 set(F83_OUT "${GENERATED}/f83")
 add_custom_command(
-  OUTPUT ${F83_OUT}/f83.com ${F83_OUT}/viewdrv.blk
+  OUTPUT ${F83_OUT}/f83.com ${F83_OUT}/viewdrv.blk ${F83_OUT}/ay.blk
   COMMAND ${CMAKE_COMMAND} -E make_directory ${F83_OUT}
   COMMAND ${CMAKE_COMMAND} -E env CPMRUN=${CPM3_OUT}/cpmrun PYTHON=${Python3_EXECUTABLE}
     ${F83_SRC}/build.sh ${F83_OUT}
-  DEPENDS ${F83_SRC}/build.sh ${F83_SRC}/f83.run ${F83_SRC}/viewdrv.fth ${F83_DIR}/F83.COM
+  DEPENDS ${F83_SRC}/build.sh ${F83_SRC}/f83.run ${F83_SRC}/viewdrv.fth ${F83_SRC}/ay.fth
+    ${F83_DIR}/F83.COM
     ${CPM3_OUT}/cpmrun ${DISKIMG_GEN} ${Z80PACK_DIR}/picosim/disks/cpm22.dsk
     ${Z80PACK_DIR}/picosim/disks/empty.dsk
   COMMENT "Patching F83.COM's VIEW (F83 on the Z80 machine)"
+  VERBATIM)
+
+# AYPLAY's example tunes (bd 1ls.18.10): our arrangements of public-domain
+# melodies, rendered into PSG files.
+set(TUNES_OUT "${GENERATED}/tunes")
+set(TUNES ${TUNES_OUT}/korobein.psg ${TUNES_OUT}/jacques.psg ${TUNES_OUT}/ode.psg)
+add_custom_command(
+  OUTPUT ${TUNES}
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${TUNES_OUT}
+  COMMAND Python3::Interpreter ${CPM_DIR}/tunes/psg_gen.py ${TUNES_OUT}
+  DEPENDS ${CPM_DIR}/tunes/psg_gen.py
+  COMMENT "Rendering AYPLAY's tunes"
   VERBATIM)
 
 set(DISKIMG_SYSTEM --system CPM22 ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin
@@ -121,7 +135,14 @@ set(DISKIMG_FILES --delete CPM22 XDIR.COM
   --file CPM22 XERA.COM ${CPM_OUT}/xera.com
   --file CPM22 MEM.COM ${CPM_OUT}/mem.com
   --file CPM22 HWINFO.COM ${CPM_OUT}/hwinfo.com
+  --file CPM22 AYTEST.COM ${CPM_OUT}/aytest.com
+  --file CPM22 AYPLAY.COM ${CPM_OUT}/ayplay.com
+  --file CPM22 AYTRACK.COM ${CPM_OUT}/aytrack.com
+  --file CPM22 KOROBEIN.PSG ${TUNES_OUT}/korobein.psg
+  --file CPM22 JACQUES.PSG ${TUNES_OUT}/jacques.psg
+  --file CPM22 ODE.PSG ${TUNES_OUT}/ode.psg
   --file CPM31 HWINFO.COM ${CPM_OUT}/hwinfo.com
+  --file CPM31 AYTEST.COM ${CPM_OUT}/aytest.com
   --file Z80TESTS TERMTEST.COM ${CPM_OUT}/termtest.com
   --file Z80TESTS ALTSCR.COM ${CPM_OUT}/altscr.com
   --file CPM32 WORMS.COM ${CPM_OUT}/worms.com
@@ -129,9 +150,16 @@ set(DISKIMG_FILES --delete CPM22 XDIR.COM
   --file CPM32 XPIP.COM ${CPM_OUT}/xpip.com
   --file CPM32 XERA.COM ${CPM_OUT}/xera.com
   --file CPM32 MEM.COM ${CPM_OUT}/mem.com
-  --file CPM32 HWINFO.COM ${CPM_OUT}/hwinfo.com)
-set(_f83_paths ${F83_OUT}/f83.com ${F83_OUT}/viewdrv.blk)
-list(APPEND DISKIMG_FILES --file F83 F83.COM ${F83_OUT}/f83.com --file F83 VIEWDRV.BLK ${F83_OUT}/viewdrv.blk)
+  --file CPM32 HWINFO.COM ${CPM_OUT}/hwinfo.com
+  --file CPM32 AYTEST.COM ${CPM_OUT}/aytest.com
+  --file CPM32 AYPLAY.COM ${CPM_OUT}/ayplay.com
+  --file CPM32 AYTRACK.COM ${CPM_OUT}/aytrack.com
+  --file CPM32 KOROBEIN.PSG ${TUNES_OUT}/korobein.psg
+  --file CPM32 JACQUES.PSG ${TUNES_OUT}/jacques.psg
+  --file CPM32 ODE.PSG ${TUNES_OUT}/ode.psg)
+set(_f83_paths ${F83_OUT}/f83.com ${F83_OUT}/viewdrv.blk ${F83_OUT}/ay.blk)
+list(APPEND DISKIMG_FILES --file F83 F83.COM ${F83_OUT}/f83.com --file F83 VIEWDRV.BLK ${F83_OUT}/viewdrv.blk
+  --file F83 AY.BLK ${F83_OUT}/ay.blk)
 foreach(_file IN LISTS F83_FILES)
   list(APPEND DISKIMG_FILES --file F83 ${_file} ${F83_DIR}/${_file})
   list(APPEND _f83_paths ${F83_DIR}/${_file})
@@ -150,9 +178,9 @@ add_custom_command(
     ${DISKIMG_IMAGES}
   DEPENDS ${DISKIMG_GEN} ${_diskimg_files} ${CPM_OUT}/boot.bin ${CPM_OUT}/bios.bin ${CPM_OUT}/worms.com
     ${CPM_OUT}/xls.com ${CPM_OUT}/xpip.com ${CPM_OUT}/xera.com ${CPM_OUT}/termtest.com
-    ${CPM_OUT}/altscr.com ${CPM_OUT}/mem.com ${CPM_OUT}/hwinfo.com ${Z80PACK_DIR}/picosim/srccpm2/cpm.bin ${CPM_DIR}/ccpbdos.rel
+    ${CPM_OUT}/altscr.com ${CPM_OUT}/mem.com ${CPM_OUT}/hwinfo.com ${CPM_OUT}/aytest.com ${CPM_OUT}/ayplay.com ${CPM_OUT}/aytrack.com ${Z80PACK_DIR}/picosim/srccpm2/cpm.bin ${CPM_DIR}/ccpbdos.rel
     ${CPM3_OUT}/cpm3.sys ${CPM3_OUT}/vt100dyn.com ${CPM3_OUT}/profile.sub
-    ${CPM3_OUT}/readme.txt ${GENERATED}/cpm32.dsk ${GENERATED}/f83.dsk ${_f83_paths}
+    ${CPM3_OUT}/readme.txt ${GENERATED}/cpm32.dsk ${GENERATED}/f83.dsk ${_f83_paths} ${TUNES}
   COMMENT "Compressing the built-in CP/M disk images"
   VERBATIM)
 

@@ -203,29 +203,35 @@ static void test_clock_settings(void) {
 	CHECK_EQ(out.clock_seconds, 1);
 	CHECK_EQ(out.clock_date, SETTINGS_DATE_SHORT);
 	// They are not SET-UP's rows: those are the main page's fields, in
-	// order, Bell after Terminal type, then USB log.
+	// order, USB log after Terminal type; the clock's, Bell and the sound's
+	// are the Clock and sound panel's.
 	unsigned main = 0;
 	for (unsigned f = 0; f < SETTINGS_FIELDS; ++f) {
-		bool clock = f >= offsetof(settings_t, clock) && f <= offsetof(settings_t, clock_date);
-		CHECK_EQ(settings_fields[f].page, clock ? SETTINGS_PAGE_CLOCK : SETTINGS_PAGE_MAIN);
-		main += !clock;
+		bool panel = (f >= offsetof(settings_t, clock) && f <= offsetof(settings_t, bell))
+			|| f >= offsetof(settings_t, sound_level);
+		CHECK_EQ(settings_fields[f].page, panel ? SETTINGS_PAGE_CLOCK : SETTINGS_PAGE_MAIN);
+		main += !panel;
 	}
 	CHECK_EQ(main, SETTINGS_MAIN_FIELDS);
 	for (unsigned row = 0; row <= offsetof(settings_t, term_type); ++row) {
 		CHECK_EQ(settings_main_field(row), row);
 	}
-	CHECK_EQ(settings_main_field(SETTINGS_MAIN_FIELDS - 2), offsetof(settings_t, bell));
 	CHECK_EQ(settings_main_field(SETTINGS_MAIN_FIELDS - 1), offsetof(settings_t, usb_log));
 }
 
-// Bell: medium unless saved; records from before it (15 bytes) get that.
+// Bell: level 3 unless saved; records from before it (15 bytes) get that,
+// and every level up to SETTINGS_BELL_MAX is kept.
 static void test_bell_setting(void) {
 	settings_t in, out;
-	settings_defaults(&in);
-	CHECK_EQ(in.bell, SETTINGS_BELL_MEDIUM);
-	in.bell = SETTINGS_BELL_OFF;
 	uint8_t rec[SETTINGS_RECORD_SIZE];
 	uint32_t seq;
+	settings_defaults(&in);
+	CHECK_EQ(in.bell, SETTINGS_BELL_DEFAULT);
+	in.bell = SETTINGS_BELL_MAX;
+	settings_encode(&in, 1, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.bell, SETTINGS_BELL_MAX);
+	in.bell = SETTINGS_BELL_OFF;
 	settings_encode(&in, 1, rec);
 	CHECK(settings_decode(rec, &out, &seq));
 	CHECK_EQ(out.bell, SETTINGS_BELL_OFF);
@@ -235,7 +241,52 @@ static void test_bell_setting(void) {
 		rec[12 + i] = (uint8_t)(crc >> 8 * i);
 	}
 	CHECK(settings_decode(rec, &out, &seq));
-	CHECK_EQ(out.bell, SETTINGS_BELL_MEDIUM);
+	CHECK_EQ(out.bell, SETTINGS_BELL_DEFAULT);
+}
+
+// Sound chip 7 and the DAC fitted unless saved; records from before them
+// (17 bytes) get that; Sound DAC is 0 or 1.
+static void test_sound_settings(void) {
+	settings_t in, out;
+	uint8_t rec[SETTINGS_RECORD_SIZE];
+	uint32_t seq;
+	settings_defaults(&in);
+	CHECK_EQ(in.sound_level, SETTINGS_SOUND_DEFAULT);
+	CHECK_EQ(in.sound_dac, 1);
+	in.sound_level = SETTINGS_SOUND_MAX;
+	in.sound_dac = 0;
+	settings_encode(&in, 1, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.sound_level, SETTINGS_SOUND_MAX);
+	CHECK_EQ(out.sound_dac, 0);
+	rec[5] = 17;
+	uint32_t crc = crc_of(rec, 17);
+	for (unsigned i = 0; i < 4; ++i) {
+		rec[12 + i] = (uint8_t)(crc >> 8 * i);
+	}
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.sound_level, SETTINGS_SOUND_DEFAULT);
+	CHECK_EQ(out.sound_dac, 1);
+}
+
+// Stereo: mono unless saved; records from before it (19 bytes) get mono.
+static void test_stereo_setting(void) {
+	settings_t in, out;
+	uint8_t rec[SETTINGS_RECORD_SIZE];
+	uint32_t seq;
+	settings_defaults(&in);
+	CHECK_EQ(in.sound_stereo, SETTINGS_STEREO_MONO);
+	in.sound_stereo = SETTINGS_STEREO_ACB;
+	settings_encode(&in, 1, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.sound_stereo, SETTINGS_STEREO_ACB);
+	rec[5] = 19;
+	uint32_t crc = crc_of(rec, 19);
+	for (unsigned i = 0; i < 4; ++i) {
+		rec[12 + i] = (uint8_t)(crc >> 8 * i);
+	}
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.sound_stereo, SETTINGS_STEREO_MONO);
 }
 
 // USB log: off unless saved; records from before it (16 bytes) get off,
@@ -351,6 +402,8 @@ int main(void) {
 	RUN(test_bad_value_keeps_default);
 	RUN(test_clock_settings);
 	RUN(test_bell_setting);
+	RUN(test_sound_settings);
+	RUN(test_stereo_setting);
 	RUN(test_usb_log_setting);
 	RUN(test_older_record);
 	RUN(test_retired_wide80);

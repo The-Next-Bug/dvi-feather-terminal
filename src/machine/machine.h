@@ -13,7 +13,9 @@
 // (after 0xAA: bit 7 halt, bit 6 reset), 254/255 front panel switches;
 // and our own 8: the format of a drive (OUT the drive, IN its format, IN
 // again its mount count), for our 8-drive BIOSes in src/machine/cpm; 10: the
-// file transfer device; and 12: the hardware information device (below).
+// file transfer device; 12: the hardware information device; 68/69 a
+// millisecond tick; and the AY-3-8910 sound chip on D8h/D0h, with our
+// stereo register 16 (all below).
 //
 // The CPU runs in slices (machine_run) from the platform's main loop;
 // while it waits (HALT, the speed limit) it calls the platform's idle hook,
@@ -62,7 +64,33 @@ typedef struct {
 	// Set the wall clock (writes to port 66, below). May be NULL: the
 	// clock cannot be set, as on picosim.
 	void (*time_set)(uint32_t secs);
+	// The AY-3-8910 (below): write or read a register (the chip ignores
+	// 17-255 and reads 0xFF there; 16 is ours, MACHINE_AY_STEREO). Both or neither; NULL: its ports read
+	// 0xFF, as with no chip fitted.
+	void (*sound_write)(uint8_t reg, uint8_t value);
+	uint8_t (*sound_read)(uint8_t reg);
 } machine_platform_t;
+
+// The AY-3-8910 (bd 1ls.18.4): ports as on Ed Brindley's RC2014 YM2149
+// board: OUT D8h selects a register, OUT D0h writes it, IN D0h reads it.
+// Reset (machine_reset) writes 0 to its registers: silence, and the
+// layout back to SET-UP's. Not the MSX's
+// A0h-A2h: A0h is picosim's hardware control port (160).
+#define MACHINE_AY_SELECT 0xd8
+#define MACHINE_AY_DATA 0xd0
+// Register 16, ours (bd 1ls.18.9; a real AY ignores it): the stereo
+// layout. Write 0 for SET-UP's Stereo setting, 1 mono (A, B and C in both
+// ears), 2 ABC (A left, B center, C right), 3 ACB (A left, C center, B
+// right); bits 2-7 are ignored. Read: what was written in bits 0-1, the
+// layout in use (1-3, as written) in bits 4-5, so 0xFF (older firmware, or
+// a real chip) means no stereo.
+#define MACHINE_AY_STEREO 16
+
+// Ports 68/69, ours: a free-running millisecond count of the platform's
+// clock, for timing without interrupts (F83, AYTEST): IN 68 its low byte,
+// latching the high byte for IN 69, which reads it; wraps every 65.536 s.
+#define MACHINE_TICK_LOW 68
+#define MACHINE_TICK_HIGH 69
 
 // Ports 65/66, the clock, as picosim's: OUT 65 selects a register, IN 66
 // reads it: 0 seconds, 1 minutes, 2 hours, 3/4 the day number (low, high:
@@ -143,6 +171,7 @@ typedef struct {
 // 29-31 were card detect, user button, battery: dropped (bd 1ls.22); not
 // to be reused, older HWINFO users may know them.
 #define HWINFO_DRIVES 32       // the disk images on drives A-H
+#define HWINFO_SOUND 33        // the AY-3-8910 on the Z80's ports (bd 1ls.18.4)
 
 #define HWINFO_ST_NONE 0      // no record
 #define HWINFO_ST_PRESENT 1   // there and in use

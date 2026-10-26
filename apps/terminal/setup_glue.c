@@ -10,6 +10,8 @@
 #include "pico/stdlib.h"
 #include "hardware/watchdog.h"
 
+#include "audio.h"
+#include "ay8910.h"
 #include "bell.h"
 #include "board.h"
 #include "demo.h"
@@ -22,6 +24,7 @@
 #include "sdcard.h"
 #include "term_build.h"
 #include "terminal.h"
+#include "tune.h"
 #include "usbkbd.h"
 #include "usbmsc.h"
 #include "video.h"
@@ -34,6 +37,8 @@ setup_state_t setup;
 static_assert(DRIVEPANEL_ROWS <= SETUP_ROWS, "the Drives panel fits SET-UP's rows");
 static_assert(FWPANEL_ROWS <= SETUP_ROWS, "the firmware panel fits SET-UP's rows");
 static_assert(CLOCKPANEL_ROWS <= SETUP_ROWS, "the Clock panel fits SET-UP's rows");
+
+static void ay_give_back(void);
 
 // The panels are boxes on the default background, the box in the status
 // line's color of the edited settings, like the preview (setup_service
@@ -236,8 +241,9 @@ void setup_enter(bool from_host) {
 	current.newline = cpm.on ? settings.newline : term.newline_mode;
 	setup_open(&setup.ui, &current);
 	setup.ui.machine_menu = cpm.on;
-	setup.ui.no_bell = !bell_present();
 	setup.bell_heard = current.bell;
+	setup.sound_heard = current.sound_level;
+	setup.stereo_heard = current.sound_stereo;
 	setup.active = true;
 	setup.drives_open = false;
 	setup.drives_work = DRIVEPANEL_NONE;
@@ -265,9 +271,12 @@ static void setup_leave(bool apply) {
 	setup.drives_work = DRIVEPANEL_NONE;
 	setup.clock_open = setup.clock_apply = false;
 	fw_close();
+	ay_give_back(); // a chime still sounding
 	if (!apply) {
 		show_palette(&settings); // back from SET-UP's preview
 		bell_set_level(settings.bell);
+		audio_set_ay_level(settings.sound_level);
+		audio_set_stereo(settings.sound_stereo);
 		return;
 	}
 	apply_settings(&setup.ui.values);
@@ -313,8 +322,8 @@ static void drives_service(void) {
 	}
 }
 
-// The Clock panel's Return: the clock set if a time was typed in, the
-// status line clock's choices kept in SET-UP's edited settings (its Return
+// The Clock and sound panel's Return: the clock set if a time was typed
+// in, its settings' choices kept in SET-UP's edited settings (its Return
 // saves them); or its Escape key timeout, and the time it shows ticking.
 static void clock_service(void) {
 	if (!setup.clock_apply) {
@@ -336,13 +345,19 @@ static void clock_service(void) {
 	}
 	const settings_t *v = &setup.clock.values;
 	settings_t *u = &setup.ui.values;
-	bool format = v->clock != u->clock || v->clock_seconds != u->clock_seconds || v->clock_date != u->clock_date;
+	bool changed = v->clock != u->clock || v->clock_seconds != u->clock_seconds || v->clock_date != u->clock_date
+		|| v->bell != u->bell || v->sound_level != u->sound_level || v->sound_dac != u->sound_dac
+		|| v->sound_stereo != u->sound_stereo;
 	u->clock = v->clock;
 	u->clock_seconds = v->clock_seconds;
 	u->clock_date = v->clock_date;
-	setup.ui.message = set && format ? "Clock set; Return here saves the status line clock's format"
+	u->bell = v->bell;
+	u->sound_level = v->sound_level;
+	u->sound_dac = v->sound_dac;
+	u->sound_stereo = v->sound_stereo;
+	setup.ui.message = set && changed ? "Clock set; Return here saves the clock and sound settings"
 		: set ? "Clock set"
-		: format ? "Return here saves the status line clock's format"
+		: changed ? "Return here saves the clock and sound settings"
 		: NULL;
 	setup_draw_panel();
 }
@@ -353,6 +368,47 @@ void draw_demo(unsigned cols, const char *what) {
 	snprintf(status, sizeof status, " demo | %u x 24 | build %s (%s, %s) | %s",
 		cols, TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE, what);
 	demo_draw(&screen, cols, raster_font_name(raster_layout(cols)), status);
+}
+
+// SET-UP's sounds on the AY (tune.c): the demo's tune, and the chime for a
+// new Sound chip level or Stereo. The Z80 is stopped while SET-UP is open,
+// so they borrow its chip, attached meanwhile in terminal mode, in the
+// edited Stereo (the program's AY_STEREO_REG set aside); its registers are
+// put back when the piece ends (the chime), the demo ends or SET-UP closes.
+static tune_t ay_tune;
+static uint8_t ay_saved[AY_STEREO_REG + 1];
+static bool ay_borrowed;
+
+static void ay_play(uint8_t piece) {
+	if (!bell_present()) {
+		return;
+	}
+	if (!ay_borrowed) {
+		for (uint8_t r = 0; r <= AY_STEREO_REG; ++r) {
+			ay_saved[r] = audio_ay_read(r);
+		}
+		audio_ay_write(AY_STEREO_REG, 0);
+		audio_attach_ay(true);
+		ay_borrowed = true;
+	}
+	tune_start(&ay_tune, piece, audio_ay_write, to_ms_since_boot(get_absolute_time()));
+}
+
+static void ay_give_back(void) {
+	if (!ay_borrowed) {
+		return;
+	}
+	ay_borrowed = false;
+	for (uint8_t r = 0; r <= AY_STEREO_REG; ++r) {
+		audio_ay_write(r, ay_saved[r]);
+	}
+	audio_attach_ay(cpm.on);
+}
+
+static void ay_service(void) {
+	if (ay_borrowed && !tune_poll(&ay_tune, to_ms_since_boot(get_absolute_time()))) {
+		ay_give_back();
+	}
 }
 
 // SET-UP's demo (T): in the edited palette, alternating widths until a key.
@@ -366,10 +422,14 @@ static void setup_demo_start(void) {
 	setup.demo_cols = screen.cols;
 	setup.demo_switch = make_timeout_time_ms(DEMO_INTERVAL_MS);
 	draw_demo(setup.demo_cols, "any key: back to SET-UP");
+	if (setup.ui.values.sound_level != 0) {
+		ay_play(TUNE_KOROBEINIKI);
+	}
 }
 
 static void setup_demo_service(void) {
 	if (setup.demo_end) {
+		ay_give_back();
 		setup.demo = false;
 		term_set_columns(&term, setup.term_cols); // clears; the status line follows
 		setup_cover();
@@ -399,12 +459,33 @@ static void restart(void) {
 // key timeout; show the edited Colors and Palette and sound the edited Bell.
 void setup_service(void) {
 	show_palette(&setup.ui.values);
-	// A new Bell setting: heard at once, as the palette is seen.
-	if (setup.ui.values.bell != setup.bell_heard) {
-		setup.bell_heard = setup.ui.values.bell;
+	// The sound levels as edited (in the Clock and sound panel while it is
+	// open): a new Bell heard at once, as the palette is seen; the AY's
+	// level heard on whatever it plays. Back from the panel without them:
+	// quietly.
+	const settings_t *v = setup.clock_open ? &setup.clock.values : &setup.ui.values;
+	if (v->bell != setup.bell_heard) {
+		setup.bell_heard = v->bell;
 		bell_set_level(setup.bell_heard);
-		bell_ring();
+		if (setup.clock_open) {
+			bell_ring();
+		}
 	}
+	if (v->sound_level != setup.sound_heard) {
+		setup.sound_heard = v->sound_level;
+		audio_set_ay_level(setup.sound_heard);
+		if (setup.clock_open && setup.sound_heard != 0) {
+			ay_play(TUNE_CHIME); // heard at the new level
+		}
+	}
+	if (v->sound_stereo != setup.stereo_heard) {
+		setup.stereo_heard = v->sound_stereo;
+		audio_set_stereo(setup.stereo_heard);
+		if (setup.clock_open && v->sound_level != 0) {
+			ay_play(TUNE_CHIME); // on A: from the left in ABC and ACB
+		}
+	}
+	ay_service();
 	if (setup.demo) {
 		setup_demo_service();
 		return;
@@ -445,7 +526,8 @@ void setup_service(void) {
 		fw_draw_panel();
 	} else if (a == SETUP_CLOCK) {
 		rtc_state_t st = rtc_state();
-		clockpanel_open(&setup.clock, &setup.ui.values, rtc_now(), st != RTC_NONE && st != RTC_MISSING);
+		clockpanel_open(&setup.clock, &setup.ui.values, rtc_now(), st != RTC_NONE && st != RTC_MISSING,
+			BOARD_AUDIO_I2S != 0);
 		setup.clock_open = true;
 		clock_draw_panel();
 	} else if (a == SETUP_DRIVES) {

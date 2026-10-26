@@ -10,6 +10,8 @@
 #include "hardware/clocks.h"
 #include "hardware/structs/sysinfo.h"
 
+#include "audio.h"
+#include "ay8910.h"
 #include "bell.h"
 #include "board.h"
 #include "extram.h"
@@ -179,8 +181,34 @@ static size_t bell_record(uint8_t *buf) {
 	if (bell_present()) {
 		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Bell", BELL_PINS ": a beep on BEL");
 	}
+	if (!audio_fitted()) {
+		return hwinfo_record(buf, HWINFO_ST_ABSENT, "Bell", BELL_PINS ": not fitted (SET-UP's Sound DAC)");
+	}
 	return hwinfo_record(buf, HWINFO_ST_NOT_FOUND, "Bell", BELL_PINS ": no PIO or DMA channel free");
 #undef BELL_PINS
+#else
+	(void)buf;
+	return 0;
+#endif
+}
+
+// The emulated AY, heard through the bell's DAC, and its stereo layout
+// (bd 1ls.18.9): none without a DAC.
+static size_t sound_record(uint8_t *buf) {
+#if BOARD_AUDIO_I2S
+	if (bell_present()) {
+		static const char *const layouts[] = {"mono", "ABC stereo", "ACB stereo"};
+		uint8_t reg = audio_ay_read(AY_STEREO_REG);
+		unsigned in_use = (reg >> 4 & 3) - 1u;
+		char text[HWINFO_MAX];
+		snprintf(text, sizeof text, "AY-3-8910 (emulated, 1.8432 MHz) on ports D8h/D0h, 32 kHz; %s (%s)",
+			layouts[in_use < 3 ? in_use : 0], reg & 3 ? "the program's" : "SET-UP's");
+		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Sound chip", text);
+	}
+	if (!audio_fitted()) {
+		return hwinfo_record(buf, HWINFO_ST_ABSENT, "Sound chip", "AY-3-8910: the DAC is not fitted (SET-UP)");
+	}
+	return hwinfo_record(buf, HWINFO_ST_NOT_FOUND, "Sound chip", "AY-3-8910: the DAC is not set up");
 #else
 	(void)buf;
 	return 0;
@@ -242,6 +270,8 @@ size_t cpm_hwinfo(uint8_t item, uint8_t *buf) {
 		return led_record(buf);
 	case HWINFO_DRIVES:
 		return drives_record(buf);
+	case HWINFO_SOUND:
+		return sound_record(buf);
 	// Planned (bd 1ls): not driven by this firmware yet.
 	case HWINFO_RTC:
 		return rtc_record(buf);

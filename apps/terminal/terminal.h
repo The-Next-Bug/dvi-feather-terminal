@@ -75,6 +75,8 @@ typedef struct {
 	uint32_t saved_reverse;
 	bool saved_cursor;
 	uint8_t bell_heard; // the Bell setting last sounded while SET-UP is open
+	uint8_t sound_heard; // the Sound chip level last set while SET-UP is open
+	uint8_t stereo_heard; // the Stereo setting last set while SET-UP is open
 	// CP/M mode: the Drives panel (D), over the same rows; its card work
 	// (mount, save or remove a set) waits for the main loop.
 	bool drives_open;

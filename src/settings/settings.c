@@ -58,9 +58,14 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 	{"Seconds", 2, {0, 1}, {"off", "on"}, SETTINGS_PAGE_CLOCK},
 	{"Date", 3, {SETTINGS_DATE_NONE, SETTINGS_DATE_ISO, SETTINGS_DATE_SHORT},
 		{"off", "2026-10-22", "Thu 22 Oct"}, SETTINGS_PAGE_CLOCK},
-	{"Bell", 4, {SETTINGS_BELL_OFF, SETTINGS_BELL_LOW, SETTINGS_BELL_MEDIUM, SETTINGS_BELL_HIGH},
-		{"off", "low", "medium", "high"}, SETTINGS_PAGE_MAIN},
+	{"Bell", SETTINGS_BELL_MAX + 1, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+		{"off", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}, SETTINGS_PAGE_CLOCK},
 	{"USB log", 2, {SETTINGS_USB_LOG_OFF, SETTINGS_USB_LOG_SD}, {"off", "SD card USBLOG.TXT"}, SETTINGS_PAGE_MAIN},
+	{"Sound chip", SETTINGS_SOUND_MAX + 1, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+		{"off", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}, SETTINGS_PAGE_CLOCK},
+	{"Sound DAC", 2, {1, 0}, {"fitted", "not fitted"}, SETTINGS_PAGE_CLOCK},
+	{"Stereo", 3, {SETTINGS_STEREO_MONO, SETTINGS_STEREO_ABC, SETTINGS_STEREO_ACB},
+		{"mono", "ABC", "ACB"}, SETTINGS_PAGE_CLOCK},
 };
 
 unsigned settings_main_field(unsigned row) {
@@ -124,8 +129,9 @@ void settings_defaults(settings_t *s) {
 	*s = (settings_t){.columns = 80, .backspace = 0x08, .local_echo = 0, .baud = BAUD_DEFAULT,
 		.framing = 0, .newline = 0, .colors = 0, .palette = 0, .mode = SETTINGS_MODE_TERMINAL,
 		.status_line = 1, .blank_after = 0, .term_type = SETTINGS_TERM_VT100, .clock = SETTINGS_CLOCK_24H,
-		.clock_seconds = 0, .clock_date = SETTINGS_DATE_NONE, .bell = SETTINGS_BELL_MEDIUM,
-		.usb_log = SETTINGS_USB_LOG_OFF};
+		.clock_seconds = 0, .clock_date = SETTINGS_DATE_NONE, .bell = SETTINGS_BELL_DEFAULT,
+		.usb_log = SETTINGS_USB_LOG_OFF, .sound_level = SETTINGS_SOUND_DEFAULT, .sound_dac = 1,
+		.sound_stereo = SETTINGS_STEREO_MONO};
 }
 
 void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_RECORD_SIZE]) {

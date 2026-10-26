@@ -25,18 +25,9 @@ static unsigned choice_index(settings_t *v, unsigned f) {
 	return 0;
 }
 
-// Why field f cannot be changed now (settings_field_fixed, or a Bell with
-// no bell to ring), else NULL.
-static const char *fixed_why(const setup_t *u, const settings_t *v, unsigned f) {
-	if (f == offsetof(settings_t, bell) && u->no_bell) {
-		return "no bell on this board";
-	}
-	return settings_field_fixed(v, f);
-}
-
 static void change(setup_t *u, int step) {
 	unsigned f = settings_main_field(u->item);
-	if (fixed_why(u, &u->values, f)) {
+	if (settings_field_fixed(&u->values, f)) {
 		return;
 	}
 	const settings_field_t *it = &settings_fields[f];
@@ -48,7 +39,7 @@ static void change(setup_t *u, int step) {
 static void select_next(setup_t *u, int step) {
 	for (unsigned n = 0; n < SETUP_ITEMS; ++n) {
 		u->item = (u->item + SETUP_ITEMS + (unsigned)step) % SETUP_ITEMS;
-		if (!fixed_why(u, &u->values, settings_main_field(u->item))) {
+		if (!settings_field_fixed(&u->values, settings_main_field(u->item))) {
 			return;
 		}
 	}
@@ -56,7 +47,7 @@ static void select_next(setup_t *u, int step) {
 
 void setup_open(setup_t *u, const settings_t *values) {
 	*u = (setup_t){.values = *values};
-	if (fixed_why(u, &u->values, settings_main_field(u->item))) {
+	if (settings_field_fixed(&u->values, settings_main_field(u->item))) {
 		select_next(u, 1);
 	}
 }
@@ -213,15 +204,12 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 			screen_put_attr(s, LEFT + c, row, (uint8_t)text[c], fg, bg, selected ? SCREEN_ATTR_BOLD : 0);
 		}
 		unsigned col = LEFT + 3 + NAME_WIDTH;
-		const char *fixed = fixed_why(u, &values, f);
+		const char *fixed = settings_field_fixed(&values, f);
 		if (fixed) {
-			// Only the value in use (Columns under the ADM-3A, Bell
-			// without one), then what decides it.
+			// Only the value in use (Columns under the ADM-3A), then
+			// what decides it.
 			settings_t used = values;
 			used.columns = (uint8_t)settings_columns(&values);
-			if (u->no_bell) {
-				used.bell = SETTINGS_BELL_OFF;
-			}
 			const char *label = it->labels[choice_index(&used, f)];
 			snprintf(text, sizeof text, " %s ", label);
 			screen_puts(s, col, row, text, bg, fg);
@@ -251,6 +239,6 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 	screen_puts(s, LEFT, top + SETUP_ROWS - 3, " Up/Down select  Left/Right change  Return save  Esc cancel",
 		fg, bg);
 	screen_puts(s, LEFT, top + SETUP_ROWS - 2, u->machine_menu
-		? " T demo  U firmware update  R reboot  C clock  D drives  M monitor"
-		: " T demo  U firmware update  R reboot  C clock", fg, bg);
+		? " T demo  U firmware update  R reboot  C clock & sound  D drives  M monitor"
+		: " T demo  U firmware update  R reboot  C clock & sound", fg, bg);
 }
