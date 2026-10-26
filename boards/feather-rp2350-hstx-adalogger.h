@@ -7,8 +7,8 @@
 // holder it keeps the time over power-off. boards/example.h explains each
 // setting.
 //
-// No flow control: CTS/RTS were GP2/3, the RTC's I2C now
-// (SERIAL_FLOW_CONTROL builds stop at board.h's check). No 1 Hz tick: the
+// No RTS/CTS: CTS/RTS were GP2/3, the RTC's I2C now (SET-UP's Flow
+// control offers XON/XOFF only). No 1 Hz tick: the
 // FeatherWing's INT/SQW pad is not wired to a Feather pin, so the
 // firmware's timer keeps the time between start-up and a set.
 

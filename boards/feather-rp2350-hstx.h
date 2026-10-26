@@ -37,13 +37,13 @@ pico_board_cmake_set(BOARD_HSTX_MODE, 2)
 
 // --- Terminal UART ---
 //
-// UART0 on the Feather's TX/RX pins. CTS/RTS (flow control builds) are
+// UART0 on the Feather's TX/RX pins. CTS/RTS (Flow control: RTS/CTS) are
 // the SDA/SCL pins, shared with the STEMMA QT connector: nothing may be
 // plugged in there then.
 #define BOARD_UART 0
 #define BOARD_UART_TX_PIN 0
 #define BOARD_UART_RX_PIN 1
-#define BOARD_UART_CTS_PIN 2 // SERIAL_FLOW_CONTROL builds
+#define BOARD_UART_CTS_PIN 2 // used with the Flow control setting's RTS/CTS
 #define BOARD_UART_RTS_PIN 3
 
 #define PICO_DEFAULT_UART BOARD_UART

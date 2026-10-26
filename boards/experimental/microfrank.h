@@ -13,7 +13,7 @@
 // (only the SWD, power and UART headers are). No RTC, card detect, user
 // button or battery.
 //
-// No SERIAL_FLOW_CONTROL: the UART header has only TX and RX.
+// No RTS/CTS (Flow control: XON/XOFF only): the UART header has only TX and RX.
 //
 // USB: slide switch S1 (a TS3USB221 mux) routes the RP2350's USB either to
 // the USB-C socket (flashing over BOOTSEL) or to the hub; the hub ports take

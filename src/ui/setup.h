@@ -47,6 +47,7 @@ typedef struct {
 	uint32_t esc_ms;     // when the ESC arrived
 	const char *message; // shown in the panel until the next key; NULL: none
 	bool machine_menu;   // offer M for the Z80 machine's menu (set after setup_open)
+	bool no_rtscts;      // the board has no CTS/RTS pins: Flow control offers no RTS/CTS
 } setup_t;
 
 void setup_open(setup_t *u, const settings_t *values);

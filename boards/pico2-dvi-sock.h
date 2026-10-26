@@ -13,7 +13,7 @@
 #define BOARD_UART 0
 #define BOARD_UART_TX_PIN 0
 #define BOARD_UART_RX_PIN 1
-#define BOARD_UART_CTS_PIN 2 // SERIAL_FLOW_CONTROL builds
+#define BOARD_UART_CTS_PIN 2 // used with the Flow control setting's RTS/CTS
 #define BOARD_UART_RTS_PIN 3
 // Before pico2.h, which only sets what is unset.
 #define PICO_DEFAULT_UART BOARD_UART

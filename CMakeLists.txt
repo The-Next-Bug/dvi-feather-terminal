@@ -54,8 +54,6 @@ option(VIDEO_DIAG "Bring-up diagnostics on UART0 TX: boot markers, core 1 timing
 # Run from SRAM: the boot-time XIP setup is chosen for clk_sys <= 150 MHz, and
 # at the 400 MHz DVI clock flash execution is unreliable (on the RP2040 it hung
 # above 252 MHz). See bd dvi-feather-terminal-dmt.10.
-# Off by default: needs the two handshake wires (see README, "Flow control").
-option(SERIAL_FLOW_CONTROL "RTS/CTS on the terminal UART (the board's BOARD_UART_RTS_PIN/CTS_PIN)" OFF)
 option(COPY_TO_RAM "Run the whole program from SRAM instead of flash" ON)
 # Video timing (src/hstx_dvi.h): 800x600 at 60 Hz needs clk_hstx at 200 MHz,
 # beyond its 150 MHz rating; the others are fallbacks with slower clocks.
@@ -143,7 +141,6 @@ target_compile_definitions(dvt_render PRIVATE LOGO_IN_FLASH=$<BOOL:${LOGO_IN_FLA
 # installed); the Z80 machine's banks.
 target_compile_definitions(dvt_disks PUBLIC DISKIMG_IN_FLASH=1)
 target_compile_definitions(dvt_z80pack PUBLIC MACHINE_BANKS=${MACHINE_BANKS})
-target_compile_definitions(dvt_board INTERFACE SERIAL_FLOW_CONTROL=$<BOOL:${SERIAL_FLOW_CONTROL}>)
 target_compile_definitions(dvt_platform PUBLIC VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}> PSRAM_BANKS=$<BOOL:${PSRAM_BANKS}>)
 target_compile_definitions(dvt_video PUBLIC HSTX_MODE=${DVT_HSTX_MODE})
 target_compile_definitions(dvt_usb PRIVATE

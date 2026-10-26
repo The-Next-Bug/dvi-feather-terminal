@@ -203,20 +203,32 @@ static void test_clock_settings(void) {
 	CHECK_EQ(out.clock_seconds, 1);
 	CHECK_EQ(out.clock_date, SETTINGS_DATE_SHORT);
 	// They are not SET-UP's rows: those are the main page's fields, in
-	// order, USB log after Terminal type; the clock's, Bell and the sound's
-	// are the Clock and sound panel's.
+	// order but Flow control after Data/parity/stop, USB log after Terminal
+	// type; the clock's, Bell and the sound's are the Clock and sound
+	// panel's.
 	unsigned main = 0;
 	for (unsigned f = 0; f < SETTINGS_FIELDS; ++f) {
 		bool panel = (f >= offsetof(settings_t, clock) && f <= offsetof(settings_t, bell))
-			|| f >= offsetof(settings_t, sound_level);
+			|| (f >= offsetof(settings_t, sound_level) && f <= offsetof(settings_t, sound_stereo));
 		CHECK_EQ(settings_fields[f].page, panel ? SETTINGS_PAGE_CLOCK : SETTINGS_PAGE_MAIN);
 		main += !panel;
+		// Each main-page field on one row.
+		unsigned rows = 0;
+		for (unsigned row = 0; row < SETTINGS_MAIN_FIELDS; ++row) {
+			rows += settings_main_field(row) == f;
+		}
+		CHECK_EQ(rows, panel ? 0u : 1u);
 	}
 	CHECK_EQ(main, SETTINGS_MAIN_FIELDS);
-	for (unsigned row = 0; row <= offsetof(settings_t, term_type); ++row) {
+	for (unsigned row = 0; row <= offsetof(settings_t, framing); ++row) {
 		CHECK_EQ(settings_main_field(row), row);
 	}
+	CHECK_EQ(settings_main_field(offsetof(settings_t, framing) + 1), offsetof(settings_t, flow));
+	for (unsigned row = offsetof(settings_t, newline) + 1; row <= offsetof(settings_t, term_type) + 1; ++row) {
+		CHECK_EQ(settings_main_field(row), row - 1);
+	}
 	CHECK_EQ(settings_main_field(SETTINGS_MAIN_FIELDS - 1), offsetof(settings_t, usb_log));
+	CHECK_EQ(settings_main_field(SETTINGS_MAIN_FIELDS), SETTINGS_FIELDS); // past the rows
 }
 
 // Bell: level 3 unless saved; records from before it (15 bytes) get that,
@@ -267,6 +279,36 @@ static void test_sound_settings(void) {
 	CHECK(settings_decode(rec, &out, &seq));
 	CHECK_EQ(out.sound_level, SETTINGS_SOUND_DEFAULT);
 	CHECK_EQ(out.sound_dac, 1);
+}
+
+// Flow control: none unless saved; records from before it (20 bytes) get
+// that; RTS/CTS and XON/XOFF are kept.
+static void test_flow_setting(void) {
+	settings_t in, out;
+	uint8_t rec[SETTINGS_RECORD_SIZE];
+	uint32_t seq;
+	settings_defaults(&in);
+	CHECK_EQ(in.flow, SETTINGS_FLOW_NONE);
+	for (uint8_t f = SETTINGS_FLOW_RTSCTS; f <= SETTINGS_FLOW_XONXOFF; ++f) {
+		in.flow = f;
+		settings_encode(&in, 3, rec);
+		CHECK(settings_decode(rec, &out, &seq));
+		CHECK_EQ(out.flow, f);
+	}
+	// An older record, one byte shorter, with its own CRC.
+	settings_encode(&in, 3, rec);
+	rec[5] = 20;
+	uint32_t crc = crc_of(rec, 20);
+	for (unsigned i = 0; i < 4; ++i) {
+		rec[12 + i] = (uint8_t)(crc >> 8 * i);
+	}
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.flow, SETTINGS_FLOW_NONE);
+	// Out of range: the default.
+	in.flow = 7;
+	settings_encode(&in, 4, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.flow, SETTINGS_FLOW_NONE);
 }
 
 // Stereo: mono unless saved; records from before it (19 bytes) get mono.
@@ -404,6 +446,7 @@ int main(void) {
 	RUN(test_bell_setting);
 	RUN(test_sound_settings);
 	RUN(test_stereo_setting);
+	RUN(test_flow_setting);
 	RUN(test_usb_log_setting);
 	RUN(test_older_record);
 	RUN(test_retired_wide80);

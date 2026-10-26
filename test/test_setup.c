@@ -14,6 +14,15 @@
 
 static setup_t u;
 
+// SET-UP's row for field f.
+static unsigned row_of(unsigned f) {
+	unsigned row = 0;
+	while (settings_main_field(row) != f) {
+		++row;
+	}
+	return row;
+}
+
 static void open_with(unsigned columns) {
 	settings_t s;
 	settings_defaults(&s);
@@ -123,8 +132,10 @@ static void test_draw_marks_current_choice(void) {
 	CHECK(row_contains(&s, top + 3, "  Local echo"));
 	CHECK(row_contains(&s, top + 4, "< 115200 >")); // long lists: current only
 	CHECK(row_contains(&s, top + 5, "< 8N1 >"));
-	CHECK(row_contains(&s, top + 7, "  Colors"));
-	CHECK(row_contains(&s, top + 7, "white   green   amber   blue")); // short lists: all
+	CHECK(row_contains(&s, top + 6, "  Flow control")); // the line's settings together
+	CHECK(row_contains(&s, top + 6, " none   RTS/CTS   XON/XOFF "));
+	CHECK(row_contains(&s, top + 8, "  Colors"));
+	CHECK(row_contains(&s, top + 8, "white   green   amber   blue")); // short lists: all
 	CHECK(row_contains(&s, top + SETUP_ROWS - 3, "Return save"));
 	// " 132 " is drawn reversed, " 80 " normal.
 	char line[81];
@@ -150,10 +161,10 @@ static void test_colors_preview(void) {
 	screen_init(&s, 80, RGB222(2, 2, 2), 0);
 	open_with(80);
 	const unsigned top = SCREEN_ROWS - 1 - SETUP_ROWS;
-	const unsigned preview = top + 9; // under Palette (item 7, row top + 8)
+	const unsigned preview = top + 10; // under Palette (item 8, row top + 9)
 	setup_draw(&u, &s, top, "", FG, BG, BORDER);
-	CHECK(row_contains(&s, top + 7, "Colors"));
-	CHECK(row_contains(&s, top + 8, "Palette"));
+	CHECK(row_contains(&s, top + 8, "Colors"));
+	CHECK(row_contains(&s, top + 9, "Palette"));
 	CHECK(row_contains(&s, preview, " Text Bold  Status "));
 	CHECK(row_contains(&s, preview, "0 1 2 3 4 5 6 7 8 9 A B C D E F"));
 	CHECK(row_contains(&s, preview + 1, "0 1 2 3 4 5 6 7 8 9 A B C D E F"));
@@ -193,7 +204,7 @@ static void test_colors_preview(void) {
 
 	// Colors -> blue and Palette -> mono: the samples keep their indices
 	// (the owner shows the edited palette); the status sample follows.
-	for (unsigned i = 0; i < 6; ++i) {
+	for (unsigned i = 0; i < row_of(offsetof(settings_t, colors)); ++i) {
 		send("\x1b[B", 0);
 	}
 	send("\x1b[D", 0); // white -> blue (wraps)
@@ -490,7 +501,7 @@ static void test_clock_panel_escape(void) {
 static void test_mode_setting(void) {
 	open_with(80);
 	CHECK_EQ(u.values.mode, SETTINGS_MODE_TERMINAL);
-	for (unsigned i = 0; i < offsetof(settings_t, mode); ++i) {
+	for (unsigned i = 0; i < row_of(offsetof(settings_t, mode)); ++i) {
 		send("\x1b[B", 0);
 	}
 	CHECK_EQ(send(" ", 0), SETUP_REDRAW);
@@ -500,7 +511,7 @@ static void test_mode_setting(void) {
 static void test_status_line_setting(void) {
 	open_with(80);
 	CHECK_EQ(u.values.status_line, 1);
-	for (unsigned i = 0; i < offsetof(settings_t, status_line); ++i) {
+	for (unsigned i = 0; i < row_of(offsetof(settings_t, status_line)); ++i) {
 		send("\x1b[B", 0);
 	}
 	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
@@ -516,7 +527,7 @@ static void test_status_line_setting(void) {
 static void test_blank_after_setting(void) {
 	open_with(80);
 	CHECK_EQ(u.values.blank_after, 0);
-	for (unsigned i = 0; i < offsetof(settings_t, blank_after); ++i) {
+	for (unsigned i = 0; i < row_of(offsetof(settings_t, blank_after)); ++i) {
 		send("\x1b[B", 0);
 	}
 	CHECK_EQ(send("\x1b[C", 0), SETUP_REDRAW);
@@ -527,9 +538,41 @@ static void test_blank_after_setting(void) {
 	static screen_t scr;
 	screen_init(&scr, 80, FG, BG);
 	setup_draw(&u, &scr, 0, "", FG, BG, BORDER);
-	unsigned r = 1 + offsetof(settings_t, blank_after) + 2; // the preview rows come before it
+	unsigned r = 1 + row_of(offsetof(settings_t, blank_after)) + 2; // the preview rows come before it
 	CHECK(row_contains(&scr, r, "> Blank after"));
 	CHECK(row_contains(&scr, r, "< 60 min >"));
+}
+
+// Flow control, under Data/parity/stop: none, RTS/CTS, XON/XOFF; a board
+// without CTS/RTS pins is not offered RTS/CTS (dmt.27).
+static void test_flow_control_row(void) {
+	static screen_t s;
+	screen_init(&s, 80, FG, BG);
+	const unsigned row = row_of(offsetof(settings_t, flow));
+	CHECK_EQ(row, row_of(offsetof(settings_t, framing)) + 1);
+	open_with(80);
+	CHECK_EQ(u.values.flow, SETTINGS_FLOW_NONE);
+	u.item = row;
+	send(" ", 0);
+	CHECK_EQ(u.values.flow, SETTINGS_FLOW_RTSCTS);
+	send(" ", 0);
+	CHECK_EQ(u.values.flow, SETTINGS_FLOW_XONXOFF);
+	send(" ", 0);
+	CHECK_EQ(u.values.flow, SETTINGS_FLOW_NONE);
+
+	open_with(80);
+	u.no_rtscts = true;
+	u.item = row;
+	send("\x1b[C", 0);
+	CHECK_EQ(u.values.flow, SETTINGS_FLOW_XONXOFF); // past RTS/CTS
+	send("\x1b[C", 0);
+	CHECK_EQ(u.values.flow, SETTINGS_FLOW_NONE);
+	send("\x1b[D", 0);
+	CHECK_EQ(u.values.flow, SETTINGS_FLOW_XONXOFF);
+	setup_draw(&u, &s, 0, "", FG, BG, BORDER);
+	CHECK(row_contains(&s, 1 + row, "> Flow control"));
+	CHECK(row_contains(&s, 1 + row, " none   XON/XOFF "));
+	CHECK(!row_contains(&s, 1 + row, "RTS/CTS"));
 }
 
 // The ADM-3A is 80 columns only: Columns shows 80 and what fixes it, is
@@ -543,7 +586,7 @@ static void test_columns_fixed_by_adm3a(void) {
 	v.term_type = SETTINGS_TERM_ADM3A;
 	setup_open(&u, &v);
 	CHECK_EQ(u.item, 1); // not on Columns
-	const unsigned type = offsetof(settings_t, term_type);
+	const unsigned type = row_of(offsetof(settings_t, term_type));
 	for (unsigned i = 0; i < 2 * SETUP_ITEMS; ++i) {
 		send("\x1b[B", 0);
 		CHECK(u.item != 0);
@@ -639,6 +682,7 @@ int main(void) {
 	RUN(test_draw_marks_current_choice);
 	RUN(test_box_and_selection);
 	RUN(test_columns_fixed_by_adm3a);
+	RUN(test_flow_control_row);
 	RUN(test_colors_preview);
 	RUN(test_machine_menu_key);
 	RUN(test_demo_key);

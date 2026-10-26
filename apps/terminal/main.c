@@ -3,8 +3,8 @@
 // Core 1 renders the screen over DVI (video.c). Core 0 receives UART0 into
 // a ring buffer (serial.c), feeds it to the VT100 emulator (term.c) that
 // owns rows 0-23, queues its replies back on UART0 TX, and rasterizes changed
-// lines; row 24 is a status line. With -DSERIAL_FLOW_CONTROL=ON, UART0 uses
-// RTS/CTS on GP3/GP2. A USB keyboard on the native USB port (usbkbd.c) types to the host through
+// lines; row 24 is a status line. The Flow control setting picks RTS/CTS
+// (the board's pins) or XON/XOFF. A USB keyboard on the native USB port (usbkbd.c) types to the host through
 // UART0 TX.
 //
 // At power-on/reset, with STARTUP_LOGO (the default), the logo (splash.h)
@@ -130,6 +130,8 @@ static void apply_line(const settings_t *s) {
 	char parity;
 	settings_framing(s, &data_bits, &parity, &stop_bits);
 	serial_configure(settings_baud_rate(s), data_bits, parity, stop_bits);
+	serial_set_flow(s->flow == SETTINGS_FLOW_RTSCTS ? SERIAL_FLOW_RTSCTS
+		: s->flow == SETTINGS_FLOW_XONXOFF ? SERIAL_FLOW_XONXOFF : SERIAL_FLOW_NONE);
 }
 
 // Use settings s: the line, the modes RIS resets to (also set now) and the
@@ -265,7 +267,7 @@ int main(void) {
 	// Diagnostic builds write to UART0 with blocking calls, which a CTS that
 	// is unwired or held off would block forever: RTS only there.
 	serial_init(BOARD_UART_INST, settings_baud_rate(&settings), BOARD_UART_TX_PIN, BOARD_UART_RX_PIN,
-#if SERIAL_FLOW_CONTROL
+#if BOARD_HAS_RTSCTS
 		VIDEO_DIAG ? SERIAL_NO_PIN : BOARD_UART_CTS_PIN, BOARD_UART_RTS_PIN);
 #else
 		SERIAL_NO_PIN, SERIAL_NO_PIN);
@@ -341,11 +343,16 @@ int main(void) {
 		usbkbd_set_reset_key(reset_key);
 		monitor_start(&cpm_monitor, true, to_ms_since_boot(get_absolute_time()));
 	} else {
-#if SERIAL_FLOW_CONTROL
-		term_puts(&term, BOARD_UART_PINS_TEXT BOARD_UART_FLOW_TEXT "\r\n\r\n");
-#else
-		term_puts(&term, BOARD_UART_PINS_TEXT "\r\n\r\n");
+		term_puts(&term, BOARD_UART_PINS_TEXT);
+#if BOARD_HAS_RTSCTS
+		if (serial_flow() == SERIAL_FLOW_RTSCTS) {
+			term_puts(&term, BOARD_UART_FLOW_TEXT);
+		}
 #endif
+		if (serial_flow() == SERIAL_FLOW_XONXOFF) {
+			term_puts(&term, ", XON/XOFF");
+		}
+		term_puts(&term, "\r\n\r\n");
 		if (pending) {
 			term_write(&term, buf, pending);
 		}

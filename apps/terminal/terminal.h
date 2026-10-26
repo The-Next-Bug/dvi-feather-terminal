@@ -33,10 +33,6 @@
 #include "setup.h"
 #include "term.h"
 
-#ifndef SERIAL_FLOW_CONTROL
-#define SERIAL_FLOW_CONTROL 0
-#endif
-
 #define TERM_ROWS (SCREEN_ROWS - 1)
 #define STATUS_ROW (SCREEN_ROWS - 1)
 #define STATUS_INTERVAL_MS 250

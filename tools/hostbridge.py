@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run a program with the DVI terminal as its display, typing on this PC.
 
-Usage: tools/hostbridge.py [--baud N] [--cols N] [--term NAME] [--rtscts] SERIAL_PORT [COMMAND ...]
+Usage: tools/hostbridge.py [--baud N] [--cols N] [--term NAME] [--rtscts | --xonxoff] SERIAL_PORT [COMMAND ...]
 
 COMMAND (default: $SHELL) runs on a pseudo-terminal with TERM=xterm-color
 (8 colors, and nothing the terminal lacks; plain vt100 has no color, so
@@ -20,8 +20,12 @@ This is how to try vttest, vim, top and friends on the terminal from a PC
 with `stty cols 132` (or start with --cols 132).
 
 With --rtscts the serial port uses RTS/CTS flow control (wire the adapter's
-RTS to the terminal's CTS, GP2, and its CTS to the terminal's RTS,
-GP3), so bulk output never overruns the terminal.
+RTS to the terminal's CTS, GP2 on the Pico 2, and its CTS to the terminal's
+RTS, GP3), so bulk output never overruns the terminal; with --xonxoff it
+stops on the terminal's XOFF (^S) and goes on at XON (^Q) instead, and
+sends them itself when its own input fills (then ^S and ^Q typed on the
+terminal never reach the program). Either way, set the terminal's Flow
+control (SET-UP) to the same.
 
 Only the Python standard library is needed.
 """
@@ -46,7 +50,7 @@ BAUDS = {n: getattr(termios, f"B{n}") for n in
          if hasattr(termios, f"B{n}")}
 
 
-def open_serial(path, baud, rtscts):
+def open_serial(path, baud, rtscts, xonxoff):
     fd = os.open(path, os.O_RDWR | os.O_NOCTTY)
     tty.setraw(fd)
     attrs = termios.tcgetattr(fd)
@@ -55,6 +59,9 @@ def open_serial(path, baud, rtscts):
         attrs[2] |= termios.CRTSCTS
     else:
         attrs[2] &= ~termios.CRTSCTS
+    if xonxoff:
+        attrs[0] |= termios.IXON | termios.IXOFF  # iflag
+        attrs[0] &= ~termios.IXANY
     attrs[4] = attrs[5] = BAUDS[baud]           # ispeed, ospeed
     termios.tcsetattr(fd, termios.TCSANOW, attrs)
     return fd
@@ -66,14 +73,17 @@ def main():
     ap.add_argument("--cols", type=int, default=80, choices=(80, 132))
     ap.add_argument("--term", default="xterm-color",
                     help="TERM for the program (default: xterm-color; vt100 for no color)")
-    ap.add_argument("--rtscts", action="store_true",
-                    help="use RTS/CTS flow control on the serial port")
+    flow = ap.add_mutually_exclusive_group()
+    flow.add_argument("--rtscts", action="store_true",
+                      help="use RTS/CTS flow control on the serial port")
+    flow.add_argument("--xonxoff", action="store_true",
+                      help="use XON/XOFF flow control on the serial port")
     ap.add_argument("port")
     ap.add_argument("command", nargs=argparse.REMAINDER)
     args = ap.parse_args()
     command = args.command or [os.environ.get("SHELL", "/bin/sh")]
 
-    serial = open_serial(args.port, args.baud, args.rtscts)
+    serial = open_serial(args.port, args.baud, args.rtscts, args.xonxoff)
     pid, master = pty.fork()
     if pid == 0:
         os.environ["TERM"] = args.term

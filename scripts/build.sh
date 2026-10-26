@@ -9,7 +9,6 @@
 #   BUILD_DIR       output root; the build lands in BUILD_DIR/TARGET (default: build)
 #   BUILD_TYPE      CMake build type (default: Release)
 #   TOOLCHAIN_DIR   toolchain location (default: <repo>/.toolchain)
-#   SERIAL_FLOW_CONTROL  ON for RTS/CTS on UART0 (default: OFF; see README)
 #   CMAKE_ARGS      extra arguments for the CMake configure step
 #   SDCARD          a mounted SD card: FIRMWARE.UF2 is copied to its root, for
 #                   the CP/M monitor's U (update the firmware from the card)
@@ -21,7 +20,6 @@ cd "$ROOT"
 TARGET="${TARGET:-pico2-dvi-sock}"
 BUILD_DIR="${BUILD_DIR:-build}"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
-SERIAL_FLOW_CONTROL="${SERIAL_FLOW_CONTROL:-OFF}"
 TOOLCHAIN_DIR="${TOOLCHAIN_DIR:-$ROOT/.toolchain}"
 
 # Targets: one per board header, boards/<TARGET>.h (pins, flash, crystal;
@@ -67,7 +65,6 @@ mkdir -p "$out"
   -DPICO_BOARD="$pico_board" \
   -DPICO_TOOLCHAIN_PATH="$TOOLCHAIN_DIR/arm-none-eabi" \
   -Dpicotool_DIR="$TOOLCHAIN_DIR/picotool/picotool" \
-  -DSERIAL_FLOW_CONTROL="$SERIAL_FLOW_CONTROL" \
   ${CMAKE_ARGS:-} \
   | tee "$out/configure.log"
 "$cmake" --build "$out" --parallel "$(nproc)" 2>&1 | tee "$out/compile.log"
@@ -79,7 +76,6 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
   echo "experimental=$experimental"
   echo "hstx_mode=$(sed -n 's/^HSTX_MODE_USED:INTERNAL=//p' "$out/CMakeCache.txt")"
   echo "build_type=$BUILD_TYPE"
-  echo "serial_flow_control=$SERIAL_FLOW_CONTROL"
   echo "machine_banks=$(sed -n 's/^MACHINE_BANKS:STRING=//p' "$out/CMakeCache.txt")"
   # TinyUSB workarounds kept (ON) or built out for testing (bd nxv)
   echo "usb_workarounds=$(for o in DEINIT DATASEQ POLL_PAUSE CONTROL_WAIT; do

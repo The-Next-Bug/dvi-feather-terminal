@@ -57,6 +57,7 @@ unit_test(splash dvt_render)
 unit_test(clock dvt_clock)
 unit_test(ay dvt_sound)
 unit_test(rtc dvt_rtc_chips)
+unit_test(xonxoff dvt_common)
 unit_test(uf2 dvt_settings)
 # Also checks the firmware build/pico2-dvi-sock made, if there is one.
 target_compile_definitions(test_uf2 PRIVATE

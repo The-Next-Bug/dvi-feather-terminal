@@ -15,6 +15,7 @@
 #include "keyname.h"
 #include "palette.h"
 #include "rtc.h"
+#include "serial.h"
 #include "term_build.h"
 #include "terminal.h"
 #include "usbkbd.h"
@@ -327,7 +328,8 @@ void draw_status(const status_t *st) {
 	char text[SCREEN_MAX_COLS + 1];
 	snprintf(text, sizeof text, " %s %ux24 | %s | %u %u%c%u%s%s%s%s%s%s",
 		st->type, screen.cols, TERM_BUILD_ID, settings_baud_rate(&st->settings), data_bits, parity, stop_bits,
-		SERIAL_FLOW_CONTROL ? " RTS/CTS" : "", st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "", st->usb,
+		serial_flow() == SERIAL_FLOW_RTSCTS ? " RTS/CTS" : serial_flow() == SERIAL_FLOW_XONXOFF ? " XON/XOFF" : "",
+		st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "", st->usb,
 		st->settings.local_echo ? " | echo" : "", key);
 	put_status_text(text);
 }
