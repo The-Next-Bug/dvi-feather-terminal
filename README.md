@@ -646,7 +646,8 @@ between them:
 
 - **Pattern**: the arrows move; the keys `Z S X D C V G B H N J M` play
   and enter a note in the octave shown (`[` `]` change it), `Q 2 W 3 E R 5
-  T 6 Y 7 U` the next octave up, with the instrument shown; `=` is a note
+  T 6 Y 7 U` the next octave up (the table under the instruments shows
+  which key plays which note), with the instrument shown; `=` is a note
   off, `.` or Delete clears; in the instrument column `0`-`7`. `^N` and
   `^P` show the next or previous pattern.
 - **Orders**: Up/Down select (and show) an entry, `0`-`F` sets its

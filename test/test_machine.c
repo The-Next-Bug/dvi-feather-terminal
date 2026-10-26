@@ -2573,6 +2573,9 @@ static void test_aytrack_tool(void) {
 	TROW_HAS(2, " 00 0");                          // the order list
 	TROW_HAS(2, ">0 FEDCBBAAA9998888 T  00");      // instrument 0
 	TROW_HAS(6, " 4 A631000000000000 N  01");      // the hi-hat
+	TROW_HAS(12, "C  C# D  D# E  F  F# G  G# A  A# B"); // the keys' notes
+	TROW_HAS(13, "Z  S  X  D  C  V  G  B  H  N  J  M");
+	TROW_HAS(14, "Q  2  W  3  E  R  5  T  6  Y  7  U");
 
 	clear_screen();
 	CHECK(type("zcb"));

@@ -11,7 +11,7 @@
 ;	looping, while the editing goes on; ^S saves NAME.AYT, ^E writes
 ;	NAME.PSG for AYPLAY, ^Q quits. Tab moves between the pattern, the
 ;	order list and the instruments. The help lines at the bottom list
-;	the keys.
+;	the keys, a table under the instruments which key plays which note.
 ;
 ;	NAME.AYT: the SONG area as it is in memory (26 records): "AYT1",
 ;	the speed, the order list's length, 64 orders, 8 instruments of 18
@@ -1895,8 +1895,12 @@ DEFINS:	DB	15,14,13,12,11,11,10,10,10,9,9,9,8,8,8,8,1,0	;0 lead
 HEADS:	DB	2,2,'Row  A      B      C',0
 	DB	2,38,'Ord',0
 	DB	2,46,'#  Volumes          Md Ns',0
-	DB	22,2,'Notes Z S X D C V G B H N J M (octave), Q 2 W 3 E R 5 T 6 Y 7 U (+1)',0
-	DB	23,2,'= off  . clear  0-7 instrument  [ ] octave  < > speed  ^N ^P pattern',0
+	DB	12,44,'Keys to notes: the octave, then +1',0
+	DB	13,44,'C  C# D  D# E  F  F# G  G# A  A# B',0
+	DB	14,44,'Z  S  X  D  C  V  G  B  H  N  J  M',0
+	DB	15,44,'Q  2  W  3  E  R  5  T  6  Y  7  U',0
+	DB	22,2,'Notes: keys as in the table above right  = off  . clear  0-7 instrument',0
+	DB	23,2,'[ ] octave  < > speed  ^N ^P pattern',0
 	DB	24,2,'Tab panel  Space song  Return pattern  ^S save  ^E export .PSG  ^Q quit',0
 	DB	21,2,'Orders: 0-F its pattern, I insert, X delete   Instruments: 0-F a value',0
 	DB	0
