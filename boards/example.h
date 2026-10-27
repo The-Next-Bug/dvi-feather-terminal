@@ -89,8 +89,9 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 // GP20-27 UART1, ...), as n % 4 = 0 TX, 1 RX, 2 CTS, 3 RTS; n % 4 = 2 and
 // 3 can also be TX and RX (the auxiliary function).
 //
-// CTS (in) and RTS (out) are used by SERIAL_FLOW_CONTROL builds only; leave
-// them out if the board has no handshake lines.
+// CTS (in) and RTS (out) are used only when the Flow control setting is
+// RTS/CTS; leave them out if the board has no handshake lines (SET-UP then
+// offers only XON/XOFF).
 #define BOARD_UART 0
 #define BOARD_UART_TX_PIN 0
 #define BOARD_UART_RX_PIN 1

@@ -14,8 +14,8 @@
 // GP24 the SD card detect, GP28 the battery voltage (ADC2). GP4/5 and
 // GP25-27 are not routed.
 //
-// No SERIAL_FLOW_CONTROL: UART0's CTS/RTS pins (GP2/3) carry the charger
-// status, and the header has only TX/RX.
+// No RTS/CTS (Flow control: XON/XOFF only): UART0's CTS/RTS pins (GP2/3)
+// carry the charger status, and the header has only TX/RX.
 //
 // Flashing: the USB-C socket is power only and the USB-A port is a host
 // port, so the first image goes in over SWD (header J1 pins 1/2); later ones

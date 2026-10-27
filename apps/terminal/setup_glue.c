@@ -241,6 +241,7 @@ void setup_enter(bool from_host) {
 	current.newline = cpm.on ? settings.newline : term.newline_mode;
 	setup_open(&setup.ui, &current);
 	setup.ui.machine_menu = cpm.on;
+	setup.ui.no_rtscts = !BOARD_HAS_RTSCTS;
 	setup.bell_heard = current.bell;
 	setup.sound_heard = current.sound_level;
 	setup.stereo_heard = current.sound_stereo;

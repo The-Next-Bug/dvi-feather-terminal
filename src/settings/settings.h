@@ -50,6 +50,7 @@ typedef struct {
 	uint8_t sound_level;   // 0 (off) to SETTINGS_SOUND_MAX: the AY-3-8910's level (audio.c)
 	uint8_t sound_dac;     // 1: the board's DAC is fitted; 0: no sound at all, no AY on the ports
 	uint8_t sound_stereo;  // SETTINGS_STEREO_*: the AY's channels left and right (bd 1ls.18.9)
+	uint8_t flow;          // SETTINGS_FLOW_*: flow control on the serial line (bd dmt.27)
 } settings_t;
 
 #define SETTINGS_MODE_TERMINAL 0 // a serial terminal on UART0
@@ -87,15 +88,22 @@ typedef struct {
 #define SETTINGS_STEREO_ABC 1 // A left, B center, C right
 #define SETTINGS_STEREO_ACB 2 // A left, C center, B right
 
+// Flow control on the terminal UART (serial.c). RTS/CTS needs the board's
+// CTS and RTS pins (SET-UP does not offer it without them); XON/XOFF takes
+// ^Q and ^S out of the received bytes.
+#define SETTINGS_FLOW_NONE 0
+#define SETTINGS_FLOW_RTSCTS 1
+#define SETTINGS_FLOW_XONXOFF 2
+
 #define SETTINGS_USB_LOG_OFF 0
 #define SETTINGS_USB_LOG_SD 1 // appended to the SD card's USBLOG.TXT (apps/terminal/usblog_glue.c)
 
 // The settings, in settings_t order, with the values each can take (the
 // first choice need not be the default), their names and the SET-UP page
-// they are on: SET-UP's own rows (SETTINGS_MAIN_FIELDS of them, in this
-// order: settings_main_field) or its Clock panel (clockpanel.h).
-#define SETTINGS_FIELDS 20
-#define SETTINGS_MAIN_FIELDS 13
+// they are on: SET-UP's own rows (SETTINGS_MAIN_FIELDS of them, in
+// settings_main_field's order) or its Clock panel (clockpanel.h).
+#define SETTINGS_FIELDS 21
+#define SETTINGS_MAIN_FIELDS 14
 #define SETTINGS_MAX_CHOICES 11
 
 #define SETTINGS_PAGE_MAIN 0
@@ -111,7 +119,8 @@ typedef struct {
 
 extern const settings_field_t settings_fields[SETTINGS_FIELDS];
 
-// The field shown on SET-UP's row (< SETTINGS_MAIN_FIELDS).
+// The field shown on SET-UP's row (< SETTINGS_MAIN_FIELDS): the main
+// page's fields in their order, but Flow control under Data/parity/stop.
 unsigned settings_main_field(unsigned row);
 
 // A field's value in s (i < SETTINGS_FIELDS).

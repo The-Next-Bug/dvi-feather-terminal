@@ -69,7 +69,7 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 #define BOARD_UART 1
 #define BOARD_UART_TX_PIN 20
 #define BOARD_UART_RX_PIN 21
-#define BOARD_UART_CTS_PIN 22 // SERIAL_FLOW_CONTROL builds
+#define BOARD_UART_CTS_PIN 22 // used with the Flow control setting's RTS/CTS
 #define BOARD_UART_RTS_PIN 23
 
 #define PICO_DEFAULT_UART BOARD_UART

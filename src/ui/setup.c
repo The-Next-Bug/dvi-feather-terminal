@@ -25,13 +25,21 @@ static unsigned choice_index(settings_t *v, unsigned f) {
 	return 0;
 }
 
+// Whether field f's choice c is offered on this board.
+static bool offered(const setup_t *u, unsigned f, unsigned c) {
+	return !(u->no_rtscts && f == offsetof(settings_t, flow) && settings_fields[f].values[c] == SETTINGS_FLOW_RTSCTS);
+}
+
 static void change(setup_t *u, int step) {
 	unsigned f = settings_main_field(u->item);
 	if (settings_field_fixed(&u->values, f)) {
 		return;
 	}
 	const settings_field_t *it = &settings_fields[f];
-	unsigned i = (choice_index(&u->values, f) + it->n_choices + (unsigned)step) % it->n_choices;
+	unsigned i = choice_index(&u->values, f);
+	do {
+		i = (i + it->n_choices + (unsigned)step) % it->n_choices;
+	} while (!offered(u, f, i));
 	*settings_field(&u->values, f) = it->values[i];
 }
 
@@ -188,7 +196,10 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 
 	settings_t values = u->values;
 	// The preview goes under the last color setting.
-	const unsigned preview_after = offsetof(settings_t, palette);
+	unsigned preview_after = 0;
+	while (settings_main_field(preview_after) != offsetof(settings_t, palette)) {
+		++preview_after;
+	}
 	unsigned row = top;
 	for (unsigned i = 0; i < SETUP_ITEMS; ++i) {
 		unsigned f = settings_main_field(i);
@@ -223,8 +234,11 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 			screen_puts(s, col + 1, row, text, bg, fg);
 			continue;
 		}
-		// Every choice, the current one reversed.
+		// Every choice offered, the current one reversed.
 		for (unsigned c = 0; c < it->n_choices; ++c) {
+			if (!offered(u, f, c)) {
+				continue;
+			}
 			snprintf(text, sizeof text, " %s ", it->labels[c]);
 			bool on = c == current;
 			screen_puts(s, col, row, text, on ? bg : fg, on ? fg : bg);

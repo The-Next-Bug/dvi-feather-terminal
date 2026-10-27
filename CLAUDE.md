@@ -66,7 +66,7 @@ CMake or Arm GCC on the dev host. Use the scripts:
 ```bash
 git submodule update --init          # lib/pico-sdk (2.3.1) and lib/tinyusb, not pico-sdk's submodules (lib/z80pack is vendored)
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool, clang-tidy (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, clock, ay (the AY-3-8910's tones, noise, envelopes, levels), rtc (the RTC chip drivers on a fake register bus), sdformat (card formats on a sparse disk), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, clock, ay (the AY-3-8910's tones, noise, envelopes, levels), rtc (the RTC chip drivers on a fake register bus), xonxoff (the XON/XOFF decisions), sdformat (card formats on a sparse disk), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimized, no sanitizers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default; any boards/<target>.h) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
@@ -158,8 +158,9 @@ touches the PSRAM. The Z80 banks in PSRAM work on the user's Feather (bd
 `boards/feather-rp2350-hstx-psram-adalogger.h` (bd 1ls.19): the user's
 Feather (PSRAM fitted) with an Adalogger FeatherWing: the base header
 (and the PSRAM one) plus BOARD_RTC_PCF8523 on I2C1 GP2/3 (the Feather's
-SDA/SCL), so BOARD_UART_CTS/RTS_PIN are #undef'd (no SERIAL_FLOW_CONTROL:
-test_board.sh asks the preprocessor which boards lack CTS); the
+SDA/SCL), so BOARD_UART_CTS/RTS_PIN are #undef'd (BOARD_HAS_RTSCTS 0: no
+RTS/CTS in SET-UP; test_board.sh asks the preprocessor which boards lack
+CTS and checks BOARD_HAS_RTSCTS against it); the
 pico_board_cmake_set lines restated (and PSRAM_BANKS). No 1 Hz pin: the
 FeatherWing's INT/SQW pad is not wired. Brought up on the user's Feather
 (bd 1ls.19.6); CI builds both.
@@ -177,9 +178,9 @@ experimental=yes into build-info.txt, which package.sh skips; CMake finds
 them through PICO_BOARD_HEADER_DIRS and warns; test_board.sh checks them.
 
 The USB host (keyboards, sticks) is always built in (USB_KEYBOARD=OFF
-was removed: bd s0i). Build options (CMake; `scripts/build.sh` passes `SERIAL_FLOW_CONTROL` from
-the environment, other options via `CMAKE_ARGS`):
-`SERIAL_FLOW_CONTROL` (RTS/CTS on the board's CTS/RTS pins, GP2/GP3 on the Sock, default OFF), `STARTUP_LOGO`
+was removed: bd s0i), and flow control is a setting (bd dmt.27: the
+SERIAL_FLOW_CONTROL option is gone). Build options (CMake; `scripts/build.sh`
+passes them via `CMAKE_ARGS`): `STARTUP_LOGO`
 (default ON; image from `LOGO_IMAGE`, shown `LOGO_MS`, default 10000: monitors
 need seconds to sync), `LOGO_IN_FLASH` (default ON, experimental dmt.25: logo data in a
 `.flashdata` section read via XIP after `nvflash_retime()`; frees ~19 KB of
@@ -189,7 +190,11 @@ panic() text),
 `COPY_TO_RAM` (default ON; must stay ON, see below), `MACHINE_BANKS` (Z80
 machine: 48 KB banks besides bank 0, default 2; each costs 48 KB of SRAM).
 TinyUSB workaround switches (bd nxv; default OFF since 2026-10-25 = rely
-on the fork's fixes; ON builds ours back in; dvt_usb only, usbkbd.c): USB_WA_DEINIT
+on the fork's fixes; ON builds ours back in; dvt_usb only, usbkbd.c;
+USB_WA_POLL_PAUSE defaults to ON again since 2026-10-26, bd 008: without
+it a stick read during a firmware update came back stale, badcsw and
+"blocks out of order"; the cache entry follows each switch's default via
+its help text): USB_WA_DEINIT
 (--wrap=rp2usb_deinit, remove-before-deinit in usbkbd_reset; #4310),
 USB_WA_DATASEQ (INTE mask in host_start, usbkbd_data_seq_error's raw INTR
 check + restart, which then returns false; #4312), USB_WA_POLL_PAUSE
@@ -232,7 +237,7 @@ dvt_compile_options (THIRD_PARTY: not the warnings); dvt_rebuild builds
 libraries' sources into another target (test_cpu's -O2 copies). The
 firmware's options reach libraries from the top CMakeLists
 (FONT_FLASH, LOGO_IN_FLASH, DISKIMG_IN_FLASH, MACHINE_BANKS on
-dvt_z80pack, SERIAL_FLOW_CONTROL on dvt_board, VIDEO_DIAG on
+dvt_z80pack, VIDEO_DIAG on
 dvt_platform, HSTX_MODE on dvt_video). FatFs is the `fatfs` target
 (lib/fatfs.cmake), linking dvt_storage for disk_* (a cycle CMake repeats
 on the link line; tests add diskio_ram.c to the tests that need it).
@@ -252,7 +257,7 @@ UF2 in the latter).
   since core 1 draws raster[], which only catches up at video_update.
   screen_stash_t (bd qur.16): saved rows as tagged entries in one
   owner-provided buffer (4 bytes a cell at the width then; put back or
-  dropped in any order, wider screens padded): main.c's 13.4 KB stash_buf
+  dropped in any order, wider screens padded): main.c's 14.1 KB stash_buf
   holds the alternate screen's main screen (24 rows x 132) or that plus
   SET-UP's rows at 80 columns; at 132, SET-UP over the alternate screen
   has no room and its rows come back blank.
@@ -363,7 +368,8 @@ UF2 in the latter).
   no Bulk-Only reset, the stick stays stuck. Workarounds for TinyUSB
   master on the RP2350, all in our code (bd xv0, upstream report bd 5bc;
   since 2026-10-25 built only with their USB_WA_* switch ON, as the fork
-  has the fixes; the INT_EP_CTRL pause, control_wait, the data-seq mask
+  has the fixes, except the INT_EP_CTRL pause, ON by default again (bd
+  008); the INT_EP_CTRL pause, control_wait, the data-seq mask
   and the deinit wrap below; CFG_TUH_ENUM_ATTEMPT_MAX, the watchdog and
   the stick checks stay):
   tuh_deinit frees hcd_rp2040's spin lock (rp2usb_deinit) before removing
@@ -435,10 +441,14 @@ UF2 in the latter).
   default; 0: audio.c gives the PIO, DMA, IRQ and pins back, the AY's ports
   read 0xFF), sound_stereo (field 19, SETTINGS_STEREO_* = AY_STEREO_*: mono
   default, ABC, ACB; bd 1ls.18.9; audio_set_stereo from apply_settings),
-  all on the panel. SET-UP's rows (SETUP_ITEMS =
-  SETTINGS_MAIN_FIELDS, 13) are the main-page fields in order,
-  settings_main_field(row) -> field (rows 0-11 = fields 0-11, row 12 =
-  usb_log); settings_columns() is 80 for the ADM-3A;
+  all on the panel; flow (field 20, SETTINGS_FLOW_NONE default / _RTSCTS /
+  _XONXOFF, bd dmt.27; main.c apply_line -> serial_set_flow, both modes;
+  setup_t.no_rtscts = !BOARD_HAS_RTSCTS, from setup_glue.c, makes SET-UP
+  skip and hide RTS/CTS). SET-UP's rows (SETUP_ITEMS =
+  SETTINGS_MAIN_FIELDS, 14) are settings.c's main_rows table,
+  settings_main_field(row) -> field: fields 0-4, flow, fields 5-11,
+  usb_log (the preview goes under Palette's row, found by field; tests
+  use test_setup.c's row_of); settings_columns() is 80 for the ADM-3A;
   settings_field_fixed() names what fixes a field, Columns under the
   ADM-3A: SET-UP skips it and shows "80 (ADM-3A)", dmt.39);
   settings_colors() gives the status
@@ -570,8 +580,18 @@ UF2 in the latter).
   columns). ay_write only stores the masked byte
   (a shape write bumps env_writes; ay_render restarts the envelope), so
   the Z80 writing on core 0 under the IRQ is safe; never two cores.
-- `src/platform/serial.[ch]`: UART0 RX ring (IRQ) + TX queue, optional hardware
-  RTS/CTS. `src/ui/demo.[ch]`: opt-in startup demo. `src/platform/diag.[ch]`: VIDEO_DIAG.
+- `src/platform/serial.[ch]`: the terminal UART's RX ring (IRQ) + TX
+  queue, and the Flow control setting at runtime (serial_set_flow, bd
+  dmt.27/68t.1): RTS/CTS = uart_set_hw_flow with the board's pins on
+  GPIO_FUNC_UART (GPIO_FUNC_NULL otherwise: unwired as at power-on; CTS
+  stays off under VIDEO_DIAG, whose blocking writes a held CTS would hang);
+  XON/XOFF = `src/common/xonxoff.[ch]` (portable, test_xonxoff): the IRQ
+  drops ^Q/^S from the data (they stop/restart serial_poll's queue) and
+  asks for XOFF at half the 2 KB ring (again every 256 bytes more), XON at
+  256; the control byte goes ahead of the queue, written by the IRQ or by
+  serial_poll/serial_read with interrupts off (serial_poll's whole FIFO
+  fill is interrupts-off, so the two never collide); leaving XON/XOFF
+  while held sends XON. `src/ui/demo.[ch]`: opt-in startup demo. `src/platform/diag.[ch]`: VIDEO_DIAG.
 - `src/render/logo_gen.py` + `src/render/logo.cmake`: PNG -> run-length encoded 2-bit
   levels (one hue; still <=2 levels per 8-px group, no longer needed).
   `src/render/splash.[ch]` (portable): `splash_check`, and `splash_compose`
@@ -894,7 +914,7 @@ SRAM is the tight resource; peripherals and pins are mostly free.
 sound (bd 1ls.18: dvt_sound, the settings and panel rows; no DAC on the
 Sock, so no audio engine running) to 0x20074840, ~45.9 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
-  60 KB, font_copy 20 KB, screen 13 KB, stash_buf 13.4 KB, line_buf 6.4 KB,
+  60 KB, font_copy 20 KB, screen 13 KB, stash_buf 14.1 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit
   (the PSRAM build has none in SRAM: __end__ 0x20057b88).
 - Flash (4 MB): image 0-0x7e108 (504 KB at v0.6.1; the 4 KB LZ window costs 32 KB;
@@ -912,10 +932,10 @@ Sock, so no audio engine running) to 0x20074840, ~45.9 KB free. Scratch X: core 
   watchdog (reboots only). Free: 14 DMA channels, DMA_IRQ_1-3, all of PIO0-2
   (12 SMs), UART1, SPI1, I2C0/1, PWM, ADC, TIMER1, TRNG, SHA-256, QMI CS1
   (PSRAM; GP8 can carry its select; spike bd g31).
-- GPIO: GP0/1 UART0, GP2/3 CTS/RTS (only with SERIAL_FLOW_CONTROL), GP4-7
-  SD, GP12-19 DVI Sock, GP25 LED (status, src/platform/led.c), GP23/24/29 board
-  internal. Free: GP8-11, GP20-22, GP26-28 (ADC capable), and GP2/3 when
-  flow control is off.
+- GPIO: GP0/1 UART0, GP2/3 CTS/RTS (in use only with Flow control
+  RTS/CTS, but the board header claims them), GP4-7 SD, GP12-19 DVI Sock,
+  GP25 LED (status, src/platform/led.c), GP23/24/29 board internal. Free:
+  GP8-11, GP20-22, GP26-28 (ADC capable).
 
 ### Frankless (TARGET=frankless, PSRAM_BANKS, 2026-10-22: bd 1ls.3.1)
 
@@ -1009,6 +1029,6 @@ Sock, so no audio engine running) to 0x20074840, ~45.9 KB free. Scratch X: core 
   `\n` and `\x1b` escaped (raw strings or a quoted shell heredoc);
   otherwise they turn into raw control bytes in the file. Check with
   `grep -lP '[\x00-\x08\x0b-\x1f]' src/* test/*`.
-- User preferences: flow control off by default; 80 columns at the full
+- User preferences: flow control off by default (Flow control none); 80 columns at the full
   width (10x20) only, the centered 8x16 layout dropped (qur.20); smooth
   scrolling, double-size lines and RP2350 HSTX are deferred nice-to-haves.

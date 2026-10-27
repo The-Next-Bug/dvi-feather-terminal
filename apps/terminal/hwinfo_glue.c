@@ -19,6 +19,7 @@
 #include "nvflash.h"
 #include "rtc.h"
 #include "sdcard.h"
+#include "serial.h"
 #include "terminal.h"
 #include "term_build.h"
 #include "usbkbd.h"
@@ -117,18 +118,26 @@ static size_t serial_record(uint8_t *buf) {
 	return hwinfo_record(buf, HWINFO_ST_PRESENT, "Serial port", text);
 }
 
+// The Flow control setting as the serial line uses it.
 static size_t flow_record(uint8_t *buf) {
-#if !defined(BOARD_UART_CTS_PIN) || !defined(BOARD_UART_RTS_PIN)
-	(void)buf;
-	return 0; // no pins for it
-#elif !SERIAL_FLOW_CONTROL
-	return hwinfo_record(buf, HWINFO_ST_ABSENT, "Flow control", "off (build option SERIAL_FLOW_CONTROL)");
+	switch (serial_flow()) {
+	case SERIAL_FLOW_XONXOFF:
+		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Flow control", "XON/XOFF (SET-UP)");
+	case SERIAL_FLOW_RTSCTS:
+#if !BOARD_HAS_RTSCTS
+		break; // not without the pins
 #elif VIDEO_DIAG
-	return hwinfo_record(buf, HWINFO_ST_PRESENT, "Flow control", "RTS " GP(BOARD_UART_RTS_PIN) " (CTS: VIDEO_DIAG)");
+		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Flow control",
+			"RTS/CTS (SET-UP): RTS " GP(BOARD_UART_RTS_PIN) ", CTS off for VIDEO_DIAG");
 #else
-	return hwinfo_record(buf, HWINFO_ST_PRESENT, "Flow control",
-		"RTS " GP(BOARD_UART_RTS_PIN) " / CTS " GP(BOARD_UART_CTS_PIN));
+		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Flow control",
+			"RTS/CTS (SET-UP): RTS " GP(BOARD_UART_RTS_PIN) " / CTS " GP(BOARD_UART_CTS_PIN));
 #endif
+	case SERIAL_FLOW_NONE:
+		break;
+	}
+	return hwinfo_record(buf, HWINFO_ST_ABSENT, "Flow control", BOARD_HAS_RTSCTS
+		? "off (SET-UP: RTS/CTS or XON/XOFF)" : "off (SET-UP: XON/XOFF; no CTS/RTS pins)");
 }
 
 static size_t sd_record(uint8_t *buf) {

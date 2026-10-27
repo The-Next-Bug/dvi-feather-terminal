@@ -72,9 +72,6 @@
 #if BOARD_UART_OF(BOARD_UART_RX_PIN) != BOARD_UART || BOARD_UART_RX_PIN % 2 != 1
 #error "BOARD_UART_RX_PIN is not an RX pin of BOARD_UART"
 #endif
-#if SERIAL_FLOW_CONTROL && (!defined(BOARD_UART_CTS_PIN) || !defined(BOARD_UART_RTS_PIN))
-#error "SERIAL_FLOW_CONTROL needs BOARD_UART_CTS_PIN and BOARD_UART_RTS_PIN in the board header"
-#endif
 #ifdef BOARD_UART_CTS_PIN
 #if BOARD_UART_OF(BOARD_UART_CTS_PIN) != BOARD_UART || BOARD_UART_CTS_PIN % 4 != 2
 #error "BOARD_UART_CTS_PIN is not a CTS pin of BOARD_UART"
@@ -261,9 +258,13 @@
 	"I2C" BOARD_STR(BOARD_RTC_I2C) ": GP" BOARD_STR(BOARD_RTC_SDA_PIN) " SDA, GP" BOARD_STR(       \
 		BOARD_RTC_SCL_PIN) " SCL"
 #endif
-#ifdef BOARD_UART_RTS_PIN
+// RTS/CTS (the Flow control setting) needs both pins.
+#if defined(BOARD_UART_CTS_PIN) && defined(BOARD_UART_RTS_PIN)
+#define BOARD_HAS_RTSCTS 1
 #define BOARD_UART_FLOW_TEXT                                                                       \
 	", RTS (GP" BOARD_STR(BOARD_UART_RTS_PIN) ") / CTS (GP" BOARD_STR(BOARD_UART_CTS_PIN) ")"
+#else
+#define BOARD_HAS_RTSCTS 0
 #endif
 
 #endif

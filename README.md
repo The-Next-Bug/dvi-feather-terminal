@@ -70,8 +70,6 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
   discarded. A string that is never terminated (an Alt+] typed by
   accident sends `ESC ]`) ends at the next control character, which then
   acts as usual, or after 1024 bytes, as with xterm's brokenStringTerm.
-- Flow control is a build option (RTS/CTS), not a SET-UP setting, and
-  there is no XON/XOFF.
 
 ## Hardware
 
@@ -83,8 +81,8 @@ connector. Everything else is optional:
 | GP0 (pin 1) | UART0 TX, data out | serial adapter RX | terminal |
 | GP1 (pin 2) | UART0 RX, data in | serial adapter TX | terminal |
 | GND | ground | serial adapter GND | terminal |
-| GP3 (pin 5) | RTS out: terminal ready to receive | serial adapter CTS | [flow control](#flow-control) builds only |
-| GP2 (pin 4) | CTS in: host ready to receive | serial adapter RTS | [flow control](#flow-control) builds only |
+| GP3 (pin 5) | RTS out: terminal ready to receive | serial adapter CTS | [RTS/CTS flow control](#flow-control) only |
+| GP2 (pin 4) | CTS in: host ready to receive | serial adapter RTS | [RTS/CTS flow control](#flow-control) only |
 | GP4 (pin 6) | SPI0 MISO | SD card DO | [CP/M machine](#z80-cpm-machine) |
 | GP5 (pin 7) | SD card CS | SD card CS | CP/M machine |
 | GP6 (pin 9) | SPI0 SCK | SD card CLK | CP/M machine |
@@ -114,7 +112,7 @@ setting explained:
   separately, so a pair routed with + and - crossed is fixed by swapping
   its two numbers. Drive strength and slew rate can be raised.
 - **Terminal UART**: which UART, TX and RX, and the CTS/RTS pins for
-  flow control builds.
+  RTS/CTS flow control (without them SET-UP offers only XON/XOFF).
 - **SD card**: which SPI, its MISO/SCK/MOSI, and CS (any GPIO).
 - **USB host**: an optional pin that switches on the port's 5 V.
 - **LED** (optional): off while the screen is on, flashing while the SD
@@ -156,26 +154,40 @@ messages that show pins on screen use the header's pins.
 
 ### Flow control
 
-The default build has no flow control. At 115200 baud the terminal keeps up
-with ordinary output, but a long burst that scrolls the whole screen can
-overrun it (the 4 KB receive buffer fills and characters go missing). To use
-hardware RTS/CTS:
+SET-UP's **Flow control** picks it: `none` (the default), `RTS/CTS` or
+`XON/XOFF`, applied when SET-UP saves, in both modes (in CP/M mode it
+covers the Z80's second serial port). Without it, at 115200 baud the
+terminal keeps up with ordinary output, but a long burst that scrolls the
+whole screen can overrun it (the 2 KB receive buffer fills and characters
+go missing); nor does anything stop the host while SET-UP is open.
 
-1. Wire GP2 and GP3 as in the [table above](#hardware).
-2. Build with flow control on:
-   ```sh
-   SERIAL_FLOW_CONTROL=ON scripts/build.sh
-   ```
-   `scripts/build.sh` passes the setting on every run (default `OFF`), and
-   records it in `build-info.txt`. For a plain CMake build, configure with
-   `-DSERIAL_FLOW_CONTROL=ON`.
+**RTS/CTS** (hardware):
+
+1. Wire the board's CTS and RTS pins (GP2 and GP3 on the Pico 2, as in the
+   [table above](#hardware); the board header names them) to the
+   adapter's RTS and CTS.
+2. Set Flow control to `RTS/CTS` and save.
 3. Enable RTS/CTS on the host side too: `stty -F /dev/ttyUSB0 crtscts`, or
    `tools/hostbridge.py --rtscts ...`.
 
-The status line then shows `RTS/CTS`. Do not enable it without the wires:
-an unconnected CTS only floats on the pin's weak pull, and if it reads as
-"hold" the terminal never sends its replies (device attribute and cursor
-position reports) to the host.
+The terminal drops RTS when its receive buffer is nearly full and raises
+it again once half of it is free; it sends only while CTS is asserted. Do
+not choose it without the wires: an unconnected CTS only floats on the
+pin's weak pull, and if it reads as "hold" the terminal never sends its
+keys or replies (device attribute and cursor position reports) to the
+host. Without RTS/CTS the two pins are left unused. Boards without the
+pins (the Adalogger Feathers: their RTC has GP2/3) do not offer it.
+
+**XON/XOFF** (software, no wires): the terminal sends XOFF (`^S`) when
+its receive buffer is half full (and again every 256 bytes if the host
+keeps sending) and XON (`^Q`) once it has drained to 256 bytes; it stops
+sending when the host sends XOFF and goes on at XON. Those two bytes are
+flow control both ways, so they never reach the screen or the Z80, and a
+program that needs them as data (Emacs and WordStar keys, XMODEM) needs
+another setting. On the host: `stty -F /dev/ttyUSB0 ixon ixoff`, or
+`tools/hostbridge.py --xonxoff ...`.
+
+The status line shows `RTS/CTS` or `XON/XOFF` after the line settings.
 
 ## Getting started
 
@@ -254,8 +266,8 @@ software set up for one of these works on the built-in Z80 too):
 
 Row 24 shows, in terminal mode: the terminal type (`VT100`, `VT52` or
 `ADM-3A`) and the width (`80x24`), the build,
-the baud rate and framing (`115200 8N1`, plus `RTS/CTS` in flow control
-builds), `kbd` while a keyboard is attached, the USB stick (as in CP/M
+the baud rate and framing (`115200 8N1`, plus `RTS/CTS` or `XON/XOFF`
+with [flow control](#flow-control)), `kbd` while a keyboard is attached, the USB stick (as in CP/M
 mode, below), `echo` when local echo is on, and the last key sent to the
 host (`key ESC [A`, `key ^C`, `key DEL`, ...).
 
@@ -282,6 +294,7 @@ shown in reverse video:
 | Local echo | off, on | keys typed are shown on the terminal as well as sent |
 | Baud rate | 300 - 115200 | default 115200 |
 | Data/parity/stop | 8N1, 8E1, 8O1, 8N2, 7E1, 7O1, 7N1, 7N2 | default 8N1 |
+| Flow control | none, RTS/CTS, XON/XOFF | default none; RTS/CTS only on boards with the pins; see [Flow control](#flow-control) |
 | New line (LNM) | off, on | LNM at power-on and after RIS: Return sends CR LF, and LF also returns the cursor. Not used in CP/M mode |
 | Colors | white, green, amber, blue | white: the 16 ANSI colors as on a VGA screen; the others: phosphor shades (below) |
 | Palette | color, mono | mono: every color is a shade of the Colors hue (below) |
@@ -367,7 +380,7 @@ table that turns them into pixels changes.
 It opens from:
 
 - **F12** (or Pause) on a USB keyboard. While it is open, data from the
-  host waits in the receive buffer (with RTS/CTS the host is held off).
+  host waits in the receive buffer (with flow control the host is held off).
 - **`CSI ? 999 ~`** (`ESC [ ? 9 9 9 ~`) from the host, a sequence private to
   this terminal. The bytes the host sends next are taken as keys, so it can
   be driven from a PC: `tools/hostbridge.py` sends it on Ctrl-\ and then
@@ -407,7 +420,7 @@ come back as its input. Ctrl-] quits; Ctrl-\ opens [SET-UP](#set-up).
 ```sh
 tools/hostbridge.py /dev/ttyUSB0 vttest   # or: vim, top, $SHELL ...
 tools/hostbridge.py --cols 132 /dev/ttyUSB0 $SHELL
-# add --rtscts when the terminal is built with flow control
+# add --rtscts or --xonxoff to match the terminal's Flow control
 ```
 
 It sets `TERM=xterm-color` (8 colors); `--term vt100` turns color off,
@@ -685,7 +698,7 @@ CPU              yes      RP2350A at 400 MHz, 4 MB flash, quad reads at 50 MHz
 Z80 memory       yes      64 KB + 2 x 48 KB banks in SRAM
 Video            yes      DVI 800x600 at 60 Hz, 80 x 24 text + status line
 Serial port      yes      UART0 TX GP0 / RX GP1, 115200 8N1 (SIO2)
-Flow control     no       off (build option SERIAL_FLOW_CONTROL)
+Flow control     no       off (SET-UP: RTS/CTS or XON/XOFF)
 SD card          yes      SDHC/SDXC, 29.7 GB; SPI0: GP4 MISO, GP5 CS, GP6 SCK,
                           GP7 MOSI
 USB host         yes      native USB port, 1 keyboard
@@ -1009,7 +1022,7 @@ sources, as `build/test` and `build/<target>` compile them, so run
 and after each target's build.
 
 `scripts/build.sh` takes `TARGET` (a board header in `boards/`, default
-`pico2-dvi-sock`; see [Other boards](#other-boards)), `SERIAL_FLOW_CONTROL`, `CMAKE_ARGS` (extra configure
+`pico2-dvi-sock`; see [Other boards](#other-boards)), `CMAKE_ARGS` (extra configure
 arguments, e.g. `CMAKE_ARGS=-DVIDEO_DIAG=ON`) and `SDCARD` (a mounted card
 to copy `FIRMWARE.UF2` to). It also writes `build/<target>/FIRMWARE.UF2`
 and runs `scripts/check_sram_only.py`, which fails the build if code that
@@ -1035,7 +1048,6 @@ hub); move it on its own, and check the firmware's `__end__`.
 
 | CMake option | Default | |
 |---|---|---|
-| `SERIAL_FLOW_CONTROL` | OFF | RTS/CTS on the board's flow control pins, GP3/GP2 on the Pico 2 (see [Flow control](#flow-control)); `scripts/build.sh` takes it from the environment |
 | `STARTUP_LOGO` | ON | show the startup logo at power-on/reset |
 | `LOGO_IMAGE` | `assets/logo/ColorLogo-576.png` | the logo's PNG (see [Startup logo](#startup-logo)) |
 | `LOGO_MS` | 10000 | how long the logo shows, in ms |
@@ -1129,7 +1141,7 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | Flash (4 MB) | firmware 496 KB; firmware-update staging area (upper 2 MB, used only during an update); settings (2 sectors); the last sector is left blank | about 1.5 MB below 2 MB for the firmware to grow into |
 | Clocks | clk_sys 400 MHz at 1.3 V, HSTX 200 MHz, USB 48 MHz | |
 | Peripherals | HSTX (DVI), 2 DMA channels, UART0, SPI0 (SD card), USB (host), TIMER0, watchdog; with a DAC (Frankless) also a PIO state machine, 2 DMA channels and DMA_IRQ_1 for the sound | 14 DMA channels (12 with a DAC), all three PIO blocks (but a state machine), UART1, SPI1, I2C0/1, PWM, ADC, TIMER1, TRNG, SHA-256, the QMI's second chip select (PSRAM) |
-| GPIO | GP0/1 UART0, GP2/3 RTS/CTS (flow control builds only), GP4-7 SD card, GP12-19 DVI Sock | GP8-11, GP20-22, GP26-28 (GP26-28 can be analog inputs), and GP2/3 without flow control |
+| GPIO | GP0/1 UART0, GP2/3 RTS/CTS (Flow control RTS/CTS only), GP4-7 SD card, GP12-19 DVI Sock | GP8-11, GP20-22, GP26-28 (GP26-28 can be analog inputs); GP2/3 are the board header's CTS/RTS, so keep them free |
 
 ## Project layout
 
@@ -1166,7 +1178,7 @@ has the helpers; `src/CMakeLists.txt` lists the libraries.
 
 | Library | | |
 |---|---|---|
-| `common` | portable | `crc32`, `lz` (LZ4-format decoder), `scratch` (the shared 4 KB buffer) |
+| `common` | portable | `crc32`, `lz` (LZ4-format decoder), `scratch` (the shared 4 KB buffer), `xonxoff` (XON/XOFF flow control's decisions) |
 | `clock` | portable | `datetime` (dates without the C library's `localtime`, FAT timestamps), `wallclock` (the time kept between reads of the RTC) |
 | `rtc` | portable / RP2350 | `rtc_chip.h` (the chip-driver interface, on a register bus), `ds3231` and `pcf8523` (the drivers): portable `dvt_rtc_chips`; `rtc` (the wall clock and the board's RTC on I2C): RP2350 `dvt_rtc` |
 | `screen` | portable | `screen` (cell buffer, saved rows), `palette` (the 256-color palette per Colors/Palette setting), `font.h` (glyph codes) |
@@ -1179,7 +1191,7 @@ has the helpers; `src/CMakeLists.txt` lists the libraries.
 | `disks` | portable | `drives` (disk images on FatFs), `drivecfg.c` (`DRIVES.CFG`, the image list and the drive sets), `diskimg` (the built-in images; `diskimg_gen.py` compresses them), `xfer` (port 10's files: `/XFER`), `usbvol` (which USB stick is `USB:`) |
 | `ui` | portable | `setup` (SET-UP panel), `drivepanel` (SET-UP's Drives panel), `fwpanel` (SET-UP's firmware update), `monitor` (the CP/M machine's monitor), `demo` |
 | `board` | RP2350 | `board.h` (the board header's pins, checked) |
-| `platform` | RP2350 | `serial` (UART with optional RTS/CTS and a TX queue), `led`, `audio` (the sound: I2S to the DAC by PIO and DMA, the bell), `nvflash` (settings sectors, written at the DVI clock), `fwupdate` (firmware update), `extram` (the PSRAM), `diag` (`VIDEO_DIAG`) |
+| `platform` | RP2350 | `serial` (UART with RTS/CTS or XON/XOFF and a TX queue), `led`, `audio` (the sound: I2S to the DAC by PIO and DMA, the bell), `nvflash` (settings sectors, written at the DVI clock), `fwupdate` (firmware update), `extram` (the PSRAM), `diag` (`VIDEO_DIAG`) |
 | `usb` | RP2350 | `usbkbd` (USB keyboards, the USB log, restarting a stuck host), `tusb_config.h` (TinyUSB host) |
 | `storage` | RP2350 | `diskio.c` (FatFs drives: 0 the SD card, 1 a USB stick), `sdcard` (SPI SD card), `usbmsc` (USB sticks) |
 | `video` | RP2350 | `hstx_dvi` (HSTX DVI output), `video` (scanlines on core 1) |

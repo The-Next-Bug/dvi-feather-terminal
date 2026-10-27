@@ -160,7 +160,7 @@ typedef struct {
 #define HWINFO_PSRAM 18        // PSRAM on the QSPI bus
 #define HWINFO_VIDEO 19        // the display
 #define HWINFO_SERIAL 20       // the serial port: UART, pins, line settings
-#define HWINFO_FLOW_CONTROL 21 // RTS/CTS
+#define HWINFO_FLOW_CONTROL 21 // the Flow control setting: RTS/CTS, XON/XOFF or off
 #define HWINFO_SD_CARD 22      // the SD card slot and the card in it
 #define HWINFO_USB_HOST 23     // the USB host port: keyboards, sticks
 #define HWINFO_USB_STICK 24    // the stick in use (USB: to the transfer tools)

@@ -13,6 +13,8 @@ failures=0
 
 # check NAME EXPECT [LINE...]: board.h with the stub pico.h, whose last
 # lines are LINE...; EXPECT is "" to pass, else part of the #error text.
+# $after: lines after board.h (checks on what it derives).
+after=""
 check() {
   local name=$1 expect=$2 out
   shift 2
@@ -26,8 +28,9 @@ check() {
     echo '#define NUM_BANK0_GPIOS 48u'
     echo '#endif'
   } > "$work/pico.h"
+  printf '#include "%s"\n%s\n' "$ROOT/src/board/board.h" "$after" > "$work/test.c"
   if out="$("$CC" -fsyntax-only -I"$work" -I"$ROOT/lib/pico-sdk/src/boards/include" \
-      -x c "$ROOT/src/board/board.h" 2>&1)"; then
+      "$work/test.c" 2>&1)"; then
     [[ -z "$expect" ]] && return
     echo "FAIL $name: built, expected: $expect"
   else
@@ -45,17 +48,20 @@ has_cts() {
     "$CC" -fsyntax-only -I"$ROOT/lib/pico-sdk/src/boards/include" -x c - 2>/dev/null
 }
 
-# A board without CTS/RTS (its pins have another job: the Adalogger's RTC)
-# stops flow control builds at the check.
+# Every board passes; one with CTS/RTS pins offers RTS/CTS (the Flow
+# control setting), one without (their pins have another job: the
+# Adalogger's RTC) does not.
 for board in "$ROOT"/boards/*.h "$ROOT"/boards/experimental/*.h; do
-  for flow in 0 1; do
-    expect=""
-    if [[ $flow == 1 ]] && ! has_cts "$board"; then
-      expect="needs BOARD_UART_CTS_PIN"
-    fi
-    check "$(basename "$board") flow $flow" "$expect" "#define SERIAL_FLOW_CONTROL $flow" "#include \"$board\""
-  done
+  rtscts=0
+  if has_cts "$board"; then
+    rtscts=1
+  fi
+  after="#if BOARD_HAS_RTSCTS != $rtscts
+#error BOARD_HAS_RTSCTS is not $rtscts
+#endif"
+  check "$(basename "$board")" "" "#include \"$board\""
 done
+after=""
 
 # The DVI Sock's pins, to change one or two at a time.
 sock='#include "'"$ROOT"'/boards/pico2-dvi-sock.h"'
@@ -76,8 +82,6 @@ check "RTS on a CTS pin" "not an RTS pin" "$sock" "$(set_pin BOARD_UART_RTS_PIN 
 check "UART 2" "must be 0 or 1" "$sock" "$(set_pin BOARD_UART 2)"
 check "no UART" "must set BOARD_UART" "$sock" "#undef BOARD_UART"
 check "SDK UART differs" "PICO_DEFAULT_UART and its pins differ" "$sock" "$(set_pin PICO_DEFAULT_UART_TX_PIN 16)"
-check "flow control, no CTS" "needs BOARD_UART_CTS_PIN" "$sock" "#undef BOARD_UART_CTS_PIN" \
-  "#define SERIAL_FLOW_CONTROL 1"
 check "no flow control pins" "" "$sock" "#undef BOARD_UART_CTS_PIN" "#undef BOARD_UART_RTS_PIN"
 check "SD on SPI1" "" "$sock" "$(set_pin BOARD_SD_SPI 1)" "$(set_pin BOARD_SD_MISO_PIN 8)" \
   "$(set_pin BOARD_SD_CS_PIN 9)" "$(set_pin BOARD_SD_SCK_PIN 10)" "$(set_pin BOARD_SD_MOSI_PIN 11)"
