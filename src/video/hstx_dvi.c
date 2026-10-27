@@ -201,6 +201,18 @@ void hstx_dvi_init(void) {
 	setup_dma();
 }
 
+// Connect the HSTX to the pins, or leave them undriven (pads' output
+// disable): to the monitor, as if the cable were pulled.
+static void __not_in_flash_func(pins_connect)(bool on) {
+	for (uint gpio = BOARD_HSTX_FIRST_PIN; gpio < BOARD_HSTX_FIRST_PIN + 8; ++gpio) {
+		if (on) {
+			hw_clear_bits(&pads_bank0_hw->io[gpio], PADS_BANK0_GPIO0_OD_BITS);
+		} else {
+			hw_set_bits(&pads_bank0_hw->io[gpio], PADS_BANK0_GPIO0_OD_BITS);
+		}
+	}
+}
+
 void hstx_dvi_start(hstx_line_fn fn) {
 	line_fn = fn;
 	// The DMA feeds the HSTX FIFO; it must not wait behind the cores.
@@ -232,8 +244,11 @@ void __not_in_flash_func(hstx_dvi_stop)(void) {
 	while (!(hstx_fifo_hw->stat & HSTX_FIFO_STAT_EMPTY_BITS) && time_us_64() < until) {
 		tight_loop_contents();
 	}
-	// No clock on the clock lane: the monitor sees no signal.
+	// No clock on the clock lane, and the pins undriven: the monitor sees
+	// no signal, as with the cable pulled, rather than a stopped HSTX's
+	// steady levels for as long as the screen sleeps (bd cpx.5).
 	hstx_ctrl_hw->csr = 0;
+	pins_connect(false);
 }
 
 void __not_in_flash_func(hstx_dvi_resume)(void) {
@@ -243,6 +258,15 @@ void __not_in_flash_func(hstx_dvi_resume)(void) {
 	irq_clear(DMA_IRQ_0);
 	irq_set_enabled(DMA_IRQ_0, true);
 	dma_channel_start(dma_ch[0]);
+	// The pins once the HSTX sends whole lines, so the monitor never sees a
+	// signal starting mid-line (as pico_hdmi's resync: bd cpx.5). The
+	// interrupt, on this core, moves `line` on as each one is queued (a
+	// line is ~25 us; 1 ms at most, so a stalled DMA cannot hang core 1).
+	uint64_t until = time_us_64() + 1000;
+	while (*(volatile uint *)&line < 4 && time_us_64() < until) {
+		tight_loop_contents();
+	}
+	pins_connect(true);
 }
 
 uint32_t hstx_dvi_frame_us(void) {
