@@ -10,6 +10,7 @@
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
 #include "hardware/irq.h"
+#include "hardware/pll.h"
 #include "hardware/structs/bus_ctrl.h"
 #include "hardware/structs/hstx_ctrl.h"
 #include "hardware/structs/hstx_fifo.h"
@@ -20,16 +21,33 @@ hstx_timing_t hstx_timing =
 #if HSTX_MODE == 0
 	// What libdvi's dvi_timing_800x600p_60hz sends (and monitors took from
 	// PicoDVI): VESA's except a 44-pixel front porch and negative syncs.
-	{ 44, 128, 88, 800, 1, 4, 23, 600, false, false, 400000 };
+	{ 44, 128, 88, 800, 1, 4, 23, 600, false, false, 400000, 400000 };
 #elif HSTX_MODE == 1
 	// VESA 800x600 56 Hz, 36 MHz.
-	{ 24, 72, 128, 800, 1, 2, 22, 600, true, true, 360000 };
+	{ 24, 72, 128, 800, 1, 2, 22, 600, true, true, 360000, 360000 };
 #elif HSTX_MODE == 2
 	// CVT reduced blanking 800x600 60 Hz (+hsync, -vsync), 35.5 MHz
 	// nominally; 35.4 MHz is the nearest clk_sys / 10 the PLL makes.
-	{ 48, 32, 80, 800, 3, 4, 11, 600, true, false, 354000 };
+	{ 48, 32, 80, 800, 3, 4, 11, 600, true, false, 354000, 354000 };
+#elif HSTX_MODE == 3
+	// CVT reduced blanking 1024x600 60 Hz (+hsync, -vsync; 10 lines of
+	// vsync: no standard aspect ratio): 1184 x 619 at 44 MHz, 60.03 Hz.
+	// The panels' own 1344 x 635 at 51.2 MHz (clk_hstx 256 MHz) gave a
+	// desktop monitor static, and at clk_sys 512 MHz the Frankless showed
+	// nothing at 1.30 V (bd cpx.4). clk_sys 432 MHz, not 384: core 1 took
+	// 90% of a 132-column line at 384; 400 is no multiple of 48 MHz.
+	{ 48, 32, 80, 1024, 3, 10, 6, 600, true, false, 440000, 432000 };
 #else
 #error "unknown HSTX_MODE"
+#endif
+
+// The core voltage. Mode 3's clk_sys 432 MHz crashed at 1.30 V, the most
+// the SDK allows without vreg_disable_voltage_limit (bd cpx.4); one step
+// up. frank-386 goes as far as 1.60 V for 504 MHz: too much heat and wear.
+#if HSTX_MODE == 3
+#define HSTX_VOLTAGE VREG_VOLTAGE_1_35
+#else
+#define HSTX_VOLTAGE VREG_VOLTAGE_1_30
 #endif
 
 volatile uint32_t hstx_dvi_frames;
@@ -136,16 +154,56 @@ static void __not_in_flash_func(setup_dma)(void) {
 	pixels_next = false;
 }
 
+// clk_sys from PLL_USB at t->sys_khz, PLL_SYS at t->pll_khz for clk_hstx
+// alone (bd cpx.1). clk_usb and clk_adc stay at 48 MHz, divided from
+// PLL_USB. clk_peri's divider has only 2 bits (1-3; an 8 wrote 0, which
+// is 4: clk_peri ran at twice what the SDK computed the UART's and SPI's
+// dividers from, and no card read worked), so it gets PLL_USB / 3 at most,
+// up to PERI_MAX_HZ; the UART and SPI divide from what clock_get_hz says.
+#define PERI_MAX_HZ 150000000u
+static void split_clocks(const hstx_timing_t *t) {
+	uint vco, pd1, pd2;
+	uint32_t sys_hz = t->sys_khz * 1000u;
+	if (sys_hz % USB_CLK_HZ || !check_sys_clock_khz(t->sys_khz, &vco, &pd1, &pd2)) {
+		panic("clk_sys %lu kHz", (unsigned long)t->sys_khz);
+	}
+	// On the crystal while both PLLs change.
+	clock_configure_undivided(clk_sys, CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLK_REF, 0, XOSC_HZ);
+	pll_init(pll_usb, 1, vco, pd1, pd2);
+	uint div = sys_hz / USB_CLK_HZ;
+	clock_configure_int_divider(clk_usb, 0, CLOCKS_CLK_USB_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB, sys_hz, div);
+	clock_configure_int_divider(clk_adc, 0, CLOCKS_CLK_ADC_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB, sys_hz, div);
+	uint peri_div = (sys_hz + PERI_MAX_HZ - 1) / PERI_MAX_HZ;
+	if (peri_div > CLOCKS_CLK_PERI_DIV_INT_BITS >> CLOCKS_CLK_PERI_DIV_INT_LSB) {
+		panic("clk_peri from %lu kHz", (unsigned long)t->sys_khz);
+	}
+	clock_configure_int_divider(clk_peri, 0, CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB, sys_hz, peri_div);
+	if (!check_sys_clock_khz(t->pll_khz, &vco, &pd1, &pd2)) {
+		panic("PLL_SYS %lu kHz", (unsigned long)t->pll_khz);
+	}
+	pll_init(pll_sys, 1, vco, pd1, pd2);
+	clock_configure_undivided(clk_sys, CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+		CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB, sys_hz);
+}
+
 void hstx_dvi_init(void) {
 	const hstx_timing_t *t = &hstx_timing;
 	// 10 x the pixel clock needs more than the default core voltage. The
 	// whole program runs from SRAM (COPY_TO_RAM): flash cannot keep up.
-	vreg_set_voltage(VREG_VOLTAGE_1_30);
+	if (HSTX_VOLTAGE > VREG_VOLTAGE_MAX) {
+		vreg_disable_voltage_limit();
+	}
+	vreg_set_voltage(HSTX_VOLTAGE);
 	sleep_ms(10);
-	set_sys_clock_khz(t->sys_khz, true);
-	// clk_hstx runs undivided from clk_sys after boot; the HSTX wants half.
-	clock_configure_int_divider(clk_hstx, 0, CLOCKS_CLK_HSTX_CTRL_AUXSRC_VALUE_CLK_SYS,
-		t->sys_khz * 1000u, 2);
+	if (t->sys_khz == t->pll_khz) {
+		set_sys_clock_khz(t->sys_khz, true);
+	} else {
+		split_clocks(t);
+	}
+	// clk_hstx runs undivided from clk_sys after boot; the HSTX wants half
+	// of PLL_SYS.
+	clock_configure_int_divider(clk_hstx, 0, CLOCKS_CLK_HSTX_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
+		t->pll_khz * 1000u, 2);
 
 	build_lists(t);
 	v_sync_start = t->v_front;
@@ -273,5 +331,5 @@ uint32_t hstx_dvi_frame_us(void) {
 	const hstx_timing_t *t = &hstx_timing;
 	uint32_t pixels = (uint32_t)(t->h_front + t->h_sync + t->h_back + t->h_active) *
 		(t->v_front + t->v_sync + t->v_back + t->v_active);
-	return (uint32_t)(pixels * 10000ull / t->sys_khz); // clk_sys is 10 x the pixel clock
+	return (uint32_t)(pixels * 10000ull / t->pll_khz); // PLL_SYS is 10 x the pixel clock
 }

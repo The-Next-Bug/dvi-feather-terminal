@@ -14,6 +14,13 @@
 #include "splash.h"
 
 _Static_assert(SCREEN_ROWS * RASTER_ROW_HEIGHT == RASTER_ACTIVE_HEIGHT, "rows fill the screen");
+_Static_assert(RASTER_ACTIVE_HEIGHT == HSTX_ACTIVE_HEIGHT, "the raster's height is the mode's");
+// A mode wider than the raster (1024x600, bd cpx) shows it centered: the
+// line buffers' borders stay black (zero from boot, never written).
+_Static_assert(HSTX_ACTIVE_WIDTH >= RASTER_ACTIVE_WIDTH && (HSTX_ACTIVE_WIDTH - RASTER_ACTIVE_WIDTH) % 4 == 0,
+	"the raster fits the mode on whole words");
+#define BORDER_WORDS ((HSTX_ACTIVE_WIDTH - RASTER_ACTIVE_WIDTH) / 4)
+#define HSTX_LINE_WORDS (HSTX_ACTIVE_WIDTH / 2)
 
 // Cursor blink: on for 32 frames, off for 32 (about 1 Hz at 60 Hz).
 #define CURSOR_BLINK_FRAMES 32
@@ -30,7 +37,7 @@ _Static_assert(SCREEN_ROWS * RASTER_ROW_HEIGHT == RASTER_ACTIVE_HEIGHT, "rows fi
 
 // Everything core 1 (and its interrupt) reads lives in SRAM (not const,
 // which would put it in flash): an XIP stall would starve the HSTX.
-static uint32_t line_buf[LINE_BUFS][RASTER_LINE_WORDS];
+static uint32_t line_buf[LINE_BUFS][HSTX_LINE_WORDS];
 // Scanlines are numbered in order from the first one of the first frame.
 // Unsigned and compared by difference, so they may wrap (every 33 hours);
 // seq % LINE_BUFS survives that, as LINE_BUFS divides 2^32, but
@@ -118,7 +125,7 @@ static void __not_in_flash_func(compose_line)(uint32_t seq, uint y) {
 	if (y == 0) {
 		start_frame(frame_no);
 	}
-	uint32_t *px = line_buf[seq % LINE_BUFS];
+	uint32_t *px = line_buf[seq % LINE_BUFS] + BORDER_WORDS;
 	if (frame.blank) {
 		for (uint i = 0; i < RASTER_LINE_WORDS; ++i) {
 			px[i] = 0;
@@ -339,8 +346,9 @@ video_stats_t video_stats(void) {
 		.max_line_cycles = diag_max_cycles,
 		.late = late_lines,
 		.core1_stage = diag_core1_stage,
-		// The system clock is 10 x the pixel clock.
-		.cycles_budget = 10u * (t->h_front + t->h_sync + t->h_back + t->h_active),
+		// PLL_SYS is 10 x the pixel clock; clk_sys may be another.
+		.cycles_budget = (uint32_t)(10ull * (t->h_front + t->h_sync + t->h_back + t->h_active) * t->sys_khz /
+			t->pll_khz),
 		.max_render_us = diag_max_render_us,
 	};
 	diag_max_cycles = 0;

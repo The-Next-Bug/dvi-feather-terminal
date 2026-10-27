@@ -1,16 +1,18 @@
 // HSTX DVI bring-up test (bd dmt.8.1): a static test pattern from
 // hstx_dvi.c, to check on hardware that the HSTX drives the Pico DVI Sock
-// at 800x600 (HSTX_MODE) before the terminal moves over to it.
+// at 800x600 (HSTX_MODE) before the terminal moves over to it; also the
+// 1024x600 modes' spike (bd cpx), at the mode's width W.
 //
-// The pattern (800x600):
+// The pattern (W x 600):
 //   - a 1-pixel white border: every edge pixel should be visible;
-//   - rows 1-400: the 64 RGB222 colors, 8 x 8 tiles (index = row * 8 + col,
-//     0bRRGGBB), with black gaps;
+//   - rows 1-400: the 64 RGB222 colors, 8 x 8 tiles W / 8 wide (index =
+//     row * 8 + col, 0bRRGGBB), with black gaps;
 //   - rows 401-499: a 1-pixel checkerboard (the most TMDS transitions),
 //     with a white line moving down through it once per frame: if it moves
 //     smoothly, frames are not being dropped;
 //   - rows 500-598: the four levels of red, green, blue and gray, left to
-//     right, to compare brightness with the PicoDVI build.
+//     right in blocks W / 16 wide, to compare brightness with the PicoDVI
+//     build.
 //
 // UART0 (GP0 TX, 115200 8N1) prints the clocks and the frame count every
 // second; the LED blinks (1 s on, 1 s off) while frames are being sent.
@@ -23,8 +25,10 @@
 #include "hstx_dvi.h"
 #include "screen.h"
 
-#define W 800
-#define H 600
+#define W HSTX_ACTIVE_WIDTH
+#define H HSTX_ACTIVE_HEIGHT
+#define TILE_W (W / 8)
+#define LEVEL_W (W / 16)
 #define WORDS (W / 2)
 
 #define WHITE RGB222(3, 3, 3)
@@ -53,14 +57,14 @@ static void build_rows(void) {
 		put(rows[ROW_GAP], x, edge ? WHITE : BLACK);
 		put(rows[ROW_CHECK0], x, edge || x & 1 ? WHITE : BLACK);
 		put(rows[ROW_CHECK1], x, edge || !(x & 1) ? WHITE : BLACK);
-		// 16 blocks of 50 px: red 0-3, green 0-3, blue 0-3, gray 0-3.
-		unsigned block = x / 50, level = block & 3, plane = block / 4;
+		// 16 blocks: red 0-3, green 0-3, blue 0-3, gray 0-3.
+		unsigned block = x / LEVEL_W, level = block & 3, plane = block / 4;
 		uint8_t c = plane == 0 ? RGB222(level, 0, 0) : plane == 1 ? RGB222(0, level, 0)
 			: plane == 2 ? RGB222(0, 0, level) : RGB222(level, level, level);
 		put(rows[ROW_LEVELS], x, edge ? WHITE : c);
-		// 8 tiles of 100 px with a 4-px black gap on the left.
+		// 8 tiles with a 4-px black gap on the left.
 		for (unsigned r = 0; r < TILE_ROWS; ++r) {
-			put(rows[ROW_TILES + r], x, edge ? WHITE : x % 100 < 4 ? BLACK : (uint8_t)(r * 8 + x / 100));
+			put(rows[ROW_TILES + r], x, edge ? WHITE : x % TILE_W < 4 ? BLACK : (uint8_t)(r * 8 + x / TILE_W));
 		}
 	}
 }
@@ -104,11 +108,12 @@ int main(void) {
 	for (unsigned s = 0;; ++s) {
 		sleep_ms(1000);
 		uint32_t frames = hstx_dvi_frames;
-		printf("hstx_test mode %d: %ux%u, total %ux%u, clk_sys %lu kHz, clk_hstx %lu kHz (measured), "
-			"%lu frames/s, %lu frames\n",
+		printf("hstx_test mode %d: %ux%u, total %ux%u, clk_sys %lu kHz, clk_hstx %lu kHz, clk_peri %lu kHz "
+			"(measured), %lu frames/s, %lu frames\n",
 			HSTX_MODE, t->h_active, t->v_active, h_total, v_total,
 			(unsigned long)frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_SYS),
 			(unsigned long)frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_HSTX),
+			(unsigned long)frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_PERI),
 			(unsigned long)(frames - last), (unsigned long)frames);
 #ifdef PICO_DEFAULT_LED_PIN
 		gpio_put(PICO_DEFAULT_LED_PIN, frames != last && (s & 1));

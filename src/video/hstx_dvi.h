@@ -13,7 +13,10 @@
 // core that calls hstx_dvi_start.
 //
 // The HSTX shifts out two bits per clk_hstx cycle, so a pixel (10 bits a
-// lane) takes 5 cycles: clk_hstx is 5 x the pixel clock, clk_sys twice that.
+// lane) takes 5 cycles: clk_hstx is 5 x the pixel clock, half of PLL_SYS.
+// clk_sys is PLL_SYS (10 x the pixel clock), or in the split modes PLL_USB
+// (bd cpx.1: the CPU clock no longer follows the pixel clock; clk_usb and
+// clk_adc then divide PLL_USB down to 48 MHz, clk_peri to <= 150 MHz).
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -22,15 +25,27 @@
 //   0: 800x600 60 Hz, 40 MHz (libdvi's timing, as PicoDVI used: clk_sys 400 MHz)
 //   1: 800x600 56 Hz, 36 MHz (VESA: clk_sys 360 MHz)
 //   2: 800x600 60 Hz reduced blanking, 35.4 MHz (CVT-RB: clk_sys 354 MHz)
+//   3: 1024x600 60 Hz reduced blanking, 44 MHz (CVT-RB): clk_hstx 220 MHz,
+//      clk_sys 432 MHz (split: PLL_USB, a multiple of 48 MHz), at 1.35 V
+// The 1024-wide mode is a spike (bd cpx.4): hstx_test fills it, the
+// terminal shows its 800 pixels centered between black borders.
 #ifndef HSTX_MODE
 #define HSTX_MODE 0
 #endif
+
+#if HSTX_MODE <= 2
+#define HSTX_ACTIVE_WIDTH 800
+#else
+#define HSTX_ACTIVE_WIDTH 1024
+#endif
+#define HSTX_ACTIVE_HEIGHT 600
 
 typedef struct {
 	uint16_t h_front, h_sync, h_back, h_active;
 	uint16_t v_front, v_sync, v_back, v_active;
 	bool h_positive, v_positive; // sync pulse polarity
-	uint32_t sys_khz;           // clk_sys: 10 x the pixel clock
+	uint32_t pll_khz;           // PLL_SYS: 10 x the pixel clock, clk_hstx its half
+	uint32_t sys_khz;           // clk_sys: pll_khz, or PLL_USB (a multiple of 48 MHz)
 } hstx_timing_t;
 
 // Not const: const data stays in flash, which the interrupt must not read.
@@ -39,7 +54,7 @@ extern hstx_timing_t hstx_timing;
 // Bytes in one active line of RGB565 pixels.
 #define HSTX_LINE_BYTES(t) ((t)->h_active * 2u)
 
-// Raise the core voltage, set clk_sys (hstx_timing.sys_khz) and clk_hstx,
+// Raise the core voltage, set the PLLs, clk_sys (hstx_timing.sys_khz) and clk_hstx,
 // and set up the HSTX, its pins and the DMA channels (not yet running). Call
 // before any peripheral that depends on clk_sys/clk_peri (e.g. the UART).
 void hstx_dvi_init(void);
