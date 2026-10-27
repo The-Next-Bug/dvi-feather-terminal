@@ -67,7 +67,9 @@ static size_t psram_record(uint8_t *buf) {
 	if (!size) {
 		return hwinfo_record(buf, HWINFO_ST_NOT_FOUND, "PSRAM", "none answered on CS1 (" GP(BOARD_PSRAM_CS_PIN) ")");
 	}
-	snprintf(text, sizeof text, "%u KB on CS1 (" GP(BOARD_PSRAM_CS_PIN) "), Z80 banks", (unsigned)(size / 1024));
+	const drives_geometry_t *ramdisk = drives_geometry(drives_ramdisk_format());
+	snprintf(text, sizeof text, "%u KB on CS1 (" GP(BOARD_PSRAM_CS_PIN) "), Z80 banks%s%s", (unsigned)(size / 1024),
+		ramdisk ? ", RAM disk " : "", ramdisk ? ramdisk->short_name : "");
 	return hwinfo_record(buf, HWINFO_ST_PRESENT, "PSRAM", text);
 #else
 	(void)buf;

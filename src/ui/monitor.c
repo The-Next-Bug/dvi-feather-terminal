@@ -167,7 +167,7 @@ static void show_menu(void) {
 
 static void list_disks(void) {
 	if (mount_result != FR_OK) {
-		say("No card.\r\n");
+		say("No card.%s\r\n", drives_ramdisk_format() ? " The RAM disk: M mounts " DRIVES_RAMDISK "." : "");
 		return;
 	}
 	static char names[DRIVES_LIST_MAX][DRIVES_NAME_MAX + 1];
@@ -179,10 +179,14 @@ static void list_disks(void) {
 	if (n % LIST_COLUMNS) {
 		say("\r\n");
 	}
-	if (!n) {
+	if (n == (drives_ramdisk_format() ? 1u : 0u)) {
 		say("No disk images in /DISKS80: I installs the built-in ones, N makes a blank one.\r\n");
-	} else {
+	}
+	if (n) {
 		say("(FD 8\" floppy, 4MB/8MB hard disks, ? not a disk image)\r\n");
+	}
+	if (drives_ramdisk_format()) {
+		say("(" DRIVES_RAMDISK ": the RAM disk, in PSRAM: blank at power-on, lost at power-off)\r\n");
 	}
 }
 

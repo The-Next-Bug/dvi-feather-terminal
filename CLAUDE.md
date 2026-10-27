@@ -149,7 +149,13 @@ nvflash_retime (psram_reinitialize goes through flash_start_xip, which
 leaves the flash's XIP set up for <= 150 MHz), divisor 4 at 400 MHz;
 cpm mode gives the machine extram_base() (0x11000000, cached, writable)
 as min(15, size / 48 KB) banks (machine_set_banks) and says so under the
-banner. nvflash_retime saves and restores QMI M1 around the ROM's
+banner. The PSRAM is handed out in order by extram_take (banks first);
+the RAM disk (bd 1ls.20) takes last from extram_left the largest format
+that fits (drives_format_fit: HD4 on 8 MB), so a new PSRAM user goes
+between them and the RAM disk shrinks. drives.c: drives_set_ramdisk
+blanks it (0xE5); RAMDISK (DRIVES_RAMDISK) is a reserved image name
+(mounted from memory, listed by drives_list, never a card file, not
+made by drives_create), kept over unmounts, blank after a reboot. nvflash_retime saves and restores QMI M1 around the ROM's
 flash_select_xip_read_mode; the SDK's flash_range_* clean the XIP cache
 (dirty PSRAM lines) and re-run the PSRAM setup themselves. Core 1 never
 touches the PSRAM. The Z80 banks in PSRAM work on the user's Feather (bd
@@ -912,7 +918,10 @@ SRAM is the tight resource; peripherals and pins are mostly free.
   (bd xv0: its bigger hcd_rp2040 ~5.9 KB, the USB log's 2 KB text and the
   watchdog) from 0x200709b0 to 0x20073288, ~52 KB free; the USB log setting's SET-UP row (stash) to 0x20073444; crash_glue.c, the stick workarounds to 0x2007401c (~48 KB free); the
 sound (bd 1ls.18: dvt_sound, the settings and panel rows; no DAC on the
-Sock, so no audio engine running) to 0x20074840, ~45.9 KB free. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+Sock, so no audio engine running) to 0x20074840, ~45.9 KB free; flow
+control (dmt.27, xonxoff.c, the SET-UP row) and the RAM disk (1ls.20) to
+0x200754b4, ~42 KB free (v0.9.5; Frankless 0x20060598, PSRAM Feather
+0x2005dc98). Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
   60 KB, font_copy 20 KB, screen 13 KB, stash_buf 14.1 KB, line_buf 6.4 KB,
   scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit
@@ -954,8 +963,8 @@ Sock, so no audio engine running) to 0x20074840, ~45.9 KB free. Scratch X: core 
 - SRAM: __end__ 0x2005d78c (bd xv0); 0x2005f428 with the audio engine and
   the AY (bd 1ls.18, +7.2 KB), 0x2005f800 with stereo and the busy count
   (1ls.18.9/.8), ~130 KB free (the Z80 banks are in the
-  PSRAM). PSRAM 8 MB: 720 KB banks (15 x 48 KB, port 64's limit), ~7.3 MB
-  free (bd g31: RAM disk, scrollback). Flash 16 MB: image 1.04 MB, growth
+  PSRAM). PSRAM 8 MB: 720 KB banks (15 x 48 KB, port 64's limit), the RAM
+  disk 4080 KB (HD4, bd 1ls.20), ~3.4 MB free (scrollback, 1ls.21, deferred). Flash 16 MB: image 1.04 MB, growth
   room to 8 MB (FWUPDATE_STAGING = half the flash), settings in the top
   12 KB.
 - Core 1: video only (62% of a line at 80 columns, 87-92% at 132, qur.22's

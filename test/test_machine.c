@@ -2109,6 +2109,96 @@ static void test_mem_banks(void) {
 	drives_unmount_all();
 }
 
+// The RAM disk (bd 1ls.20): memory given as the largest format that fits,
+// listed and mounted as RAMDISK in place of a card image of that name,
+// blank at first, kept over unmounts; CP/M 2.2 writes a file to it.
+static void test_ramdisk(void) {
+	CHECK_EQ(drives_format_fit(0), DRIVES_NONE);
+	CHECK_EQ(drives_format_fit(drives_geometry(DRIVES_FLOPPY)->size - 1), DRIVES_NONE);
+	CHECK_EQ(drives_format_fit(drives_geometry(DRIVES_FLOPPY)->size), DRIVES_FLOPPY);
+	CHECK_EQ(drives_format_fit(8u * 1024 * 1024 - 15 * MACHINE_BANK_SIZE), DRIVES_HD4); // 8 MB PSRAM
+	CHECK_EQ(drives_format_fit(16u * 1024 * 1024 - 15 * MACHINE_BANK_SIZE), DRIVES_HD8);
+
+	drives_unmount_all();
+	CHECK_EQ(drives_ramdisk_format(), DRIVES_NONE);
+	CHECK_EQ(drives_mount(2, "RAMDISK"), DRIVES_NOT_FOUND);
+	CHECK_EQ(drives_image_format("RAMDISK"), DRIVES_NONE);
+	static char names[DRIVES_LIST_MAX][DRIVES_NAME_MAX + 1];
+	unsigned n = drives_list(names, DRIVES_LIST_MAX);
+	for (unsigned i = 0; i < n; ++i) {
+		CHECK(strcmp(names[i], "RAMDISK") != 0);
+	}
+
+	uint32_t size = drives_geometry(DRIVES_HD4)->size;
+	uint8_t *memory = malloc(size);
+	CHECK(memory != NULL);
+	memset(memory, 0, size);
+	drives_set_ramdisk(memory, DRIVES_HD4);
+	CHECK_EQ(drives_ramdisk_format(), DRIVES_HD4);
+	CHECK(memory[0] == 0xe5 && memory[size - 1] == 0xe5);
+	CHECK_EQ(drives_image_format("ramdisk"), DRIVES_HD4);
+	CHECK_EQ(drives_list(names, DRIVES_LIST_MAX), n + 1);
+	for (unsigned i = 0; i + 1 < n + 1; ++i) {
+		CHECK(strcmp(names[i], names[i + 1]) < 0); // sorted, once
+	}
+	// A card image of that name is not used, nor made.
+	CHECK_EQ(drives_create("RAMDISK", DRIVES_FLOPPY, window, sizeof window, NULL, NULL), DRIVES_EXISTS);
+	CHECK(!fat_file_exists("/DISKS80/RAMDISK.DSK"));
+	put_fat_file("/DISKS80/RAMDISK.DSK", window, 512);
+	CHECK_EQ(drives_list(names, DRIVES_LIST_MAX), n + 1);
+	CHECK_EQ(drives_image_format("RAMDISK"), DRIVES_HD4);
+	CHECK_EQ(f_unlink("/DISKS80/RAMDISK.DSK"), FR_OK);
+	// The list full of card images: the RAM disk still in it.
+	CHECK_EQ(drives_list(names, 2), 2);
+	CHECK(strcmp(names[1], "RAMDISK") == 0 || strcmp(names[0], "RAMDISK") == 0);
+
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	CHECK_EQ(drives_mount(2, "ramdisk"), DRIVES_OK);
+	CHECK_EQ(drives_mount(3, "RAMDISK"), DRIVES_IN_USE);
+	CHECK(strcmp(drives_name(2), "RAMDISK") == 0);
+	CHECK_EQ(drives_format(2), DRIVES_HD4);
+	uint8_t buf[DRIVES_SECTOR];
+	memset(buf, 0x5a, sizeof buf);
+	drives_activity();
+	CHECK_EQ(drives_write(2, 254, 128, buf), 0);
+	CHECK_EQ(drives_read(2, 255, 1, buf), 8); // track out of range
+	CHECK_EQ(drives_activity(), 0x04);
+	CHECK(memory[size - 1] == 0x5a && memory[size - DRIVES_SECTOR - 1] == 0xe5);
+	memset(buf, 0, sizeof buf);
+	CHECK_EQ(drives_read(2, 254, 128, buf), 0);
+	CHECK(buf[0] == 0x5a && buf[DRIVES_SECTOR - 1] == 0x5a);
+
+	// The Drives panel: in the list, said to be in PSRAM.
+	static drivepanel_t p;
+	drivepanel_open(&p);
+	CHECK(p.choice[2] >= 0 && strcmp(p.images[p.choice[2]], "RAMDISK") == 0);
+	CHECK(panel_row_has(&p, 4, "4 MB disk in PSRAM, lost at power-off"));
+
+	// CP/M 2.2 on it (a hard disk, blank: no system tracks needed).
+	clear_screen();
+	machine_reset();
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("DIR C:", "NO FILE"));
+	CHECK(cpm("SAVE 3 C:RAM.COM", ""));
+	CHECK(cpm("STAT C:RAM.COM", "RAM.COM"));
+	// Unmounted and mounted again (as the monitor's card check does): kept.
+	drives_unmount(2);
+	CHECK(drives_name(2) == NULL);
+	CHECK_EQ(drives_mount(2, "RAMDISK"), DRIVES_OK);
+	clear_screen();
+	CHECK(type("\x03"));
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("DIR C:", "RAM      COM"));
+
+	// Taken away: unmounted, and the name is no disk again.
+	drives_set_ramdisk(NULL, DRIVES_NONE);
+	CHECK(drives_name(2) == NULL);
+	CHECK_EQ(drives_mount(2, "RAMDISK"), DRIVES_NOT_FOUND);
+	CHECK_EQ(drives_list(names, DRIVES_LIST_MAX), n);
+	drives_unmount_all();
+	free(memory);
+}
+
 // The disk controller refuses a hard-disk image to a system that has not
 // asked port 8 about the drive since the reset (bd f8w.7); floppies are
 // always served.
@@ -2801,6 +2891,7 @@ int main(void) {
 	RUN(test_cpm3_drives);
 	RUN(test_hd_guard);
 	RUN(test_mem_banks);
+	RUN(test_ramdisk);
 	RUN(test_termtest);
 	RUN(test_altscr);
 	RUN(test_aytrack_tool);

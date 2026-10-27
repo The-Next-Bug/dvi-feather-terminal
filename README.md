@@ -934,6 +934,19 @@ keys:
   The monitor's install (**I**) writes two to start with, if they are
   missing: `CPM22` (CPM22, Z80TESTS) and `CPM3` (CPM31, CPM32); after
   that they are yours to change or remove.
+
+  **RAM disk** (boards with PSRAM: `frankless`, `feather-rp2350-hstx-psram`
+  and its Adalogger variant): the PSRAM left over after the Z80's banks
+  is a drive image named `RAMDISK`, in the panel's list (and the
+  monitor's **M** and **L**, also without a card) with the card's images.
+  It is the largest format that fits in what is left: a 4 MB hard disk
+  with an 8 MB PSRAM (an 8 MB one with 16 MB); the start-up lines say
+  which. It is fast and wears nothing, but it starts blank at power-on and
+  every reboot (Mode change, SET-UP's R, a firmware update) and is lost at
+  power-off: copy what you want to keep to a card image (`PIP`). It keeps
+  its files while the board runs, also when unmounted or after **F11**.
+  `DRIVES.CFG` and the sets can name it like any image (a `RAMDISK.DSK`
+  on the card is never used, and **N** does not make one).
 - **M** returns to the monitor.
 
 **F11** is the reset button: it reboots from drive A at once (keys typed
@@ -1054,7 +1067,7 @@ hub); move it on its own, and check the firmware's `__end__`.
 | `LOGO_IN_FLASH` | ON | experimental: keep the logo data in flash, copied out only while it shows (saves about 19 KB of SRAM); OFF copies it into SRAM with the program |
 | `STARTUP_DEMO` | OFF | run the demo after the logo |
 | `MACHINE_BANKS` | 2 | Z80 machine: 48 KB banks besides bank 0 (each costs 48 KB of SRAM; a third does not fit) |
-| `PSRAM_BANKS` | OFF | Z80 machine: the banks in the board's QSPI PSRAM (QMI chip select 1) instead, as many as fit up to 15, none in SRAM; set by `boards/feather-rp2350-hstx-psram.h`. Without a PSRAM chip at boot the machine has no banks |
+| `PSRAM_BANKS` | OFF | Z80 machine: the banks in the board's QSPI PSRAM (QMI chip select 1) instead, as many as fit up to 15, none in SRAM, and the rest a [RAM disk](#running-cpm); set by `boards/feather-rp2350-hstx-psram.h`. Without a PSRAM chip at boot the machine has no banks |
 | `HSTX_MODE` | the board's | 0: 800x600 at 60 Hz (clk_sys 400 MHz, clk_hstx 200 MHz); 1: at 56 Hz (360 / 180 MHz); 2: 60 Hz reduced blanking (354 / 177 MHz). 1 and 2 are slower fallbacks. Empty (the default): the board header's choice, `pico_board_cmake_set(BOARD_HSTX_MODE, n)` (2 on the Feathers), else 0 |
 | `VIDEO_DIAG` | OFF | bring-up diagnostics on UART0 TX: boot markers, core 1 scanline timing, fault reports |
 | `COPY_TO_RAM` | ON | run from SRAM; must stay ON (see [How it works](#how-it-works)) |

@@ -40,7 +40,28 @@ static unsigned list(const char *folder, const char *pattern, char names[][DRIVE
 }
 
 unsigned drives_list(char names[][DRIVES_NAME_MAX + 1], unsigned max) {
-	return list("/DISKS80", "*.DSK", names, max);
+	unsigned n = list("/DISKS80", "*.DSK", names, max);
+	if (!drives_ramdisk_format() || max == 0) {
+		return n;
+	}
+	// The RAM disk in place of a RAMDISK.DSK, else in its place in the
+	// order (the last image making room when the list is full).
+	unsigned at = 0;
+	while (at < n && strcmp(names[at], DRIVES_RAMDISK) < 0) {
+		++at;
+	}
+	if (at < n && strcmp(names[at], DRIVES_RAMDISK) == 0) {
+		return n;
+	}
+	if (n == max) {
+		--n;
+		if (at > n) {
+			at = n;
+		}
+	}
+	memmove(names[at + 1], names[at], (n - at) * sizeof names[0]);
+	strcpy(names[at], DRIVES_RAMDISK);
+	return n + 1;
 }
 
 // DRIVES.CFG and the sets: a line a drive, A=NAME (A= for none).

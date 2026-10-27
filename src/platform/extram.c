@@ -4,6 +4,8 @@
 
 #include "hardware/psram.h"
 
+static size_t taken; // bytes handed out by extram_take
+
 size_t extram_retime(void) {
 	if (!psram_is_available()) {
 		return 0;
@@ -27,6 +29,20 @@ uint8_t *extram_base(void) {
 	return psram_get_size() ? (uint8_t *)(XIP_BASE + flash_devinfo_size_to_bytes(FLASH_DEVINFO_SIZE_MAX)) : NULL;
 }
 
+uint8_t *extram_take(size_t size) {
+	if (size > extram_left()) {
+		return NULL;
+	}
+	uint8_t *at = extram_base() + taken;
+	taken += size;
+	return at;
+}
+
+size_t extram_left(void) {
+	size_t size = psram_get_size();
+	return size > taken ? size - taken : 0;
+}
+
 #else
 
 size_t extram_retime(void) {
@@ -39,6 +55,15 @@ size_t extram_size(void) {
 
 uint8_t *extram_base(void) {
 	return NULL;
+}
+
+uint8_t *extram_take(size_t size) {
+	(void)size;
+	return NULL;
+}
+
+size_t extram_left(void) {
+	return 0;
 }
 
 #endif

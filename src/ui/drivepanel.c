@@ -334,12 +334,15 @@ void drivepanel_draw(const drivepanel_t *p, screen_t *s, unsigned top, uint8_t f
 		char label[3] = {(char)('A' + d), ':', '\0'};
 		char info[SCREEN_MAX_COLS + 1];
 		int c = p->choice[d];
-		const char *format = "";
+		const char *format = "", *where = "";
 		if (c >= 0) {
 			const drives_geometry_t *g = drives_geometry(drives_image_format(p->images[c]));
 			format = g ? g->name : "not a disk image";
+			if (strcmp(p->images[c], DRIVES_RAMDISK) == 0) {
+				where = " in PSRAM, lost at power-off";
+			}
 		}
-		snprintf(info, sizeof info, "%s%s", format, c != p->mounted[d] ? "  (changed)" : "");
+		snprintf(info, sizeof info, "%s%s%s", format, where, c != p->mounted[d] ? "  (changed)" : "");
 		draw_row(s, top + 2 + d, label, !p->on_set && d == p->drive, c >= 0 ? p->images[c] : "none", info, fg, bg);
 	}
 	unsigned msg_row = top + DRIVEPANEL_ROWS - 4;
