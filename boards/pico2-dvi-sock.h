@@ -32,11 +32,6 @@
 #define BOARD_DVI_D2_N_PIN 17
 #define BOARD_DVI_D1_P_PIN 18
 #define BOARD_DVI_D1_N_PIN 19
-// 1024x600 at 60 Hz with reduced blanking (bd cpx.4): the 7" HDMI panels'
-// native size, pixel for pixel, and desktop monitors take it too. clk_hstx
-// 220 MHz, clk_sys 384 MHz from PLL_USB at 1.30 V; 80 columns of Terminus
-// 12x24, 132 of 6x12 in 7-pixel cells. -DHSTX_MODE=0 builds 800x600.
-pico_board_cmake_set(BOARD_HSTX_MODE, 3)
 
 // --- SD card ---
 #define BOARD_SD_SPI 0

@@ -37,7 +37,8 @@ hstx_timing_t hstx_timing =
 	// nothing at 1.30 V (bd cpx.4). clk_sys 384 MHz at 1.30 V: 432 needed
 	// 1.35 V and then went without a picture after waking (cpx.5); with
 	// qur.22's compose core 1 took 42% of a 132-column line at 432.
-	{ 48, 32, 80, 1024, 3, 10, 6, 600, true, false, 440000, 384000 };
+	// A board may run it slower (BOARD_SPLIT_SYS_KHZ: the Feathers, 336).
+	{ 48, 32, 80, 1024, 3, 10, 6, 600, true, false, 440000, BOARD_SPLIT_SYS_KHZ };
 #else
 #error "unknown HSTX_MODE"
 #endif

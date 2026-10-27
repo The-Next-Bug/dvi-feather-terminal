@@ -85,7 +85,9 @@ build job. Spelling is American (bd azw: color, gray, center, license,
 Boards (bd axq): `boards/<target>.h` is a pico-sdk board header
 (PICO_BOARD = target, PICO_BOARD_HEADER_DIRS = boards/) plus every pin the
 firmware uses: BOARD_DVI_{CLK,D0,D1,D2}_{P,N}_PIN (any order/polarity in
-GP12-19), optional BOARD_DVI_DRIVE_MA / _SLEW_FAST, BOARD_UART (0/1) +
+GP12-19), optional BOARD_DVI_DRIVE_MA / _SLEW_FAST, optional BOARD_SPLIT_SYS_KHZ
+(clk_sys in HSTX_MODE 3, multiple of 48 MHz, default 384000; the
+Feathers 336000), BOARD_UART (0/1) +
 BOARD_UART_{TX,RX,CTS,RTS}_PIN (terminal UART, also VIDEO_DIAG; CTS/RTS
 optional; the header points PICO_DEFAULT_UART* at them for hstx_test's
 stdio, before including an SDK board), BOARD_SD_SPI + BOARD_SD_{MISO,CS,SCK,MOSI}_PIN,
@@ -218,8 +220,8 @@ dev host; Docker is not usable for CI simulation).
 VT100 serial terminal with DVI output for a Pico 2 (RP2350) with the Pico
 DVI Sock. RP2040 (Feather RP2040 DVI) support was dropped (dmt.29): out of
 SRAM, and the USB keyboard crashed it (dmt.20); CMake rejects non-RP2350
-boards. 1024x600p60 on the Sock (HSTX_MODE 3, clk_sys 384 MHz, 1.3 V, bd
-cpx.4), 800x600p60 elsewhere (400 MHz; the Feathers 354); 80 or 132
+boards. 1024x600p60 (HSTX_MODE 3, the default since v0.10.0, bd cpx.4:
+clk_sys 384 MHz, the Feathers 336, 1.3 V) or 800x600p60 (0, 400 MHz); 80 or 132
 columns x 24 rows plus a status line (row 24); UART0 on GP0/GP1.
 
 Source layout (bd gr1, after github.com/arlaneenalra/CGA_LCD_Capture):
@@ -335,8 +337,10 @@ UF2 in the latter).
   DMA channels, reloaded by DMA_IRQ_0 with blanking command lists and
   per-line pixels from a callback. `HSTX_MODE` 0 = 800x600@60 with libdvi's
   timing (clk_hstx 200 MHz, above the 150 MHz rating: dmt.8.1), 1 = @56,
-  2 = CVT-RB (354 MHz), 3 = 1024x600 CVT-RB (bd cpx.4, the Sock's since
-  v0.10.0; Feathers and Frankless untried: 44 MHz, clk_hstx 220 from PLL_SYS 440, clk_sys 384 from
+  2 = CVT-RB (354 MHz), 3 = 1024x600 CVT-RB (bd cpx.4, every board's
+  since v0.10.0; soaked on the Sock: 44 MHz, clk_hstx 220 from PLL_SYS 440, clk_sys
+  BOARD_SPLIT_SYS_KHZ (board.h: a multiple of 48 MHz, default 384, the
+  Feathers 336) from
   PLL_USB at 1.30 V (432 needed 1.35 V), clk_usb/adc /8, clk_peri /3 =
   128 MHz: its divider has 2 bits, 1-3; dvt_render PUBLIC
   RASTER_ACTIVE_WIDTH=1024: 80 cols in 12-px cells of Terminus 12x24
@@ -348,14 +352,15 @@ UF2 in the latter).
   hstx_dvi_resume connects them once whole lines go out, and core 1 takes
   the signal off for 0.5 s 3 s after each wake (bd cpx.5: a panel showed
   no picture after waking from over an hour). The cache option is empty by default: the board
-  header's pico_board_cmake_set(BOARD_HSTX_MODE, n), else 0 (top
+  header's pico_board_cmake_set(BOARD_HSTX_MODE, n) (none sets one now),
+  else 3 (top
   CMakeLists: DVT_HSTX_MODE, HSTX_MODE_USED for build-info.txt; a cache
   with the old help string is reset to empty so a stale 0 does not win).
-  The Feather headers set 2 (bd 1ls.19.8): at 400 MHz / 1.3 V two
-  Feathers hard faulted at random on either core (quad or serial flash,
-  PSRAM at 100 or 67 MHz, or none: likely their core supply), stable at
-  354 MHz; 132 columns peaks at 98-99% of core 1's line, late 0. The user
-  chose that over a voltage bump past 1.30 V. `apps/hstx_test/hstx_test.c` -> `hstx_test.uf2`: test pattern.
+  The Feather headers set BOARD_SPLIT_SYS_KHZ 336000 (bd 1ls.19.8): at
+  400 MHz / 1.3 V two Feathers hard faulted at random on either core (quad
+  or serial flash, PSRAM at 100 or 67 MHz, or none: likely their core
+  supply), stable at 354 (their mode 2 before v0.10.0). The user chose
+  that over a voltage bump past 1.30 V. `apps/hstx_test/hstx_test.c` -> `hstx_test.uf2`: test pattern.
 - `src/video/video.[ch]` (RP2350): core 1 composes scanlines (raster_compose or
   splash_compose) into a ring of 4 line buffers, at most 2 lines ahead of
   the DMA interrupt (also on core 1), latching mode/cursor/splash per

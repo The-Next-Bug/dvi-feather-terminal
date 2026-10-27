@@ -12,8 +12,8 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
 
 ## Features
 
-- **Display**: 1024x600p60 over DVI/HDMI on the Sock (the 7" HDMI panels'
-  native size, pixel for pixel), 800x600p60 on the other boards or as a
+- **Display**: 1024x600p60 over DVI/HDMI (the 7" HDMI panels' native
+  size, pixel for pixel; desktop monitors take it too), or 800x600p60 as a
   build option (`HSTX_MODE`). At 1024 wide, 80 columns use Terminus 12x24
   in 12-pixel cells (960 pixels, centered) and 132 columns misc-fixed 6x12
   at double height (each glyph row on two scanlines, like a VT100) in
@@ -132,9 +132,9 @@ Adalogger FeatherWing are checked on hardware, the Frankless in part):
 
 | Target | Board |
 |---|---|
-| `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default); 1024x600 with reduced blanking (`HSTX_MODE` 3) |
+| `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default) |
 | `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS, the Z80 machine's banks in its 8 MB PSRAM (`PSRAM_BANKS`), DS3231M real-time clock, TDA1387 DAC for the bell and the sound chip (U8, hand-fitted) |
-| `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing); 800x600 with reduced blanking at 354 MHz (`HSTX_MODE` 2), as it crashes at 400 MHz |
+| `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing); clk_sys 336 MHz (`BOARD_SPLIT_SYS_KHZ`), as it crashes at 400 MHz |
 | `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
 | `feather-rp2350-hstx-adalogger` | `feather-rp2350-hstx` with the Adalogger FeatherWing's PCF8523 real-time clock on I2C1 (SDA/SCL, GP2/3); no RTS/CTS (those were GP2/3) |
 | `feather-rp2350-hstx-psram-adalogger` | `feather-rp2350-hstx-psram` with the Adalogger FeatherWing's PCF8523, as above |
@@ -146,10 +146,11 @@ build them and releases leave them out; `EXPERIMENTAL=1
 TARGET=<target> scripts/build.sh` builds one
 ([boards/experimental/README.md](boards/experimental/README.md)).
 
-All four Feather targets run at 354 MHz instead of 400: on two Feathers
-the firmware crashed at random at 400 MHz, with or without the PSRAM. The
-video is the same 800x600 at 60 Hz with shorter blanking, which most
-monitors take; the CP/M machine runs about 11% slower.
+All four Feather targets run at 336 MHz instead of the other boards' 384:
+on two Feathers the firmware crashed at random at 400 MHz, with or without
+the PSRAM. The video is the same 1024x600; the CP/M machine runs about 12%
+slower. Built with `-DHSTX_MODE=2` they give 800x600 at 354 MHz instead,
+as before v0.10.0.
 
 `src/board/board.h` checks the header when it compiles. A missing setting, a pin
 that cannot carry its signal, or a pin used twice stops the build with an
@@ -1072,7 +1073,7 @@ hub); move it on its own, and check the firmware's `__end__`.
 | `STARTUP_DEMO` | OFF | run the demo after the logo |
 | `MACHINE_BANKS` | 2 | Z80 machine: 48 KB banks besides bank 0 (each costs 48 KB of SRAM; a third does not fit) |
 | `PSRAM_BANKS` | OFF | Z80 machine: the banks in the board's QSPI PSRAM (QMI chip select 1) instead, as many as fit up to 15, none in SRAM, and the rest a [RAM disk](#running-cpm); set by `boards/feather-rp2350-hstx-psram.h`. Without a PSRAM chip at boot the machine has no banks |
-| `HSTX_MODE` | the board's | 0: 800x600 at 60 Hz (clk_sys 400 MHz, clk_hstx 200 MHz); 1: at 56 Hz (360 / 180 MHz); 2: 60 Hz reduced blanking (354 / 177 MHz), 1 and 2 slower fallbacks; 3: 1024x600 at 60 Hz reduced blanking (clk_sys 384 MHz from the USB PLL, clk_hstx 220 MHz from the system PLL). Empty (the default): the board header's choice, `pico_board_cmake_set(BOARD_HSTX_MODE, n)` (3 on the Sock, 2 on the Feathers), else 0 |
+| `HSTX_MODE` | the board's | 0: 800x600 at 60 Hz (clk_sys 400 MHz, clk_hstx 200 MHz); 1: at 56 Hz (360 / 180 MHz); 2: 60 Hz reduced blanking (354 / 177 MHz), 1 and 2 slower fallbacks; 3: 1024x600 at 60 Hz reduced blanking (clk_sys 384 MHz from the USB PLL, clk_hstx 220 MHz from the system PLL). Empty (the default): the board header's choice, `pico_board_cmake_set(BOARD_HSTX_MODE, n)` (none does), else 3. In mode 3 a board header can lower clk_sys with `BOARD_SPLIT_SYS_KHZ` (a multiple of 48 MHz; the Feathers: 336 MHz) |
 | `VIDEO_DIAG` | OFF | bring-up diagnostics on UART0 TX: boot markers, core 1 scanline timing, fault reports |
 | `COPY_TO_RAM` | ON | run from SRAM; must stay ON (see [How it works](#how-it-works)) |
 
