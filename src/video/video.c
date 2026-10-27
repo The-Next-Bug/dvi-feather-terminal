@@ -172,16 +172,26 @@ static const uint32_t *__not_in_flash_func(next_line)(unsigned y) {
 	return line_buf[seq % LINE_BUFS];
 }
 
-// Blanked (video_set_blank): no DVI signal at all, so the monitor can
-// power down (its backlight too). Frame time goes on meanwhile (frames
-// counted, the palette switched), as core 0 waits on both; then the output
-// starts again at a frame start. Returns the next line to compose.
-static uint32_t __not_in_flash_func(signal_off)(uint32_t next) {
+// After a wake, the signal goes off once more for RESYNC_OFF_US,
+// RESYNC_AFTER_US later: a monitor that woke from a long sleep without
+// locking to the signal (no picture until a reboot, bd cpx.5) gets a new
+// start, as if the cable were plugged in again. One that did lock only
+// locks again.
+#define RESYNC_AFTER_US 3000000u
+#define RESYNC_OFF_US 500000u
+
+// No DVI signal at all while blanked (video_set_blank), so the monitor can
+// power down (its backlight too), and for at least off_us. Frame time goes
+// on meanwhile (frames counted, the palette switched), as core 0 waits on
+// both; then the output starts again at a frame start. Returns the next
+// line to compose.
+static uint32_t __not_in_flash_func(signal_off)(uint32_t next, uint32_t off_us) {
 	hstx_dvi_stop();
 	next = to_frame_start(next);
 	const uint32_t frame_us = hstx_dvi_frame_us();
 	uint64_t frame_end = time_us_64() + frame_us;
-	while (blank_next) {
+	const uint64_t on_at = time_us_64() + off_us;
+	while (blank_next || time_us_64() < on_at) {
 		if (time_us_64() >= frame_end) {
 			frame_end += frame_us;
 			next += RASTER_ACTIVE_HEIGHT;
@@ -219,10 +229,15 @@ static void __not_in_flash_func(core1_main)(void) {
 	hstx_dvi_start(next_line);
 	diag_core1_stage = 3;
 
+	uint64_t resync_at = 0; // 0: none due
 	for (;;) {
 		diag_core1_stage = 4;
 		if (blank_next) {
-			next = signal_off(next);
+			next = signal_off(next, 0);
+			resync_at = time_us_64() + RESYNC_AFTER_US;
+		} else if (resync_at && time_us_64() >= resync_at) {
+			resync_at = 0;
+			next = signal_off(next, RESYNC_OFF_US);
 		}
 		while ((int32_t)(next - requested) > AHEAD) {
 			tight_loop_contents();
