@@ -17,6 +17,7 @@
 #include "demo.h"
 #include "ff.h"
 #include "fwupdate.h"
+#include "hstx_dvi.h"
 #include "nvflash.h"
 #include "palette.h"
 #include "raster.h"
@@ -368,7 +369,12 @@ void draw_demo(unsigned cols, const char *what) {
 	char status[SCREEN_MAX_COLS + 1];
 	snprintf(status, sizeof status, " demo | %u x 24 | build %s (%s, %s) | %s",
 		cols, TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE, what);
-	demo_draw(&screen, cols, raster_font_name(raster_layout(cols)), status);
+	// The mode as sent (bd cpx.4: it said 800x600p60 at 1024x600 too).
+	const uint32_t frame_us = hstx_dvi_frame_us();
+	char mode[24];
+	snprintf(mode, sizeof mode, "%ux%up%lu", hstx_timing.h_active, hstx_timing.v_active,
+		(unsigned long)((1000000u + frame_us / 2) / frame_us));
+	demo_draw(&screen, cols, mode, raster_font_name(raster_layout(cols)), status);
 }
 
 // SET-UP's sounds on the AY (tune.c): the demo's tune, and the chime for a

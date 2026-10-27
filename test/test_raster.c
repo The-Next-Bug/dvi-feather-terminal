@@ -514,7 +514,7 @@ static void test_blank_line(void) {
 static void test_demo(void) {
 	for (raster_layout_t l = 0; l < RASTER_LAYOUTS; ++l) {
 		const unsigned cols = raster_cols(l);
-		demo_draw(&s, cols, raster_font_name(l), " status");
+		demo_draw(&s, cols, "800x600p60", raster_font_name(l), " status");
 		unsigned bad = 0;
 		for (unsigned row = 0; row < SCREEN_ROWS; ++row) {
 			bad += mismatches(row, l);
