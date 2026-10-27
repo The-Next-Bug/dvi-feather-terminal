@@ -16,6 +16,7 @@ target_link_libraries(dvt_video
     hardware_clocks_headers
     hardware_dma_headers
     hardware_irq_headers
+    hardware_pll_headers
     hardware_structs
     hardware_sync_headers
     hardware_vreg_headers

@@ -11,6 +11,11 @@
 //              columns (16-bit rows)
 //   font_132   misc-fixed 6x12 for 132 columns, shown at double height
 //              (no bold face fits 6 pixels)
+// and for the 1024-pixel-wide display (RASTER_ACTIVE_WIDTH, bd cpx.4):
+//   font_12x24, font_12x24_bold  Terminus 12x24 and its bold face, for 80
+//              columns (16-bit rows)
+//   font_132_7 font_132 widened to 7 pixels: a blank 7th column, which line
+//              drawing, blocks and shades carry on into
 //
 // Glyph codes, as stored in the screen buffer (the same in both fonts):
 //   0x00        blank
@@ -21,13 +26,14 @@
 //   0xA0-0xFF   Latin-1
 //
 // Layout is glyph-major: font[glyph * height + row], one byte per glyph
-// row (16 bits for the 10x20 fonts), least-significant bit = leftmost
+// row (16 bits for the 10x20 and 12x24 fonts), least-significant bit = leftmost
 // pixel; only the low `width` bits are used.
 
 #define FONT_GLYPHS 256
 #define FONT_10X20_HEIGHT 20
 #define FONT_132_HEIGHT 12
 #define FONT_132_SCALE 2 // scanlines per glyph row: 6x12 fills the 24-scanline rows
+#define FONT_12X24_HEIGHT 24
 
 #if FONT_FLASH
 #define FONT_FLASH_DATA __attribute__((section(".flashdata.font")))
@@ -52,6 +58,9 @@
 extern const uint16_t font_10x20[FONT_GLYPHS * FONT_10X20_HEIGHT];
 extern const uint16_t font_10x20_bold[FONT_GLYPHS * FONT_10X20_HEIGHT];
 extern const uint8_t font_132[FONT_GLYPHS * FONT_132_HEIGHT];
+extern const uint16_t font_12x24[FONT_GLYPHS * FONT_12X24_HEIGHT];
+extern const uint16_t font_12x24_bold[FONT_GLYPHS * FONT_12X24_HEIGHT];
+extern const uint8_t font_132_7[FONT_GLYPHS * FONT_132_HEIGHT];
 
 // Glyphs that join the cells above and below (line drawing, blocks,
 // shades): the renderer extends their top and bottom rows into the blank

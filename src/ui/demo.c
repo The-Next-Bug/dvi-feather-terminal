@@ -79,7 +79,7 @@ static void color_row(screen_t *s, unsigned row, const char *label, int style) {
 	}
 }
 
-void demo_draw(screen_t *s, unsigned cols, const char *font, const char *status) {
+void demo_draw(screen_t *s, unsigned cols, const char *mode, const char *font, const char *status) {
 	screen_init(s, cols, GRAY, BLACK);
 	const unsigned w = s->cols;
 	char text[SCREEN_MAX_COLS + 1];
@@ -88,7 +88,7 @@ void demo_draw(screen_t *s, unsigned cols, const char *font, const char *status)
 	screen_clear_line(s, 0, WHITE, TITLE_BG);
 	snprintf(text, sizeof text, " DVI Feather Terminal - %u x 24 demo", w);
 	screen_puts(s, 0, 0, text, WHITE, TITLE_BG);
-	screen_puts(s, w - 12, 0, "800x600p60", WHITE, TITLE_BG);
+	screen_puts(s, w - 1 - (unsigned)strlen(mode), 0, mode, WHITE, TITLE_BG);
 
 	// Column ruler: tens, then units colored per decade.
 	for (unsigned c = 0; c < w; ++c) {

@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Generate a firmware font table from a PSF or BDF font.
 
-Usage: font_gen.py [--scale-y N] [--flash] SOURCE WIDTH HEIGHT NAME OUT.c
+Usage: font_gen.py [--scale-y N] [--pad-x P] [--flash] SOURCE WIDTH HEIGHT NAME OUT.c
 
 SOURCE is a PSF console font (optionally .gz) or a BDF font; its glyphs must
-be WIDTH pixels wide (up to 16) and HEIGHT / N pixels high (--scale-y
-repeats each row N times). The output defines
+be WIDTH - P pixels wide (WIDTH up to 16) and HEIGHT / N pixels high
+(--scale-y repeats each row N times). --pad-x adds P blank columns on the
+right of each glyph; line drawing, blocks and shades carry on into them, so
+they still join the next cell (6x12 in the 1024-wide layout's 7-pixel
+cells). The output defines
 `const uint8_t NAME[FONT_GLYPHS * HEIGHT]` (uint16_t for fonts wider than 8),
 with --flash in the firmware's flash (FONT_FLASH_DATA, src/screen/font.h).
 
@@ -277,6 +280,30 @@ def build(chars, width, height):
     return table
 
 
+def joins_right(ch):
+    """Whether the glyph's right edge continues into the next cell."""
+    return 0x2500 <= ord(ch) <= 0x259F or ch in "⎺⎻⎼⎽"
+
+
+def pad_right(chars, width, pad):
+    """Widen width-pixel glyphs by pad columns on the right (rows MSB-left)."""
+    out = {}
+    for ch, rows in chars.items():
+        wide = []
+        for row in rows:
+            row <<= pad
+            if joins_right(ch):
+                # Each new column repeats the one a period to its left: 2
+                # for the shades' checkered patterns, else the edge column.
+                period = 2 if ch in "░▒▓" else 1
+                for x in range(width, width + pad):
+                    if row >> (width + pad - 1 - (x - period)) & 1:
+                        row |= 1 << (width + pad - 1 - x)
+            wide.append(row)
+        out[ch] = wide
+    return out
+
+
 def lsb_left(row, width):
     """Mirror a width-bit row so the leftmost pixel is bit 0."""
     return int(f"{row:0{width}b}"[::-1], 2)
@@ -285,6 +312,7 @@ def lsb_left(row, width):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--scale-y", type=int, default=1)
+    ap.add_argument("--pad-x", type=int, default=0)
     ap.add_argument("--flash", action="store_true")
     ap.add_argument("source")
     ap.add_argument("width", type=int)
@@ -292,12 +320,14 @@ def main():
     ap.add_argument("name")
     ap.add_argument("out")
     args = ap.parse_args()
-    if not 1 <= args.width <= 16 or args.height % args.scale_y:
-        sys.exit("width must be 1-16 and height a multiple of --scale-y")
+    if not 1 <= args.width <= 16 or args.height % args.scale_y or not 0 <= args.pad_x < args.width:
+        sys.exit("width must be 1-16 and height a multiple of --scale-y, --pad-x less than width")
 
     src_height = args.height // args.scale_y
     load = load_bdf if args.source.endswith(".bdf") else load_psf
-    chars = load(args.source, args.width, src_height)
+    chars = load(args.source, args.width - args.pad_x, src_height)
+    if args.pad_x:
+        chars = pad_right(chars, args.width - args.pad_x, args.pad_x)
     chars = {ch: [r for r in rows for _ in range(args.scale_y)] for ch, rows in chars.items()}
     table = build(chars, args.width, args.height)
 

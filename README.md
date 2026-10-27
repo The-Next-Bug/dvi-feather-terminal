@@ -1,7 +1,7 @@
 # dvi-feather-terminal
 
 A VT100 serial terminal with DVI output for the Raspberry Pi Pico 2
-(RP2350) with the Pico DVI Sock: UART in, 800x600 DVI out, 80 or 132
+(RP2350) with the Pico DVI Sock: UART in, 1024x600 DVI out, 80 or 132
 columns by 24 rows plus a status line, and a USB keyboard that types to the
 host over the same UART. The same board can instead be a small Z80 CP/M
 computer with the screen and keyboard as its console and its disks on a
@@ -12,11 +12,15 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
 
 ## Features
 
-- **Display**: 800x600p60 over DVI/HDMI. 80 columns use Terminus 10x20 in
-  10-pixel cells across the full width; 132 columns use misc-fixed 6x12 at
-  double height (each glyph row on two scanlines, like a VT100) in 6-pixel
-  cells (792 pixels, centered). Rows are 24 pixels high; line drawing,
-  block and shade characters join up between rows.
+- **Display**: 1024x600p60 over DVI/HDMI on the Sock (the 7" HDMI panels'
+  native size, pixel for pixel), 800x600p60 on the other boards or as a
+  build option (`HSTX_MODE`). At 1024 wide, 80 columns use Terminus 12x24
+  in 12-pixel cells (960 pixels, centered) and 132 columns misc-fixed 6x12
+  at double height (each glyph row on two scanlines, like a VT100) in
+  7-pixel cells (924 pixels, centered); at 800, Terminus 10x20 in 10-pixel
+  cells across the full width and 6x12 in 6-pixel cells (792 pixels,
+  centered). Rows are 24 pixels high; line drawing, block and shade
+  characters join up between rows and across cells.
 - **Emulation**: VT100/VT102. Cursor movement, scrolling regions, erase,
   insert/delete lines and characters, tab stops, G0/G1 character sets
   (ASCII, UK, DEC Special Graphics) with SI/SO, modes (DECAWM, DECOM, IRM,
@@ -128,7 +132,7 @@ Adalogger FeatherWing are checked on hardware, the Frankless in part):
 
 | Target | Board |
 |---|---|
-| `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default) |
+| `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default); 1024x600 with reduced blanking (`HSTX_MODE` 3) |
 | `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS, the Z80 machine's banks in its 8 MB PSRAM (`PSRAM_BANKS`), DS3231M real-time clock, TDA1387 DAC for the bell and the sound chip (U8, hand-fitted) |
 | `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing); 800x600 with reduced blanking at 354 MHz (`HSTX_MODE` 2), as it crashes at 400 MHz |
 | `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
@@ -1068,7 +1072,7 @@ hub); move it on its own, and check the firmware's `__end__`.
 | `STARTUP_DEMO` | OFF | run the demo after the logo |
 | `MACHINE_BANKS` | 2 | Z80 machine: 48 KB banks besides bank 0 (each costs 48 KB of SRAM; a third does not fit) |
 | `PSRAM_BANKS` | OFF | Z80 machine: the banks in the board's QSPI PSRAM (QMI chip select 1) instead, as many as fit up to 15, none in SRAM, and the rest a [RAM disk](#running-cpm); set by `boards/feather-rp2350-hstx-psram.h`. Without a PSRAM chip at boot the machine has no banks |
-| `HSTX_MODE` | the board's | 0: 800x600 at 60 Hz (clk_sys 400 MHz, clk_hstx 200 MHz); 1: at 56 Hz (360 / 180 MHz); 2: 60 Hz reduced blanking (354 / 177 MHz). 1 and 2 are slower fallbacks. Empty (the default): the board header's choice, `pico_board_cmake_set(BOARD_HSTX_MODE, n)` (2 on the Feathers), else 0 |
+| `HSTX_MODE` | the board's | 0: 800x600 at 60 Hz (clk_sys 400 MHz, clk_hstx 200 MHz); 1: at 56 Hz (360 / 180 MHz); 2: 60 Hz reduced blanking (354 / 177 MHz), 1 and 2 slower fallbacks; 3: 1024x600 at 60 Hz reduced blanking (clk_sys 384 MHz from the USB PLL, clk_hstx 220 MHz from the system PLL). Empty (the default): the board header's choice, `pico_board_cmake_set(BOARD_HSTX_MODE, n)` (3 on the Sock, 2 on the Feathers), else 0 |
 | `VIDEO_DIAG` | OFF | bring-up diagnostics on UART0 TX: boot markers, core 1 scanline timing, fault reports |
 | `COPY_TO_RAM` | ON | run from SRAM; must stay ON (see [How it works](#how-it-works)) |
 
@@ -1077,7 +1081,12 @@ hub); move it on its own, and check the firmware's `__end__`.
 Video comes from the RP2350's HSTX, whose TMDS encoder turns RGB565 pixels
 into DVI (`src/video/hstx_dvi.c`, after Raspberry Pi's
 `pico-examples/hstx/dvi_out_hstx_encoder`): 800x600 at 60 Hz, a 40 MHz pixel
-clock, so clk_hstx 200 MHz and clk_sys 400 MHz (1.3 V). Two DMA channels
+clock, so clk_hstx 200 MHz and clk_sys 400 MHz (1.3 V); or 1024x600 at 60 Hz
+with reduced blanking, a 44 MHz pixel clock: clk_hstx 220 MHz from the
+system PLL and clk_sys 384 MHz from the USB PLL, which also gives USB its
+48 MHz. While the screen is blanked the DVI pins are left undriven, so the
+monitor sleeps; 3 s after waking the signal stops for half a second once
+more, for a monitor that woke without locking to it. Two DMA channels
 feed it blanking command lists and scanlines in turn. `hstx_test.uf2`,
 built alongside, shows a test pattern for checking a monitor and the
 clocks.

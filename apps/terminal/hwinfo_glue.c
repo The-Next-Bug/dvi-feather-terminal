@@ -106,7 +106,7 @@ static size_t video_record(uint8_t *buf) {
 	char text[80];
 	unsigned hz = HSTX_MODE == 1 ? 56 : 60;
 	snprintf(text, sizeof text, "DVI %ux%u at %u Hz%s, %u x %u text + status line", hstx_timing.h_active,
-		hstx_timing.v_active, hz, HSTX_MODE == 2 ? " (reduced blanking)" : "", screen.cols, TERM_ROWS);
+		hstx_timing.v_active, hz, HSTX_MODE >= 2 ? " (reduced blanking)" : "", screen.cols, TERM_ROWS);
 	return hwinfo_record(buf, HWINFO_ST_PRESENT, "Video", text);
 }
 

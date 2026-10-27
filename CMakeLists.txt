@@ -59,7 +59,7 @@ option(COPY_TO_RAM "Run the whole program from SRAM instead of flash" ON)
 # beyond its 150 MHz rating; the others are fallbacks with slower clocks.
 # Empty: the board header's, pico_board_cmake_set(BOARD_HSTX_MODE, n) (the
 # Feathers: 2, they do not run 400 MHz reliably), else 0.
-set(HSTX_MODE_HELP "HSTX video mode: empty the board's (else 0), 0 800x600@60 (400 MHz), 1 800x600@56 (360 MHz), 2 800x600@60 reduced blanking (354 MHz)")
+set(HSTX_MODE_HELP "HSTX video mode: empty the board's (else 0), 0 800x600@60 (400 MHz), 1 800x600@56 (360 MHz), 2 800x600@60 reduced blanking (354 MHz); spike (bd cpx.4): 3 1024x600@60 reduced blanking (clk_hstx 220, clk_sys 384 MHz)")
 set(HSTX_MODE "" CACHE STRING "${HSTX_MODE_HELP}")
 # A build directory from before the board's choice holds 0, which would
 # now override it: start it over at empty.
@@ -151,6 +151,11 @@ target_compile_definitions(dvt_disks PUBLIC DISKIMG_IN_FLASH=1)
 target_compile_definitions(dvt_z80pack PUBLIC MACHINE_BANKS=${MACHINE_BANKS})
 target_compile_definitions(dvt_platform PUBLIC VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}> PSRAM_BANKS=$<BOOL:${PSRAM_BANKS}>)
 target_compile_definitions(dvt_video PUBLIC HSTX_MODE=${DVT_HSTX_MODE})
+# The 1024x600 mode: the raster's 1024-wide layouts (80 columns of 12x24,
+# 132 of 7-pixel cells), for everything that includes raster.h.
+if(DVT_HSTX_MODE EQUAL 3)
+  target_compile_definitions(dvt_render PUBLIC RASTER_ACTIVE_WIDTH=1024)
+endif()
 target_compile_definitions(dvt_usb PRIVATE
   USB_WA_DEINIT=$<BOOL:${USB_WA_DEINIT}>
   USB_WA_DATASEQ=$<BOOL:${USB_WA_DATASEQ}>
