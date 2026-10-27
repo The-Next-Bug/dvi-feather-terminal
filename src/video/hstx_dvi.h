@@ -26,9 +26,9 @@
 //   1: 800x600 56 Hz, 36 MHz (VESA: clk_sys 360 MHz)
 //   2: 800x600 60 Hz reduced blanking, 35.4 MHz (CVT-RB: clk_sys 354 MHz)
 //   3: 1024x600 60 Hz reduced blanking, 44 MHz (CVT-RB): clk_hstx 220 MHz,
-//      clk_sys 432 MHz (split: PLL_USB, a multiple of 48 MHz), at 1.35 V
+//      clk_sys 384 MHz (split: PLL_USB, a multiple of 48 MHz)
 // The 1024-wide mode is a spike (bd cpx.4): hstx_test fills it, the
-// terminal shows its 800 pixels centered between black borders.
+// terminal draws it with its 1024-wide layouts (RASTER_ACTIVE_WIDTH).
 #ifndef HSTX_MODE
 #define HSTX_MODE 0
 #endif

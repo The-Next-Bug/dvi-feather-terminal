@@ -34,20 +34,12 @@ hstx_timing_t hstx_timing =
 	// vsync: no standard aspect ratio): 1184 x 619 at 44 MHz, 60.03 Hz.
 	// The panels' own 1344 x 635 at 51.2 MHz (clk_hstx 256 MHz) gave a
 	// desktop monitor static, and at clk_sys 512 MHz the Frankless showed
-	// nothing at 1.30 V (bd cpx.4). clk_sys 432 MHz, not 384: core 1 took
-	// 90% of a 132-column line at 384; 400 is no multiple of 48 MHz.
-	{ 48, 32, 80, 1024, 3, 10, 6, 600, true, false, 440000, 432000 };
+	// nothing at 1.30 V (bd cpx.4). clk_sys 384 MHz at 1.30 V: 432 needed
+	// 1.35 V and then went without a picture after waking (cpx.5); with
+	// qur.22's compose core 1 took 42% of a 132-column line at 432.
+	{ 48, 32, 80, 1024, 3, 10, 6, 600, true, false, 440000, 384000 };
 #else
 #error "unknown HSTX_MODE"
-#endif
-
-// The core voltage. Mode 3's clk_sys 432 MHz crashed at 1.30 V, the most
-// the SDK allows without vreg_disable_voltage_limit (bd cpx.4); one step
-// up. frank-386 goes as far as 1.60 V for 504 MHz: too much heat and wear.
-#if HSTX_MODE == 3
-#define HSTX_VOLTAGE VREG_VOLTAGE_1_35
-#else
-#define HSTX_VOLTAGE VREG_VOLTAGE_1_30
 #endif
 
 volatile uint32_t hstx_dvi_frames;
@@ -190,10 +182,7 @@ void hstx_dvi_init(void) {
 	const hstx_timing_t *t = &hstx_timing;
 	// 10 x the pixel clock needs more than the default core voltage. The
 	// whole program runs from SRAM (COPY_TO_RAM): flash cannot keep up.
-	if (HSTX_VOLTAGE > VREG_VOLTAGE_MAX) {
-		vreg_disable_voltage_limit();
-	}
-	vreg_set_voltage(HSTX_VOLTAGE);
+	vreg_set_voltage(VREG_VOLTAGE_1_30);
 	sleep_ms(10);
 	if (t->sys_khz == t->pll_khz) {
 		set_sys_clock_khz(t->sys_khz, true);

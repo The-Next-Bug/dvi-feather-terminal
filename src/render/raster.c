@@ -11,8 +11,13 @@ static const struct {
 	bool wide;                 // 16-bit rows (otherwise 8-bit)
 	const char *name;
 } fonts[RASTER_LAYOUTS] = {
+#if RASTER_ACTIVE_WIDTH == 1024
+	[RASTER_80] = {font_12x24, font_12x24_bold, true, "Terminus 12x24"},
+	[RASTER_132] = {font_132_7, NULL, false, "misc-fixed 6x12 in 7-pixel cells"},
+#else
 	[RASTER_80] = {font_10x20, font_10x20_bold, true, "Terminus 10x20"},
 	[RASTER_132] = {font_132, NULL, false, "misc-fixed 6x12"},
+#endif
 };
 
 // The active layout's fonts in SRAM, one 16-bit word per glyph row
@@ -137,9 +142,25 @@ static inline __attribute__((always_inline)) uint32_t *compose_cell(uint32_t *p,
 	return p;
 }
 
+// Two cells of an odd width w from their 2w bits b (the first cell's in
+// the low w): w words, the middle one a pixel of each, so its colors are
+// half the first cell's, half the second's.
+static inline __attribute__((always_inline)) uint32_t *compose_cell_pair(uint32_t *p, uint32_t b, unsigned w,
+		uint32_t fg0, uint32_t bg0, uint32_t fg1, uint32_t bg1) {
+	const unsigned mid = w / 2;
+	uint32_t d0 = fg0 ^ bg0, d1 = fg1 ^ bg1;
+	uint32_t bgm = (bg0 & 0xffffu) | (bg1 & 0xffff0000u), dm = (d0 & 0xffffu) | (d1 & 0xffff0000u);
+	for (unsigned k = 0; k < w; ++k, b >>= 2) {
+		uint32_t m = pair_masks[b & 3];
+		*p++ = k < mid ? bg0 ^ (d0 & m) : k == mid ? bgm ^ (dm & m) : bg1 ^ (d1 & m);
+	}
+	return p;
+}
+
 // raster_compose for one layout, its width and columns constants once
 // inlined (qur.22: the generic loop kept them on the stack, reloaded per
-// cell, and compared each cell with the cursor's column).
+// cell, and compared each cell with the cursor's column). Odd widths go
+// two cells at a time (cols is even).
 static inline __attribute__((always_inline)) void compose_layout(uint32_t *px, const raster_line_t *line,
 		const uint8_t *row, unsigned w, unsigned cols, unsigned border, int cursor_col, const uint32_t colors[256]) {
 	const unsigned pairs = w / 2;
@@ -147,8 +168,15 @@ static inline __attribute__((always_inline)) void compose_layout(uint32_t *px, c
 	for (unsigned i = 0; i < border; ++i) {
 		*p++ = 0;
 	}
-	for (unsigned c = 0; c < cols; ++c) {
-		p = compose_cell(p, cell_word(row, c * w), pairs, colors[line->fg[c]], colors[line->bg[c]]);
+	if (w % 2) {
+		for (unsigned c = 0; c < cols; c += 2) {
+			p = compose_cell_pair(p, cell_word(row, c * w), w, colors[line->fg[c]], colors[line->bg[c]],
+				colors[line->fg[c + 1]], colors[line->bg[c + 1]]);
+		}
+	} else {
+		for (unsigned c = 0; c < cols; ++c) {
+			p = compose_cell(p, cell_word(row, c * w), pairs, colors[line->fg[c]], colors[line->bg[c]]);
+		}
 	}
 	while (p < px + RASTER_LINE_WORDS) {
 		*p++ = 0;
@@ -156,8 +184,15 @@ static inline __attribute__((always_inline)) void compose_layout(uint32_t *px, c
 	// The cursor's cell again, inverted: once per line, not a test per cell.
 	if (cursor_col >= 0 && (unsigned)cursor_col < cols) {
 		unsigned c = (unsigned)cursor_col;
-		compose_cell(px + border + c * pairs, ~cell_word(row, c * w), pairs, colors[line->fg[c]],
-			colors[line->bg[c]]);
+		if (w % 2) {
+			c &= ~1u; // its pair, only its own bits inverted
+			uint32_t flip = ((1u << w) - 1) << ((unsigned)cursor_col % 2 * w);
+			compose_cell_pair(px + border + c / 2 * w, cell_word(row, c * w) ^ flip, w, colors[line->fg[c]],
+				colors[line->bg[c]], colors[line->fg[c + 1]], colors[line->bg[c + 1]]);
+		} else {
+			compose_cell(px + border + c * pairs, ~cell_word(row, c * w), pairs, colors[line->fg[c]],
+				colors[line->bg[c]]);
+		}
 	}
 }
 
@@ -165,8 +200,8 @@ void raster_compose(uint32_t *px, const raster_line_t *line, raster_layout_t l, 
 		const uint32_t colors[256]) {
 	const uint8_t *row = line->bits[sr];
 	if (l == RASTER_132) {
-		compose_layout(px, line, row, 6, 132, raster_x_offset(RASTER_132) / 2, cursor_col, colors);
+		compose_layout(px, line, row, RASTER_132_CELL, 132, raster_x_offset(RASTER_132) / 2, cursor_col, colors);
 	} else {
-		compose_layout(px, line, row, 10, 80, raster_x_offset(RASTER_80) / 2, cursor_col, colors);
+		compose_layout(px, line, row, RASTER_80_CELL, 80, raster_x_offset(RASTER_80) / 2, cursor_col, colors);
 	}
 }

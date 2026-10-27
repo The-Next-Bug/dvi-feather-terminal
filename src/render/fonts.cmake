@@ -6,14 +6,19 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(FONT_GEN "${CMAKE_CURRENT_LIST_DIR}/font_gen.py")
 set(FONT_DIR "${CMAKE_CURRENT_LIST_DIR}/../../assets/fonts")
 
-# font_table(<name> <out.c> <source> <width> <height> [FLASH]): generate the
-# table <name> into <out.c>; FLASH keeps it in the firmware's flash
-# (FONT_FLASH_DATA in src/screen/font.h): raster.c copies the active layout's
-# fonts into SRAM.
+# font_table(<name> <out.c> <source> <width> <height> [FLASH] [PAD_X <n>]):
+# generate the table <name> into <out.c>; FLASH keeps it in the firmware's
+# flash (FONT_FLASH_DATA in src/screen/font.h): raster.c copies the active
+# layout's fonts into SRAM. PAD_X widens a font n columns narrower than
+# <width> (font_gen.py --pad-x).
 function(font_table name out source width height)
+  cmake_parse_arguments(PARSE_ARGV 5 arg "FLASH" "PAD_X" "")
   set(flash "")
-  if("FLASH" IN_LIST ARGN)
+  if(arg_FLASH)
     set(flash "--flash")
+  endif()
+  if(arg_PAD_X)
+    list(APPEND flash --pad-x ${arg_PAD_X})
   endif()
   add_custom_command(
     OUTPUT ${out}
@@ -32,4 +37,12 @@ font_table(font_10x20_bold "${GENERATED}/font_10x20_bold.c" Uni2-TerminusBold20x
 # 132 columns: misc-fixed 6x12, each glyph row shown on two scanlines (no
 # 6-pixel-wide font is taller); it fills the 24-scanline rows.
 font_table(font_132 "${GENERATED}/font_132.c" misc-fixed-6x12.bdf 6 12 FLASH)
-set(FONT_SOURCES "${GENERATED}/font_10x20.c" "${GENERATED}/font_10x20_bold.c" "${GENERATED}/font_132.c")
+# The 1024-wide layouts (RASTER_ACTIVE_WIDTH 1024, bd cpx.4): 80 columns of
+# Terminus 12x24 and its bold face in 12-pixel cells, 132 of misc-fixed 6x12
+# widened to 7-pixel cells. Each table is its own object: a firmware links
+# only its width's.
+font_table(font_12x24 "${GENERATED}/font_12x24.c" Uni2-Terminus24x12.psf.gz 12 24 FLASH)
+font_table(font_12x24_bold "${GENERATED}/font_12x24_bold.c" Uni2-TerminusBold24x12.psf.gz 12 24 FLASH)
+font_table(font_132_7 "${GENERATED}/font_132_7.c" misc-fixed-6x12.bdf 7 12 FLASH PAD_X 1)
+set(FONT_SOURCES "${GENERATED}/font_10x20.c" "${GENERATED}/font_10x20_bold.c" "${GENERATED}/font_132.c"
+  "${GENERATED}/font_12x24.c" "${GENERATED}/font_12x24_bold.c" "${GENERATED}/font_132_7.c")

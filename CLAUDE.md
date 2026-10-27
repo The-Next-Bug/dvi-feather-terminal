@@ -335,10 +335,14 @@ UF2 in the latter).
   per-line pixels from a callback. `HSTX_MODE` 0 = 800x600@60 with libdvi's
   timing (clk_hstx 200 MHz, above the 150 MHz rating: dmt.8.1), 1 = @56,
   2 = CVT-RB (354 MHz), 3 = 1024x600 CVT-RB (bd cpx.4, experimental
-  branch only: 44 MHz, clk_hstx 220 from PLL_SYS 440, clk_sys 432 from
-  PLL_USB at 1.35 V, clk_usb/adc /9, clk_peri /3 = 144 MHz: its divider
-  has 2 bits, 1-3; the terminal's 800 px centered, line_buf 1024 wide;
-  132 columns at 79% of core 1's line). The cache option is empty by default: the board
+  branch only: 44 MHz, clk_hstx 220 from PLL_SYS 440, clk_sys 384 from
+  PLL_USB at 1.30 V (432 needed 1.35 V), clk_usb/adc /8, clk_peri /3 =
+  128 MHz: its divider has 2 bits, 1-3; dvt_render PUBLIC
+  RASTER_ACTIVE_WIDTH=1024: 80 cols in 12-px cells of Terminus 12x24
+  (960 px), 132 in 7-px cells of font_132_7 (6x12 + a column font_gen.py
+  --pad-x extends for line drawing; 924 px; raster_compose draws odd
+  widths two cells at a time); test_raster_1024 runs test_raster.c at
+  that width). The cache option is empty by default: the board
   header's pico_board_cmake_set(BOARD_HSTX_MODE, n), else 0 (top
   CMakeLists: DVT_HSTX_MODE, HSTX_MODE_USED for build-info.txt; a cache
   with the old help string is reset to empty so a stale 0 does not win).

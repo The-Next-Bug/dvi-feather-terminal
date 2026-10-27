@@ -15,7 +15,8 @@
 
 _Static_assert(SCREEN_ROWS * RASTER_ROW_HEIGHT == RASTER_ACTIVE_HEIGHT, "rows fill the screen");
 _Static_assert(RASTER_ACTIVE_HEIGHT == HSTX_ACTIVE_HEIGHT, "the raster's height is the mode's");
-// A mode wider than the raster (1024x600, bd cpx) shows it centered: the
+// A mode wider than the raster (none now: the 1024x600 mode builds the
+// raster 1024 wide, bd cpx.4) would show it centered: the
 // line buffers' borders stay black (zero from boot, never written).
 _Static_assert(HSTX_ACTIVE_WIDTH >= RASTER_ACTIVE_WIDTH && (HSTX_ACTIVE_WIDTH - RASTER_ACTIVE_WIDTH) % 4 == 0,
 	"the raster fits the mode on whole words");

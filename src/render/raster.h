@@ -12,6 +12,12 @@
 // the screen: the glyph is centered with blank padding above and below
 // (none for 6x12, which fills the row).
 //
+// Or, built with RASTER_ACTIVE_WIDTH 1024 (the 1024x600 mode, bd cpx.4),
+// 1024x600: 80 columns of 12-pixel cells and Terminus 12x24, which fills
+// the rows (960 px, centered), or 132 of 7-pixel cells (924 px, centered)
+// and 6x12 widened by a column (font_132_7). Cells of an odd width start
+// on whole words in pairs: raster_compose draws two at a time.
+//
 // Line-drawing, block and shade glyphs (glyph_is_connector) extend their
 // top and bottom rows into that padding so vertical lines join up. Each
 // line therefore stores font-height + 2 rows: a top padding row, the glyph
@@ -35,18 +41,33 @@
 #include "font.h"
 #include "screen.h"
 
+#ifndef RASTER_ACTIVE_WIDTH
 #define RASTER_ACTIVE_WIDTH 800
+#endif
 #define RASTER_ACTIVE_HEIGHT 600
 #define RASTER_ROW_HEIGHT 24
-#define RASTER_MAX_FONT_ROWS 20
+#if RASTER_ACTIVE_WIDTH == 800
+#define RASTER_80_CELL 10  // pixels per cell, 80 columns
+#define RASTER_132_CELL 6  // and 132
+#define RASTER_80_FONT_ROWS FONT_10X20_HEIGHT
+#elif RASTER_ACTIVE_WIDTH == 1024
+#define RASTER_80_CELL 12
+#define RASTER_132_CELL 7
+#define RASTER_80_FONT_ROWS FONT_12X24_HEIGHT
+#else
+#error "RASTER_ACTIVE_WIDTH: 800 or 1024"
+#endif
+#define RASTER_MAX_FONT_ROWS RASTER_80_FONT_ROWS
 #define RASTER_STORED_ROWS (RASTER_MAX_FONT_ROWS + 2)
-#define RASTER_ROW_BYTES (RASTER_ACTIVE_WIDTH / 8) // a stored row's pixel bits
+// A stored row's pixel bits: the wider layout's cells (raster_cell_bits
+// and put_cell_bits touch the byte after a cell's first).
+#define RASTER_ROW_BYTES ((80 * RASTER_80_CELL > 132 * RASTER_132_CELL ? 80 * RASTER_80_CELL : 132 * RASTER_132_CELL) / 8)
 // A composed scanline: two 16-bit pixels per word, the first in the low half.
 #define RASTER_LINE_WORDS (RASTER_ACTIVE_WIDTH / 2)
 
 typedef enum {
-	RASTER_80,  // 80 columns, 10x20 in 10-pixel cells, the full width
-	RASTER_132, // 132 columns, 6x12 doubled in 6-pixel cells, centered
+	RASTER_80,  // 80 columns, 10x20 in 10-pixel cells, the full width (12x24 in 12)
+	RASTER_132, // 132 columns, 6x12 doubled in 6-pixel cells, centered (7)
 	RASTER_LAYOUTS
 } raster_layout_t;
 
@@ -65,18 +86,19 @@ static inline unsigned raster_cols(raster_layout_t l) {
 }
 
 static inline unsigned raster_cell_width(raster_layout_t l) {
-	return l == RASTER_132 ? 6 : 10;
+	return l == RASTER_132 ? RASTER_132_CELL : RASTER_80_CELL;
 }
 
-// 80 columns fill the width; 132 are centered at 4 px. Always even, so
-// cells start on whole words of the composed scanline.
+// The cells centered (800 wide: 80 columns fill it, 132 start at 4 px).
+// Always even, so cells (pairs of odd-width ones) start on whole words of
+// the composed scanline.
 static inline unsigned raster_x_offset(raster_layout_t l) {
 	return (RASTER_ACTIVE_WIDTH - raster_cols(l) * raster_cell_width(l)) / 2;
 }
 
 // Glyph rows in the font, and the scanlines each one is shown on.
 static inline unsigned raster_font_rows(raster_layout_t l) {
-	return l == RASTER_132 ? FONT_132_HEIGHT : FONT_10X20_HEIGHT;
+	return l == RASTER_132 ? FONT_132_HEIGHT : RASTER_80_FONT_ROWS;
 }
 
 static inline unsigned raster_font_scale(raster_layout_t l) {
@@ -104,8 +126,8 @@ static inline unsigned raster_stored_row(raster_layout_t l, unsigned sy) {
 	return raster_font_rows(l) + 1;
 }
 
-// Cell c's pixels (w of them, up to 10) in a stored row: two bytes hold
-// them wherever they start (cells start on even bits, so at most 6 + 10).
+// Cell c's pixels (w of them, up to 12) in a stored row: two bytes hold
+// them wherever they start (at most 7 + 7 or 4 + 12 bits).
 static inline unsigned raster_cell_bits(const uint8_t row[RASTER_ROW_BYTES], unsigned w, unsigned c) {
 	unsigned bit = c * w;
 	unsigned v = row[bit >> 3] | (unsigned)row[(bit >> 3) + 1] << 8;
