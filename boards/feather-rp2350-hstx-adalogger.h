@@ -26,8 +26,6 @@
 pico_board_cmake_set(PICO_PLATFORM, rp2350)
 pico_board_cmake_set_default(PICO_FLASH_SIZE_BYTES, (8 * 1024 * 1024))
 pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
-// feather-rp2350-hstx.h's video mode (354 MHz), restated.
-pico_board_cmake_set(BOARD_HSTX_MODE, 2)
 
 #include "feather-rp2350-hstx.h"
 

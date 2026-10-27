@@ -80,6 +80,12 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 // with longer traces or a level shifter may want more.
 // #define BOARD_DVI_DRIVE_MA 2
 // #define BOARD_DVI_SLEW_FAST 0
+// Optional: clk_sys in the 1024x600 mode (HSTX_MODE 3, the default), where
+// it comes from the USB PLL: a multiple of 48 MHz, default 384000 (kHz).
+// Lower for a board unstable at 384 MHz (the Feathers: 336000).
+// #define BOARD_SPLIT_SYS_KHZ 384000
+// Optional: another video mode for the board, as a CMake setting (not a
+// #define): pico_board_cmake_set(BOARD_HSTX_MODE, 0) for 800x600.
 
 // --- Terminal UART ---
 //

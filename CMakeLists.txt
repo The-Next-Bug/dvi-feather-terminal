@@ -57,9 +57,10 @@ option(VIDEO_DIAG "Bring-up diagnostics on UART0 TX: boot markers, core 1 timing
 option(COPY_TO_RAM "Run the whole program from SRAM instead of flash" ON)
 # Video timing (src/hstx_dvi.h): 800x600 at 60 Hz needs clk_hstx at 200 MHz,
 # beyond its 150 MHz rating; the others are fallbacks with slower clocks.
-# Empty: the board header's, pico_board_cmake_set(BOARD_HSTX_MODE, n) (the
-# Feathers: 2, they do not run 400 MHz reliably), else 0.
-set(HSTX_MODE_HELP "HSTX video mode: empty the board's (else 0), 0 800x600@60 (400 MHz), 1 800x600@56 (360 MHz), 2 800x600@60 reduced blanking (354 MHz); spike (bd cpx.4): 3 1024x600@60 reduced blanking (clk_hstx 220, clk_sys 384 MHz)")
+# Empty: the board header's, pico_board_cmake_set(BOARD_HSTX_MODE, n), else
+# 3 (1024x600, since v0.10.0; clk_sys BOARD_SPLIT_SYS_KHZ, 336 MHz on the
+# Feathers, which do not run 400 MHz reliably).
+set(HSTX_MODE_HELP "HSTX video mode: empty the board's (else 3), 0 800x600@60 (400 MHz), 1 800x600@56 (360 MHz), 2 800x600@60 reduced blanking (354 MHz), 3 1024x600@60 reduced blanking (clk_hstx 220 MHz, clk_sys the board's, 384 MHz)")
 set(HSTX_MODE "" CACHE STRING "${HSTX_MODE_HELP}")
 # A build directory from before the board's choice holds 0, which would
 # now override it: start it over at empty.
@@ -120,7 +121,7 @@ if(NOT HSTX_MODE STREQUAL "")
 elseif(DEFINED BOARD_HSTX_MODE)
   set(DVT_HSTX_MODE ${BOARD_HSTX_MODE})
 else()
-  set(DVT_HSTX_MODE 0)
+  set(DVT_HSTX_MODE 3)
 endif()
 set(HSTX_MODE_USED ${DVT_HSTX_MODE} CACHE INTERNAL "the video mode built (build-info.txt)")
 message(STATUS "HSTX_MODE ${DVT_HSTX_MODE}")
