@@ -26,12 +26,18 @@ static const drives_geometry_t geometries[DRIVES_FORMATS] = {
 };
 
 static struct {
-	FIL file;
+	FIL file;               // unused for the RAM disk
 	drives_format_t format; // DRIVES_NONE: not mounted
+	bool ram;               // the RAM disk
 	bool dirty;
 	uint8_t mounts; // images mounted on it (mod 256)
 	char name[DRIVES_NAME_MAX + 1];
 } drive[DRIVES];
+
+static struct {
+	uint8_t *memory;
+	drives_format_t format; // DRIVES_NONE: none
+} ramdisk;
 
 static uint32_t last_write_ms;
 static uint8_t activity; // bit per drive
@@ -47,6 +53,32 @@ drives_format_t drives_format_of_size(uint32_t size) {
 		}
 	}
 	return DRIVES_NONE;
+}
+
+drives_format_t drives_format_fit(size_t size) {
+	for (drives_format_t f = DRIVES_FORMATS - 1; f > DRIVES_NONE; --f) {
+		if (geometries[f].size <= size) {
+			return f;
+		}
+	}
+	return DRIVES_NONE;
+}
+
+void drives_set_ramdisk(uint8_t *memory, drives_format_t f) {
+	for (unsigned d = 0; d < DRIVES; ++d) {
+		if (drive[d].ram) {
+			drives_unmount(d);
+		}
+	}
+	ramdisk.format = memory && drives_geometry(f) ? f : DRIVES_NONE;
+	ramdisk.memory = ramdisk.format ? memory : NULL;
+	if (ramdisk.memory) {
+		memset(ramdisk.memory, BLANK, geometries[f].size);
+	}
+}
+
+drives_format_t drives_ramdisk_format(void) {
+	return ramdisk.format;
 }
 
 bool drives_normalize(const char *in, char out[DRIVES_NAME_MAX + 1]) {
@@ -76,6 +108,17 @@ drives_result_t drives_mount(unsigned d, const char *name) {
 	}
 	drives_unmount(d);
 
+	if (strcmp(upper, DRIVES_RAMDISK) == 0) {
+		if (!ramdisk.format) {
+			return DRIVES_NOT_FOUND;
+		}
+		drive[d].format = ramdisk.format;
+		drive[d].ram = true;
+		drive[d].dirty = false;
+		++drive[d].mounts;
+		strcpy(drive[d].name, upper);
+		return DRIVES_OK;
+	}
 	char path[32];
 	image_path(path, sizeof path, upper);
 	FRESULT r = f_open(&drive[d].file, path, FA_READ | FA_WRITE);
@@ -104,8 +147,11 @@ void drives_unmount(unsigned d) {
 	if (d >= DRIVES || !drive[d].format) {
 		return;
 	}
-	f_close(&drive[d].file); // flushes
+	if (!drive[d].ram) {
+		f_close(&drive[d].file); // flushes
+	}
 	drive[d].format = DRIVES_NONE;
+	drive[d].ram = false;
 	drive[d].dirty = false;
 }
 
@@ -133,6 +179,9 @@ drives_result_t drives_create(const char *name, drives_format_t f, uint8_t *buf,
 	const drives_geometry_t *g = drives_geometry(f);
 	if (!g || !drives_normalize(name, upper)) {
 		return DRIVES_NOT_FOUND;
+	}
+	if (strcmp(upper, DRIVES_RAMDISK) == 0) {
+		return DRIVES_EXISTS;
 	}
 	FRESULT r = f_mkdir("/DISKS80");
 	if (r != FR_OK && r != FR_EXIST) {
@@ -171,12 +220,16 @@ drives_format_t drives_image_format(const char *name) {
 	if (!drives_normalize(name, upper)) {
 		return DRIVES_NONE;
 	}
+	if (strcmp(upper, DRIVES_RAMDISK) == 0) {
+		return ramdisk.format;
+	}
 	image_path(path, sizeof path, upper);
 	return f_stat(path, &info) == FR_OK ? drives_format_of_size((uint32_t)info.fsize) : DRIVES_NONE;
 }
 
-// Position drive d at the sector, or return why not.
-static uint8_t seek(unsigned d, unsigned track, unsigned sector) {
+// Position drive d at the sector (the RAM disk: *pos, its offset), or
+// return why not.
+static uint8_t seek(unsigned d, unsigned track, unsigned sector, uint32_t *pos) {
 	if (d >= DRIVES) {
 		return FDC_STAT_DISK;
 	}
@@ -191,14 +244,22 @@ static uint8_t seek(unsigned d, unsigned track, unsigned sector) {
 		return FDC_STAT_SEC;
 	}
 	activity |= (uint8_t)(1u << d);
-	FSIZE_t pos = ((FSIZE_t)track * g->sectors + sector - 1) * DRIVES_SECTOR;
-	return f_lseek(&drive[d].file, pos) == FR_OK ? FDC_STAT_OK : FDC_STAT_SEEK;
+	*pos = ((uint32_t)track * g->sectors + sector - 1) * DRIVES_SECTOR;
+	if (drive[d].ram) {
+		return FDC_STAT_OK;
+	}
+	return f_lseek(&drive[d].file, *pos) == FR_OK ? FDC_STAT_OK : FDC_STAT_SEEK;
 }
 
 uint8_t drives_read(unsigned d, unsigned track, unsigned sector, uint8_t buf[DRIVES_SECTOR]) {
-	uint8_t st = seek(d, track, sector);
+	uint32_t pos;
+	uint8_t st = seek(d, track, sector, &pos);
 	if (st != FDC_STAT_OK) {
 		return st;
+	}
+	if (drive[d].ram) {
+		memcpy(buf, ramdisk.memory + pos, DRIVES_SECTOR);
+		return FDC_STAT_OK;
 	}
 	UINT n;
 	return f_read(&drive[d].file, buf, DRIVES_SECTOR, &n) == FR_OK && n == DRIVES_SECTOR ? FDC_STAT_OK
@@ -206,9 +267,14 @@ uint8_t drives_read(unsigned d, unsigned track, unsigned sector, uint8_t buf[DRI
 }
 
 uint8_t drives_write(unsigned d, unsigned track, unsigned sector, const uint8_t buf[DRIVES_SECTOR]) {
-	uint8_t st = seek(d, track, sector);
+	uint32_t pos;
+	uint8_t st = seek(d, track, sector, &pos);
 	if (st != FDC_STAT_OK) {
 		return st;
+	}
+	if (drive[d].ram) {
+		memcpy(ramdisk.memory + pos, buf, DRIVES_SECTOR);
+		return FDC_STAT_OK;
 	}
 	UINT n;
 	if (f_write(&drive[d].file, buf, DRIVES_SECTOR, &n) != FR_OK || n != DRIVES_SECTOR) {

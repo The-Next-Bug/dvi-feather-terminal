@@ -15,6 +15,14 @@
 // data a quarter of a second after the first unflushed write, drives_flush
 // at once. The assignments are kept in /DISKS80/DRIVES.CFG. Portable C
 // (FatFs), host-tested.
+//
+// The RAM disk (bd 1ls.20): on boards with PSRAM, memory the platform
+// gives (drives_set_ramdisk) is a drive image named RAMDISK, mounted,
+// listed and saved in DRIVES.CFG and the sets like the card's (a
+// RAMDISK.DSK on the card is never used: the name is the RAM disk's).
+// Its format is the largest of the three that fits; it starts blank and
+// keeps its contents while the board runs (unmounts and the machine's
+// reset too), not over a power-off or reboot. FatFs is not involved.
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -46,6 +54,9 @@ const drives_geometry_t *drives_geometry(drives_format_t f);
 // The format of an image of size bytes, DRIVES_NONE if none.
 drives_format_t drives_format_of_size(uint32_t size);
 
+// The largest format whose image fits in size bytes, DRIVES_NONE if none.
+drives_format_t drives_format_fit(size_t size);
+
 typedef enum {
 	DRIVES_OK,
 	DRIVES_NOT_FOUND,  // no such image
@@ -55,8 +66,8 @@ typedef enum {
 	DRIVES_IO_ERROR,
 } drives_result_t;
 
-// Mount /DISKS80/<name>.DSK (name case-insensitive, without the extension)
-// on drive (0-7), unmounting what was there.
+// Mount /DISKS80/<name>.DSK (name case-insensitive, without the extension),
+// or the RAM disk for RAMDISK, on drive (0-7), unmounting what was there.
 drives_result_t drives_mount(unsigned drive, const char *name);
 void drives_unmount(unsigned drive);
 void drives_unmount_all(void);
@@ -73,8 +84,8 @@ uint8_t drives_mounts(unsigned drive);
 // Progress of a long write: done of total bytes.
 typedef void (*drives_progress_t)(void *ctx, uint32_t done, uint32_t total);
 
-// Create /DISKS80/<name>.DSK as a blank (formatted, empty) disk of format f,
-// writing buf_size bytes at a time from buf (scratch; a multiple of 512
+// Create /DISKS80/<name>.DSK as a blank (formatted, empty) disk of format f
+// (RAMDISK: DRIVES_EXISTS), writing buf_size bytes at a time from buf (scratch; a multiple of 512
 // bytes and at least 512: bigger is faster, FatFs passes whole sectors on
 // to the card). progress, if not NULL, is called after each write.
 drives_result_t drives_create(const char *name, drives_format_t f, uint8_t *buf, size_t buf_size,
@@ -88,9 +99,18 @@ drives_format_t drives_image_format(const char *name);
 // one (empty, over 8 characters, or . / \\ : * ? or a blank in it).
 bool drives_normalize(const char *name, char upper[DRIVES_NAME_MAX + 1]);
 
-// The images in /DISKS80 (base names, sorted), up to max (drivecfg.c, as
-// the configuration and sets below).
+// The images in /DISKS80 and the RAM disk (base names, sorted), up to max
+// (drivecfg.c, as the configuration and sets below).
 unsigned drives_list(char names[][DRIVES_NAME_MAX + 1], unsigned max);
+
+#define DRIVES_RAMDISK "RAMDISK"
+
+// Make memory (at least drives_geometry(f)->size bytes) the RAM disk of
+// format f, blank; NULL or DRIVES_NONE: none (unmounted where mounted).
+void drives_set_ramdisk(uint8_t *memory, drives_format_t f);
+
+// The RAM disk's format, DRIVES_NONE without one.
+drives_format_t drives_ramdisk_format(void);
 
 // Sector I/O for the FDC: track and sector within the drive's geometry
 // (sectors from 1). Return FDC status codes (sd-fdc.h: 0 = OK).

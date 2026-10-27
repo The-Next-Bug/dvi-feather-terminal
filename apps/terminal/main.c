@@ -327,12 +327,27 @@ int main(void) {
 #if PSRAM_BANKS
 		// The banks in the PSRAM: as many as fit, at most 15.
 		unsigned banks = (unsigned)(psram / MACHINE_BANK_SIZE);
-		machine_set_banks(extram_base(), banks);
+		if (banks > MACHINE_MAX_BANKS) {
+			banks = MACHINE_MAX_BANKS;
+		}
+		machine_set_banks(extram_take(banks * MACHINE_BANK_SIZE), banks);
 		if (psram) {
 			snprintf(banner, sizeof banner, "Z80 banks: %u x 48K in PSRAM (%u KB found)\r\n", machine_banks(),
 				(unsigned)(psram / 1024));
 			term_puts(&term, banner);
-		} else {
+		}
+		// The RAM disk last (extram.h): the largest format in what is left.
+		// Blanking it takes a moment, so the new screen is drawn first: till
+		// then core 1 shows the raster as the logo left it (color blocks).
+		video_update(&screen);
+		drives_format_t ramdisk = drives_format_fit(extram_left());
+		drives_set_ramdisk(ramdisk ? extram_take(drives_geometry(ramdisk)->size) : NULL, ramdisk);
+		if (drives_ramdisk_format()) {
+			snprintf(banner, sizeof banner, "RAM disk: " DRIVES_RAMDISK ", %s in PSRAM, blank (lost at power-off)\r\n",
+				drives_geometry(drives_ramdisk_format())->name);
+			term_puts(&term, banner);
+		}
+		if (!psram) {
 			term_puts(&term, "No PSRAM found: the Z80 has no banks (CP/M 3 needs one)\r\n");
 		}
 #else

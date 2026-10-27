@@ -20,4 +20,11 @@ size_t extram_retime(void);
 size_t extram_size(void);   // 0: none
 uint8_t *extram_base(void); // cached, writable; NULL: none
 
+// The PSRAM handed out from its start, in main()'s order: the Z80 banks
+// first, the RAM disk (drives.h) last from what is left, so a new user of
+// the PSRAM takes its share between them and the RAM disk shrinks to a
+// smaller format if it must. size bytes, or NULL if not that many are left.
+uint8_t *extram_take(size_t size);
+size_t extram_left(void);
+
 #endif
