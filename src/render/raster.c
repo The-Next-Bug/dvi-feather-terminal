@@ -113,29 +113,60 @@ void raster_blank_line(raster_line_t *line, uint8_t color) {
 	memset(line->bits, 0, sizeof line->bits);
 }
 
-void raster_compose(uint32_t *px, const raster_line_t *line, raster_layout_t l, unsigned sr, int cursor_col,
-		const uint32_t colors[256]) {
-	const unsigned w = raster_cell_width(l), cols = raster_cols(l);
-	const unsigned pairs = w / 2, border = raster_x_offset(l) / 2;
-	const uint8_t *row = line->bits[sr];
+// Pixel-pair masks for two bits of a cell (bit 0: the pair's first pixel,
+// the word's low half). Not const: core 1 must not read flash.
+static uint32_t pair_masks[4] = { 0, 0x0000ffffu, 0xffff0000u, 0xffffffffu };
+
+// Cell c's bits from the bit string row, in the low bits (the ones above
+// are the next cells': each caller takes only the cell's own). One
+// unaligned load; the 3 bytes past the cell stay inside raster_line_t
+// (the next stored row, or fg[]).
+static inline uint32_t cell_word(const uint8_t *row, unsigned bit) {
+	uint32_t v;
+	memcpy(&v, row + (bit >> 3), sizeof v);
+	return v >> (bit & 7);
+}
+
+// One cell's pairs of pixels from its bits b.
+static inline __attribute__((always_inline)) uint32_t *compose_cell(uint32_t *p, uint32_t b, unsigned pairs,
+		uint32_t fg, uint32_t bg) {
+	uint32_t d = fg ^ bg;
+	for (unsigned k = 0; k < pairs; ++k, b >>= 2) {
+		*p++ = bg ^ (d & pair_masks[b & 3]);
+	}
+	return p;
+}
+
+// raster_compose for one layout, its width and columns constants once
+// inlined (qur.22: the generic loop kept them on the stack, reloaded per
+// cell, and compared each cell with the cursor's column).
+static inline __attribute__((always_inline)) void compose_layout(uint32_t *px, const raster_line_t *line,
+		const uint8_t *row, unsigned w, unsigned cols, unsigned border, int cursor_col, const uint32_t colors[256]) {
+	const unsigned pairs = w / 2;
 	uint32_t *p = px;
 	for (unsigned i = 0; i < border; ++i) {
 		*p++ = 0;
 	}
 	for (unsigned c = 0; c < cols; ++c) {
-		unsigned b = raster_cell_bits(row, w, c);
-		if ((int)c == cursor_col) {
-			b = ~b;
-		}
-		uint32_t fg = colors[line->fg[c]], bg = colors[line->bg[c]];
-		// Two pixels per word: pixel 2k in the low half, from bit 2k.
-		for (unsigned k = 0; k < pairs; ++k, b >>= 2) {
-			uint32_t m = (0u - (b & 1)) & 0xffffu;
-			m |= (0u - (b >> 1 & 1)) << 16;
-			*p++ = (fg & m) | (bg & ~m);
-		}
+		p = compose_cell(p, cell_word(row, c * w), pairs, colors[line->fg[c]], colors[line->bg[c]]);
 	}
 	while (p < px + RASTER_LINE_WORDS) {
 		*p++ = 0;
+	}
+	// The cursor's cell again, inverted: once per line, not a test per cell.
+	if (cursor_col >= 0 && (unsigned)cursor_col < cols) {
+		unsigned c = (unsigned)cursor_col;
+		compose_cell(px + border + c * pairs, ~cell_word(row, c * w), pairs, colors[line->fg[c]],
+			colors[line->bg[c]]);
+	}
+}
+
+void raster_compose(uint32_t *px, const raster_line_t *line, raster_layout_t l, unsigned sr, int cursor_col,
+		const uint32_t colors[256]) {
+	const uint8_t *row = line->bits[sr];
+	if (l == RASTER_132) {
+		compose_layout(px, line, row, 6, 132, raster_x_offset(RASTER_132) / 2, cursor_col, colors);
+	} else {
+		compose_layout(px, line, row, 10, 80, raster_x_offset(RASTER_80) / 2, cursor_col, colors);
 	}
 }
