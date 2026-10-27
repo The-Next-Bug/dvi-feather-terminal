@@ -218,8 +218,9 @@ dev host; Docker is not usable for CI simulation).
 VT100 serial terminal with DVI output for a Pico 2 (RP2350) with the Pico
 DVI Sock. RP2040 (Feather RP2040 DVI) support was dropped (dmt.29): out of
 SRAM, and the USB keyboard crashed it (dmt.20); CMake rejects non-RP2350
-boards. 800x600p60 (400 MHz, 1.3 V); 80 or 132 columns x 24 rows plus a
-status line (row 24); UART0 on GP0/GP1.
+boards. 1024x600p60 on the Sock (HSTX_MODE 3, clk_sys 384 MHz, 1.3 V, bd
+cpx.4), 800x600p60 elsewhere (400 MHz; the Feathers 354); 80 or 132
+columns x 24 rows plus a status line (row 24); UART0 on GP0/GP1.
 
 Source layout (bd gr1, after github.com/arlaneenalra/CGA_LCD_Capture):
 libraries under `src/<name>/`, each a static `dvt_<name>` with its own
@@ -334,15 +335,19 @@ UF2 in the latter).
   DMA channels, reloaded by DMA_IRQ_0 with blanking command lists and
   per-line pixels from a callback. `HSTX_MODE` 0 = 800x600@60 with libdvi's
   timing (clk_hstx 200 MHz, above the 150 MHz rating: dmt.8.1), 1 = @56,
-  2 = CVT-RB (354 MHz), 3 = 1024x600 CVT-RB (bd cpx.4, experimental
-  branch only: 44 MHz, clk_hstx 220 from PLL_SYS 440, clk_sys 384 from
+  2 = CVT-RB (354 MHz), 3 = 1024x600 CVT-RB (bd cpx.4, the Sock's since
+  v0.10.0; Feathers and Frankless untried: 44 MHz, clk_hstx 220 from PLL_SYS 440, clk_sys 384 from
   PLL_USB at 1.30 V (432 needed 1.35 V), clk_usb/adc /8, clk_peri /3 =
   128 MHz: its divider has 2 bits, 1-3; dvt_render PUBLIC
   RASTER_ACTIVE_WIDTH=1024: 80 cols in 12-px cells of Terminus 12x24
   (960 px), 132 in 7-px cells of font_132_7 (6x12 + a column font_gen.py
   --pad-x extends for line drawing; 924 px; raster_compose draws odd
   widths two cells at a time); test_raster_1024 runs test_raster.c at
-  that width). The cache option is empty by default: the board
+  that width; Sock __end__ 0x2007ca34, ~13.8 KB free; line 49%, peaks 59%
+  at 132 columns). hstx_dvi_stop leaves the pins undriven (pads OD),
+  hstx_dvi_resume connects them once whole lines go out, and core 1 takes
+  the signal off for 0.5 s 3 s after each wake (bd cpx.5: a panel showed
+  no picture after waking from over an hour). The cache option is empty by default: the board
   header's pico_board_cmake_set(BOARD_HSTX_MODE, n), else 0 (top
   CMakeLists: DVT_HSTX_MODE, HSTX_MODE_USED for build-info.txt; a cache
   with the old help string is reset to empty so a stale 0 does not win).
