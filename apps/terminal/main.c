@@ -33,6 +33,7 @@
 
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
+#include "hardware/watchdog.h"
 
 #include "audio.h"
 #include "bell.h"
@@ -79,6 +80,7 @@ static uint8_t stash_buf[STASH_SIZE];
 screen_stash_t stash;
 bool term_started;
 bool key_pressed;
+bool keys_held;
 
 settings_t settings;
 settings_target_t save_target;
@@ -152,6 +154,84 @@ void apply_settings(const settings_t *s) {
 	audio_set_ay_level(s->sound_level);
 	audio_set_stereo(s->sound_stereo);
 	audio_set_fitted(s->sound_dac != 0);
+}
+
+bool settings_store(const settings_t *s) {
+	static uint8_t page[SETTINGS_RECORD_SIZE]; // RAM, for the flash ROM routines
+	settings_encode(s, save_target.seq, page);
+	if (!nvflash_write(save_target.slot, page)) {
+		return false;
+	}
+	settings = *s;
+	save_target.slot = (save_target.slot + 1) % SETTINGS_SLOTS;
+	++save_target.seq;
+	return true;
+}
+
+// A new Display mode is kept only once seen (bd cpx.6): saving one stores
+// the old mode as display_was (setup_glue.c), and every boot that finds it
+// set asks for a key instead of showing the logo; without one in
+// DISPLAY_CONFIRM_MS the old mode is saved back and the board reboots into
+// it. In flash, so a power cycle during the prompt (no picture: the
+// monitor cannot show the mode) asks again rather than keeping it.
+#define DISPLAY_CONFIRM_MS 15000
+uint8_t display_booted;
+
+static void display_prompt(uint8_t previous, unsigned seconds) {
+	char text[SCREEN_MAX_COLS + 1];
+	const unsigned row = TERM_ROWS / 2 - 2;
+	for (unsigned r = row; r < row + 4; ++r) {
+		screen_clear_line(&screen, r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	}
+	snprintf(text, sizeof text, "Display: %ux600", SETTINGS_DISPLAY_WIDTH(settings.display));
+	screen_puts(&screen, (screen.cols - (unsigned)strlen(text)) / 2, row, text, PALETTE_BOLD_TEXT, PALETTE_BACKGROUND);
+	snprintf(text, sizeof text, "Press any key to keep it.");
+	screen_puts(&screen, (screen.cols - (unsigned)strlen(text)) / 2, row + 2, text, PALETTE_TEXT, PALETTE_BACKGROUND);
+	snprintf(text, sizeof text, "Back to %ux600 in %2u s", SETTINGS_DISPLAY_WIDTH(previous), seconds);
+	screen_puts(&screen, (screen.cols - (unsigned)strlen(text)) / 2, row + 3, text, PALETTE_TEXT, PALETTE_BACKGROUND);
+	video_update(&screen);
+}
+
+// After a Display change not yet kept: the prompt until a key (true: kept,
+// display_was cleared) or the time is up (the old mode saved back, reboot).
+// False when no change is waiting.
+static bool display_confirm(void) {
+	uint8_t previous = settings.display_was;
+	if (previous == SETTINGS_DISPLAY_NONE) {
+		return false;
+	}
+	settings_t now = settings;
+	now.display_was = SETTINGS_DISPLAY_NONE;
+	if (previous == settings.display) {
+		settings_store(&now); // nothing to ask: just clear it
+		return false;
+	}
+	keys_held = true;
+	key_pressed = false;
+	absolute_time_t end = make_timeout_time_ms(DISPLAY_CONFIRM_MS);
+	unsigned shown = 0;
+	while (!key_pressed && !time_reached(end)) {
+		unsigned left = (unsigned)((absolute_time_diff_us(get_absolute_time(), end) + 999999) / 1000000);
+		if (left != shown) {
+			shown = left;
+			display_prompt(previous, left);
+		}
+		keyboard_poll();
+		serial_poll();
+		diag_poll();
+	}
+	keys_held = false;
+	if (key_pressed) {
+		key_pressed = false;
+		settings_store(&now); // kept
+		return true;
+	}
+	now.display = previous;
+	settings_store(&now); // failed: asked again after the reboot
+	watchdog_reboot(0, 0, 0);
+	while (true) {
+		tight_loop_contents();
+	}
 }
 
 // Wait until `until`, UART0 receiving something (copied into buf) or a key
@@ -249,7 +329,8 @@ int main(void) {
 	settings_load(slots, &settings, &save_target);
 	colors = settings_colors(&settings); // the status line under the logo uses them
 
-	video_init();
+	display_booted = settings.display;
+	video_init(SETTINGS_DISPLAY_WIDTH(settings.display));
 	// The PSRAM's timing for the new clock; it leaves the flash's XIP set
 	// up for the boot clock, so first.
 	size_t psram = extram_retime();
@@ -286,9 +367,11 @@ int main(void) {
 
 	uint8_t buf[256];
 	size_t pending = 0;
-	bool input = false;
+	bool input = display_confirm(); // instead of the logo after a Display change
 #if STARTUP_LOGO
-	input = show_logo(buf, sizeof buf, &pending);
+	if (!input) {
+		input = show_logo(buf, sizeof buf, &pending);
+	}
 #endif
 	if (STARTUP_DEMO && !input) {
 		pending = run_demo(buf, sizeof buf);

@@ -17,12 +17,13 @@
 #include "hardware/structs/pads_bank0.h"
 #include "hardware/vreg.h"
 
-hstx_timing_t hstx_timing =
-#if DVI_WIDTH == 800
+// The two modes, [0] 800x600, [1] 1024x600 (hstx_dvi_select). In SRAM,
+// as hstx_timing: chosen before the clock change, when check_sram_only.py
+// allows no flash reads.
+static hstx_timing_t modes[2] = {
 	// What libdvi's dvi_timing_800x600p_60hz sends (and monitors took from
 	// PicoDVI): VESA's except a 44-pixel front porch and negative syncs.
-	{ 44, 128, 88, 800, 1, 4, 23, 600, false, false, 400000, BOARD_SYS_KHZ };
-#elif DVI_WIDTH == 1024
+	{ 44, 128, 88, 800, 1, 4, 23, 600, false, false, 400000, BOARD_SYS_KHZ },
 	// CVT reduced blanking 1024x600 60 Hz (+hsync, -vsync; 10 lines of
 	// vsync: no standard aspect ratio): 1184 x 619 at 44 MHz, 60.03 Hz.
 	// The panels' own 1344 x 635 at 51.2 MHz (clk_hstx 256 MHz) gave a
@@ -30,10 +31,18 @@ hstx_timing_t hstx_timing =
 	// nothing at 1.30 V (bd cpx.4). clk_sys 432 MHz needed 1.35 V and then
 	// went without a picture after waking (cpx.5); with qur.22's compose
 	// core 1 took 42% of a 132-column line at 432, 49% at 384.
-	{ 48, 32, 80, 1024, 3, 10, 6, 600, true, false, 440000, BOARD_SYS_KHZ };
-#else
-#error "DVI_WIDTH: 800 or 1024"
+	{ 48, 32, 80, 1024, 3, 10, 6, 600, true, false, 440000, BOARD_SYS_KHZ },
+};
+
+#if DVI_DEFAULT_WIDTH != 800 && DVI_DEFAULT_WIDTH != 1024
+#error "DVI_DEFAULT_WIDTH: 800 or 1024"
 #endif
+hstx_timing_t hstx_timing =
+	{ 44, 128, 88, 800, 1, 4, 23, 600, false, false, 400000, BOARD_SYS_KHZ }; // until selected
+
+void hstx_dvi_select(unsigned width) {
+	hstx_timing = modes[width == 1024];
+}
 
 volatile uint32_t hstx_dvi_frames;
 

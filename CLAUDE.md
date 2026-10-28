@@ -247,7 +247,7 @@ libraries' sources into another target (test_cpu's -O2 copies). The
 firmware's options reach libraries from the top CMakeLists
 (FONT_FLASH, LOGO_IN_FLASH, DISKIMG_IN_FLASH, MACHINE_BANKS on
 dvt_z80pack, VIDEO_DIAG on
-dvt_platform, DVI_WIDTH on dvt_video and RASTER_ACTIVE_WIDTH on dvt_render). FatFs is the `fatfs` target
+dvt_platform, DVI_DEFAULT_WIDTH on dvt_video, SETTINGS_DISPLAY_DEFAULT on dvt_settings). FatFs is the `fatfs` target
 (lib/fatfs.cmake), linking dvt_storage for disk_* (a cycle CMake repeats
 on the link line; tests add diskio_ram.c to the tests that need it).
 Programs: `apps/terminal/` (main.c: state, settings, startup, main loop;
@@ -338,17 +338,31 @@ UF2 in the latter).
   PLL_USB / (sys / 48 MHz), clk_peri PLL_USB / 3 at 384 = 128 MHz: its
   divider has 2 bits, 1-3; bd cpx.1/cpx.4) at 1.30 V; RGB565 through the
   TMDS expander; two chained DMA channels, reloaded by DMA_IRQ_0 with
-  blanking command lists and per-line pixels from a callback. DVI_MODE (bd
-  cpx.7; CMake -> DVI_WIDTH on dvt_video, RASTER_ACTIVE_WIDTH on
-  dvt_render): 1024x600 (the default since v0.10.0, bd cpx.4: CVT-RB at
+  blanking command lists and per-line pixels from a callback. The mode
+  comes from the Display setting at boot (bd cpx.6: settings field 21,
+  SETTINGS_DISPLAY_800 0 / _1024 1, SET-UP's row under Palette; main.c
+  video_init(width) -> raster_set_width + hstx_dvi_select, which copies
+  one of hstx_dvi.c's two modes[] (SRAM) into hstx_timing; raster.c's
+  layouts, both font sets (each width's linked), compose loops (four
+  inlined) and splash offset follow raster_width(), its buffers sized for
+  1024: Sock __end__ 0x2007d098, ~12.1 KB free, the Adalogger Feather
+  without PSRAM ~9.4 KB). Saving another Display stores the old one in
+  the hidden field 22 display_was (SETTINGS_PAGE_NONE; SETTINGS_DISPLAY_NONE
+  2 when nothing waits) and reboots; every boot that finds it set runs
+  main.c display_confirm instead of the logo: any key keeps the mode
+  (keys_held: send_key goes no further; display_was cleared), none within
+  DISPLAY_CONFIRM_MS 15 s saves the old one back (settings_store) and
+  reboots. In flash, not RAM, so a power cycle during the prompt asks
+  again. test_raster and test_splash run at both widths. DVI_MODE (bd
+  cpx.7; CMake -> DVI_DEFAULT_WIDTH on dvt_video for hstx_test,
+  SETTINGS_DISPLAY_DEFAULT on dvt_settings) is only the default: 1024x600 (the default since v0.10.0, bd cpx.4: CVT-RB at
   44 MHz, PLL_SYS 440, clk_hstx 220; soaked on the Sock; the panels' own
   51.2 MHz timing gave a desktop monitor static, 512 MHz showed nothing
   at 1.30 V, 432 needed 1.35 V; 80 cols in 12-px cells of Terminus 12x24
   (960 px), 132 in 7-px cells of font_132_7 (6x12 + a column font_gen.py
   --pad-x extends for line drawing; 924 px; raster_compose draws odd
-  widths two cells at a time); test_raster_1024 runs test_raster.c at
-  that width; Sock __end__ 0x2007ca34, ~13.8 KB free; line 49%, peaks 59%
-  at 132 columns) or 800x600 (libdvi's timing, 40 MHz, PLL_SYS 400,
+  widths two cells at a time); line 49%, peaks 59% at 132
+  columns on the Sock) or 800x600 (libdvi's timing, 40 MHz, PLL_SYS 400,
   clk_hstx 200, above the 150 MHz rating: dmt.8.1). Empty: the board
   header's pico_board_cmake_set(BOARD_DVI_MODE, ...) (none makes one),
   else 1024x600; DVI_MODE_USED for build-info.txt. HSTX_MODE (0 800x600,

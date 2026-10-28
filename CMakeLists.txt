@@ -56,10 +56,11 @@ option(VIDEO_DIAG "Bring-up diagnostics on UART0 TX: boot markers, core 1 timing
 # above 252 MHz). See bd dvi-feather-terminal-dmt.10.
 option(COPY_TO_RAM "Run the whole program from SRAM instead of flash" ON)
 # The DVI mode (src/video/hstx_dvi.h, bd cpx.7): 1024x600 (the default
-# since v0.10.0) or 800x600, both at 60 Hz. Empty: the board header's,
+# since v0.10.0) or 800x600, both at 60 Hz. Only the default: the Display
+# setting picks the mode at boot (bd cpx.6). Empty: the board header's,
 # pico_board_cmake_set(BOARD_DVI_MODE, ...), else 1024x600. clk_sys is the
 # board's BOARD_SYS_KHZ in both (384 MHz; the Feathers 336).
-set(DVI_MODE "" CACHE STRING "DVI mode: empty the board's (else 1024x600), 1024x600 or 800x600")
+set(DVI_MODE "" CACHE STRING "Default DVI mode (the Display setting's): empty the board's (else 1024x600), 1024x600 or 800x600")
 set_property(CACHE DVI_MODE PROPERTY STRINGS "" 1024x600 800x600)
 # HSTX_MODE (0-3, until v0.10.0) is gone: its 800x600 fallbacks with lower
 # clocks are not needed now that clk_sys no longer follows the pixel
@@ -159,10 +160,14 @@ target_compile_definitions(dvt_render PRIVATE LOGO_IN_FLASH=$<BOOL:${LOGO_IN_FLA
 target_compile_definitions(dvt_disks PUBLIC DISKIMG_IN_FLASH=1)
 target_compile_definitions(dvt_z80pack PUBLIC MACHINE_BANKS=${MACHINE_BANKS})
 target_compile_definitions(dvt_platform PUBLIC VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}> PSRAM_BANKS=$<BOOL:${PSRAM_BANKS}>)
-target_compile_definitions(dvt_video PUBLIC DVI_WIDTH=${DVT_DVI_WIDTH})
-# The raster as wide (1024: 80 columns of 12x24, 132 of 7-pixel cells), for
-# everything that includes raster.h.
-target_compile_definitions(dvt_render PUBLIC RASTER_ACTIVE_WIDTH=${DVT_DVI_WIDTH})
+# DVI_MODE is the default: the Display setting's until one is saved
+# (bd cpx.6), and hstx_test's mode.
+target_compile_definitions(dvt_video PUBLIC DVI_DEFAULT_WIDTH=${DVT_DVI_WIDTH})
+if(DVT_DVI_WIDTH EQUAL 1024)
+  target_compile_definitions(dvt_settings PRIVATE SETTINGS_DISPLAY_DEFAULT=SETTINGS_DISPLAY_1024)
+else()
+  target_compile_definitions(dvt_settings PRIVATE SETTINGS_DISPLAY_DEFAULT=SETTINGS_DISPLAY_800)
+endif()
 target_compile_definitions(dvt_usb PRIVATE
   USB_WA_DEINIT=$<BOOL:${USB_WA_DEINIT}>
   USB_WA_DATASEQ=$<BOOL:${USB_WA_DATASEQ}>

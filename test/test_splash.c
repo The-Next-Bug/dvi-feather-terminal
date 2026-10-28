@@ -3,13 +3,13 @@
 #include "splash.h"
 #include "test.h"
 
-static uint16_t px[RASTER_ACTIVE_WIDTH];
+static uint16_t px[RASTER_MAX_WIDTH];
 
 // Level colors for the tests: level l as the pixel 0x10 + l (black is 0).
 static const uint16_t colors[4] = { 0x10, 0x11, 0x12, 0x13 };
 
 static bool row_black(void) {
-	for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x) {
+	for (unsigned x = 0; x < raster_width(); ++x) {
 		if (px[x]) {
 			return false;
 		}
@@ -28,7 +28,7 @@ static const splash_image_t small = { 16, 2, 0x2, small_data, sizeof small_data 
 static void test_small_image_centered(void) {
 	CHECK(splash_check(&small));
 	splash_decoder_t d = splash_decoder_init(&small, small_data);
-	unsigned x0 = (RASTER_ACTIVE_WIDTH - 16) / 2, y0 = (SPLASH_HEIGHT - 2) / 2;
+	unsigned x0 = (raster_width() - 16) / 2, y0 = (SPLASH_HEIGHT - 2) / 2;
 	for (unsigned y = 0; y < SPLASH_HEIGHT; ++y) {
 		memset(px, 0xa5, sizeof px); // every pixel must be written
 		splash_compose(px, &d, y, colors);
@@ -55,7 +55,7 @@ static void test_start_even(void) {
 	const splash_image_t img = { 2, 1, 0x2, data, sizeof data };
 	splash_decoder_t d = splash_decoder_init(&img, data);
 	CHECK_EQ(d.x0 % 2, 0);
-	CHECK_EQ(d.x0, (RASTER_ACTIVE_WIDTH - 2) / 2 / 2 * 2);
+	CHECK_EQ(d.x0, (raster_width() - 2) / 2 / 2 * 2);
 }
 
 static void test_bad_images_rejected(void) {
@@ -78,7 +78,7 @@ static void test_bad_images_rejected(void) {
 	img = small;
 	img.size = 2;
 	splash_decoder_t d = splash_decoder_init(&img, small_data);
-	unsigned y0 = (SPLASH_HEIGHT - 2) / 2, x0 = (RASTER_ACTIVE_WIDTH - 16) / 2;
+	unsigned y0 = (SPLASH_HEIGHT - 2) / 2, x0 = (raster_width() - 16) / 2;
 	for (unsigned y = 0; y <= y0; ++y) {
 		splash_compose(px, &d, y, colors);
 	}
@@ -95,7 +95,7 @@ static void test_built_in_logo(void) {
 	unsigned lit = 0;
 	for (unsigned y = 0; y < SPLASH_HEIGHT; ++y) {
 		splash_compose(px, &d, y, colors);
-		for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x) {
+		for (unsigned x = 0; x < raster_width(); ++x) {
 			lit += px[x] > 0x10;
 		}
 	}
@@ -135,11 +135,15 @@ static void test_tint_color(void) {
 }
 
 int main(void) {
-	RUN(test_small_image_centered);
-	RUN(test_start_even);
-	RUN(test_bad_images_rejected);
-	RUN(test_built_in_logo);
-	RUN(test_tint);
-	RUN(test_tint_color);
+	// At both widths (bd cpx.6): the logo is centered in either.
+	for (unsigned i = 0; i < 2; ++i) {
+		raster_set_width(i ? RASTER_WIDTH_1024 : RASTER_WIDTH_800);
+		RUN(test_small_image_centered);
+		RUN(test_start_even);
+		RUN(test_bad_images_rejected);
+		RUN(test_built_in_logo);
+		RUN(test_tint);
+		RUN(test_tint_color);
+	}
 	return tests_done();
 }

@@ -24,6 +24,9 @@ static bool key_wakes(void) {
 void send_key(void *ctx, const uint8_t *data, size_t len) {
 	(void)ctx;
 	key_pressed = true;
+	if (keys_held) {
+		return;
+	}
 	if (key_wakes()) {
 		return;
 	}

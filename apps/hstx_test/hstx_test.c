@@ -25,7 +25,7 @@
 #include "hstx_dvi.h"
 #include "screen.h"
 
-#define W HSTX_ACTIVE_WIDTH
+#define W DVI_DEFAULT_WIDTH
 #define H HSTX_ACTIVE_HEIGHT
 #define TILE_W (W / 8)
 #define LEVEL_W (W / 16)
@@ -90,6 +90,7 @@ static const uint32_t *__not_in_flash_func(line)(unsigned y) {
 }
 
 int main(void) {
+	hstx_dvi_select(W);
 	hstx_dvi_init();
 	// After the clock change: the UART's divisor depends on clk_peri.
 	stdio_init_all();

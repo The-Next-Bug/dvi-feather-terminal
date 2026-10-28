@@ -15,13 +15,7 @@
 
 _Static_assert(SCREEN_ROWS * RASTER_ROW_HEIGHT == RASTER_ACTIVE_HEIGHT, "rows fill the screen");
 _Static_assert(RASTER_ACTIVE_HEIGHT == HSTX_ACTIVE_HEIGHT, "the raster's height is the mode's");
-// A mode wider than the raster (none now: the 1024x600 mode builds the
-// raster 1024 wide, bd cpx.4) would show it centered: the
-// line buffers' borders stay black (zero from boot, never written).
-_Static_assert(HSTX_ACTIVE_WIDTH >= RASTER_ACTIVE_WIDTH && (HSTX_ACTIVE_WIDTH - RASTER_ACTIVE_WIDTH) % 4 == 0,
-	"the raster fits the mode on whole words");
-#define BORDER_WORDS ((HSTX_ACTIVE_WIDTH - RASTER_ACTIVE_WIDTH) / 4)
-#define HSTX_LINE_WORDS (HSTX_ACTIVE_WIDTH / 2)
+_Static_assert(RASTER_MAX_WIDTH == HSTX_MAX_WIDTH, "line buffers for the widest mode");
 
 // Cursor blink: on for 32 frames, off for 32 (about 1 Hz at 60 Hz).
 #define CURSOR_BLINK_FRAMES 32
@@ -38,7 +32,7 @@ _Static_assert(HSTX_ACTIVE_WIDTH >= RASTER_ACTIVE_WIDTH && (HSTX_ACTIVE_WIDTH - 
 
 // Everything core 1 (and its interrupt) reads lives in SRAM (not const,
 // which would put it in flash): an XIP stall would starve the HSTX.
-static uint32_t line_buf[LINE_BUFS][HSTX_LINE_WORDS];
+static uint32_t line_buf[LINE_BUFS][RASTER_LINE_WORDS]; // the widest; the mode's width used
 // Scanlines are numbered in order from the first one of the first frame.
 // Unsigned and compared by difference, so they may wrap (every 33 hours);
 // seq % LINE_BUFS survives that, as LINE_BUFS divides 2^32, but
@@ -126,9 +120,9 @@ static void __not_in_flash_func(compose_line)(uint32_t seq, uint y) {
 	if (y == 0) {
 		start_frame(frame_no);
 	}
-	uint32_t *px = line_buf[seq % LINE_BUFS] + BORDER_WORDS;
+	uint32_t *px = line_buf[seq % LINE_BUFS];
 	if (frame.blank) {
-		for (uint i = 0; i < RASTER_LINE_WORDS; ++i) {
+		for (uint i = 0; i < raster_width() / 2; ++i) {
 			px[i] = 0;
 		}
 		return;
@@ -137,7 +131,7 @@ static void __not_in_flash_func(compose_line)(uint32_t seq, uint y) {
 		if (frame.splash == SPLASH_SHOW) {
 			splash_compose((uint16_t *)px, &frame.decoder, y, frame.colors);
 		} else {
-			for (uint i = 0; i < RASTER_LINE_WORDS; ++i) {
+			for (uint i = 0; i < raster_width() / 2; ++i) {
 				px[i] = 0;
 			}
 		}
@@ -261,7 +255,9 @@ static void __not_in_flash_func(core1_main)(void) {
 	}
 }
 
-void video_init(void) {
+void video_init(unsigned width) {
+	raster_set_width(width);
+	hstx_dvi_select(raster_width()); // the same, 800 for anything else
 	hstx_dvi_init();
 	diag_reinit(115200);
 	diag_mark("clocks and HSTX set up");

@@ -13,8 +13,8 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
 ## Features
 
 - **Display**: 1024x600p60 over DVI/HDMI (the 7" HDMI panels' native
-  size, pixel for pixel; desktop monitors take it too), or 800x600p60 as a
-  build option (`DVI_MODE`). At 1024 wide, 80 columns use Terminus 12x24
+  size, pixel for pixel; desktop monitors take it too), or 800x600p60,
+  picked in SET-UP (Display). At 1024 wide, 80 columns use Terminus 12x24
   in 12-pixel cells (960 pixels, centered) and 132 columns misc-fixed 6x12
   at double height (each glyph row on two scanlines, like a VT100) in
   7-pixel cells (924 pixels, centered); at 800, Terminus 10x20 in 10-pixel
@@ -41,8 +41,8 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
   checking a keyboard without a host; in CP/M mode, the drives and the
   emulated clock rate. See [Status line](#status-line).
 - **SET-UP**: power-on width, Backspace (DEL/BS), local echo, baud rate,
-  data/parity/stop bits, new line mode, colors, palette, mode and terminal
-  type, kept in
+  data/parity/stop bits, new line mode, colors, palette, display mode
+  (1024x600 or 800x600), mode and terminal type, kept in
   flash. F12 or Pause on the USB keyboard, or `CSI ? 999 ~` from the host,
   opens it; see [SET-UP](#set-up).
 - **Startup logo**: at power-on/reset the logo shows for 10 seconds
@@ -305,6 +305,7 @@ shown in reverse video:
 | New line (LNM) | off, on | LNM at power-on and after RIS: Return sends CR LF, and LF also returns the cursor. Not used in CP/M mode |
 | Colors | white, green, amber, blue | white: the 16 ANSI colors as on a VGA screen; the others: phosphor shades (below) |
 | Palette | color, mono | mono: every color is a shade of the Colors hue (below) |
+| Display | 1024x600, 800x600 | the DVI mode, both at 60 Hz (default 1024x600, or the build's `DVI_MODE`). Saving a new one restarts the board in it, which then asks for a key: without one within 15 seconds (say the monitor shows nothing) it goes back to the old mode and restarts again. Until a key keeps it, every start asks, so switching the board off and on during the wait also comes back to the old mode |
 | Mode | terminal, CP/M machine | a serial terminal on UART0, or the console of the [Z80 CP/M machine](#z80-cpm-machine). Saving a new mode restarts the board |
 | Status line | shown, hidden, debug, debug usb | hidden: row 24 stays blank (the text area is still 24 rows; the boot logo's build line and CP/M's drive lights are not shown). debug: video timing instead; debug usb: the USB host's last events (both below, refreshed four times a second) |
 | Terminal type | VT100, VT52, ADM-3A | what the terminal is at power-on and after a reset: a VT100, a VT100 in VT52 mode, or an ADM-3A (80 columns only); see [Terminal types](#terminal-types). Changing to or from ADM-3A clears the screen |
@@ -1075,7 +1076,7 @@ hub); move it on its own, and check the firmware's `__end__`.
 | `STARTUP_DEMO` | OFF | run the demo after the logo |
 | `MACHINE_BANKS` | 2 | Z80 machine: 48 KB banks besides bank 0 (each costs 48 KB of SRAM; a third does not fit) |
 | `PSRAM_BANKS` | OFF | Z80 machine: the banks in the board's QSPI PSRAM (QMI chip select 1) instead, as many as fit up to 15, none in SRAM, and the rest a [RAM disk](#running-cpm); set by `boards/feather-rp2350-hstx-psram.h`. Without a PSRAM chip at boot the machine has no banks |
-| `DVI_MODE` | the board's | `1024x600` (60 Hz, reduced blanking, a 44 MHz pixel clock: clk_hstx 220 MHz) or `800x600` (60 Hz, 40 MHz: clk_hstx 200 MHz). Empty (the default): the board header's choice, `pico_board_cmake_set(BOARD_DVI_MODE, ...)` (none makes one), else `1024x600`. clk_sys is the board's in both: 384 MHz, 336 on the Feathers (`BOARD_SYS_KHZ`, a multiple of 48 MHz). `HSTX_MODE`, until v0.10.0, is refused |
+| `DVI_MODE` | the board's | the Display setting's default (until one is saved) and `hstx_test`'s mode: `1024x600` (60 Hz, reduced blanking, a 44 MHz pixel clock: clk_hstx 220 MHz) or `800x600` (60 Hz, 40 MHz: clk_hstx 200 MHz). Empty (the default): the board header's choice, `pico_board_cmake_set(BOARD_DVI_MODE, ...)` (none makes one), else `1024x600`. clk_sys is the board's in both: 384 MHz, 336 on the Feathers (`BOARD_SYS_KHZ`, a multiple of 48 MHz). `HSTX_MODE`, until v0.10.0, is refused |
 | `VIDEO_DIAG` | OFF | bring-up diagnostics on UART0 TX: boot markers, core 1 scanline timing, fault reports |
 | `COPY_TO_RAM` | ON | run from SRAM; must stay ON (see [How it works](#how-it-works)) |
 

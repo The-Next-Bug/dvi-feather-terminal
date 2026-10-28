@@ -203,32 +203,82 @@ static void test_clock_settings(void) {
 	CHECK_EQ(out.clock_seconds, 1);
 	CHECK_EQ(out.clock_date, SETTINGS_DATE_SHORT);
 	// They are not SET-UP's rows: those are the main page's fields, in
-	// order but Flow control after Data/parity/stop, USB log after Terminal
-	// type; the clock's, Bell and the sound's are the Clock and sound
-	// panel's.
+	// order but Flow control after Data/parity/stop, Display after Palette,
+	// USB log after Terminal type; the clock's, Bell and the sound's are the
+	// Clock and sound panel's.
 	unsigned main = 0;
 	for (unsigned f = 0; f < SETTINGS_FIELDS; ++f) {
 		bool panel = (f >= offsetof(settings_t, clock) && f <= offsetof(settings_t, bell))
 			|| (f >= offsetof(settings_t, sound_level) && f <= offsetof(settings_t, sound_stereo));
-		CHECK_EQ(settings_fields[f].page, panel ? SETTINGS_PAGE_CLOCK : SETTINGS_PAGE_MAIN);
-		main += !panel;
+		bool hidden = f == offsetof(settings_t, display_was);
+		CHECK_EQ(settings_fields[f].page, panel ? SETTINGS_PAGE_CLOCK : hidden ? SETTINGS_PAGE_NONE : SETTINGS_PAGE_MAIN);
+		main += !panel && !hidden;
 		// Each main-page field on one row.
 		unsigned rows = 0;
 		for (unsigned row = 0; row < SETTINGS_MAIN_FIELDS; ++row) {
 			rows += settings_main_field(row) == f;
 		}
-		CHECK_EQ(rows, panel ? 0u : 1u);
+		CHECK_EQ(rows, panel || hidden ? 0u : 1u);
 	}
 	CHECK_EQ(main, SETTINGS_MAIN_FIELDS);
 	for (unsigned row = 0; row <= offsetof(settings_t, framing); ++row) {
 		CHECK_EQ(settings_main_field(row), row);
 	}
 	CHECK_EQ(settings_main_field(offsetof(settings_t, framing) + 1), offsetof(settings_t, flow));
-	for (unsigned row = offsetof(settings_t, newline) + 1; row <= offsetof(settings_t, term_type) + 1; ++row) {
+	for (unsigned row = offsetof(settings_t, newline) + 1; row <= offsetof(settings_t, palette) + 1; ++row) {
 		CHECK_EQ(settings_main_field(row), row - 1);
+	}
+	CHECK_EQ(settings_main_field(offsetof(settings_t, palette) + 2), offsetof(settings_t, display));
+	for (unsigned row = offsetof(settings_t, mode) + 2; row <= offsetof(settings_t, term_type) + 2; ++row) {
+		CHECK_EQ(settings_main_field(row), row - 2);
 	}
 	CHECK_EQ(settings_main_field(SETTINGS_MAIN_FIELDS - 1), offsetof(settings_t, usb_log));
 	CHECK_EQ(settings_main_field(SETTINGS_MAIN_FIELDS), SETTINGS_FIELDS); // past the rows
+}
+
+// Display (bd cpx.6): the build's default (1024x600 on the host) unless
+// saved; records from before it (21 bytes) get that, as do values out of
+// range; its row is under Palette. display_was, after it, is not shown.
+static void test_display_setting(void) {
+	settings_t in, out;
+	uint8_t rec[SETTINGS_RECORD_SIZE];
+	uint32_t seq;
+	settings_defaults(&in);
+	CHECK_EQ(in.display, SETTINGS_DISPLAY_1024);
+	CHECK_EQ(SETTINGS_DISPLAY_WIDTH(in.display), 1024u);
+	in.display = SETTINGS_DISPLAY_800;
+	CHECK_EQ(SETTINGS_DISPLAY_WIDTH(in.display), 800u);
+	settings_encode(&in, 3, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.display, SETTINGS_DISPLAY_800);
+	// An older record, without it, with its own CRC.
+	rec[5] = offsetof(settings_t, display);
+	uint32_t crc = crc_of(rec, offsetof(settings_t, display));
+	for (unsigned i = 0; i < 4; ++i) {
+		rec[12 + i] = (uint8_t)(crc >> 8 * i);
+	}
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.display, SETTINGS_DISPLAY_1024);
+	in.display = 9;
+	settings_encode(&in, 4, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.display, SETTINGS_DISPLAY_1024);
+	const settings_field_t *f = &settings_fields[offsetof(settings_t, display)];
+	CHECK(strcmp(f->name, "Display") == 0);
+	CHECK_EQ(f->page, SETTINGS_PAGE_MAIN);
+	// The mode before an unconfirmed change: none unless saved, kept
+	// through a record, not shown.
+	settings_defaults(&in);
+	CHECK_EQ(in.display_was, SETTINGS_DISPLAY_NONE);
+	in.display_was = SETTINGS_DISPLAY_800;
+	settings_encode(&in, 5, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.display_was, SETTINGS_DISPLAY_800);
+	in.display_was = 7;
+	settings_encode(&in, 6, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.display_was, SETTINGS_DISPLAY_NONE);
+	CHECK_EQ(settings_fields[offsetof(settings_t, display_was)].page, SETTINGS_PAGE_NONE);
 }
 
 // Bell: level 3 unless saved; records from before it (15 bytes) get that,
@@ -447,6 +497,7 @@ int main(void) {
 	RUN(test_sound_settings);
 	RUN(test_stereo_setting);
 	RUN(test_flow_setting);
+	RUN(test_display_setting);
 	RUN(test_usb_log_setting);
 	RUN(test_older_record);
 	RUN(test_retired_wide80);

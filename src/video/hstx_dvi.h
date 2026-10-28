@@ -21,16 +21,18 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// Video timing, by the width DVI_WIDTH (the build option DVI_MODE):
+// Video timing, by width (hstx_dvi_select; the terminal's Display setting,
+// bd cpx.6):
 //   800:  800x600 60 Hz, 40 MHz (libdvi's timing, as PicoDVI used): clk_hstx 200 MHz
 //   1024: 1024x600 60 Hz reduced blanking, 44 MHz (CVT-RB): clk_hstx 220 MHz
 // (bd cpx.7: the 56 Hz and reduced-blanking 800x600 modes, which only
-// lowered clk_sys while it was 10 x the pixel clock, are retired.) The
-// terminal draws 1024 with its 1024-wide layouts (RASTER_ACTIVE_WIDTH).
-#ifndef DVI_WIDTH
-#define DVI_WIDTH 1024
+// lowered clk_sys while it was 10 x the pixel clock, are retired.)
+// DVI_DEFAULT_WIDTH, from the build option DVI_MODE: the Display setting's
+// default, and hstx_test's mode.
+#ifndef DVI_DEFAULT_WIDTH
+#define DVI_DEFAULT_WIDTH 1024
 #endif
-#define HSTX_ACTIVE_WIDTH DVI_WIDTH
+#define HSTX_MAX_WIDTH 1024
 #define HSTX_ACTIVE_HEIGHT 600
 
 typedef struct {
@@ -42,7 +44,12 @@ typedef struct {
 } hstx_timing_t;
 
 // Not const: const data stays in flash, which the interrupt must not read.
+// The mode in use: 800x600 until hstx_dvi_select.
 extern hstx_timing_t hstx_timing;
+
+// Use the mode `width` pixels wide (800 or 1024; anything else is 800).
+// Before hstx_dvi_init.
+void hstx_dvi_select(unsigned width);
 
 // Bytes in one active line of RGB565 pixels.
 #define HSTX_LINE_BYTES(t) ((t)->h_active * 2u)
