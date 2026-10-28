@@ -5,60 +5,76 @@
 
 #include "font.h"
 
-// Each layout's fonts as generated (in flash on the board).
-static const struct {
+uint16_t raster_active_width = RASTER_WIDTH_800;
+
+// Each width's layouts' fonts as generated (in flash on the board):
+// [0] 800, [1] 1024 pixels wide.
+typedef struct {
 	const void *normal, *bold; // bold NULL: no bold face
 	bool wide;                 // 16-bit rows (otherwise 8-bit)
 	const char *name;
-} fonts[RASTER_LAYOUTS] = {
-#if RASTER_ACTIVE_WIDTH == 1024
-	[RASTER_80] = {font_12x24, font_12x24_bold, true, "Terminus 12x24"},
-	[RASTER_132] = {font_132_7, NULL, false, "misc-fixed 6x12 in 7-pixel cells"},
-#else
-	[RASTER_80] = {font_10x20, font_10x20_bold, true, "Terminus 10x20"},
-	[RASTER_132] = {font_132, NULL, false, "misc-fixed 6x12"},
-#endif
+} font_set_t;
+
+static const font_set_t fonts[2][RASTER_LAYOUTS] = {
+	{
+		[RASTER_80] = {font_10x20, font_10x20_bold, true, "Terminus 10x20"},
+		[RASTER_132] = {font_132, NULL, false, "misc-fixed 6x12"},
+	},
+	{
+		[RASTER_80] = {font_12x24, font_12x24_bold, true, "Terminus 12x24"},
+		[RASTER_132] = {font_132_7, NULL, false, "misc-fixed 6x12 in 7-pixel cells"},
+	},
 };
+
+static const font_set_t *font_set(raster_layout_t l) {
+	return &fonts[raster_width() == RASTER_WIDTH_1024][l];
+}
 
 // The active layout's fonts in SRAM, one 16-bit word per glyph row
 // whatever the source: [0] normal, [1] bold (unused without a bold face,
 // when font_bold points at the normal one).
 static uint16_t font_copy[2][FONT_GLYPHS * RASTER_MAX_FONT_ROWS];
 static const uint16_t *font_normal = font_copy[0], *font_bold = font_copy[1];
-static int font_layout = -1; // the layout copied, -1: none yet
+static const font_set_t *font_copied; // the fonts copied, NULL: none yet
 
 static unsigned source_row(const void *table, bool wide, unsigned i) {
 	return wide ? ((const uint16_t *)table)[i] : ((const uint8_t *)table)[i];
 }
 
+void raster_set_width(unsigned w) {
+	raster_active_width = w == RASTER_WIDTH_1024 ? RASTER_WIDTH_1024 : RASTER_WIDTH_800;
+}
+
 void raster_select_font(raster_layout_t l) {
-	if ((int)l == font_layout) {
+	const font_set_t *f = font_set(l);
+	if (f == font_copied) {
 		return;
 	}
 	const unsigned n = FONT_GLYPHS * raster_font_rows(l);
 	for (unsigned i = 0; i < n; ++i) {
-		font_copy[0][i] = (uint16_t)source_row(fonts[l].normal, fonts[l].wide, i);
+		font_copy[0][i] = (uint16_t)source_row(f->normal, f->wide, i);
 	}
-	if (fonts[l].bold) {
+	if (f->bold) {
 		for (unsigned i = 0; i < n; ++i) {
-			font_copy[1][i] = (uint16_t)source_row(fonts[l].bold, fonts[l].wide, i);
+			font_copy[1][i] = (uint16_t)source_row(f->bold, f->wide, i);
 		}
 	}
-	font_bold = fonts[l].bold ? font_copy[1] : font_copy[0];
-	font_layout = (int)l;
+	font_bold = f->bold ? font_copy[1] : font_copy[0];
+	font_copied = f;
 }
 
 unsigned raster_glyph_row(raster_layout_t l, bool bold, uint8_t g, unsigned r) {
-	const void *table = bold && fonts[l].bold ? fonts[l].bold : fonts[l].normal;
-	return source_row(table, fonts[l].wide, g * raster_font_rows(l) + r);
+	const font_set_t *f = font_set(l);
+	const void *table = bold && f->bold ? f->bold : f->normal;
+	return source_row(table, f->wide, g * raster_font_rows(l) + r);
 }
 
 bool raster_has_bold_face(raster_layout_t l) {
-	return fonts[l].bold != NULL;
+	return font_set(l)->bold != NULL;
 }
 
 const char *raster_font_name(raster_layout_t l) {
-	return fonts[l].name;
+	return font_set(l)->name;
 }
 
 // Replace cell c's pixels (w of them) in a stored row with m
@@ -162,7 +178,8 @@ static inline __attribute__((always_inline)) uint32_t *compose_cell_pair(uint32_
 // cell, and compared each cell with the cursor's column). Odd widths go
 // two cells at a time (cols is even).
 static inline __attribute__((always_inline)) void compose_layout(uint32_t *px, const raster_line_t *line,
-		const uint8_t *row, unsigned w, unsigned cols, unsigned border, int cursor_col, const uint32_t colors[256]) {
+		const uint8_t *row, unsigned width, unsigned w, unsigned cols, int cursor_col, const uint32_t colors[256]) {
+	const unsigned border = (width - cols * w) / 4; // words: the cells centered
 	const unsigned pairs = w / 2;
 	uint32_t *p = px;
 	for (unsigned i = 0; i < border; ++i) {
@@ -178,7 +195,7 @@ static inline __attribute__((always_inline)) void compose_layout(uint32_t *px, c
 			p = compose_cell(p, cell_word(row, c * w), pairs, colors[line->fg[c]], colors[line->bg[c]]);
 		}
 	}
-	while (p < px + RASTER_LINE_WORDS) {
+	while (p < px + width / 2) {
 		*p++ = 0;
 	}
 	// The cursor's cell again, inverted: once per line, not a test per cell.
@@ -198,10 +215,17 @@ static inline __attribute__((always_inline)) void compose_layout(uint32_t *px, c
 
 void raster_compose(uint32_t *px, const raster_line_t *line, raster_layout_t l, unsigned sr, int cursor_col,
 		const uint32_t colors[256]) {
+	// One loop per width and layout (cell widths and counts constants).
 	const uint8_t *row = line->bits[sr];
-	if (l == RASTER_132) {
-		compose_layout(px, line, row, RASTER_132_CELL, 132, raster_x_offset(RASTER_132) / 2, cursor_col, colors);
+	if (raster_width() == RASTER_WIDTH_1024) {
+		if (l == RASTER_132) {
+			compose_layout(px, line, row, RASTER_WIDTH_1024, 7, 132, cursor_col, colors);
+		} else {
+			compose_layout(px, line, row, RASTER_WIDTH_1024, 12, 80, cursor_col, colors);
+		}
+	} else if (l == RASTER_132) {
+		compose_layout(px, line, row, RASTER_WIDTH_800, 6, 132, cursor_col, colors);
 	} else {
-		compose_layout(px, line, row, RASTER_80_CELL, 80, raster_x_offset(RASTER_80) / 2, cursor_col, colors);
+		compose_layout(px, line, row, RASTER_WIDTH_800, 10, 80, cursor_col, colors);
 	}
 }

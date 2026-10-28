@@ -13,10 +13,11 @@
 #include "screen.h"
 #include "splash.h"
 
-// Raise the core voltage, set the system clock (10 x the pixel clock) and
-// set up the HSTX. Call before any peripheral that depends on
-// clk_sys/clk_peri (e.g. the UART) is initialized.
-void video_init(void);
+// Use the mode `width` pixels wide (800 or 1024: the raster's layouts and
+// the DVI timing; raster_set_width, hstx_dvi_select), raise the core
+// voltage, set the clocks and set up the HSTX. Call before any peripheral
+// that depends on clk_sys/clk_peri (e.g. the UART) is initialized.
+void video_init(unsigned width);
 
 // Show the screen's palette indices in these colors (RGB565; see
 // palette_build) from the next frame, without re-rendering anything. Call

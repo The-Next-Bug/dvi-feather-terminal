@@ -27,7 +27,7 @@ typedef struct {
 	size_t size;
 } splash_image_t;
 
-// Whether img fits (at most RASTER_ACTIVE_WIDTH x SPLASH_HEIGHT, width
+// Whether img fits (at most raster_width() x SPLASH_HEIGHT, width
 // even) and its runs cover exactly width x height pixels.
 bool splash_check(const splash_image_t *img);
 
@@ -45,7 +45,7 @@ typedef struct {
 splash_decoder_t splash_decoder_init(const splash_image_t *img, const uint8_t *data);
 
 // Scanline y (0 .. SPLASH_HEIGHT - 1, called in order) into
-// RASTER_ACTIVE_WIDTH pixels: colors[level] inside the image, 0 (black)
+// raster_width() pixels: colors[level] inside the image, 0 (black)
 // around it.
 void splash_compose(uint16_t *px, splash_decoder_t *d, unsigned y, const uint16_t colors[4]);
 

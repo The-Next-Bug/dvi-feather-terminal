@@ -288,15 +288,10 @@ static void setup_leave(bool apply) {
 }
 
 static bool setup_save(void) {
-	static uint8_t page[SETTINGS_RECORD_SIZE]; // RAM, for the flash ROM routines
-	settings_encode(&setup.ui.values, save_target.seq, page);
-	if (!nvflash_write(save_target.slot, page)) {
-		return false;
-	}
-	settings = setup.ui.values;
-	save_target.slot = (save_target.slot + 1) % SETTINGS_SLOTS;
-	++save_target.seq;
-	return true;
+	// A new Display is kept only once confirmed after the reboot into it.
+	setup.ui.values.display_was =
+		setup.ui.values.display != display_booted ? display_booted : SETTINGS_DISPLAY_NONE;
+	return settings_store(&setup.ui.values);
 }
 
 // The Drives panel's pending card work, or its Escape key timeout.
@@ -551,6 +546,9 @@ void setup_service(void) {
 		setup_draw_panel();
 		video_update(&screen);
 		if (setup_save()) {
+			if (settings.display != display_booted) {
+				restart(); // the DVI mode is set at boot, and asks to keep it
+			}
 			if (settings.mode != (cpm.on ? SETTINGS_MODE_CPM : SETTINGS_MODE_TERMINAL)) {
 				restart(); // the other mode starts from a clean power-on
 			}

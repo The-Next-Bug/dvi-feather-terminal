@@ -49,6 +49,7 @@ extern term_t term;
 extern screen_stash_t stash;
 extern bool term_started;
 extern bool key_pressed; // before the terminal started: ends the logo and demo
+extern bool keys_held;   // keys only set key_pressed, going nowhere (the Display prompt)
 
 extern settings_t settings;          // as saved in flash
 extern settings_target_t save_target;
@@ -59,6 +60,15 @@ extern bool screen_blanked;          // blank_tick's answer: the LED's heartbeat
 
 void show_palette(const settings_t *s);
 void apply_settings(const settings_t *s);
+
+// Save s as the settings (flash, then `settings`); false if the write
+// failed.
+bool settings_store(const settings_t *s);
+
+// The Display setting this boot runs with (SETTINGS_DISPLAY_*): saving
+// another reboots into it, with display_was = display_booted saved too, so
+// that boot (and any after it until a key) asks to keep it (bd cpx.6).
+extern uint8_t display_booted;
 
 // ---- setup_glue.c ----
 

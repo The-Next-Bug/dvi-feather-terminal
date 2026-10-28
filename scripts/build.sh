@@ -74,7 +74,7 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
   echo "target=$TARGET"
   echo "pico_board=$pico_board"
   echo "experimental=$experimental"
-  echo "hstx_mode=$(sed -n 's/^HSTX_MODE_USED:INTERNAL=//p' "$out/CMakeCache.txt")"
+  echo "dvi_mode=$(sed -n 's/^DVI_MODE_USED:INTERNAL=//p' "$out/CMakeCache.txt")"
   echo "build_type=$BUILD_TYPE"
   echo "machine_banks=$(sed -n 's/^MACHINE_BANKS:STRING=//p' "$out/CMakeCache.txt")"
   # TinyUSB workarounds kept (ON) or built out for testing (bd nxv)

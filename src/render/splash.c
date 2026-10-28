@@ -1,7 +1,7 @@
 #include "splash.h"
 
 bool splash_check(const splash_image_t *img) {
-	if (img->width % 2 || img->width > RASTER_ACTIVE_WIDTH || img->height > SPLASH_HEIGHT) {
+	if (img->width % 2 || img->width > raster_width() || img->height > SPLASH_HEIGHT) {
 		return false;
 	}
 	size_t pixels = 0;
@@ -18,7 +18,7 @@ splash_decoder_t splash_decoder_init(const splash_image_t *img, const uint8_t *d
 		.width = img->width,
 		.height = img->height,
 		// Even, so the image starts on a whole word of pixels.
-		.x0 = (uint16_t)((RASTER_ACTIVE_WIDTH - img->width) / 4 * 2),
+		.x0 = (uint16_t)((raster_width() - img->width) / 4 * 2),
 		.y0 = (uint16_t)((SPLASH_HEIGHT - img->height) / 2),
 	};
 	return d;
@@ -48,7 +48,7 @@ void splash_compose(uint16_t *px, splash_decoder_t *d, unsigned y, const uint16_
 			todo -= n;
 		}
 	}
-	for (; x < RASTER_ACTIVE_WIDTH; ++x) {
+	for (; x < raster_width(); ++x) {
 		px[x] = 0;
 	}
 }

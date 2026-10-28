@@ -51,6 +51,8 @@ typedef struct {
 	uint8_t sound_dac;     // 1: the board's DAC is fitted; 0: no sound at all, no AY on the ports
 	uint8_t sound_stereo;  // SETTINGS_STEREO_*: the AY's channels left and right (bd 1ls.18.9)
 	uint8_t flow;          // SETTINGS_FLOW_*: flow control on the serial line (bd dmt.27)
+	uint8_t display;       // SETTINGS_DISPLAY_*: the DVI mode, used from the next boot (bd cpx.6)
+	uint8_t display_was;   // not in SET-UP: the mode before an unconfirmed change, or SETTINGS_DISPLAY_NONE
 } settings_t;
 
 #define SETTINGS_MODE_TERMINAL 0 // a serial terminal on UART0
@@ -95,6 +97,21 @@ typedef struct {
 #define SETTINGS_FLOW_RTSCTS 1
 #define SETTINGS_FLOW_XONXOFF 2
 
+// The DVI mode (video.c, hstx_dvi.c). Changing it reboots, and the new mode
+// is kept only if a key is pressed on its first screen: until then
+// display_was holds the old one, in flash, so a power cycle meanwhile asks
+// again (and falls back) rather than keeping a mode the monitor may not show. The default is the
+// build's DVI_MODE (SETTINGS_DISPLAY_DEFAULT).
+#define SETTINGS_DISPLAY_800 0  // 800x600
+#define SETTINGS_DISPLAY_1024 1 // 1024x600
+#define SETTINGS_DISPLAY_NONE 2 // display_was: no change waiting to be kept
+#ifndef SETTINGS_DISPLAY_DEFAULT
+#define SETTINGS_DISPLAY_DEFAULT SETTINGS_DISPLAY_1024
+#endif
+
+// The width of the mode s->display picks: 800 or 1024.
+#define SETTINGS_DISPLAY_WIDTH(d) ((d) == SETTINGS_DISPLAY_1024 ? 1024u : 800u)
+
 #define SETTINGS_USB_LOG_OFF 0
 #define SETTINGS_USB_LOG_SD 1 // appended to the SD card's USBLOG.TXT (apps/terminal/usblog_glue.c)
 
@@ -102,12 +119,13 @@ typedef struct {
 // first choice need not be the default), their names and the SET-UP page
 // they are on: SET-UP's own rows (SETTINGS_MAIN_FIELDS of them, in
 // settings_main_field's order) or its Clock panel (clockpanel.h).
-#define SETTINGS_FIELDS 21
-#define SETTINGS_MAIN_FIELDS 14
+#define SETTINGS_FIELDS 23
+#define SETTINGS_MAIN_FIELDS 15
 #define SETTINGS_MAX_CHOICES 11
 
 #define SETTINGS_PAGE_MAIN 0
 #define SETTINGS_PAGE_CLOCK 1 // the Clock and sound panel (clockpanel.h)
+#define SETTINGS_PAGE_NONE 2  // kept, not shown (display_was)
 
 typedef struct {
 	const char *name;
@@ -120,7 +138,8 @@ typedef struct {
 extern const settings_field_t settings_fields[SETTINGS_FIELDS];
 
 // The field shown on SET-UP's row (< SETTINGS_MAIN_FIELDS): the main
-// page's fields in their order, but Flow control under Data/parity/stop.
+// page's fields in their order, but Flow control under Data/parity/stop
+// and Display under Palette.
 unsigned settings_main_field(unsigned row);
 
 // A field's value in s (i < SETTINGS_FIELDS).

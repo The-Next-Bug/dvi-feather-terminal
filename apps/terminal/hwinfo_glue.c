@@ -103,10 +103,11 @@ static size_t rtc_record(uint8_t *buf) {
 }
 
 static size_t video_record(uint8_t *buf) {
-	char text[80];
-	unsigned hz = HSTX_MODE == 1 ? 56 : 60;
+	char text[96];
+	const uint32_t frame_us = hstx_dvi_frame_us();
+	unsigned hz = (unsigned)((1000000u + frame_us / 2) / frame_us);
 	snprintf(text, sizeof text, "DVI %ux%u at %u Hz%s, %u x %u text + status line", hstx_timing.h_active,
-		hstx_timing.v_active, hz, HSTX_MODE >= 2 ? " (reduced blanking)" : "", screen.cols, TERM_ROWS);
+		hstx_timing.v_active, hz, hstx_timing.h_active == 1024 ? " (reduced blanking)" : "", screen.cols, TERM_ROWS);
 	return hwinfo_record(buf, HWINFO_ST_PRESENT, "Video", text);
 }
 

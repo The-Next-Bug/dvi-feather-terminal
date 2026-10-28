@@ -17,31 +17,32 @@
 #include "hardware/structs/pads_bank0.h"
 #include "hardware/vreg.h"
 
-hstx_timing_t hstx_timing =
-#if HSTX_MODE == 0
+// The two modes, [0] 800x600, [1] 1024x600 (hstx_dvi_select). In SRAM,
+// as hstx_timing: chosen before the clock change, when check_sram_only.py
+// allows no flash reads.
+static hstx_timing_t modes[2] = {
 	// What libdvi's dvi_timing_800x600p_60hz sends (and monitors took from
 	// PicoDVI): VESA's except a 44-pixel front porch and negative syncs.
-	{ 44, 128, 88, 800, 1, 4, 23, 600, false, false, 400000, 400000 };
-#elif HSTX_MODE == 1
-	// VESA 800x600 56 Hz, 36 MHz.
-	{ 24, 72, 128, 800, 1, 2, 22, 600, true, true, 360000, 360000 };
-#elif HSTX_MODE == 2
-	// CVT reduced blanking 800x600 60 Hz (+hsync, -vsync), 35.5 MHz
-	// nominally; 35.4 MHz is the nearest clk_sys / 10 the PLL makes.
-	{ 48, 32, 80, 800, 3, 4, 11, 600, true, false, 354000, 354000 };
-#elif HSTX_MODE == 3
+	{ 44, 128, 88, 800, 1, 4, 23, 600, false, false, 400000, BOARD_SYS_KHZ },
 	// CVT reduced blanking 1024x600 60 Hz (+hsync, -vsync; 10 lines of
 	// vsync: no standard aspect ratio): 1184 x 619 at 44 MHz, 60.03 Hz.
 	// The panels' own 1344 x 635 at 51.2 MHz (clk_hstx 256 MHz) gave a
 	// desktop monitor static, and at clk_sys 512 MHz the Frankless showed
-	// nothing at 1.30 V (bd cpx.4). clk_sys 384 MHz at 1.30 V: 432 needed
-	// 1.35 V and then went without a picture after waking (cpx.5); with
-	// qur.22's compose core 1 took 42% of a 132-column line at 432.
-	// A board may run it slower (BOARD_SPLIT_SYS_KHZ: the Feathers, 336).
-	{ 48, 32, 80, 1024, 3, 10, 6, 600, true, false, 440000, BOARD_SPLIT_SYS_KHZ };
-#else
-#error "unknown HSTX_MODE"
+	// nothing at 1.30 V (bd cpx.4). clk_sys 432 MHz needed 1.35 V and then
+	// went without a picture after waking (cpx.5); with qur.22's compose
+	// core 1 took 42% of a 132-column line at 432, 49% at 384.
+	{ 48, 32, 80, 1024, 3, 10, 6, 600, true, false, 440000, BOARD_SYS_KHZ },
+};
+
+#if DVI_DEFAULT_WIDTH != 800 && DVI_DEFAULT_WIDTH != 1024
+#error "DVI_DEFAULT_WIDTH: 800 or 1024"
 #endif
+hstx_timing_t hstx_timing =
+	{ 44, 128, 88, 800, 1, 4, 23, 600, false, false, 400000, BOARD_SYS_KHZ }; // until selected
+
+void hstx_dvi_select(unsigned width) {
+	hstx_timing = modes[width == 1024];
+}
 
 volatile uint32_t hstx_dvi_frames;
 
@@ -148,7 +149,7 @@ static void __not_in_flash_func(setup_dma)(void) {
 }
 
 // clk_sys from PLL_USB at t->sys_khz, PLL_SYS at t->pll_khz for clk_hstx
-// alone (bd cpx.1). clk_usb and clk_adc stay at 48 MHz, divided from
+// alone (bd cpx.1, cpx.4). clk_usb and clk_adc stay at 48 MHz, divided from
 // PLL_USB. clk_peri's divider has only 2 bits (1-3; an 8 wrote 0, which
 // is 4: clk_peri ran at twice what the SDK computed the UART's and SPI's
 // dividers from, and no card read worked), so it gets PLL_USB / 3 at most,
@@ -181,15 +182,11 @@ static void split_clocks(const hstx_timing_t *t) {
 
 void hstx_dvi_init(void) {
 	const hstx_timing_t *t = &hstx_timing;
-	// 10 x the pixel clock needs more than the default core voltage. The
+	// clk_sys at 336-384 MHz needs more than the default core voltage. The
 	// whole program runs from SRAM (COPY_TO_RAM): flash cannot keep up.
 	vreg_set_voltage(VREG_VOLTAGE_1_30);
 	sleep_ms(10);
-	if (t->sys_khz == t->pll_khz) {
-		set_sys_clock_khz(t->sys_khz, true);
-	} else {
-		split_clocks(t);
-	}
+	split_clocks(t);
 	// clk_hstx runs undivided from clk_sys after boot; the HSTX wants half
 	// of PLL_SYS.
 	clock_configure_int_divider(clk_hstx, 0, CLOCKS_CLK_HSTX_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,

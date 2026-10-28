@@ -91,7 +91,7 @@ static unsigned mismatches(unsigned row, raster_layout_t l) {
 	render(line, l, 0);
 	unsigned bad = 0;
 	for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
-		for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x) {
+		for (unsigned x = 0; x < raster_width(); ++x) {
 			bad += shown(l, sy, x) != wanted(line, l, sy, x);
 		}
 	}
@@ -101,21 +101,21 @@ static unsigned mismatches(unsigned row, raster_layout_t l) {
 static void test_layout(void) {
 	CHECK_EQ(raster_layout(80), RASTER_80);
 	CHECK_EQ(raster_layout(132), RASTER_132);
-#if RASTER_ACTIVE_WIDTH == 1024
-	CHECK_EQ(raster_cell_width(RASTER_80), 12);
-	CHECK_EQ(raster_x_offset(RASTER_80), 32); // centered
-	CHECK_EQ(raster_cell_width(RASTER_132), 7);
-	CHECK_EQ(raster_x_offset(RASTER_132), 50);
-	CHECK_EQ(raster_pad_top(RASTER_80), 0); // 24 glyph rows fill them
-#else
-	CHECK_EQ(raster_cell_width(RASTER_80), 10);
-	CHECK_EQ(raster_x_offset(RASTER_80), 0); // the full width
-	CHECK_EQ(raster_cell_width(RASTER_132), 6);
-	CHECK_EQ(raster_x_offset(RASTER_132), 4); // centered
-	CHECK_EQ(raster_pad_top(RASTER_80), 2); // 20 glyph rows in 24
-#endif
-	CHECK_EQ(raster_x_offset(RASTER_132) * 2 + 132 * raster_cell_width(RASTER_132), RASTER_ACTIVE_WIDTH);
-	CHECK_EQ(raster_x_offset(RASTER_80) * 2 + 80 * raster_cell_width(RASTER_80), RASTER_ACTIVE_WIDTH);
+	if (raster_width() == RASTER_WIDTH_1024) {
+		CHECK_EQ(raster_cell_width(RASTER_80), 12);
+		CHECK_EQ(raster_x_offset(RASTER_80), 32); // centered
+		CHECK_EQ(raster_cell_width(RASTER_132), 7);
+		CHECK_EQ(raster_x_offset(RASTER_132), 50);
+		CHECK_EQ(raster_pad_top(RASTER_80), 0); // 24 glyph rows fill them
+	} else {
+		CHECK_EQ(raster_cell_width(RASTER_80), 10);
+		CHECK_EQ(raster_x_offset(RASTER_80), 0); // the full width
+		CHECK_EQ(raster_cell_width(RASTER_132), 6);
+		CHECK_EQ(raster_x_offset(RASTER_132), 4); // centered
+		CHECK_EQ(raster_pad_top(RASTER_80), 2); // 20 glyph rows in 24
+	}
+	CHECK_EQ(raster_x_offset(RASTER_132) * 2 + 132 * raster_cell_width(RASTER_132), raster_width());
+	CHECK_EQ(raster_x_offset(RASTER_80) * 2 + 80 * raster_cell_width(RASTER_80), raster_width());
 	CHECK_EQ(SCREEN_ROWS * RASTER_ROW_HEIGHT, RASTER_ACTIVE_HEIGHT);
 	CHECK_EQ(raster_pad_top(RASTER_132), 0); // 12 rows doubled fill them
 	CHECK(raster_has_bold_face(RASTER_80));
@@ -176,11 +176,11 @@ static void test_glyph_bits(void) {
 		CHECK_EQ(raster_cell_bits(out.bits[1 + gy], w80, 1), raster_glyph_row(RASTER_80, false, 'W', gy));
 		CHECK_EQ(raster_cell_bits(out.bits[1 + gy], w80, 2), raster_glyph_row(RASTER_80, true, 'W', gy));
 	}
-#if RASTER_ACTIVE_WIDTH == 1024
-	CHECK_EQ(raster_glyph_row(RASTER_80, false, 'A', 4), font_12x24['A' * FONT_12X24_HEIGHT + 4]);
-#else
-	CHECK_EQ(raster_glyph_row(RASTER_80, false, 'A', 4), font_10x20['A' * FONT_10X20_HEIGHT + 4]);
-#endif
+	if (raster_width() == RASTER_WIDTH_1024) {
+		CHECK_EQ(raster_glyph_row(RASTER_80, false, 'A', 4), font_12x24['A' * FONT_12X24_HEIGHT + 4]);
+	} else {
+		CHECK_EQ(raster_glyph_row(RASTER_80, false, 'A', 4), font_10x20['A' * FONT_10X20_HEIGHT + 4]);
+	}
 	CHECK_EQ(out.fg[0], RGB222(3, 0, 0));
 	CHECK_EQ(out.bg[0], RGB222(0, 0, 1));
 	// Padding rows above and below the glyph are blank.
@@ -197,18 +197,18 @@ static void test_glyph_bits(void) {
 	for (unsigned gy = 0; gy < FONT_132_HEIGHT; ++gy) {
 		CHECK_EQ(raster_cell_bits(out.bits[1 + gy], w132, 2), raster_glyph_row(RASTER_132, false, 'g', gy));
 	}
-#if RASTER_ACTIVE_WIDTH == 1024
-	// The 7th column: blank in a letter, carried on in line drawing.
-	for (unsigned gy = 0; gy < FONT_132_HEIGHT; ++gy) {
-		CHECK_EQ(raster_glyph_row(RASTER_132, false, 'g', gy) >> 6, 0);
-		CHECK_EQ(raster_glyph_row(RASTER_132, false, 'g', gy), font_132['g' * FONT_132_HEIGHT + gy] & 0x3fu);
+	if (raster_width() == RASTER_WIDTH_1024) {
+		// The 7th column: blank in a letter, carried on in line drawing.
+		for (unsigned gy = 0; gy < FONT_132_HEIGHT; ++gy) {
+			CHECK_EQ(raster_glyph_row(RASTER_132, false, 'g', gy) >> 6, 0);
+			CHECK_EQ(raster_glyph_row(RASTER_132, false, 'g', gy), font_132['g' * FONT_132_HEIGHT + gy] & 0x3fu);
 	}
 	unsigned h_row = 0;
 	for (unsigned gy = 0; gy < FONT_132_HEIGHT; ++gy) {
 		h_row |= raster_glyph_row(RASTER_132, false, GLYPH_DEC_GRAPHICS('q'), gy); // ─
 	}
 	CHECK_EQ(h_row, 0x7fu);
-#endif
+	}
 }
 
 // A line rendered over another (any layout, any attributes) comes out as
@@ -272,7 +272,7 @@ static void test_border_is_black(void) {
 		render(screen_line(&s, 0), l, 0);
 		const unsigned x0 = raster_x_offset(l), x_end = x0 + cols * raster_cell_width(l);
 		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
-			for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x) {
+			for (unsigned x = 0; x < raster_width(); ++x) {
 				CHECK_EQ(shown(l, sy, x), x >= x0 && x < x_end ? RGB222(3, 3, 3) : 0);
 			}
 		}
@@ -499,7 +499,7 @@ static void test_blank_line(void) {
 		const unsigned x0 = raster_x_offset(l), x_end = x0 + raster_cols(l) * raster_cell_width(l);
 		unsigned bad = 0;
 		for (unsigned sy = 0; sy < RASTER_ROW_HEIGHT; ++sy) {
-			for (unsigned x = 0; x < RASTER_ACTIVE_WIDTH; ++x) {
+			for (unsigned x = 0; x < raster_width(); ++x) {
 				bad += shown(l, sy, x) != (x >= x0 && x < x_end ? RGB222(0, 1, 1) : 0);
 			}
 		}
@@ -524,19 +524,24 @@ static void test_demo(void) {
 }
 
 int main(void) {
-	RUN(test_layout);
-	RUN(test_any_colors_exact);
-	RUN(test_glyph_bits);
-	RUN(test_render_over);
-	RUN(test_blank_line);
-	RUN(test_border_is_black);
-	RUN(test_connectors_join);
-	RUN(test_double_lines);
-	RUN(test_cursor_inverts_cell);
-	RUN(test_underline);
-	RUN(test_blink);
-	RUN(test_bold);
-	RUN(test_reverse);
-	RUN(test_demo);
+	// Every test at both widths (bd cpx.6: the Display setting picks one at
+	// boot).
+	for (unsigned i = 0; i < 2; ++i) {
+		raster_set_width(i ? RASTER_WIDTH_1024 : RASTER_WIDTH_800);
+		RUN(test_layout);
+		RUN(test_any_colors_exact);
+		RUN(test_glyph_bits);
+		RUN(test_render_over);
+		RUN(test_blank_line);
+		RUN(test_border_is_black);
+		RUN(test_connectors_join);
+		RUN(test_double_lines);
+		RUN(test_cursor_inverts_cell);
+		RUN(test_underline);
+		RUN(test_blink);
+		RUN(test_bold);
+		RUN(test_reverse);
+		RUN(test_demo);
+	}
 	return tests_done();
 }

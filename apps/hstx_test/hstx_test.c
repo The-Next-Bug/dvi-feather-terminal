@@ -1,7 +1,7 @@
 // HSTX DVI bring-up test (bd dmt.8.1): a static test pattern from
-// hstx_dvi.c, to check on hardware that the HSTX drives the Pico DVI Sock
-// at 800x600 (HSTX_MODE) before the terminal moves over to it; also the
-// 1024x600 modes' spike (bd cpx), at the mode's width W.
+// hstx_dvi.c, to check on hardware that the HSTX drives the board's DVI
+// pins at the build's mode (DVI_MODE: 800x600 or 1024x600, bd cpx.4), at
+// the mode's width W.
 //
 // The pattern (W x 600):
 //   - a 1-pixel white border: every edge pixel should be visible;
@@ -25,7 +25,7 @@
 #include "hstx_dvi.h"
 #include "screen.h"
 
-#define W HSTX_ACTIVE_WIDTH
+#define W DVI_DEFAULT_WIDTH
 #define H HSTX_ACTIVE_HEIGHT
 #define TILE_W (W / 8)
 #define LEVEL_W (W / 16)
@@ -90,6 +90,7 @@ static const uint32_t *__not_in_flash_func(line)(unsigned y) {
 }
 
 int main(void) {
+	hstx_dvi_select(W);
 	hstx_dvi_init();
 	// After the clock change: the UART's divisor depends on clk_peri.
 	stdio_init_all();
@@ -108,9 +109,9 @@ int main(void) {
 	for (unsigned s = 0;; ++s) {
 		sleep_ms(1000);
 		uint32_t frames = hstx_dvi_frames;
-		printf("hstx_test mode %d: %ux%u, total %ux%u, clk_sys %lu kHz, clk_hstx %lu kHz, clk_peri %lu kHz "
+		printf("hstx_test: %ux%u, total %ux%u, clk_sys %lu kHz, clk_hstx %lu kHz, clk_peri %lu kHz "
 			"(measured), %lu frames/s, %lu frames\n",
-			HSTX_MODE, t->h_active, t->v_active, h_total, v_total,
+			t->h_active, t->v_active, h_total, v_total,
 			(unsigned long)frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_SYS),
 			(unsigned long)frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_HSTX),
 			(unsigned long)frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_PERI),

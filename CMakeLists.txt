@@ -55,19 +55,21 @@ option(VIDEO_DIAG "Bring-up diagnostics on UART0 TX: boot markers, core 1 timing
 # at the 400 MHz DVI clock flash execution is unreliable (on the RP2040 it hung
 # above 252 MHz). See bd dvi-feather-terminal-dmt.10.
 option(COPY_TO_RAM "Run the whole program from SRAM instead of flash" ON)
-# Video timing (src/hstx_dvi.h): 800x600 at 60 Hz needs clk_hstx at 200 MHz,
-# beyond its 150 MHz rating; the others are fallbacks with slower clocks.
-# Empty: the board header's, pico_board_cmake_set(BOARD_HSTX_MODE, n), else
-# 3 (1024x600, since v0.10.0; clk_sys BOARD_SPLIT_SYS_KHZ, 336 MHz on the
-# Feathers, which do not run 400 MHz reliably).
-set(HSTX_MODE_HELP "HSTX video mode: empty the board's (else 3), 0 800x600@60 (400 MHz), 1 800x600@56 (360 MHz), 2 800x600@60 reduced blanking (354 MHz), 3 1024x600@60 reduced blanking (clk_hstx 220 MHz, clk_sys the board's, 384 MHz)")
-set(HSTX_MODE "" CACHE STRING "${HSTX_MODE_HELP}")
-# A build directory from before the board's choice holds 0, which would
-# now override it: start it over at empty.
-get_property(hstx_mode_help CACHE HSTX_MODE PROPERTY HELPSTRING)
-if(NOT hstx_mode_help STREQUAL HSTX_MODE_HELP)
-  set(HSTX_MODE "" CACHE STRING "${HSTX_MODE_HELP}" FORCE)
+# The DVI mode (src/video/hstx_dvi.h, bd cpx.7): 1024x600 (the default
+# since v0.10.0) or 800x600, both at 60 Hz. Only the default: the Display
+# setting picks the mode at boot (bd cpx.6). Empty: the board header's,
+# pico_board_cmake_set(BOARD_DVI_MODE, ...), else 1024x600. clk_sys is the
+# board's BOARD_SYS_KHZ in both (384 MHz; the Feathers 336).
+set(DVI_MODE "" CACHE STRING "Default DVI mode (the Display setting's): empty the board's (else 1024x600), 1024x600 or 800x600")
+set_property(CACHE DVI_MODE PROPERTY STRINGS "" 1024x600 800x600)
+# HSTX_MODE (0-3, until v0.10.0) is gone: its 800x600 fallbacks with lower
+# clocks are not needed now that clk_sys no longer follows the pixel
+# clock. Refuse it rather than guess, as its numbers meant other modes.
+if(DEFINED HSTX_MODE AND NOT HSTX_MODE STREQUAL "")
+  message(FATAL_ERROR "HSTX_MODE was retired after v0.10.0: use -DDVI_MODE=1024x600 or -DDVI_MODE=800x600 "
+    "(and -UHSTX_MODE, or a new build directory)")
 endif()
+unset(HSTX_MODE CACHE)
 # Z80 CP/M machine (Mode setting): 48 KB memory banks besides the 64 KB of
 # bank 0. CP/M 2.2 needs none, CP/M 3 one; MP/M wants as many as it was
 # generated for.
@@ -116,15 +118,22 @@ pico_sdk_init()
 if(NOT PICO_PLATFORM MATCHES "^rp2350")
   message(FATAL_ERROR "PICO_BOARD ${PICO_BOARD} is ${PICO_PLATFORM}: only RP2350 boards are supported")
 endif()
-if(NOT HSTX_MODE STREQUAL "")
-  set(DVT_HSTX_MODE ${HSTX_MODE})
-elseif(DEFINED BOARD_HSTX_MODE)
-  set(DVT_HSTX_MODE ${BOARD_HSTX_MODE})
+if(NOT DVI_MODE STREQUAL "")
+  set(DVT_DVI_MODE ${DVI_MODE})
+elseif(DEFINED BOARD_DVI_MODE)
+  set(DVT_DVI_MODE ${BOARD_DVI_MODE})
 else()
-  set(DVT_HSTX_MODE 3)
+  set(DVT_DVI_MODE 1024x600)
 endif()
-set(HSTX_MODE_USED ${DVT_HSTX_MODE} CACHE INTERNAL "the video mode built (build-info.txt)")
-message(STATUS "HSTX_MODE ${DVT_HSTX_MODE}")
+if(DVT_DVI_MODE STREQUAL "1024x600")
+  set(DVT_DVI_WIDTH 1024)
+elseif(DVT_DVI_MODE STREQUAL "800x600")
+  set(DVT_DVI_WIDTH 800)
+else()
+  message(FATAL_ERROR "DVI_MODE ${DVT_DVI_MODE}: 1024x600 or 800x600")
+endif()
+set(DVI_MODE_USED ${DVT_DVI_MODE} CACHE INTERNAL "the DVI mode built (build-info.txt)")
+message(STATUS "DVI_MODE ${DVT_DVI_MODE}")
 if(PSRAM_BANKS)
   set(MACHINE_BANKS 0) # all of them in the PSRAM: 96 KB of SRAM free
   message(STATUS "Z80 banks in PSRAM (PSRAM_BANKS)")
@@ -151,11 +160,13 @@ target_compile_definitions(dvt_render PRIVATE LOGO_IN_FLASH=$<BOOL:${LOGO_IN_FLA
 target_compile_definitions(dvt_disks PUBLIC DISKIMG_IN_FLASH=1)
 target_compile_definitions(dvt_z80pack PUBLIC MACHINE_BANKS=${MACHINE_BANKS})
 target_compile_definitions(dvt_platform PUBLIC VIDEO_DIAG=$<BOOL:${VIDEO_DIAG}> PSRAM_BANKS=$<BOOL:${PSRAM_BANKS}>)
-target_compile_definitions(dvt_video PUBLIC HSTX_MODE=${DVT_HSTX_MODE})
-# The 1024x600 mode: the raster's 1024-wide layouts (80 columns of 12x24,
-# 132 of 7-pixel cells), for everything that includes raster.h.
-if(DVT_HSTX_MODE EQUAL 3)
-  target_compile_definitions(dvt_render PUBLIC RASTER_ACTIVE_WIDTH=1024)
+# DVI_MODE is the default: the Display setting's until one is saved
+# (bd cpx.6), and hstx_test's mode.
+target_compile_definitions(dvt_video PUBLIC DVI_DEFAULT_WIDTH=${DVT_DVI_WIDTH})
+if(DVT_DVI_WIDTH EQUAL 1024)
+  target_compile_definitions(dvt_settings PRIVATE SETTINGS_DISPLAY_DEFAULT=SETTINGS_DISPLAY_1024)
+else()
+  target_compile_definitions(dvt_settings PRIVATE SETTINGS_DISPLAY_DEFAULT=SETTINGS_DISPLAY_800)
 endif()
 target_compile_definitions(dvt_usb PRIVATE
   USB_WA_DEINIT=$<BOOL:${USB_WA_DEINIT}>

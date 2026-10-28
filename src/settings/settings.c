@@ -68,6 +68,9 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 		{"mono", "ABC", "ACB"}, SETTINGS_PAGE_CLOCK},
 	{"Flow control", 3, {SETTINGS_FLOW_NONE, SETTINGS_FLOW_RTSCTS, SETTINGS_FLOW_XONXOFF},
 		{"none", "RTS/CTS", "XON/XOFF"}, SETTINGS_PAGE_MAIN},
+	{"Display", 2, {SETTINGS_DISPLAY_1024, SETTINGS_DISPLAY_800}, {"1024x600", "800x600"}, SETTINGS_PAGE_MAIN},
+	{"Display before", 3, {SETTINGS_DISPLAY_NONE, SETTINGS_DISPLAY_1024, SETTINGS_DISPLAY_800},
+		{"none", "1024x600", "800x600"}, SETTINGS_PAGE_NONE},
 };
 
 // SET-UP's rows: the line's settings together, then the rest.
@@ -75,7 +78,7 @@ static const uint8_t main_rows[SETTINGS_MAIN_FIELDS] = {
 	offsetof(settings_t, columns), offsetof(settings_t, backspace), offsetof(settings_t, local_echo),
 	offsetof(settings_t, baud), offsetof(settings_t, framing), offsetof(settings_t, flow),
 	offsetof(settings_t, newline), offsetof(settings_t, colors), offsetof(settings_t, palette),
-	offsetof(settings_t, mode), offsetof(settings_t, status_line), offsetof(settings_t, blank_after),
+	offsetof(settings_t, display), offsetof(settings_t, mode), offsetof(settings_t, status_line), offsetof(settings_t, blank_after),
 	offsetof(settings_t, term_type), offsetof(settings_t, usb_log),
 };
 
@@ -136,7 +139,8 @@ void settings_defaults(settings_t *s) {
 		.status_line = 1, .blank_after = 0, .term_type = SETTINGS_TERM_VT100, .clock = SETTINGS_CLOCK_24H,
 		.clock_seconds = 0, .clock_date = SETTINGS_DATE_NONE, .bell = SETTINGS_BELL_DEFAULT,
 		.usb_log = SETTINGS_USB_LOG_OFF, .sound_level = SETTINGS_SOUND_DEFAULT, .sound_dac = 1,
-		.sound_stereo = SETTINGS_STEREO_MONO, .flow = SETTINGS_FLOW_NONE};
+		.sound_stereo = SETTINGS_STEREO_MONO, .flow = SETTINGS_FLOW_NONE,
+		.display = SETTINGS_DISPLAY_DEFAULT, .display_was = SETTINGS_DISPLAY_NONE};
 }
 
 void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_RECORD_SIZE]) {
