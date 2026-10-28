@@ -76,10 +76,27 @@ build:
       - build/$TARGET/compile.log
     expire_in: 30 days
 
+# The user guide (scripts/docs.sh, bd 1ay): mdBook over docs/guide with
+# the screenshots and tables generated from the sources; the package puts
+# it in the release ZIP. Until the build image has mdBook (toolchain.env's
+# MDBOOK_*), setup-toolchain.sh downloads it.
+docs:
+  extends: .image
+  stage: build
+  needs: []
+  script:
+    - scripts/setup-toolchain.sh cmake mdbook
+    - scripts/docs.sh
+  artifacts:
+    name: "dvi-terminal-guide-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - build/docs/html
+    expire_in: 30 days
+
 package:
   extends: .image
   stage: package
-  needs: [test, build]
+  needs: [test, build, docs]
   script:
     - BUILD_DIR=build DIST_DIR=dist scripts/package.sh
   artifacts:

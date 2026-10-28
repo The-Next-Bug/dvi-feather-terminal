@@ -3,8 +3,9 @@
 # builds; nothing is installed system-wide.
 #
 # Usage: scripts/setup-toolchain.sh [component...]
-#   components: cmake arm picotool clang-tidy (default: all). The host-test
-#   job only needs cmake; scripts/lint.sh needs clang-tidy.
+#   components: cmake arm picotool clang-tidy mdbook (default: all). The
+#   host-test job only needs cmake; scripts/lint.sh needs clang-tidy,
+#   scripts/docs.sh mdbook (and cmake).
 #
 # Versions come from toolchain.env; any of its variables can be overridden
 # from the environment (e.g. ARM_GNU_VERSION=... ARM_GNU_SHA256=...).
@@ -31,7 +32,7 @@ done < "$ROOT/toolchain.env"
 TOOLCHAIN_DIR="${TOOLCHAIN_DIR:-$ROOT/.toolchain}"
 
 components=("$@")
-[[ ${#components[@]} -gt 0 ]] || components=(cmake arm picotool clang-tidy)
+[[ ${#components[@]} -gt 0 ]] || components=(cmake arm picotool clang-tidy mdbook)
 
 mkdir -p "$TOOLCHAIN_DIR"
 
@@ -138,12 +139,27 @@ PY
   "$dir/bin/clang-tidy" --version | grep -i version | head -1
 }
 
+# mdBook (scripts/docs.sh): one static binary.
+install_mdbook() {
+  local dir="$TOOLCHAIN_DIR/mdbook"
+  if ! installed "$dir" "$MDBOOK_VERSION"; then
+    local tarball
+    tarball="$(fetch "https://github.com/rust-lang/mdBook/releases/download/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+      "$MDBOOK_SHA256")"
+    rm -rf "$dir" && mkdir -p "$dir"
+    tar -xzf "$tarball" -C "$dir"
+    echo "$MDBOOK_VERSION" > "$dir/.version"
+  fi
+  "$dir/mdbook" --version
+}
+
 for c in "${components[@]}"; do
   case "$c" in
     cmake) install_cmake ;;
     arm) install_arm ;;
     picotool) install_picotool ;;
     clang-tidy) install_clang_tidy ;;
+    mdbook) install_mdbook ;;
     *) echo "error: unknown component '$c'" >&2; exit 1 ;;
   esac
 done

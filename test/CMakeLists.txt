@@ -48,6 +48,13 @@ unit_test(vtparse dvt_term)
 unit_test(term dvt_term)
 unit_test(palette dvt_screen)
 unit_test(raster dvt_render dvt_ui)
+# The user guide's screenshots and settings tables (docs/guide/gen/docgen.c,
+# run by scripts/docs.sh; bd 1ay): built with the tests, not one of them.
+add_executable(docgen ${CMAKE_CURRENT_LIST_DIR}/../docs/guide/gen/docgen.c)
+target_link_libraries(docgen dvt_ui dvt_term dvt_render dvt_settings dvt_clock dvt_screen)
+target_include_directories(docgen PRIVATE ${SRC})
+target_compile_options(docgen PRIVATE -Wall -Wextra -Werror -fsanitize=address,undefined)
+target_link_options(docgen PRIVATE -fsanitize=address,undefined)
 unit_test(keyboard dvt_input)
 unit_test(blank dvt_input)
 unit_test(keyname dvt_input)

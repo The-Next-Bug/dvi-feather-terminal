@@ -1034,6 +1034,7 @@ scripts/test.sh                      # host unit tests
 scripts/build.sh                     # -> build/pico2-dvi-sock/dvi_terminal.uf2, build-info.txt
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<rev>.zip, dist/CHANGES.md
 scripts/lint.sh                      # clang-tidy over the tests' and the firmware's builds
+scripts/docs.sh                      # the user guide -> build/docs/html/index.html (also in the release ZIP as guide/)
 ```
 
 `scripts/lint.sh` runs clang-tidy with the checks in `.clang-tidy` (for

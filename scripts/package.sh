@@ -3,8 +3,9 @@
 # BUILD_DIR (but experimental boards: boards/experimental/README.md), its UF2, BIN and build-info, and the UF2 again as
 # sdcard-<target>/FIRMWARE.UF2 (for the CP/M monitor's update from the
 # card); plus flashing instructions, the third-party notices and license texts, CHANGES.md (from the git history since the previous tag), SHA256SUMS and the
-# source of the built commit. CHANGES.md is also written next to the ZIP for
-# use as release notes.
+# source of the built commit; and the user guide (scripts/docs.sh) as
+# guide/, also on its own as <release>-guide.zip. CHANGES.md is also written
+# next to the ZIP for use as release notes.
 #
 # Tagged builds (tags like v0.1.0) are named dvi-terminal-<tag>; anything
 # else dvi-terminal-<git describe>.
@@ -12,6 +13,7 @@
 # Environment overrides:
 #   BUILD_DIR   build output root from build.sh (default: build)
 #   DIST_DIR    where the ZIP is written        (default: dist)
+#   DOCS_DIR    the built user guide            (default: build/docs/html)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,6 +21,8 @@ cd "$ROOT"
 
 BUILD_DIR="${BUILD_DIR:-build}"
 DIST_DIR="${DIST_DIR:-dist}"
+DOCS_DIR="${DOCS_DIR:-build/docs/html}"
+[[ -f "$DOCS_DIR/index.html" ]] || { echo "error: no user guide in $DOCS_DIR; run scripts/docs.sh" >&2; exit 1; }
 
 info() { sed -n "s/^$2=//p" "$1"; }
 infos=()
@@ -77,5 +81,13 @@ scripts/changelog.sh "$sha" | tee "$stage/CHANGES.md" > "$DIST_DIR/CHANGES.md"
 mkdir -p "$stage/source"
 git archive --format=tar "$sha" | tar -x -C "$stage/source"
 
-(cd "$DIST_DIR" && rm -f "$release.zip" && python3 -m zipfile -c "$release.zip" "$release")
+# The user guide (bd 1ay): guide/index.html, readable offline.
+cp -r "$DOCS_DIR" "$stage/guide"
+guide="$release-guide"
+rm -rf "$DIST_DIR/$guide"
+cp -r "$DOCS_DIR" "$DIST_DIR/$guide"
+
+(cd "$DIST_DIR" && rm -f "$release.zip" "$guide.zip" && python3 -m zipfile -c "$release.zip" "$release" \
+  && python3 -m zipfile -c "$guide.zip" "$guide" && rm -rf "$guide")
 echo "$DIST_DIR/$release.zip"
+echo "$DIST_DIR/$guide.zip"

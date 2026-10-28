@@ -1,0 +1,22 @@
+# The user guide (bd 1ay): scripts/docs.sh stages this with src/ and the
+# generated parts and runs mdBook (pinned in toolchain.env).
+[book]
+title = "DVI Feather Terminal: User Guide"
+authors = ["arlaneenalra"]
+language = "en"
+src = "src"
+
+[build]
+# A page named in SUMMARY.md but missing is an error, not a blank page.
+create-missing = false
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+no-section-label = false
+
+[output.html.print]
+enable = true
+
+[output.html.search]
+enable = true

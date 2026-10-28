@@ -1,12 +1,21 @@
 Flashing the DVI terminal firmware
 ==================================
 
+The user guide is in guide/ in this ZIP: open guide/index.html in a web
+browser. It covers everything below in more detail.
+
 Files: dvi_terminal-<target>.uf2 for each supported board:
 
-  pico2-dvi-sock      Raspberry Pi Pico 2 (RP2350) with the Pico DVI Sock
+  pico2-dvi-sock                      Raspberry Pi Pico 2 with the Pico DVI Sock
+  frankless                           Frankless (a reworked MicroFRANK)
+  feather-rp2350-hstx                 Adafruit Feather RP2350 with HSTX Port
+  feather-rp2350-hstx-psram           the same with its 8 MB PSRAM fitted
+  feather-rp2350-hstx-adalogger       the Feather with an Adalogger FeatherWing's RTC
+  feather-rp2350-hstx-psram-adalogger the PSRAM Feather with the Adalogger's RTC
 
-It uses UART0 on GP0 (TX) and GP1 (RX). RP2040 boards (such as the
-Adafruit Feather RP2040 DVI) are no longer supported.
+The guide's "Boards" page has each board's pins (the Pico 2: UART0 TX GP0,
+RX GP1). RP2040 boards (such as the Adafruit Feather RP2040 DVI) are no
+longer supported.
 
 1. Hold the BOOT button, press and release RESET, then release BOOT.
    (Or hold BOOT while plugging in USB.) The board appears as a USB drive
@@ -17,22 +26,24 @@ Adafruit Feather RP2040 DVI) are no longer supported.
 
    picotool also works: picotool load -x dvi_terminal-<target>.uf2
 
-3. Connect a DVI/HDMI monitor. The display runs at 800x600 60 Hz.
+3. Connect a DVI/HDMI monitor. The display runs at 1024x600 60 Hz; SET-UP
+   (F12) switches it to 800x600 (Display), and asks to keep the new mode
+   (without a key in 15 s, or after a power cycle, it goes back).
    The logo shows for 10 seconds, with the build id on the bottom line,
-   then the terminal starts (at once if data arrives on the RX pin, UART0
+   then the terminal starts (at once if data arrives on the serial port,
    115200 8N1, or a key is pressed).
 
-4. Optional USB keyboard: after flashing, unplug the PC from
+4. Optional USB keyboard: on the Pico 2, after flashing, unplug the PC from
    the USB port, connect the keyboard there through an OTG adapter, and
    power the board with 5 V into VBUS (pin 40): in host mode the board does
    not power the keyboard itself. Never feed 5 V in while a PC is plugged
-   into the USB port. See the README, "USB keyboard".
+   into the USB port. One USB hub at most. See the guide, "Keyboard".
 
 5. Optional Z80 CP/M machine: in SET-UP (F12) set Mode to "CP/M machine"
    and save; the board restarts as a CP/M computer. Wire an SPI microSD
-   adapter to GP4 (MISO), GP5 (CS), GP6 (SCK), GP7 (MOSI), 3V3 and GND,
-   with a FAT32 card; I in the monitor installs the built-in CP/M 2.2 disk.
-   See the README, "Z80 CP/M machine".
+   adapter (on the Pico 2: GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI, 3V3 and
+   GND) with a FAT32 card; I in the monitor installs the built-in disks.
+   See the guide, "The Z80 CP/M machine".
 
 6. Later updates without a PC connection: copy the UF2 to the root of the
    SD card or a USB stick as FIRMWARE.UF2 (sdcard-<target>/FIRMWARE.UF2 in
@@ -41,8 +52,7 @@ Adafruit Feather RP2040 DVI) are no longer supported.
    writes it beside the running firmware, then installs it and restarts;
    do not power off while it says so. If the power fails then, the board
    does not start: flash it again as in steps 1-2 (the boot ROM's BOOTSEL
-   mode always works). See the README, "Updating the firmware from the SD
-   card or a USB stick".
+   mode always works). See the guide, "Firmware updates".
 
 The BIN files are the same images as raw flash contents, for SWD programmers
 (load at 0x10000000). SHA256SUMS covers the UF2 and BIN files.
