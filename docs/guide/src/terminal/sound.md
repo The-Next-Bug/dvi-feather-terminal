@@ -18,7 +18,7 @@ The Z80 machine has a General Instrument AY-3-8910: three square-wave
 tones, noise and an envelope, emulated, clocked at 1.8432 MHz, on RC2014's
 ports. A tone of f Hz has period 115200 / f. Programs written for RC2014's
 YM2149 sound board use the same ports; see
-[Z80 I/O ports](../reference/ports.md#the-ay-3-8910-d8hd0h).
+[Z80 I/O ports](../reference/ports.md#the-ay-3-8910-d8h-d0h).
 
 ## Settings
 
@@ -31,9 +31,9 @@ In SET-UP's Clock and sound panel (**C**):
 | Stereo | mono, ABC, ACB | where the AY's channels are heard: all in both ears; A left, B center, C right (as on the ZX Spectrum 128 and Amstrad CPC); or A left, C center, B right. Mono by default: a channel in one ear only tires on headphones |
 | Sound DAC | fitted, not fitted | not fitted: no sound at all (the DAC's pins, PIO and DMA are given back), and the AY's ports read FFh as with no chip |
 
-A program can pick the stereo layout itself through register 16, which the
+A program can pick the stereo layout itself through register 10h, which the
 firmware adds (a real AY ignores it): see
-[Z80 I/O ports](../reference/ports.md#the-ay-3-8910-d8hd0h).
+[Z80 I/O ports](../reference/ports.md#the-ay-3-8910-d8h-d0h).
 
 ## Programs
 

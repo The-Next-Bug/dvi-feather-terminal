@@ -49,8 +49,8 @@
 - [Keys sent](reference/keys.md)
 - [Character set](reference/charset.md)
 - [Z80 I/O ports](reference/ports.md)
-- [File transfer device (port 10)](reference/xfer.md)
-- [Hardware information (port 12)](reference/hwinfo.md)
+- [File transfer device (port 0Ah)](reference/xfer.md)
+- [Hardware information (port 0Ch)](reference/hwinfo.md)
 - [Writing a BIOS](reference/bios.md)
 - [File formats](reference/file-formats.md)
 

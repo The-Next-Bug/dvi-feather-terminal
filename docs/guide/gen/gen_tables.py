@@ -32,12 +32,14 @@ def hwinfo(repo, out):
             elif name not in ("HWINFO_VERSION", "HWINFO_MAX", "HWINFO_RECORD"):
                 items.append((value, name, note))
     with open(os.path.join(out, "hwinfo-items.md"), "w") as f:
+        # Hex, as the Z80 I/O ports page writes ports and values; items
+        # with their decimal numbers too (HWINFO's sources use them).
         f.write("| Item | Name | What |\n|---|---|---|\n")
         for value, name, note in sorted(items):
-            f.write(f"| {value} | `{name}` | {note} |\n")
+            f.write(f"| {value:02X}h ({value}) | `{name}` | {note} |\n")
         f.write("\n| Status | Name | Meaning |\n|---|---|---|\n")
         for value, name, note in sorted(statuses):
-            f.write(f"| {value} | `{name}` | {note} |\n")
+            f.write(f"| {value:02X}h | `{name}` | {note} |\n")
 
 
 def board_macros(repo, header, cc):

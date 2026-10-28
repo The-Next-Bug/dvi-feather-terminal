@@ -13,9 +13,9 @@ warm boot reloads the CCP and BDOS from the system tracks of drive A.
 
 ## Disks
 
-- Use the [disk controller](ports.md#disk-controller-4) on port 4:
+- Use the [disk controller](ports.md#disk-controller-04h) on port 04h:
   128-byte sectors by DMA, the sector number 1-based.
-- Ask [port 8](ports.md#drive-format-8) what each drive holds and pick
+- Ask [port 08h](ports.md#drive-format-08h) what each drive holds and pick
   the disk parameter block (DPB) to match, at SELDSK (CP/M 2.2) or at
   log-in (CP/M 3). Until a system has asked about a drive, the controller
   refuses it a hard-disk image.
@@ -35,7 +35,7 @@ warm boot reloads the CCP and BDOS from the system tracks of drive A.
 These are `bios.asm`'s DPBs; the images on the card were written with them,
 so another BIOS must use the same.
 
-- **Media change**: the second `IN 8` gives a count of the images mounted
+- **Media change**: the second `IN 08h` gives a count of the images mounted
   on the drive since power-on. CP/M 3's BIOS compares format and count with
   those at log-in and returns `0FFH` (media changed) from READ/WRITE when
   they differ, so the BDOS logs the drive in again. On hard disks it sets
@@ -44,16 +44,16 @@ so another BIOS must use the same.
 ## Memory
 
 - CP/M 2.2 runs in bank 0.
-- A banked system selects banks with the [MMU](ports.md#mmu-64); 0000H-BFFFH
-  is banked, C000H-FFFFH common. CP/M 3 here keeps the BIOS's DPBs in
+- A banked system selects banks with the [MMU](ports.md#mmu-40h); 0000h-BFFFh
+  is banked, C000h-FFFFh common. CP/M 3 here keeps the BIOS's DPBs in
   common memory and the DPHs banked.
 
 ## Console and devices
 
-- Console on ports 0/1, the second serial port on 2/3.
-- The clock on ports 65/66 (CP/M 3's TIME function reads and, here, writes
+- Console on ports 00h/01h, the second serial port on 02h/03h.
+- The clock on ports 41h/42h (CP/M 3's TIME function reads and, here, writes
   it).
-- `BYE` and `RESET` style commands through [hardware control](ports.md#hardware-control-160).
+- `BYE` and `RESET` style commands through [hardware control](ports.md#hardware-control-a0h).
 
 ## Building CPM3.SYS
 

@@ -5,7 +5,7 @@ AYTEST
 ```
 
 A menu of the [sound chip](../../terminal/sound.md)'s parts. It first looks
-for the chip on its ports (D8h/D0h) and says so if there is none (a board
+for the chip on its ports (D8h, D0h) and says so if there is none (a board
 without a DAC, or Sound DAC set to not fitted).
 
 | Item | What it plays |
@@ -19,7 +19,7 @@ without a DAC, or Sound DAC set to not fitted).
 | 7 | all of them |
 | **S** | step the stereo layout: the Stereo setting's, mono, ABC, ACB |
 
-The menu shows the stereo layout in use (none when register 16 reads FFh,
+The menu shows the stereo layout in use (none when register 10h reads FFh,
 on older firmware). A key stops a part; `Q`, `Esc` or `^C` ends the
 program, and the layout AYTEST found is put back. Durations come from the
-millisecond tick (ports 68/69); without it AYTEST says so.
+millisecond tick (ports 44h/45h); without it AYTEST says so.

@@ -17,7 +17,7 @@ it) or RP2350-only.
 | `src/settings` | portable | `settings` (the records, the fields), `uf2` (firmware file checks) | [SET-UP](../terminal/setup.md), [Firmware updates](../terminal/firmware-update.md) |
 | `src/machine` | portable | `machine` (the Z80 machine on z80pack's core); `cpm/` (the BIOSes and the CP/M tools, in assembler), `cpm/cpm3/`, `cpm/f83/`, `cpm/tunes/` | [The Z80 CP/M machine](../cpm/overview.md), [Z80 I/O ports](../reference/ports.md) |
 | `src/sound` | portable | `ay8910`, `mixer`, `tune` | [Bell and sound](../terminal/sound.md) |
-| `src/disks` | portable | `drives`, `drivecfg` (images, DRIVES.CFG, sets), `diskimg` (the built-in disks), `xfer` (port 10), `usbvol`, `sdformat` | [Drives](../cpm/drives.md), [Moving files](../cpm/moving-files.md), [File transfer](../reference/xfer.md) |
+| `src/disks` | portable | `drives`, `drivecfg` (images, DRIVES.CFG, sets), `diskimg` (the built-in disks), `xfer` (port 0Ah), `usbvol`, `sdformat` | [Drives](../cpm/drives.md), [Moving files](../cpm/moving-files.md), [File transfer](../reference/xfer.md) |
 | `src/ui` | portable | `setup`, `clockpanel`, `drivepanel`, `fwpanel`, `monitor`, `demo` | [SET-UP](../terminal/setup.md), [The monitor](../cpm/monitor.md) |
 | `src/board` | RP2350 | `board.h` (the board header, checked) | [Adding a board](boards.md) |
 | `src/platform` | RP2350 | `serial`, `led`, `audio`, `nvflash` (the settings' flash), `fwupdate`, `extram` (PSRAM), `diag` | [Troubleshooting](../terminal/troubleshooting.md), [Firmware updates](../terminal/firmware-update.md) |
@@ -29,7 +29,7 @@ it) or RP2350-only.
 
 | Path | Contents |
 |---|---|
-| `apps/terminal/` | the firmware: `main.c` (start-up, the main loop, the Display prompt), `setup_glue.c` (SET-UP and its panels), `cpm_glue.c` (the Z80 machine's platform), `status.c` (the status line), `input_glue.c` (keys), `hwinfo_glue.c` (port 12's records), `crash_glue.c`, `usblog_glue.c` |
+| `apps/terminal/` | the firmware: `main.c` (start-up, the main loop, the Display prompt), `setup_glue.c` (SET-UP and its panels), `cpm_glue.c` (the Z80 machine's platform), `status.c` (the status line), `input_glue.c` (keys), `hwinfo_glue.c` (port 0Ch's records), `crash_glue.c`, `usblog_glue.c` |
 | `apps/hstx_test/` | the HSTX test pattern |
 
 ## Elsewhere

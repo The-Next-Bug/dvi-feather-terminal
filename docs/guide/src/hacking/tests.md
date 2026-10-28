@@ -17,7 +17,7 @@ AddressSanitizer/UndefinedBehaviorSanitizer and runs the unit tests in
 | `clock`, `rtc` | dates, the wall clock, the RTC chip drivers on a fake bus |
 | `ay` | the AY-3-8910: tones, noise, envelopes, levels, stereo, tunes |
 | `xonxoff` | XON/XOFF decisions |
-| `sdformat`, `xfer`, `usbvol` | card formats, port 10's files, which stick is `USB:` |
+| `sdformat`, `xfer`, `usbvol` | card formats, port 0Ah's files, which stick is `USB:` |
 | `uf2`, `lz` | firmware update checks, the image decompressor |
 | `machine` | boots CP/M 2.2 and 3 from a RAM volume and runs the tools (TERMTEST, ALTSCR, HWINFO, MEM, XLS/XPIP/XERA, AYTEST, AYPLAY, AYTRACK) and F83 |
 

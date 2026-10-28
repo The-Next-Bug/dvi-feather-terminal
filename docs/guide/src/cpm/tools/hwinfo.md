@@ -36,6 +36,6 @@ Disk drives      yes      A: CPM22, B: Z80TESTS
 ```
 
 It reads them from the [hardware information device](../../reference/hwinfo.md)
-on port 12, which other programs can use too. On older firmware or on
+on port 0Ch, which other programs can use too. On older firmware or on
 z80pack's picosim, which do not have the device, it says there is no
 information.

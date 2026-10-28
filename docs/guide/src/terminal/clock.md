@@ -36,8 +36,8 @@ Return: the clock is set, and the chip with it, so it survives power-off.
 Without a chip the panel says the time lasts only until power-off.
 
 Under CP/M 3, `DATE` shows the time and `DATE SET` sets it, the chip's
-too. Programs read it from the machine's clock ports (65/66; see
-[Z80 I/O ports](../reference/ports.md#clock-65-66)).
+too. Programs read it from the machine's clock ports (41h/42h; see
+[Z80 I/O ports](../reference/ports.md#clock-41h-42h)).
 
 Files written on the SD card and USB sticks (`XPIP SD:...`, `DRIVES.CFG`,
 new disk images, `USBLOG.TXT`) get their dates from it.

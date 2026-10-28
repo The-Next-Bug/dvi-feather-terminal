@@ -3,7 +3,7 @@
 `CPM22` is a 62K CP/M 2.2: Digital Research's CCP and BDOS (relocated from
 picosim's) with this project's BIOS (`src/machine/cpm/bios.asm`), which
 knows eight drives, A-H, each any of the three image formats (it asks the
-machine which, through [port 8](../reference/ports.md#drive-format-8)).
+machine which, through [port 08h](../reference/ports.md#drive-format-08h)).
 
 ## Booting
 
@@ -24,5 +24,5 @@ monitor, or reset with **F11**. Drive B: is usually `Z80TESTS`.
 ## Time
 
 CP/M 2.2 has no clock commands, but programs can read the machine's clock
-(ports 65/66). Set the time in SET-UP's
+(ports 41h/42h). Set the time in SET-UP's
 [Clock and sound panel](../terminal/setup.md#the-clock-and-sound-panel).

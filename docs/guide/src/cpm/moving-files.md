@@ -5,7 +5,7 @@ disks and the folder `/XFER` on the SD card (`SD:`) or a USB stick (`USB:`):
 `XLS` lists the folder, `XPIP` copies, `XERA` erases. Files go in and out
 without image tools on a PC, and a USB stick can be plugged in and pulled
 while CP/M runs. They use the machine's
-[file transfer device](../reference/xfer.md), port 10.
+[file transfer device](../reference/xfer.md), port 0Ah.
 
 ## XLS: list
 
