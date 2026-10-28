@@ -53,13 +53,13 @@
 #else
 #error "BOARD_DVI_DRIVE_MA must be 2, 4, 8 or 12"
 #endif
-// clk_sys in the split-clock video mode (HSTX_MODE 3): from PLL_USB, which
-// gives USB its 48 MHz by an integer divider.
-#ifndef BOARD_SPLIT_SYS_KHZ
-#define BOARD_SPLIT_SYS_KHZ 384000
+// clk_sys, in both video modes: from PLL_USB, which gives USB its 48 MHz
+// by an integer divider (hstx_dvi.c).
+#ifndef BOARD_SYS_KHZ
+#define BOARD_SYS_KHZ 384000
 #endif
-#if BOARD_SPLIT_SYS_KHZ % 48000 || BOARD_SPLIT_SYS_KHZ < 144000 || BOARD_SPLIT_SYS_KHZ > 432000
-#error "BOARD_SPLIT_SYS_KHZ must be a multiple of 48000 from 144000 to 432000"
+#if BOARD_SYS_KHZ % 48000 || BOARD_SYS_KHZ < 144000 || BOARD_SYS_KHZ > 432000
+#error "BOARD_SYS_KHZ must be a multiple of 48000 from 144000 to 432000"
 #endif
 #ifndef BOARD_DVI_SLEW_FAST
 #define BOARD_DVI_SLEW_FAST 0

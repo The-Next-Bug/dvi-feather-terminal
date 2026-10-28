@@ -27,13 +27,12 @@
 
 // --- Video mode ---
 //
-// The default 1024x600 (HSTX_MODE 3) with clk_sys at 336 MHz instead of
-// 384: at 400 MHz (and 1.3 V) two Feathers crashed at random, with or
-// without PSRAM, where the Pico 2 and Frankless do not (bd 1ls.19.8):
-// likely the core supply's parts under that load; they were stable at 354
-// (800x600 with reduced blanking, -DHSTX_MODE=2, still a choice). The
-// headers that include this one inherit it.
-#define BOARD_SPLIT_SYS_KHZ 336000
+// clk_sys at 336 MHz instead of 384, at either resolution: at 400 MHz (and
+// 1.3 V) two Feathers crashed at random, with or without PSRAM, where the
+// Pico 2 and Frankless do not (bd 1ls.19.8): likely the core supply's
+// parts under that load; they were stable at 354. The headers that
+// include this one inherit it.
+#define BOARD_SYS_KHZ 336000
 
 // --- Terminal UART ---
 //

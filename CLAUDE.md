@@ -85,8 +85,8 @@ build job. Spelling is American (bd azw: color, gray, center, license,
 Boards (bd axq): `boards/<target>.h` is a pico-sdk board header
 (PICO_BOARD = target, PICO_BOARD_HEADER_DIRS = boards/) plus every pin the
 firmware uses: BOARD_DVI_{CLK,D0,D1,D2}_{P,N}_PIN (any order/polarity in
-GP12-19), optional BOARD_DVI_DRIVE_MA / _SLEW_FAST, optional BOARD_SPLIT_SYS_KHZ
-(clk_sys in HSTX_MODE 3, multiple of 48 MHz, default 384000; the
+GP12-19), optional BOARD_DVI_DRIVE_MA / _SLEW_FAST, optional BOARD_SYS_KHZ
+(clk_sys in both DVI modes, multiple of 48 MHz, default 384000; the
 Feathers 336000), BOARD_UART (0/1) +
 BOARD_UART_{TX,RX,CTS,RTS}_PIN (terminal UART, also VIDEO_DIAG; CTS/RTS
 optional; the header points PICO_DEFAULT_UART* at them for hstx_test's
@@ -220,8 +220,8 @@ dev host; Docker is not usable for CI simulation).
 VT100 serial terminal with DVI output for a Pico 2 (RP2350) with the Pico
 DVI Sock. RP2040 (Feather RP2040 DVI) support was dropped (dmt.29): out of
 SRAM, and the USB keyboard crashed it (dmt.20); CMake rejects non-RP2350
-boards. 1024x600p60 (HSTX_MODE 3, the default since v0.10.0, bd cpx.4:
-clk_sys 384 MHz, the Feathers 336, 1.3 V) or 800x600p60 (0, 400 MHz); 80 or 132
+boards. 1024x600p60 (DVI_MODE, the default since v0.10.0, bd cpx.4) or
+800x600p60 (bd cpx.7); clk_sys 384 MHz, the Feathers 336, 1.3 V; 80 or 132
 columns x 24 rows plus a status line (row 24); UART0 on GP0/GP1.
 
 Source layout (bd gr1, after github.com/arlaneenalra/CGA_LCD_Capture):
@@ -247,7 +247,7 @@ libraries' sources into another target (test_cpu's -O2 copies). The
 firmware's options reach libraries from the top CMakeLists
 (FONT_FLASH, LOGO_IN_FLASH, DISKIMG_IN_FLASH, MACHINE_BANKS on
 dvt_z80pack, VIDEO_DIAG on
-dvt_platform, HSTX_MODE on dvt_video). FatFs is the `fatfs` target
+dvt_platform, DVI_WIDTH on dvt_video and RASTER_ACTIVE_WIDTH on dvt_render). FatFs is the `fatfs` target
 (lib/fatfs.cmake), linking dvt_storage for disk_* (a cycle CMake repeats
 on the link line; tests add diskio_ram.c to the tests that need it).
 Programs: `apps/terminal/` (main.c: state, settings, startup, main loop;
@@ -331,35 +331,36 @@ UF2 in the latter).
   land in RAM, but check the .dis when changing them).
 - `src/video/hstx_dvi.[ch]` (RP2350): DVI from the HSTX on the DVI Sock pins
   (GP12-19 = HSTX bits 0-7; the Sock: D0 0/1, CK 2/3, D2 4/5, D1 6/7;
-  per-pin from the board header, - = + inverted). clk_sys = 10 x
-  pixel clock, clk_hstx = clk_sys / 2 (set explicitly: the SDK leaves it
-  undivided from clk_sys); RGB565 through the TMDS expander; two chained
-  DMA channels, reloaded by DMA_IRQ_0 with blanking command lists and
-  per-line pixels from a callback. `HSTX_MODE` 0 = 800x600@60 with libdvi's
-  timing (clk_hstx 200 MHz, above the 150 MHz rating: dmt.8.1), 1 = @56,
-  2 = CVT-RB (354 MHz), 3 = 1024x600 CVT-RB (bd cpx.4, every board's
-  since v0.10.0; soaked on the Sock: 44 MHz, clk_hstx 220 from PLL_SYS 440, clk_sys
-  BOARD_SPLIT_SYS_KHZ (board.h: a multiple of 48 MHz, default 384, the
-  Feathers 336) from
-  PLL_USB at 1.30 V (432 needed 1.35 V), clk_usb/adc /8, clk_peri /3 =
-  128 MHz: its divider has 2 bits, 1-3; dvt_render PUBLIC
-  RASTER_ACTIVE_WIDTH=1024: 80 cols in 12-px cells of Terminus 12x24
+  per-pin from the board header, - = + inverted). The
+  pixel clock = PLL_SYS / 10, clk_hstx = PLL_SYS / 2 (5 x the pixel
+  clock); clk_sys from PLL_USB at BOARD_SYS_KHZ (board.h: a multiple of
+  48 MHz, default 384000, the Feathers 336000; split_clocks: clk_usb/adc
+  PLL_USB / (sys / 48 MHz), clk_peri PLL_USB / 3 at 384 = 128 MHz: its
+  divider has 2 bits, 1-3; bd cpx.1/cpx.4) at 1.30 V; RGB565 through the
+  TMDS expander; two chained DMA channels, reloaded by DMA_IRQ_0 with
+  blanking command lists and per-line pixels from a callback. DVI_MODE (bd
+  cpx.7; CMake -> DVI_WIDTH on dvt_video, RASTER_ACTIVE_WIDTH on
+  dvt_render): 1024x600 (the default since v0.10.0, bd cpx.4: CVT-RB at
+  44 MHz, PLL_SYS 440, clk_hstx 220; soaked on the Sock; the panels' own
+  51.2 MHz timing gave a desktop monitor static, 512 MHz showed nothing
+  at 1.30 V, 432 needed 1.35 V; 80 cols in 12-px cells of Terminus 12x24
   (960 px), 132 in 7-px cells of font_132_7 (6x12 + a column font_gen.py
   --pad-x extends for line drawing; 924 px; raster_compose draws odd
   widths two cells at a time); test_raster_1024 runs test_raster.c at
   that width; Sock __end__ 0x2007ca34, ~13.8 KB free; line 49%, peaks 59%
-  at 132 columns). hstx_dvi_stop leaves the pins undriven (pads OD),
-  hstx_dvi_resume connects them once whole lines go out, and core 1 takes
-  the signal off for 0.5 s 3 s after each wake (bd cpx.5: a panel showed
-  no picture after waking from over an hour). The cache option is empty by default: the board
-  header's pico_board_cmake_set(BOARD_HSTX_MODE, n) (none sets one now),
-  else 3 (top
-  CMakeLists: DVT_HSTX_MODE, HSTX_MODE_USED for build-info.txt; a cache
-  with the old help string is reset to empty so a stale 0 does not win).
-  The Feather headers set BOARD_SPLIT_SYS_KHZ 336000 (bd 1ls.19.8): at
+  at 132 columns) or 800x600 (libdvi's timing, 40 MHz, PLL_SYS 400,
+  clk_hstx 200, above the 150 MHz rating: dmt.8.1). Empty: the board
+  header's pico_board_cmake_set(BOARD_DVI_MODE, ...) (none makes one),
+  else 1024x600; DVI_MODE_USED for build-info.txt. HSTX_MODE (0 800x600,
+  1 @56, 2 CVT-RB at 354 MHz, 3 1024x600, until v0.10.0) is refused by
+  CMake: 1 and 2 only lowered clk_sys while it was 10 x the pixel clock.
+  hstx_dvi_stop leaves the pins undriven (pads OD), hstx_dvi_resume
+  connects them once whole lines go out, and core 1 takes the signal off
+  for 0.5 s 3 s after each wake (bd cpx.5: a panel showed no picture
+  after waking from over an hour). The Feathers' 336 MHz (bd 1ls.19.8): at
   400 MHz / 1.3 V two Feathers hard faulted at random on either core (quad
   or serial flash, PSRAM at 100 or 67 MHz, or none: likely their core
-  supply), stable at 354 (their mode 2 before v0.10.0). The user chose
+  supply), stable at 354 (their HSTX_MODE 2 before v0.10.0). The user chose
   that over a voltage bump past 1.30 V. `apps/hstx_test/hstx_test.c` -> `hstx_test.uf2`: test pattern.
 - `src/video/video.[ch]` (RP2350): core 1 composes scanlines (raster_compose or
   splash_compose) into a ring of 4 line buffers, at most 2 lines ahead of
@@ -952,7 +953,8 @@ control (dmt.27, xonxoff.c, the SET-UP row) and the RAM disk (1ls.20) to
   only during an update, up to the new image's length); settings
   0x3fd000-0x3fefff; last sector left blank (E10). New persistent storage
   has to come out of the image's growth room or lower the image cap.
-- Clocks: clk_sys 400 MHz at 1.3 V, clk_hstx 200 MHz, clk_usb 48 MHz. Core
+- Clocks (v0.6.1; now clk_sys 384 MHz from PLL_USB, clk_hstx 220/200
+  from PLL_SYS 440/400, bd cpx.4/cpx.7): clk_sys 400 MHz at 1.3 V, clk_hstx 200 MHz, clk_usb 48 MHz. Core
   load not measured (video_stats().late shows core 1 falling behind).
 - In use: HSTX; DMA ch x2 + DMA_IRQ_0 (core 1); UART0 + its IRQ; SPI0
   (polled); USB host + USBCTRL_IRQ; TIMER0 (time base, SDK alarm pool);
@@ -977,7 +979,8 @@ control (dmt.27, xonxoff.c, the SET-UP row) and the RAM disk (1ls.20) to
   DMA_IRQ_0 core 1's, DMA_IRQ_1 core 0's (audio); IRQ_2-3 free. IO_IRQ_BANK0 has the RTC tick's raw
   handler (shared: add more). UART0, SPI1, I2C0, TIMER1, PWM, ADC, TRNG,
   SHA-256, POWMAN's always-on timer free; I2C1 can take more chips (other
-  addresses). No spare PLL (PLL_SYS 400 MHz, PLL_USB 48 MHz; bd cpx.1).
+  addresses). No spare PLL (PLL_SYS 440 MHz for the HSTX, PLL_USB 384 MHz for clk_sys,
+  USB and clk_peri; bd cpx.4).
 - SRAM: __end__ 0x2005d78c (bd xv0); 0x2005f428 with the audio engine and
   the AY (bd 1ls.18, +7.2 KB), 0x2005f800 with stereo and the busy count
   (1ls.18.9/.8), ~130 KB free (the Z80 banks are in the
@@ -1029,6 +1032,10 @@ control (dmt.27, xonxoff.c, the SET-UP row) and the RAM disk (1ls.20) to
     budget".
   - Pin functions for CTS/RTS use `GPIO_FUNC_UART` (UART_FUNCSEL_NUM is
     wrong for GPIO 2/3 on RP2350).
+  - One USB hub only (CFG_TUH_HUB 1, CFG_TUH_DEVICE_MAX 5): the user's
+    choice (bd rsu). A second hub behind the first (the Frankless's own
+    hub counts) may leave the host finding no new devices while connected
+    ones keep working; the README says so. Not to be fixed for now.
   - TinyUSB 0.18 had one control transfer for the whole host: one started
     from a TinyUSB callback (e.g. the keyboard LEDs' SET_REPORT) made a
     device still being set up lose its next request, stay half set up,

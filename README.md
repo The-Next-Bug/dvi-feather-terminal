@@ -14,7 +14,7 @@ Releases (`vX.Y.Z` tags) ship the firmware; see
 
 - **Display**: 1024x600p60 over DVI/HDMI (the 7" HDMI panels' native
   size, pixel for pixel; desktop monitors take it too), or 800x600p60 as a
-  build option (`HSTX_MODE`). At 1024 wide, 80 columns use Terminus 12x24
+  build option (`DVI_MODE`). At 1024 wide, 80 columns use Terminus 12x24
   in 12-pixel cells (960 pixels, centered) and 132 columns misc-fixed 6x12
   at double height (each glyph row on two scanlines, like a VT100) in
   7-pixel cells (924 pixels, centered); at 800, Terminus 10x20 in 10-pixel
@@ -134,7 +134,7 @@ Adalogger FeatherWing are checked on hardware, the Frankless in part):
 |---|---|
 | `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default) |
 | `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS, the Z80 machine's banks in its 8 MB PSRAM (`PSRAM_BANKS`), DS3231M real-time clock, TDA1387 DAC for the bell and the sound chip (U8, hand-fitted) |
-| `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing); clk_sys 336 MHz (`BOARD_SPLIT_SYS_KHZ`), as it crashes at 400 MHz |
+| `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing); clk_sys 336 MHz (`BOARD_SYS_KHZ`), as it crashes at 400 MHz |
 | `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
 | `feather-rp2350-hstx-adalogger` | `feather-rp2350-hstx` with the Adalogger FeatherWing's PCF8523 real-time clock on I2C1 (SDA/SCL, GP2/3); no RTS/CTS (those were GP2/3) |
 | `feather-rp2350-hstx-psram-adalogger` | `feather-rp2350-hstx-psram` with the Adalogger FeatherWing's PCF8523, as above |
@@ -148,9 +148,8 @@ TARGET=<target> scripts/build.sh` builds one
 
 All four Feather targets run at 336 MHz instead of the other boards' 384:
 on two Feathers the firmware crashed at random at 400 MHz, with or without
-the PSRAM. The video is the same 1024x600; the CP/M machine runs about 12%
-slower. Built with `-DHSTX_MODE=2` they give 800x600 at 354 MHz instead,
-as before v0.10.0.
+the PSRAM. The video is the same, 1024x600 or 800x600; the CP/M machine
+runs about 12% slower.
 
 `src/board/board.h` checks the header when it compiles. A missing setting, a pin
 that cannot carry its signal, or a pin used twice stops the build with an
@@ -211,7 +210,10 @@ The status line shows `RTS/CTS` or `XON/XOFF` after the line settings.
 ### USB keyboard
 
 Plug a USB keyboard into the Pico 2's micro-USB port through an OTG adapter
-or cable; a hub (or a keyboard with one built in) works too. The firmware is
+or cable; a hub (or a keyboard with one built in) works too, but only one:
+the firmware has room for a single hub (the Frankless's built-in one
+counts), and with a second hub behind it the USB host may misbehave (new
+devices no longer found, those already connected still working). The firmware is
 the USB host, so the port is no longer the board's power input, and the
 board does not switch 5 V onto the connector's VBUS by itself: feed 5 V into
 **VBUS** (pin 40), which is the micro-USB connector's VBUS.
@@ -1073,7 +1075,7 @@ hub); move it on its own, and check the firmware's `__end__`.
 | `STARTUP_DEMO` | OFF | run the demo after the logo |
 | `MACHINE_BANKS` | 2 | Z80 machine: 48 KB banks besides bank 0 (each costs 48 KB of SRAM; a third does not fit) |
 | `PSRAM_BANKS` | OFF | Z80 machine: the banks in the board's QSPI PSRAM (QMI chip select 1) instead, as many as fit up to 15, none in SRAM, and the rest a [RAM disk](#running-cpm); set by `boards/feather-rp2350-hstx-psram.h`. Without a PSRAM chip at boot the machine has no banks |
-| `HSTX_MODE` | the board's | 0: 800x600 at 60 Hz (clk_sys 400 MHz, clk_hstx 200 MHz); 1: at 56 Hz (360 / 180 MHz); 2: 60 Hz reduced blanking (354 / 177 MHz), 1 and 2 slower fallbacks; 3: 1024x600 at 60 Hz reduced blanking (clk_sys 384 MHz from the USB PLL, clk_hstx 220 MHz from the system PLL). Empty (the default): the board header's choice, `pico_board_cmake_set(BOARD_HSTX_MODE, n)` (none does), else 3. In mode 3 a board header can lower clk_sys with `BOARD_SPLIT_SYS_KHZ` (a multiple of 48 MHz; the Feathers: 336 MHz) |
+| `DVI_MODE` | the board's | `1024x600` (60 Hz, reduced blanking, a 44 MHz pixel clock: clk_hstx 220 MHz) or `800x600` (60 Hz, 40 MHz: clk_hstx 200 MHz). Empty (the default): the board header's choice, `pico_board_cmake_set(BOARD_DVI_MODE, ...)` (none makes one), else `1024x600`. clk_sys is the board's in both: 384 MHz, 336 on the Feathers (`BOARD_SYS_KHZ`, a multiple of 48 MHz). `HSTX_MODE`, until v0.10.0, is refused |
 | `VIDEO_DIAG` | OFF | bring-up diagnostics on UART0 TX: boot markers, core 1 scanline timing, fault reports |
 | `COPY_TO_RAM` | ON | run from SRAM; must stay ON (see [How it works](#how-it-works)) |
 
@@ -1081,11 +1083,11 @@ hub); move it on its own, and check the firmware's `__end__`.
 
 Video comes from the RP2350's HSTX, whose TMDS encoder turns RGB565 pixels
 into DVI (`src/video/hstx_dvi.c`, after Raspberry Pi's
-`pico-examples/hstx/dvi_out_hstx_encoder`): 800x600 at 60 Hz, a 40 MHz pixel
-clock, so clk_hstx 200 MHz and clk_sys 400 MHz (1.3 V); or 1024x600 at 60 Hz
-with reduced blanking, a 44 MHz pixel clock: clk_hstx 220 MHz from the
-system PLL and clk_sys 384 MHz from the USB PLL, which also gives USB its
-48 MHz. While the screen is blanked the DVI pins are left undriven, so the
+`pico-examples/hstx/dvi_out_hstx_encoder`): 1024x600 at 60 Hz with reduced
+blanking, a 44 MHz pixel clock, so clk_hstx 220 MHz, or 800x600 at 60 Hz, a
+40 MHz pixel clock, so clk_hstx 200 MHz, from the system PLL; clk_sys runs
+at 384 MHz (1.3 V; the Feathers 336) from the USB PLL, which also gives USB
+its 48 MHz. While the screen is blanked the DVI pins are left undriven, so the
 monitor sleeps; 3 s after waking the signal stops for half a second once
 more, for a monitor that woke without locking to it. Two DMA channels
 feed it blanking command lists and scanlines in turn. `hstx_test.uf2`,
@@ -1108,8 +1110,8 @@ clocks.
   interrupt runs on core 1 too.
 
 The firmware runs entirely from SRAM (`COPY_TO_RAM`): the boot-time flash
-(XIP) setup is chosen for clk_sys up to 150 MHz, far below the 400 MHz DVI
-clock.
+(XIP) setup is chosen for clk_sys up to 150 MHz, far below the 384 MHz the
+firmware runs at.
 
 ### Fonts and glyph codes
 
@@ -1149,7 +1151,7 @@ power loss keeps the previous settings; flashing new firmware keeps them
 too. (The last sector is erased by every UF2 flash: the SDK's RP2350-E10
 workaround block for 0x10ffff00 wraps round to it.) A save holds up the
 terminal for the erase (typically 30-50 ms); the picture stays up, as the
-program runs from RAM. The flash is written with the 400 MHz DVI clock
+program runs from RAM. The flash is written with the 384 MHz clock
 running: the ROM's erase/program routines run its serial clock at
 clk_sys / 12, and reads are set back to at most 50 MHz afterwards (see
 `src/platform/nvflash.c`).
@@ -1162,7 +1164,7 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 |---|---|---|
 | SRAM (520 KB) | about 475 KB: code 170 KB, data 20 KB, buffers 285 KB (Z80 memory 160 KB, raster memory 60 KB, the current fonts 20 KB, screen 13 KB, ...) | about 37 KB, plus most of the two 4 KB scratch banks. A third Z80 bank (48 KB) does not fit |
 | Flash (4 MB) | firmware 496 KB; firmware-update staging area (upper 2 MB, used only during an update); settings (2 sectors); the last sector is left blank | about 1.5 MB below 2 MB for the firmware to grow into |
-| Clocks | clk_sys 400 MHz at 1.3 V, HSTX 200 MHz, USB 48 MHz | |
+| Clocks | clk_sys 384 MHz at 1.3 V (from the USB PLL; the Feathers 336), HSTX 220 MHz (200 at 800x600), USB 48 MHz | |
 | Peripherals | HSTX (DVI), 2 DMA channels, UART0, SPI0 (SD card), USB (host), TIMER0, watchdog; with a DAC (Frankless) also a PIO state machine, 2 DMA channels and DMA_IRQ_1 for the sound | 14 DMA channels (12 with a DAC), all three PIO blocks (but a state machine), UART1, SPI1, I2C0/1, PWM, ADC, TIMER1, TRNG, SHA-256, the QMI's second chip select (PSRAM) |
 | GPIO | GP0/1 UART0, GP2/3 RTS/CTS (Flow control RTS/CTS only), GP4-7 SD card, GP12-19 DVI Sock | GP8-11, GP20-22, GP26-28 (GP26-28 can be analog inputs); GP2/3 are the board header's CTS/RTS, so keep them free |
 

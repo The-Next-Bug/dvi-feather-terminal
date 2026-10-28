@@ -1,5 +1,5 @@
 # HSTX DVI bring-up test pattern (bd dmt.8.1): hstx_test.uf2 next to the
-# terminal, stdio on the board's UART. HSTX_MODE picks the timing
+# terminal, stdio on the board's UART. DVI_MODE picks the timing
 # (src/video/hstx_dvi.h).
 add_executable(hstx_test hstx_test.c)
 # Warnings for our source only, not the SDK's (built here too).
