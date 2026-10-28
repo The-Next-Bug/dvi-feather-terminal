@@ -20,7 +20,8 @@ Each release (`dvi-terminal-<version>.zip`) holds:
 ## Flashing over USB (BOOTSEL)
 
 1. Unplug the board. On boards whose USB port is the keyboard's host
-   port, disconnect any 5 V supply fed into VBUS and the keyboard first
+   port, disconnect any 5 V supply fed into VBUS (or a powered OTG adapter)
+   and the keyboard first
    (see [Keyboard](../terminal/keyboard.md)).
 2. Hold the **BOOTSEL** button and plug the board into a PC by USB (on the
    Frankless, set the USB switch to the USB-C socket). A drive named

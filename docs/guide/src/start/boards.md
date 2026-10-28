@@ -27,7 +27,7 @@ the default target.
 | GP6 (pin 9) | SPI0 SCK | SD card CLK | the CP/M machine |
 | GP7 (pin 10) | SPI0 MOSI | SD card DI | the CP/M machine |
 | 3V3 (pin 36), GND | power | SD card VCC, GND | the CP/M machine |
-| VBUS (pin 40) | 5 V in | a 5 V supply | a [USB keyboard](../terminal/keyboard.md) |
+| VBUS (pin 40) | 5 V in | a 5 V supply | a [USB keyboard](../terminal/keyboard.md), unless a powered USB OTG adapter powers it |
 
 The SD card adapter must be an SPI one for 3.3 V.
 
@@ -54,6 +54,10 @@ an Adalogger FeatherWing for the SD card. Four targets:
 - `feather-rp2350-hstx-adalogger`, `feather-rp2350-hstx-psram-adalogger`:
   the same, using the Adalogger FeatherWing's PCF8523 real-time clock on
   the Feather's SDA/SCL (GP2/3), which takes the pins RTS/CTS would use.
+
+A USB keyboard plugs into the Feather's USB-C port through an OTG adapter,
+powered (an adapter with its own supply) or with 5 V fed into the
+Feather's USB pin; see [Keyboard](../terminal/keyboard.md).
 
 The Feathers run the CPU at 336 MHz instead of 384: two of them crashed at
 random at 400 MHz. The display is the same; the Z80 runs about 12% slower.

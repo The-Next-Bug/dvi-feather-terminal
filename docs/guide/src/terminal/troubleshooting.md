@@ -19,9 +19,10 @@
 ## The keyboard does nothing
 
 - Check `kbd` on the [status line](status-line.md): no `kbd` means the USB
-  host does not see a keyboard. On the Pico 2, 5 V must be fed into VBUS
-  (see [Keyboard](keyboard.md)); on the Frankless the USB switch must be on
-  the hub.
+  host does not see a keyboard. On the Pico 2 and the Feathers the keyboard
+  needs 5 V, from a powered OTG adapter or fed into VBUS (a Feather's USB
+  pin; see [Keyboard](keyboard.md)); on the Frankless the USB switch must be
+  on the hub.
 - Only one hub is supported: with a second hub behind the first, new
   devices are no longer found.
 - The screen is blanked: the first key only wakes it.

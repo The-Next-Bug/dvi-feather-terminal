@@ -92,7 +92,7 @@ connector. Everything else is optional:
 | GP6 (pin 9) | SPI0 SCK | SD card CLK | CP/M machine |
 | GP7 (pin 10) | SPI0 MOSI | SD card DI | CP/M machine |
 | 3V3 (pin 36), GND | power | SD card VCC, GND | CP/M machine |
-| VBUS (pin 40) | 5 V in | 5 V supply | [USB keyboard](#usb-keyboard) |
+| VBUS (pin 40) | 5 V in | 5 V supply | [USB keyboard](#usb-keyboard), unless a powered USB OTG adapter powers it |
 | GP12-19 | HSTX: D0 GP12/13, clock GP14/15, D2 GP16/17, D1 GP18/19 | the DVI Sock | always |
 
 The UART uses 3.3 V logic only, at 115200 8N1 until changed in
@@ -216,11 +216,14 @@ counts), and with a second hub behind it the USB host may misbehave (new
 devices no longer found, those already connected still working). The firmware is
 the USB host, so the port is no longer the board's power input, and the
 board does not switch 5 V onto the connector's VBUS by itself: feed 5 V into
-**VBUS** (pin 40), which is the micro-USB connector's VBUS.
+**VBUS** (pin 40), which is the micro-USB connector's VBUS, or use a
+**powered USB OTG adapter** (one with its own power input), whose supply
+powers the keyboard and the board. The Feathers are the same: a powered OTG
+adapter on their USB-C port, or 5 V into their **USB** pin.
 
-Never connect a PC (or charger) to the USB port while 5 V is fed in this
-way: both would drive VBUS. To flash, disconnect the 5 V supply and the
-keyboard, then use the USB port as usual (BOOTSEL).
+Never connect a PC (or charger) to the USB port while 5 V is fed in either
+way: both would drive VBUS. To flash, disconnect the 5 V supply (or the
+powered adapter) and the keyboard, then use the USB port as usual (BOOTSEL).
 
 Keys (US layout) send what a VT100 sends: letters honor Caps Lock, Ctrl
 makes control characters, Alt sends ESC first (meta). Return sends CR (CR LF
