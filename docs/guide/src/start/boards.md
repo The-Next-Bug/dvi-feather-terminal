@@ -33,7 +33,10 @@ The SD card adapter must be an SPI one for 3.3 V.
 
 ## Frankless (`frankless`)
 
-A reworked MicroFRANK: UART1 on header J8 with CTS/RTS, 8 MB of PSRAM
+A reworked MicroFRANK, a board of the [FRANK platform](https://frank.rh1.tech/);
+its design files are in
+[pi-pico-boards/reworked/frankless](https://github.com/arlaneenalra/pi-pico-boards/tree/main/reworked/frankless).
+UART1 on header J8 with CTS/RTS, 8 MB of PSRAM
 (the Z80's memory banks and a RAM disk), a DS3231M real-time clock with
 its 1 Hz output, a TDA1387 DAC for sound, and a USB hub; a slide switch
 puts the USB port on the hub (host) or on the USB-C socket (for flashing).

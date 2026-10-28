@@ -133,7 +133,7 @@ Adalogger FeatherWing are checked on hardware, the Frankless in part):
 | Target | Board |
 |---|---|
 | `pico2-dvi-sock` | Pico 2 + Pico DVI Sock (the default) |
-| `frankless` | Frankless, a reworked MicroFRANK: UART1 on J8 with CTS/RTS, the Z80 machine's banks in its 8 MB PSRAM (`PSRAM_BANKS`), DS3231M real-time clock, TDA1387 DAC for the bell and the sound chip (U8, hand-fitted) |
+| `frankless` | [Frankless](https://github.com/arlaneenalra/pi-pico-boards/tree/main/reworked/frankless), a reworked MicroFRANK (a board of the [FRANK platform](https://frank.rh1.tech/)): UART1 on J8 with CTS/RTS, the Z80 machine's banks in its 8 MB PSRAM (`PSRAM_BANKS`), DS3231M real-time clock, TDA1387 DAC for the bell and the sound chip (U8, hand-fitted) |
 | `feather-rp2350-hstx` | Adafruit Feather RP2350 with HSTX Port + DVI breakout; SD on SPI0 with CS on D10 (Adalogger FeatherWing); clk_sys 336 MHz (`BOARD_SYS_KHZ`), as it crashes at 400 MHz |
 | `feather-rp2350-hstx-psram` | The same Feather with its 8 MB PSRAM fitted: the Z80 machine's banks in the PSRAM (15 of 48 KB) instead of SRAM (`PSRAM_BANKS`) |
 | `feather-rp2350-hstx-adalogger` | `feather-rp2350-hstx` with the Adalogger FeatherWing's PCF8523 real-time clock on I2C1 (SDA/SCL, GP2/3); no RTS/CTS (those were GP2/3) |
