@@ -44,7 +44,7 @@ seen = set()
 for e in json.load(open(sys.argv[1])):
     f = os.path.normpath(os.path.join(e['directory'], e['file']))
     rel = os.path.relpath(f, root)
-    if rel.split(os.sep)[0] in ('apps', 'boards', 'src', 'test') and f not in seen:
+    if rel.split(os.sep)[0] in ('apps', 'boards', 'docs', 'src', 'test') and f not in seen:
         seen.add(f)
         print(f)
 PY

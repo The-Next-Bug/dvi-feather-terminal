@@ -71,7 +71,23 @@ CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default; any boards/<target>.h) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
 scripts/lint.sh                      # clang-tidy (.clang-tidy) over build/test and build/$TARGET's compile_commands.json (build them first)
+scripts/docs.sh                      # the user guide (mdBook, toolchain.env MDBOOK_*) -> build/docs/html; package.sh requires it
 ```
+
+User guide (bd 1ay): `docs/guide/` (book.toml, src/SUMMARY.md and one
+page per feature; each page says which sources it documents, and the
+guide's hacking/source-map.md maps libraries to pages). A user-visible
+change updates its page. Generated parts, written by scripts/docs.sh into
+the staged book: docs/guide/gen/docgen.c (built with the host tests:
+test/CMakeLists.txt; screenshots rendered by the portable term/screen/
+raster/palette/ui code to PPM, ppm2png.py; settings tables from
+settings_fields[]), gen_tables.py (board pins via `cc -dM -E` on each
+boards/*.h, HWINFO items from machine.h), the version. checklinks.py fails
+the build on a broken internal link or image. package.sh puts the HTML in
+the release ZIP as guide/ (and dist/<release>-guide.zip); CI's docs job
+builds it (mdBook downloaded until the build image has it). lint.sh also
+covers docs/ (docgen.c). The README stays as it is for now (user,
+2026-10-28: not trimmed yet).
 
 Lint (bd 4rf): `.clang-tidy` enables readability-braces-around-statements
 as an error (every if/else/for/while/do body a { } block; else if
