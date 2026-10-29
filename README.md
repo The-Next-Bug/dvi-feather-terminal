@@ -710,12 +710,12 @@ have is left out: its header (`boards/<target>.h`, `boards/example.h`)
 says what it has. On a Pico 2 with the DVI Sock:
 
 ```
-Firmware         DVI Feather Terminal v0.9.0 (2026-10-15)
+Firmware         DVI Feather Terminal v0.11.4 (2026-10-29)
 Board            pico2-dvi-sock
 
-CPU              yes      RP2350A at 400 MHz, 4 MB flash, quad reads at 50 MHz
+CPU              yes      RP2350A at 384 MHz, 4 MB flash, quad reads at 50 MHz
 Z80 memory       yes      64 KB + 2 x 48 KB banks in SRAM
-Video            yes      DVI 800x600 at 60 Hz, 80 x 24 text + status line
+Video            yes      DVI 1024x600 at 60 Hz, 80 x 24 text + status line
 Serial port      yes      UART0 TX GP0 / RX GP1, 115200 8N1 (SIO2)
 Flow control     no       off (SET-UP: RTS/CTS or XON/XOFF)
 SD card          yes      SDHC/SDXC, 29.7 GB; SPI0: GP4 MISO, GP5 CS, GP6 SCK,
@@ -1000,9 +1000,10 @@ The machine is picosim's:
 
 The CPU runs unthrottled in 10 ms slices between the keyboard, disk and
 screen work: the monitor's speed test (a JP loop) measured 48.84 MHz (Z80
-clock equivalent) on a Pico 2 at the 400 MHz DVI clock, and the status line
-shows about 36 MHz while `EXZ80DOC` runs (its prefixed and block
-instructions cost more per T-state).
+clock equivalent) on a Pico 2 when clk_sys ran at 400 MHz (before v0.10.0;
+it is 384 MHz now, so expect about 4% less), and the status line showed
+about 36 MHz while `EXZ80DOC` ran (its prefixed and block instructions cost
+more per T-state).
 
 ### Updating the firmware from the SD card or a USB stick
 
@@ -1067,11 +1068,10 @@ automatically.
 
 Toolchain versions are pinned in **`toolchain.env`**, the single source of
 truth for `scripts/setup-toolchain.sh`. To upgrade, change the version and
-its SHA256 there, and the matching `ARG`s in the CI build image's Dockerfile
-(gitlab.seg9.com `images/build-image`, which installs the toolchain in
-`/opt/pico-toolchain`; until it is rebuilt, CI downloads the new versions in
-every job). pico-sdk is upgraded by moving its submodule (and the image's
-`PICO_SDK_*`, which picotool is built against). TinyUSB is our own
+its SHA256 there; CI's toolchain cache is keyed on that file (and on
+pico-sdk's commit, which picotool is built against), so the next run
+installs the new versions. pico-sdk is upgraded by moving its submodule.
+TinyUSB is our own
 submodule (`lib/tinyusb`, the top `CMakeLists.txt` sets `PICO_TINYUSB_PATH`),
 pinned to an upstream master commit after 0.21.0 for its RP2350 host fixes
 (control-transfer timeouts, aborting failed transfers, recovering a stuck
@@ -1242,11 +1242,9 @@ test pattern). FatFs (`lib/fatfs`, `lib/fatfs.cmake`) and z80pack's CPU
 
 ## CI and releasing
 
-GitLab CI (`.gitlab-ci.yml`) and GitHub Actions (`.github/workflows/ci.yml`,
-on the GitHub mirror) run the same jobs from the same scripts; on GitHub a
-`v*` tag makes a GitHub Release with the ZIP. GitHub's runners install the
-toolchain with `scripts/setup-toolchain.sh` (cached) instead of the build
-image.
+GitHub Actions (`.github/workflows/ci.yml`) runs the same scripts as a
+local build. Its runners install the toolchain with
+`scripts/setup-toolchain.sh` and cache it.
 
 - `test`: host unit tests (JUnit report).
 - `build`: firmware per target (a matrix: `pico2-dvi-sock`, `frankless` and
@@ -1254,11 +1252,14 @@ image.
   UF2/BIN/ELF/disassembly/map and `build-info.txt` artifacts.
 - `package`: ZIP with UF2 and BIN per target, `FLASHING.txt`,
   `THIRD-PARTY.md` and `licenses/`, `CHANGES.md` (commits since the
-  previous tag), `SHA256SUMS` and the source of the built commit. Automatic
-  on the default branch and tags.
-- `release`: tags only. Uploads the ZIP to the project's generic package
-  registry (`dvi-terminal/<tag>`) and creates a GitLab Release linking to
-  it, with `CHANGES.md` as the description.
+  previous tag), the user guide, `SHA256SUMS` and the source of the built
+  commit.
+- `docs`: the user guide (`scripts/docs.sh`).
+- `release`: `v*` tags only. A GitHub Release with the ZIP and the guide's
+  ZIP, `CHANGES.md` as its notes; a tag with a hyphen (`v0.11.3-rc1`)
+  makes a pre-release.
+- `pages`: release tags without a hyphen only. Publishes the guide to
+  GitHub Pages, <https://the-next-bug.github.io/dvi-feather-terminal/>.
 
 To release, push an annotated tag:
 
