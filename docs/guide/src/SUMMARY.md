@@ -48,6 +48,7 @@
 - [VT52 and ADM-3A](reference/vt52-adm3a.md)
 - [Keys sent](reference/keys.md)
 - [Character set](reference/charset.md)
+- [Memory maps](reference/memory-map.md)
 - [Z80 I/O ports](reference/ports.md)
 - [File transfer device (port 0Ah)](reference/xfer.md)
 - [Hardware information (port 0Ch)](reference/hwinfo.md)

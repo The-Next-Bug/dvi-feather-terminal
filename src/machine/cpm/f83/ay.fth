@@ -15,7 +15,8 @@ ONLY FORTH ALSO DEFINITIONS   DECIMAL
 CR .( AY words loaded: SCALE CHORDS SIREN DRUM PAN TUNE )
 ---
 \ AY-3-8910: the chip                              26Oct26 dvt
-216 CONSTANT AY-SELECT   208 CONSTANT AY-DATA
+216 CONSTANT AY-SELECT   (S -- port )   ( D8h: the register )
+208 CONSTANT AY-DATA     (S -- port )   ( D0h: its data )
 : AY!   (S b reg -- )   AY-SELECT PC!  AY-DATA PC!  ;
 : AY@   (S reg -- b )   AY-SELECT PC!  AY-DATA PC@  ;
 : AY?   (S -- f )   255 1 AY!  1 AY@  15 =  ;
@@ -31,7 +32,7 @@ CR .( AY words loaded: SCALE CHORDS SIREN DRUM PAN TUNE )
 ---
 \ AY-3-8910: notes and time                        26Oct26 dvt
 : HZ>PERIOD   (S hz -- period )   >R 115200. R> UM/MOD NIP  ;
-CREATE OCTAVE2   ( C2 to B2 )
+CREATE OCTAVE2   (S -- addr )   ( C2 to B2, 12 cells )
    1761 , 1662 , 1569 , 1481 , 1398 , 1319 ,
    1245 , 1175 , 1110 , 1047 ,  988 ,  933 ,
 : NOTE>PERIOD   (S n -- period )
@@ -42,7 +43,8 @@ CREATE OCTAVE2   ( C2 to B2 )
    BEGIN  DUP TICKS - 0>  WHILE  REPEAT  DROP  ;
 ---
 \ AY examples: SCALE CHORDS SIREN                  26Oct26 dvt
-CREATE MAJOR   0 C, 2 C, 4 C, 5 C, 7 C, 9 C, 11 C, 12 C,
+CREATE MAJOR   (S -- addr )   ( the major scale's steps )
+   0 C, 2 C, 4 C, 5 C, 7 C, 9 C, 11 C, 12 C,
 : SCALE   (S -- )   QUIET  1 0 VOICES  13 0 VOLUME
    8 0 DO  MAJOR I + C@ 48 + 0 NOTE  300 WAIT  LOOP  QUIET  ;
 : CHORD   (S root -- )   DUP 0 NOTE  DUP 4 + 1 NOTE  7 + 2 NOTE
@@ -61,7 +63,7 @@ CREATE MAJOR   0 C, 2 C, 4 C, 5 C, 7 C, 9 C, 11 C, 12 C,
 : DRUM   (S -- )   QUIET  0 4 VOICES
    4 0 DO  2 HIT 250 WAIT  2 HIT 250 WAIT  20 HIT 500 WAIT
    LOOP  QUIET  ;
-CREATE BITS   1 C, 2 C, 4 C,
+CREATE BITS   (S -- addr )   1 C, 2 C, 4 C,
 : .LAYOUT   (S n -- )   DUP 1 = IF ." mono " THEN
    DUP 2 = IF ." ABC " THEN   3 = IF ." ACB " THEN  ;
 : PAN   (S -- )
@@ -71,12 +73,12 @@ CREATE BITS   1 C, 2 C, 4 C,
    LOOP  QUIET  0 STEREO  ;
 ---
 \ AY examples: TUNE from a table                   26Oct26 dvt
-CREATE KOROBEINIKI
+CREATE KOROBEINIKI   (S -- addr )
    64 C, 2 C,  59 C, 1 C,  60 C, 1 C,  62 C, 2 C,  60 C, 1 C,
    59 C, 1 C,  57 C, 2 C,  57 C, 1 C,  60 C, 1 C,  64 C, 2 C,
    62 C, 1 C,  60 C, 1 C,  59 C, 3 C,  60 C, 1 C,  62 C, 2 C,
    64 C, 2 C,  60 C, 2 C,  57 C, 2 C,  57 C, 4 C,  0 C, 0 C,
-200 CONSTANT EIGHTH
+200 CONSTANT EIGHTH   (S -- ms )
 : PLAY   (S addr -- )
    QUIET  1 0 VOICES
    BEGIN  DUP C@  OVER 1+ C@  DUP  WHILE   SWAP ?DUP
@@ -101,6 +103,7 @@ VIEWS makes AY.BLK view file 7, so VIEW finds these words.
 (then  4 LOAD  and so on for an example).
 ---
 \ The chip                                          26Oct26 dvt
+AY-SELECT AY-DATA   the ports: D8h register, D0h data.
 AY!   write b into register reg.   AY@   read register reg.
 AY?   true if the chip is there: register 1 keeps 4 bits.
 TONE   channel ch's tone period, 1 to 4095 (registers 0-5).
@@ -127,6 +130,7 @@ TICKS   the firmware's millisecond count (ports 68 and 69; the
 WAIT   ms milliseconds by TICKS: the Z80 has no fixed speed.
 ---
 \ Examples: SCALE CHORDS SIREN                      26Oct26 dvt
+MAJOR   the major scale's 8 steps, in semitones from C.
 SCALE   C4 to C5 on A, 300 ms a note.
 CHORD   the major chord on root: A the root, B the third, C
    the fifth.
@@ -136,6 +140,7 @@ SIREN   A swept down and up three times.
 \ Examples: DRUM PAN                                26Oct26 dvt
 HIT   a noise burst on C through the decaying envelope.
 DRUM   four bars of a low and a high hit.
+BITS   each channel's bit in VOICES's masks: 1 A, 2 B, 4 C.
 .LAYOUT   a layout's name.
 PAN   A, B and C in turn in each layout (mono, ABC, ACB), then
    SET-UP's again: with ABC, A left, B center and C right.
