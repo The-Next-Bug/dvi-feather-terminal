@@ -943,7 +943,14 @@ UF2 in the latter).
   (key: toolchain.env + pico-sdk's commit), `git fetch --force --tags`
   after checkout (checkout can leave a pushed tag lightweight, and
   git describe names the release). Keep both CI files in step. Plan:
-  GitHub public and primary later, GitLab its mirror.
+  GitHub public and primary later, GitLab its mirror. Tags with a hyphen
+  (v0.11.3-rc1) make a GitHub pre-release; push rc tags to `public` only
+  (on GitLab any v* tag releases). The `pages` job (releases only: v*
+  without a hyphen, after `release`) publishes the guide to GitHub Pages,
+  https://the-next-bug.github.io/dvi-feather-terminal/ (the Pages site is
+  public, 2026-10-29); book.toml's site-url matches (404 page only). Needs
+  Pages source "GitHub Actions" and the github-pages environment allowing
+  v* tags.
 
 ## Resource budget (v0.6.1, MACHINE_BANKS=2)
 

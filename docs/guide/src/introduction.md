@@ -2,6 +2,10 @@
 
 Firmware version: {{#include generated/version.md}}
 
+The latest release's guide is online at
+<https://the-next-bug.github.io/dvi-feather-terminal/>; each release ZIP
+carries its own in `guide/`.
+
 The DVI Feather Terminal turns a Raspberry Pi RP2350 board with a DVI or
 HDMI connector into one of two machines, chosen in [SET-UP](terminal/setup.md):
 

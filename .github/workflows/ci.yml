@@ -6,7 +6,8 @@
 # which picotool is built against).
 #
 # Runs on pushes to any branch (as GitLab's pipelines do), v* tags (which
-# also make a GitHub Release with the ZIP), pull requests and by hand.
+# also make a GitHub Release with the ZIP and, for releases, publish the
+# guide on GitHub Pages), pull requests and by hand.
 
 name: CI
 
@@ -189,6 +190,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
+        # A tag with a hyphen (v0.11.3-rc1) is a pre-release.
         run: |
-          gh release create "$TAG" --title "$TAG" --notes-file dist/CHANGES.md --verify-tag \
+          pre=()
+          [[ "$TAG" == *-* ]] && pre=(--prerelease)
+          gh release create "$TAG" --title "$TAG" --notes-file dist/CHANGES.md --verify-tag "${pre[@]}" \
             "dist/dvi-terminal-$TAG.zip" "dist/dvi-terminal-$TAG-guide.zip"
+
+  # Releases only (v* tags without a hyphen, after the release): the guide
+  # on GitHub Pages, https://the-next-bug.github.io/dvi-feather-terminal/.
+  # Needs Settings > Pages > Source "GitHub Actions", and the github-pages
+  # environment allowing v* tags to deploy.
+  pages:
+    runs-on: ubuntu-24.04
+    needs: [release]
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: guide
+          path: site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

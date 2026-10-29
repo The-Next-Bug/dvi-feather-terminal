@@ -8,7 +8,9 @@ computer with the screen and keyboard as its console and its disks on a
 microSD card (see [Z80 CP/M machine](#z80-cpm-machine)).
 
 Releases (`vX.Y.Z` tags) ship the firmware; see
-[Getting started](#getting-started).
+[Getting started](#getting-started). The user guide is online at
+<https://the-next-bug.github.io/dvi-feather-terminal/> (the latest
+release's) and in every release ZIP as `guide/`.
 
 ## Features
 
