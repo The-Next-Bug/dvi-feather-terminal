@@ -936,7 +936,9 @@ UF2 in the latter).
   git@github.com:The-Next-Bug/dvi-feather-terminal.git; remote `gitlab` =
   git@gitlab.seg9.com:jules/dvi-feather-terminal.git, a mirror of GitHub
   only (its CI, .gitlab-ci.yml, and the private build image were removed;
-  docs name GitHub only). CI is `.github/workflows/ci.yml` (bd c8q): test,
+  docs name GitHub only). The mirroring is manual and always was: no
+  server-side mirror in either direction. After pushing to origin, `git
+  push gitlab` (its push refspecs: main and the tags) brings it level. CI is `.github/workflows/ci.yml` (bd c8q): test,
   build matrix, docs, package; v* tags a GitHub Release with the ZIP and
   the guide ZIP; on ubuntu-24.04: setup-toolchain.sh with `.toolchain/`
   cached (key: toolchain.env + pico-sdk's commit), `git fetch --force
