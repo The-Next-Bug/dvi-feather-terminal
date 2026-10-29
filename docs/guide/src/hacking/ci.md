@@ -1,7 +1,11 @@
 # CI and releases
 
-The GitLab pipeline (`.gitlab-ci.yml`) runs in a build image that carries
-the pinned toolchain:
+Two CI systems run the same jobs from the same scripts: GitLab CI
+(`.gitlab-ci.yml`) and GitHub Actions (`.github/workflows/ci.yml`). The
+GitLab pipeline runs in a build image that carries the pinned toolchain;
+GitHub's runners install it with `scripts/setup-toolchain.sh` and cache it.
+On GitHub, a `v*` tag makes a GitHub Release with the ZIP and the guide's
+ZIP.
 
 | Stage | Job | What it does |
 |---|---|---|
