@@ -8,7 +8,9 @@ set -euo pipefail
 ref="${1:-HEAD}"
 title="$(git describe --tags --exact-match "$ref" 2>/dev/null || git rev-parse --short "$ref")"
 
-if prev="$(git describe --tags --abbrev=0 "$ref^" 2>/dev/null)"; then
+# Pre-release tags (with a hyphen: v0.11.3-rc1) are passed over: a release's
+# changes run from the previous release.
+if prev="$(git describe --tags --abbrev=0 --exclude '*-*' "$ref^" 2>/dev/null)"; then
   range="$prev..$ref"
   since="Changes since $prev"
 else
