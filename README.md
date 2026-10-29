@@ -1234,6 +1234,12 @@ test pattern). FatFs (`lib/fatfs`, `lib/fatfs.cmake`) and z80pack's CPU
 
 ## CI and releasing
 
+GitLab CI (`.gitlab-ci.yml`) and GitHub Actions (`.github/workflows/ci.yml`,
+on the GitHub mirror) run the same jobs from the same scripts; on GitHub a
+`v*` tag makes a GitHub Release with the ZIP. GitHub's runners install the
+toolchain with `scripts/setup-toolchain.sh` (cached) instead of the build
+image.
+
 - `test`: host unit tests (JUnit report).
 - `build`: firmware per target (a matrix: `pico2-dvi-sock`, `frankless` and
   the four Feather targets);
