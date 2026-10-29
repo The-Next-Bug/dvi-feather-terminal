@@ -12,26 +12,9 @@ braces on every body), `scripts/build.sh`
 via `scripts/setup-toolchain.sh`; firmware must run from SRAM
 (`COPY_TO_RAM`), and hardware checks are done by the user.
 
-> **Architecture in one line:** Issues live in a local Dolt database
-> (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
-> git-compatible protocol), stored under `refs/dolt/data` on your git
-> remote — separate from `refs/heads/*` where your code lives.
-> `.beads/issues.jsonl` is a passive export, not the wire protocol.
->
-> See [SYNC_CONCEPTS.md](https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md)
-> for the one-screen overview and anti-patterns (don't treat JSONL as the
-> source of truth; don't `bd import` during normal operation; don't
-> reach for third-party Dolt hosting before trying the default).
-
-## Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
+Beads keeps its issues in an embedded Dolt database (`.beads/embeddeddolt`);
+`.beads/issues.jsonl` is a passive export. The bd-managed blocks below
+(and `bd prime`) have the commands and the sync model.
 
 ## Non-Interactive Shell Commands
 

@@ -162,8 +162,9 @@ banks.
 | `__end__`-2007FFFFh | free (nothing uses a heap) |
 | 20000000h-`__end__` | the code (it runs from SRAM), data and .bss: the Z80's memory (bank 0 and the SRAM banks), the raster, the fonts in use, the screen |
 
-`__end__` is in the build's `.elf.map`; on the Pico 2, with two Z80 banks
-in SRAM, about 40 KB stays free.
+`__end__` is in the build's `.elf.map`. With two Z80 banks in SRAM about
+12 KB stays free (the Pico 2; 9 KB on the Feather with an Adalogger); the
+PSRAM boards, whose banks are in the PSRAM, keep about 100 KB free.
 
 ### PSRAM
 

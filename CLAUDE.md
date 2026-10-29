@@ -2,7 +2,7 @@
 
 This file provides instructions and context for AI coding agents working on this project.
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
 ## Beads Issue Tracker
 
 This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
@@ -46,6 +46,7 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
    # Team-maintainer opt-in only, unless current instructions forbid it:
    git pull --rebase
+   bd dolt push
    git push
    git status
    ```
@@ -65,11 +66,11 @@ CMake or Arm GCC on the dev host. Use the scripts:
 
 ```bash
 git submodule update --init          # lib/pico-sdk (2.3.1) and lib/tinyusb, not pico-sdk's submodules (lib/z80pack is vendored)
-scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool, clang-tidy (toolchain.env)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): screen, vtparse, term, raster, keyboard, keyname, settings, setup, splash, clock, ay (the AY-3-8910's tones, noise, envelopes, levels), rtc (the RTC chip drivers on a fake register bus), xonxoff (the XON/XOFF decisions), sdformat (card formats on a sparse disk), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), machine (boots CP/M 2.2 from a FAT32 RAM volume)
+scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool, clang-tidy, mdBook (toolchain.env; one by name: setup-toolchain.sh mdbook)
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): board (test_board.sh on every board header), screen, palette, vtparse, term, raster, keyboard, blank, keyname, settings, setup, splash, clock, ay (the AY-3-8910's tones, noise, envelopes, levels), rtc (the RTC chip drivers on a fake register bus), xonxoff (the XON/XOFF decisions), sdformat (card formats on a sparse disk), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), usbvol (which stick is USB:), machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimized, no sanitizers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default; any boards/<target>.h) -> build/<target>/dvi_terminal.uf2
-scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip
+scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip (release notes: scripts/changelog.sh, the commits since the last tag without a hyphen)
 scripts/lint.sh                      # clang-tidy (.clang-tidy) over build/test and build/$TARGET's compile_commands.json (build them first)
 scripts/docs.sh                      # the user guide (mdBook, toolchain.env MDBOOK_*) -> build/docs/html; package.sh requires it
 ```
@@ -335,7 +336,7 @@ UF2 in the latter).
   bits under a mask (no clearing first: a memset there blanked lines
   mid-render, qur.20). Its fonts: raster_select_font copies the layout's
   normal and bold tables from flash into one SRAM pair of 16-bit rows
-  (font_copy, 20 KB) on a layout change (video_update calls it before
+  (font_copy, 24 KB) on a layout change (video_update calls it before
   timing renders); raster_glyph_row reads the flash tables (tests).
   Stored rows per line = font rows + 2 padding rows; connectors (line
   drawing, blocks, shades) extend into the padding. Handles
@@ -500,9 +501,9 @@ UF2 in the latter).
   _XONXOFF, bd dmt.27; main.c apply_line -> serial_set_flow, both modes;
   setup_t.no_rtscts = !BOARD_HAS_RTSCTS, from setup_glue.c, makes SET-UP
   skip and hide RTS/CTS). SET-UP's rows (SETUP_ITEMS =
-  SETTINGS_MAIN_FIELDS, 14) are settings.c's main_rows table,
-  settings_main_field(row) -> field: fields 0-4, flow, fields 5-11,
-  usb_log (the preview goes under Palette's row, found by field; tests
+  SETTINGS_MAIN_FIELDS, 15) are settings.c's main_rows table,
+  settings_main_field(row) -> field: fields 0-4, flow, fields 5-7,
+  display, fields 8-11, usb_log (the preview goes under Palette's row, found by field; tests
   use test_setup.c's row_of); settings_columns() is 80 for the ADM-3A;
   settings_field_fixed() names what fixes a field, Columns under the
   ADM-3A: SET-UP skips it and shows "80 (ADM-3A)", dmt.39);
@@ -860,8 +861,9 @@ UF2 in the latter).
   mnemonics) -> WORMS.COM, put on CPM22 by diskimg_gen.py --file (writes
   into the 8" CP/M directory); host tests in test_machine (machine_host
   answers ESC [ 6 n through host_cpr_reply). `src/ui/monitor.[ch]`
-  (portable): menu (boot, mount, list, new blank disk, install, speed
-  test, rescan), 3 s autoboot. `src/ui/drivepanel.[ch]` (portable): SET-UP's
+  (portable): menu (Return boot, R resume a stopped machine, M mount,
+  L list, N new blank disk, I install, S speed test, F format, C check
+  the card again), 3 s autoboot. `src/ui/drivepanel.[ch]` (portable): SET-UP's
   Drives panel (D in CP/M mode); setup_glue.c defers its FatFs work (mount,
   save/remove a set: drives_work) to the main loop (setup_feed runs inside
   the USB stack). Named drive sets (bd f8w.6): /DISKS80/SETS/NAME.SET in
@@ -952,9 +954,12 @@ UF2 in the latter).
   Pages source "GitHub Actions" and the github-pages environment allowing
   v* tags.
 
-## Resource budget (v0.6.1, MACHINE_BANKS=2)
+## Resource budget (the Sock, MACHINE_BANKS=2)
 
 SRAM is the tight resource; peripherals and pins are mostly free.
+The history below is the Sock's (v0.6.1 on); the current figures close
+each item. Check `__end__` in build/<target>/dvi_terminal.elf.map
+rather than trusting them.
 
 - SRAM (520 KB): .text 170 KB, .data 20 KB (Z80 tables, video code
   copied to RAM), .bss 285 KB (3of figures); `__end__` 0x20077f4c, so ~32 KB free below
@@ -987,10 +992,14 @@ sound (bd 1ls.18: dvt_sound, the settings and panel rows; no DAC on the
 Sock, so no audio engine running) to 0x20074840, ~45.9 KB free; flow
 control (dmt.27, xonxoff.c, the SET-UP row) and the RAM disk (1ls.20) to
 0x200754b4, ~42 KB free (v0.9.5; Frankless 0x20060598, PSRAM Feather
-0x2005dc98). Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
+0x2005dc98); the 1024x600 mode's buffers and 12x24 fonts (bd cpx.4,
+cpx.7) to 0x2007d098. Now (v0.11.6): Sock 0x2007d178, ~11.6 KB free;
+Feather with Adalogger, no PSRAM, 0x2007db2c, ~9.4 KB; Frankless
+0x200683f8, ~97 KB; PSRAM Feather 0x20065968. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
-  60 KB, font_copy 20 KB, screen 13 KB, stash_buf 14.1 KB, line_buf 6.4 KB,
-  scratch 4 KB, UART RX ring 2 KB. A third Z80 bank (48 KB) does not fit
+  84.6 KB, font_copy 24 KB, stash_buf 14.4 KB, screen 13 KB, line_buf 8 KB,
+  scratch 4 KB, FatFs's sector buffer 4 KB, the palette 2 KB, UART RX
+  ring 2 KB. A third Z80 bank (48 KB) does not fit
   (the PSRAM build has none in SRAM: __end__ 0x20057b88).
 - Flash (4 MB): image 0-0x7e108 (504 KB at v0.6.1; the 4 KB LZ window costs 32 KB;
   ~875 KB with the CP/M 3 disks, f8w.1: ~610 KB of compressed images in all;
@@ -1000,10 +1009,12 @@ control (dmt.27, xonxoff.c, the SET-UP row) and the RAM disk (1ls.20) to
   only during an update, up to the new image's length); settings
   0x3fd000-0x3fefff; last sector left blank (E10). New persistent storage
   has to come out of the image's growth room or lower the image cap.
-- Clocks (v0.6.1; now clk_sys 384 MHz from PLL_USB, clk_hstx 220/200
-  from PLL_SYS 440/400, bd cpx.4/cpx.7): clk_sys 400 MHz at 1.3 V, clk_hstx 200 MHz, clk_usb 48 MHz. Core
-  load not measured (video_stats().late shows core 1 falling behind).
-- In use: HSTX; DMA ch x2 + DMA_IRQ_0 (core 1); UART0 + its IRQ; SPI0
+- Clocks (bd cpx.4/cpx.7): clk_sys 384 MHz from PLL_USB (the Feathers
+  336) at 1.3 V, clk_hstx 220 MHz (1024x600) or 200 MHz (800x600) from
+  PLL_SYS 440/400, clk_peri 128 MHz (the Feathers 112), clk_usb 48 MHz. Core 1's load: the
+  debug status line (video_stats(); late lines show it falling behind).
+- In use on the Sock (no DAC, no RTC; other boards: their sections and
+  board headers): HSTX; DMA ch x2 + DMA_IRQ_0 (core 1); UART0 + its IRQ; SPI0
   (polled); USB host + USBCTRL_IRQ; TIMER0 (time base, SDK alarm pool);
   watchdog (reboots only). Free: 14 DMA channels, DMA_IRQ_1-3, all of PIO0-2
   (12 SMs), UART1, SPI1, I2C0/1, PWM, ADC, TIMER1, TRNG, SHA-256, QMI CS1
@@ -1030,13 +1041,13 @@ control (dmt.27, xonxoff.c, the SET-UP row) and the RAM disk (1ls.20) to
   USB and clk_peri; bd cpx.4).
 - SRAM: __end__ 0x2005d78c (bd xv0); 0x2005f428 with the audio engine and
   the AY (bd 1ls.18, +7.2 KB), 0x2005f800 with stereo and the busy count
-  (1ls.18.9/.8), ~130 KB free (the Z80 banks are in the
-  PSRAM). PSRAM 8 MB: 720 KB banks (15 x 48 KB, port 64's limit), the RAM
+  (1ls.18.9/.8); 0x200683f8 now (v0.11.6, the 1024x600 buffers), ~97 KB
+  free (the Z80 banks are in the PSRAM). PSRAM 8 MB: 720 KB banks (15 x 48 KB, port 64's limit), the RAM
   disk 4080 KB (HD4, bd 1ls.20), ~3.4 MB free (scrollback, 1ls.21, deferred). Flash 16 MB: image 1.04 MB, growth
   room to 8 MB (FWUPDATE_STAGING = half the flash), settings in the top
   12 KB.
-- Core 1: video only (62% of a line at 80 columns, 87-92% at 132, qur.22's
-  Sock figures). Core 0: main loop + the Z80 unthrottled, so new core 0
+- Core 1: video only (in 1024x600, 49% of a line, peaks 59% at 132
+  columns, on the Sock; see the DVI section). Core 0: main loop + the Z80 unthrottled, so new core 0
   work costs Z80 speed; the audio engine's refill IRQ (mixer, AY render)
   is the debug status line's "snd A%": 6-7% on the Frankless, playing or
   idle (the AY is rendered every refill, silent or not; bd 1ls.18.12).
