@@ -189,6 +189,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
+        # A tag with a hyphen (v0.11.3-rc1) is a pre-release.
         run: |
-          gh release create "$TAG" --title "$TAG" --notes-file dist/CHANGES.md --verify-tag \
+          pre=()
+          [[ "$TAG" == *-* ]] && pre=(--prerelease)
+          gh release create "$TAG" --title "$TAG" --notes-file dist/CHANGES.md --verify-tag "${pre[@]}" \
             "dist/dvi-terminal-$TAG.zip" "dist/dvi-terminal-$TAG-guide.zip"
