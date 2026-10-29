@@ -1,0 +1,223 @@
+# Build the DVI terminal firmware on GitHub Actions: the same steps as
+# .gitlab-ci.yml (bd c8q), from the same scripts, on GitHub's runners
+# instead of the private build image. The toolchain comes from
+# scripts/setup-toolchain.sh at toolchain.env's pinned versions and is
+# cached in .toolchain/ (keyed on toolchain.env and pico-sdk's commit,
+# which picotool is built against).
+#
+# Runs on pushes to any branch (as GitLab's pipelines do), v* tags (which
+# also make a GitHub Release with the ZIP and, for releases, publish the
+# guide on GitHub Pages), pull requests and by hand.
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  TOOLCHAIN_DIR: ${{ github.workspace }}/.toolchain
+
+jobs:
+  # Host unit tests for the portable code, then clang-tidy over them.
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: "Check out (full history for git describe, top-level submodules)"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+      # actions/checkout can leave a pushed tag lightweight; git describe
+      # (the build's version, the release's name) needs it annotated.
+      - name: Fetch the annotated tags
+        run: git fetch --force --tags origin
+      - name: pico-sdk commit (toolchain cache key)
+        id: sdk
+        run: echo "sha=$(git rev-parse HEAD:lib/pico-sdk)" >> "$GITHUB_OUTPUT"
+      - name: Toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .toolchain
+            !.toolchain/downloads
+          key: toolchain-test-${{ hashFiles('toolchain.env') }}-${{ steps.sdk.outputs.sha }}
+      - run: scripts/setup-toolchain.sh cmake clang-tidy
+      - run: scripts/test.sh
+      - run: scripts/lint.sh build/test
+      - name: Test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit
+          path: build/test/junit.xml
+          if-no-files-found: ignore
+
+  # The firmware for each board, and clang-tidy over its build.
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [pico2-dvi-sock, frankless, feather-rp2350-hstx, feather-rp2350-hstx-psram,
+                 feather-rp2350-hstx-adalogger, feather-rp2350-hstx-psram-adalogger]
+    steps:
+      - name: "Check out (full history for git describe, top-level submodules)"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+      - name: Fetch the annotated tags
+        run: git fetch --force --tags origin
+      - name: pico-sdk commit (toolchain cache key)
+        id: sdk
+        run: echo "sha=$(git rev-parse HEAD:lib/pico-sdk)" >> "$GITHUB_OUTPUT"
+      - name: Toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .toolchain
+            !.toolchain/downloads
+          key: toolchain-build-${{ hashFiles('toolchain.env') }}-${{ steps.sdk.outputs.sha }}
+      - run: scripts/setup-toolchain.sh cmake arm picotool clang-tidy
+      - run: scripts/build.sh
+        env:
+          TARGET: ${{ matrix.target }}
+      - run: scripts/lint.sh build/${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.target }}
+          path: |
+            build/${{ matrix.target }}/dvi_terminal.uf2
+            build/${{ matrix.target }}/hstx_test.uf2
+            build/${{ matrix.target }}/dvi_terminal.bin
+            build/${{ matrix.target }}/dvi_terminal.elf
+            build/${{ matrix.target }}/dvi_terminal.dis
+            build/${{ matrix.target }}/dvi_terminal.elf.map
+            build/${{ matrix.target }}/build-info.txt
+            build/${{ matrix.target }}/compile.log
+          retention-days: 30
+
+  # The user guide (scripts/docs.sh, bd 1ay).
+  docs:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: "Check out (full history for git describe, top-level submodules)"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+      - name: Fetch the annotated tags
+        run: git fetch --force --tags origin
+      - name: pico-sdk commit (toolchain cache key)
+        id: sdk
+        run: echo "sha=$(git rev-parse HEAD:lib/pico-sdk)" >> "$GITHUB_OUTPUT"
+      - name: Toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .toolchain
+            !.toolchain/downloads
+          key: toolchain-docs-${{ hashFiles('toolchain.env') }}-${{ steps.sdk.outputs.sha }}
+      - run: scripts/setup-toolchain.sh cmake mdbook
+      - run: scripts/docs.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: guide
+          path: build/docs/html
+          retention-days: 30
+
+  # The release ZIP from every board's build and the guide.
+  package:
+    runs-on: ubuntu-24.04
+    needs: [test, build, docs]
+    steps:
+      - name: "Check out (full history for git describe, top-level submodules)"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+      - name: Fetch the annotated tags
+        run: git fetch --force --tags origin
+      - name: The builds, back into build/<target>
+        uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          path: build
+      - run: |
+          for d in build/build-*; do
+            mv "$d" "build/${d#build/build-}"
+          done
+      - name: The guide
+        uses: actions/download-artifact@v4
+        with:
+          name: guide
+          path: build/docs/html
+      - run: scripts/package.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: |
+            dist/*.zip
+            dist/CHANGES.md
+          retention-days: 90
+
+  # v* tags: a GitHub Release with the ZIP and the guide's ZIP, CHANGES.md
+  # as its notes.
+  release:
+    runs-on: ubuntu-24.04
+    needs: [package]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: dist
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        # A tag with a hyphen (v0.11.3-rc1) is a pre-release.
+        run: |
+          pre=()
+          [[ "$TAG" == *-* ]] && pre=(--prerelease)
+          gh release create "$TAG" --title "$TAG" --notes-file dist/CHANGES.md --verify-tag "${pre[@]}" \
+            "dist/dvi-terminal-$TAG.zip" "dist/dvi-terminal-$TAG-guide.zip"
+
+  # Releases only (v* tags without a hyphen, after the release): the guide
+  # on GitHub Pages, https://the-next-bug.github.io/dvi-feather-terminal/.
+  # Needs Settings > Pages > Source "GitHub Actions", and the github-pages
+  # environment allowing v* tags to deploy.
+  pages:
+    runs-on: ubuntu-24.04
+    needs: [release]
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: guide
+          path: site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

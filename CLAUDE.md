@@ -934,6 +934,23 @@ UF2 in the latter).
   typing on the PC.
 - CI (`.gitlab-ci.yml`): test -> build (matrix of targets) -> package ->
   release (tags `vX.Y.Z`). Pipeline status is not visible from here.
+- GitHub (bd c8q): remote `public` = git@github.com:The-Next-Bug/dvi-feather-terminal.git,
+  private for now, a mirror of GitLab (GitLab mirrors main; push tags
+  there by hand: `git push public --tags`). `.github/workflows/ci.yml`
+  does what .gitlab-ci.yml does (test, build matrix, docs, package; v*
+  tags: a GitHub Release with the ZIP and the guide ZIP) on ubuntu-24.04
+  without the private image: setup-toolchain.sh with `.toolchain/` cached
+  (key: toolchain.env + pico-sdk's commit), `git fetch --force --tags`
+  after checkout (checkout can leave a pushed tag lightweight, and
+  git describe names the release). Keep both CI files in step. Plan:
+  GitHub public and primary later, GitLab its mirror. Tags with a hyphen
+  (v0.11.3-rc1) make a GitHub pre-release; push rc tags to `public` only
+  (on GitLab any v* tag releases). The `pages` job (releases only: v*
+  without a hyphen, after `release`) publishes the guide to GitHub Pages,
+  https://the-next-bug.github.io/dvi-feather-terminal/ (the Pages site is
+  public, 2026-10-29); book.toml's site-url matches (404 page only). Needs
+  Pages source "GitHub Actions" and the github-pages environment allowing
+  v* tags.
 
 ## Resource budget (v0.6.1, MACHINE_BANKS=2)
 

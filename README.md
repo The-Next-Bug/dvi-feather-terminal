@@ -8,7 +8,9 @@ computer with the screen and keyboard as its console and its disks on a
 microSD card (see [Z80 CP/M machine](#z80-cpm-machine)).
 
 Releases (`vX.Y.Z` tags) ship the firmware; see
-[Getting started](#getting-started).
+[Getting started](#getting-started). The user guide is online at
+<https://the-next-bug.github.io/dvi-feather-terminal/> (the latest
+release's) and in every release ZIP as `guide/`.
 
 ## Features
 
@@ -1233,6 +1235,12 @@ test pattern). FatFs (`lib/fatfs`, `lib/fatfs.cmake`) and z80pack's CPU
 (`lib/z80pack`, built by `src/machine`) are vendored.
 
 ## CI and releasing
+
+GitLab CI (`.gitlab-ci.yml`) and GitHub Actions (`.github/workflows/ci.yml`,
+on the GitHub mirror) run the same jobs from the same scripts; on GitHub a
+`v*` tag makes a GitHub Release with the ZIP. GitHub's runners install the
+toolchain with `scripts/setup-toolchain.sh` (cached) instead of the build
+image.
 
 - `test`: host unit tests (JUnit report).
 - `build`: firmware per target (a matrix: `pico2-dvi-sock`, `frankless` and
