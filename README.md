@@ -1,5 +1,11 @@
 # dvi-feather-terminal
 
+> **Note:** this project is built with heavy use of AI. Most of its code,
+> tests and documentation were written with an AI coding assistant
+> (Anthropic's Claude, through Claude Code), at the maintainer's direction,
+> and tested on real hardware by the maintainer. Commits made this way carry
+> a `Co-Authored-By: Claude` line.
+
 A VT100 serial terminal with DVI output for the Raspberry Pi Pico 2
 (RP2350) with the Pico DVI Sock: UART in, 1024x600 DVI out, 80 or 132
 columns by 24 rows plus a status line, and a USB keyboard that types to the
