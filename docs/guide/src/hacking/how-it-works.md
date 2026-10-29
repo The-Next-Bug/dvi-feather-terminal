@@ -49,16 +49,17 @@ at every build.
 
 SRAM is the tight resource: the Z80's memory (160 KB on boards without
 PSRAM), the raster (85 KB), the fonts in use (24 KB), the screen and the
-saved rows. The PSRAM boards keep the Z80's banks and a RAM disk in PSRAM.
+saved rows. The PSRAM boards keep the Z80's banks and a RAM disk in PSRAM
+(see the [memory maps](../reference/memory-map.md)).
 
 ## Flash
 
-| Area | Use |
-|---|---|
-| from the start | the firmware (about 1.2 MB: code, fonts, the logo, the built-in disk images, compressed) |
-| upper half | the firmware update's staging area, used only during an update |
-| two sectors before the last | the settings, used in turn |
-| the last sector | left blank (UF2 flashing erases it) |
+The firmware (about 1.2 MB: code, fonts, the logo, the built-in disk
+images, compressed) from the start, the firmware update's staging area in
+the upper half, the settings in the two sectors before the last, and the
+last left blank (UF2 flashing erases it). The
+[memory maps](../reference/memory-map.md#the-rp2350s-memory) give the
+addresses for each flash size, and the SRAM's and PSRAM's layout.
 
 ## Settings
 

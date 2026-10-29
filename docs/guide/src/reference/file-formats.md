@@ -34,23 +34,37 @@ frame by frame, as emulators record them.
 |---|---|
 | `50h 53h 47h 1Ah` | `PSG` and ^Z |
 | 12 bytes | the rest of the header (ignored) |
-| `r v` (r 00h-0Fh) | write v to register r |
+| `r v` (r 00h-0Fh) | write v to register r (see [the AY's registers](ports.md#the-ay-3-8910-d8h-d0h)) |
 | `FFh` | end of a frame (20 ms) |
 | `FEh n` | n x 4 empty frames |
 | `FDh` | end of the tune |
 
 ## AYT
 
-The songs [AYTRACK](../cpm/tools/aytrack.md) saves, 26 records (3328 bytes):
+The songs [AYTRACK](../cpm/tools/aytrack.md) saves: its song memory as it
+is, 26 records (3328 bytes). Offsets in decimal and hex:
 
-| Part | Size | Contents |
+| Offset | Size | Contents |
 |---|---|---|
-| header | 4 | `AYT1` |
-| speed | 1 | frames a row |
-| order count | 1 | entries in the order list |
-| orders | 64 | pattern numbers |
-| instruments | 8 x 18 | each: 16 volumes, a mode (bit 0 tone, bit 1 noise), a noise period |
-| patterns | 16 x 32 rows x 3 channels x 2 | each cell: a note (12-95: octave x 12 + semitone; 0 empty, FFh off) and an instrument |
+| 0 (000h) | 4 | `AYT1` |
+| 4 (004h) | 1 | speed: frames (20 ms) a row |
+| 5 (005h) | 1 | order count: entries used in the order list, 1-64 |
+| 6 (006h) | 64 | the order list: a pattern number (0-15) each |
+| 70 (046h) | 8 x 18 | the instruments |
+| 214 (0D6h) | 16 x 192 | the patterns |
+| 3286 (CD6h) | 42 | unused |
+
+An instrument (18 bytes): 16 volumes (0-15), one a frame, the last held;
+a mode (bit 0 tone, bit 1 noise); a noise period (0-31).
+
+A pattern (192 bytes): 32 rows of 6 bytes, one pair per channel A, B, C:
+
+| Byte | 0 | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|---|
+| | A note | A instrument | B note | B instrument | C note | C instrument |
+
+A note is 12-95 (C1-B7), octave x 12 + semitone (C = 0 ... B = 11; 48 is C4), 0
+empty, FFh off; the instrument is 0-7.
 
 ## USBLOG.TXT
 

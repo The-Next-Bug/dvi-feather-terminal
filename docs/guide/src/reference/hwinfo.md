@@ -20,6 +20,25 @@ listed with their decimal numbers too, which HWINFO's sources use.
   description, each text ending in 00h. Status 00h means no record under that
   number: the numbers in between may be used later, so read them all.
 
+An `OUT 0Ch` always starts the item from its first byte; it can be read
+again from the start the same way. Items do not change while they are
+read, but they can change between reads (a stick plugged in, the time
+set).
+
+## Data
+
+Text is ASCII: at most 127 characters, then 00h. A record:
+
+| Offset | Size | Field |
+|---|---|---|
+| +0 | 1 | the status (below) |
+| +1 | n + 1 | the name, then 00h, e.g. `Z80 memory` |
+| +n + 2 | m + 1 | the description, then 00h: free text, may be long (a program should wrap it) |
+| after it | | 00h for every further `IN` |
+
+The whole record is at most 128 bytes. An item without a record reads 00h
+at once, which is status 00h.
+
 ## Items
 
 {{#include ../generated/hwinfo-items.md}}
@@ -29,7 +48,9 @@ board header names but this firmware does not drive yet is listed as
 planned. Items 1Dh-1Fh (29-31) once listed hardware that was dropped; they stay
 unused, as older programs may know them.
 
-## Example: is there a real-time clock?
+## Examples
+
+### Is there a real-time clock?
 
 ```
         LD   A,00H        ; item 00h: 'H' 'W' version?
@@ -43,3 +64,37 @@ unused, as older programs may know them.
         CP   01H          ; 01h: there and in use
         JR   Z,HASRTC
 ```
+
+### Printing the firmware's version (CP/M)
+
+```
+        LD   A,01H        ; item 01h: the firmware's version and date
+        OUT  (0CH),A
+NEXT:   IN   A,(0CH)
+        OR   A            ; 00h: its end
+        RET  Z
+        CP   0FFH         ; FFh: no device here
+        RET  Z
+        LD   E,A
+        LD   C,02H        ; BDOS 2: console output
+        CALL 0005H
+        JR   NEXT
+```
+
+### Every record
+
+```
+        LD   B,10H        ; the first record
+ITEM:   LD   A,B
+        OUT  (0CH),A
+        IN   A,(0CH)      ; the status
+        OR   A
+        JR   Z,SKIP       ; 00h: no record under this number
+        ...               ; then IN 0Ch: the name up to 00h,
+        ...               ; then the description up to 00h
+SKIP:   INC  B
+        JR   NZ,ITEM      ; up to item FFh
+```
+
+[HWINFO](../cpm/tools/hwinfo.md) (`src/machine/cpm/hwinfo.asm`) does this
+and wraps the descriptions to the screen.
