@@ -85,7 +85,7 @@ settings_fields[]), gen_tables.py (board pins via `cc -dM -E` on each
 boards/*.h, HWINFO items from machine.h), the version. checklinks.py fails
 the build on a broken internal link or image. package.sh puts the HTML in
 the release ZIP as guide/ (and dist/<release>-guide.zip); CI's docs job
-builds it (mdBook downloaded until the build image has it). lint.sh also
+builds it. lint.sh also
 covers docs/ (docgen.c). The README stays as it is for now (user,
 2026-10-28: not trimmed yet).
 
@@ -932,20 +932,18 @@ UF2 in the latter).
   newlib's localtime/scanf cost ~20 KB of SRAM, so the clock avoids them.
 - `tools/hostbridge.py`: run a host program with the terminal as display,
   typing on the PC.
-- CI (`.gitlab-ci.yml`): test -> build (matrix of targets) -> package ->
-  release (tags `vX.Y.Z`). Pipeline status is not visible from here.
-- GitHub (bd c8q): remote `public` = git@github.com:The-Next-Bug/dvi-feather-terminal.git,
-  private for now, a mirror of GitLab (GitLab mirrors main; push tags
-  there by hand: `git push public --tags`). `.github/workflows/ci.yml`
-  does what .gitlab-ci.yml does (test, build matrix, docs, package; v*
-  tags: a GitHub Release with the ZIP and the guide ZIP) on ubuntu-24.04
-  without the private image: setup-toolchain.sh with `.toolchain/` cached
-  (key: toolchain.env + pico-sdk's commit), `git fetch --force --tags`
-  after checkout (checkout can leave a pushed tag lightweight, and
-  git describe names the release). Keep both CI files in step. Plan:
-  GitHub public and primary later, GitLab its mirror. Tags with a hyphen
-  (v0.11.3-rc1) make a GitHub pre-release; push rc tags to `public` only
-  (on GitLab any v* tag releases). The `pages` job (releases only: v*
+- GitHub is primary (2026-10-29): remote `origin` =
+  git@github.com:The-Next-Bug/dvi-feather-terminal.git; remote `gitlab` =
+  git@gitlab.seg9.com:jules/dvi-feather-terminal.git, a mirror of GitHub
+  only (its CI, .gitlab-ci.yml, and the private build image were removed;
+  docs name GitHub only). CI is `.github/workflows/ci.yml` (bd c8q): test,
+  build matrix, docs, package; v* tags a GitHub Release with the ZIP and
+  the guide ZIP; on ubuntu-24.04: setup-toolchain.sh with `.toolchain/`
+  cached (key: toolchain.env + pico-sdk's commit), `git fetch --force
+  --tags` after checkout (checkout can leave a pushed tag lightweight, and
+  git describe names the release). Pipeline status is not visible from
+  here. Tags with a hyphen (v0.11.3-rc1) make a GitHub pre-release. The
+  `pages` job (releases only: v*
   without a hyphen, after `release`) publishes the guide to GitHub Pages,
   https://the-next-bug.github.io/dvi-feather-terminal/ (the Pages site is
   public, 2026-10-29); book.toml's site-url matches (404 page only). Needs
@@ -1102,7 +1100,7 @@ control (dmt.27, xonxoff.c, the SET-UP row) and the RAM disk (1ls.20) to
 - Git: work on a branch, merge to `main` with `git merge --no-ff`, push only
   when the user asks (they usually say "commit and push" / "merge").
   Commit messages end with the Co-Authored-By line. Tags `vX.Y.Z` trigger a
-  GitLab release.
+  GitHub release.
 - bd: the pre-commit hook re-exports `.beads/issues.jsonl` after `bd close`
   in the same command; check `git status` after committing and amend if
   needed before switching branches. Chain git steps with `&&`, not `;`.

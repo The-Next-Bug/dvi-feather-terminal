@@ -13,6 +13,8 @@ create-missing = false
 [output.html]
 # Where GitHub Pages serves it (CI's pages job): only the 404 page uses it.
 site-url = "/dvi-feather-terminal/"
+# The source, linked from every page's header.
+git-repository-url = "https://github.com/The-Next-Bug/dvi-feather-terminal"
 default-theme = "light"
 preferred-dark-theme = "navy"
 no-section-label = false

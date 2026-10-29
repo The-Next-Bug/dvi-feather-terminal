@@ -6,11 +6,13 @@ The RP2350's HSTX peripheral has a TMDS encoder, so DVI needs no CPU work
 per pixel: the CPU supplies RGB565 scanlines and the HSTX serializes them
 (`src/video/hstx_dvi.c`, after Raspberry Pi's pico-examples).
 
-- **Clocks**: the system PLL runs at 10 x the pixel clock (440 MHz for
-  1024x600, 400 MHz for 800x600) and feeds only the HSTX, at half that.
-  The CPU (clk_sys) runs from the USB PLL at 384 MHz (336 on the Feathers),
+- **Clocks**: the HSTX (clk_hstx) runs at 5 x the pixel clock: 220 MHz
+  for 1024x600, 200 MHz for 800x600. It is the system PLL's only user,
+  which runs at twice that (440 or 400 MHz) and feeds nothing else. The
+  CPU (clk_sys) runs from the USB PLL at 384 MHz (336 on the Feathers),
   which also gives USB, the ADC and the peripherals their clocks. So the
-  CPU's speed does not depend on the display mode.
+  CPU's speed does not depend on the display mode, and no part of the
+  chip is clocked above 384 MHz.
 - **Two DMA channels** take turns feeding the HSTX: blanking command lists,
   then each active line's commands and pixels, reloaded by an interrupt.
 - **The screen** is a buffer of cells: a glyph code, colors and attributes

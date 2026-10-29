@@ -52,7 +52,8 @@ the clock change, the flash writes).
 Pinned in `toolchain.env`, the single source of truth for
 `scripts/setup-toolchain.sh`: CMake, the Arm GNU Toolchain, picotool,
 clang-tidy and mdBook, each with its SHA-256. To upgrade one, change its
-version and checksum there and the matching `ARG`s of the CI build image.
+version and checksum there; CI's toolchain cache is keyed on the file, so
+the next run installs the new one.
 pico-sdk and TinyUSB are submodules under `lib/`; z80pack (the Z80 core and
 picosim's disks), FatFs and F83 are vendored.
 
