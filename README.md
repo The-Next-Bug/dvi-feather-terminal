@@ -998,7 +998,7 @@ The machine is picosim's:
 | Port | Device |
 |---|---|
 | 0/1 | console |
-| 2/3 | second serial port (UART0 at the SET-UP baud rate) |
+| 2/3 | second serial port (the board's UART at the SET-UP baud rate): CP/M 2.2's RDR:/PUN:, CP/M 3's `TTY2` (AUX:), MP/M II's console 1; status bit 7 is set while the transmit queue is full |
 | 4 | disk controller |
 | 5/6 | printer (none) |
 | 8 | the disk in a drive, for our BIOSes (ours, not picosim's): OUT the drive, IN its format (0 none, 1 8" floppy, 2 4 MB, 3 8 MB), IN again the count of images mounted on it. A hard-disk image is refused to a system that has not asked about its drive since the reset |

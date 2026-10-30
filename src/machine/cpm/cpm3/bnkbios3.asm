@@ -18,6 +18,10 @@
 ;	segment (bank 0, where the BDOS runs), so the common part stays
 ;	small (TPA 61K, as with picosim's BIOS); the DPBs must be common.
 ;
+;	Character devices (bd qtq): TTY1 the screen and keyboard (SIO1),
+;	TTY2 the board's serial port (SIO2, ports 2/3), AUXIN:/AUXOUT: by
+;	default; DEVICE moves CON: and AUX: between them.
+;
 ; History:
 ; 03-JUL-2024 first public release
 ; 07-JUL-2024 added RTC
@@ -63,6 +67,8 @@ TPA	EQU	0100H		; start of TPA
 ;
 TTY1	EQU	01H		; tty 1 data
 TTY1S	EQU	00H		; tty 1 status
+TTY2	EQU	03H		; tty 2 data: SIO2, the board's serial port
+TTY2S	EQU	02H		; tty 2 status
 FDC	EQU	04H		; FDC
 DINFO	EQU	08H		; drive format: OUT drive, IN 0 none, 1 8" floppy,
 				; 2 4 MB, 3 8 MB hard disk (ours)
@@ -192,7 +198,10 @@ DDHDMA	EQU	CMD+3		; DMA address high
 ;
 ;	character device table
 ;
-CHRTBL:	DB	'TTY1  '
+CHRTBL:	DB	'TTY1  '	; device 0 (vector bit 15): the screen and keyboard
+	DB	mb$inou+mb$ser
+	DB	baud$0
+	DB	'TTY2  '	; device 1 (vector bit 14): the serial port
 	DB	mb$inou+mb$ser
 	DB	baud$0
 ;
@@ -351,9 +360,10 @@ BOOT:	LXI	SP,STACK
 	LXI	H,8000H		; device 0
 	SHLD	@civec		; CONIN:=TTY1
 	SHLD	@covec		; CONOUT:=TTY1
-	LXI	H,0
-	SHLD	@aivec		; AUXIN:=NULL
-	SHLD	@aovec		; AUXOUT:=NULL
+	MVI	H,40H		; device 1
+	SHLD	@aivec		; AUXIN:=TTY2
+	SHLD	@aovec		; AUXOUT:=TTY2
+	MVI	H,0
 	SHLD	@lovec		; LST:=NULL
 ;
 	MVI	A,10H		; setup FDC command
@@ -443,54 +453,48 @@ CPPERR:	MVI	C,PRINT		; error loading CCP, print error message
 	CALL	BDOS
 	HLT			; and halt the machine
 ;
+;	The BIOS entries only CP/M 3 has (DEVTBL, DEVINI, DRVTBL, TIME)
+;	are banked: the BDOS calls them, function 50 too, with bank 0 in
+;	place, and the common part must stay within 3 pages (TPA 61K).
+;
+	DSEG
+;
 ;	I/O drivers for character devices
 ;
-DEVTBL:	LXI	H,CHRTBL	; return address of character I/O table
+DEVTBL:	LXI	H,CHRTBL	; return address of character I/O table (common)
 	RET
 ;
 ;	initialize character I/O devices
 ;
 DEVINI: RET
 ;
-;	console input status
+;	I/O drivers for disks
 ;
-CONST:	LHLD	@civec		; get console in vector
-	MVI	A,80H		; test for device 0
-	ANA	H
-	JZ	CONS1		; if not set try next
-	CALL	TTY1IS		; test tty 1 input status
-	JZ	DEVRDY		; done if device ready
-CONS1:	XRA	A		; no device ready
+DRVTBL:	LXI	H,DRIVES	; return address of disk drive table
 	RET
 ;
-;	console input
+	CSEG
 ;
-CONIN:	LHLD	@civec		; get console in vector
-	MVI	A,80H		; test for device 0
-	ANA	H
-	JZ	CONI1		; if not set try next
-	CALL	TTY1IS		; test tty 1 input status
-	JZ	TTY1IN		; ready, get input from tty 1
-CONI1:	JMP	CONIN		; no device ready, try again
+;	The logical devices: CON: and AUX: go to every device their vector
+;	selects, TTY1 (bit 15) and TTY2 (bit 14), so DEVICE can move or
+;	copy them (DEVICE CONOUT:=TTY1,TTY2).
 ;
-;	console output status
-;
-CONOST:	LHLD	@covec		; get console out vector
-	MVI	A,80H		; test for device 0
-	ANA	H
-	JNZ	CONOS1		; if not set try next
-	CALL	TTY1OS		; test tty 1 output status
-	JNZ	DEVNRY		; if device not ready
-CONOS1:	MVI	A,0FFH		; all output devices ready
-	RET
-;
-;	console output
-;
-CONOUT: LHLD	@covec		; get console out vector
-	MVI	A,80H		; test for device 0
-	ANA	H
-	CNZ	TTY1OU		; if set call tty 1 output
-	RET
+CONST:	LHLD	@civec		; console input status
+	JMP	VECIST
+CONIN:	LHLD	@civec		; console input
+	JMP	VECIN
+CONOST:	LHLD	@covec		; console output status
+	JMP	VECOST
+CONOUT:	LHLD	@covec		; console output
+	JMP	VECOUT
+AUXIST:	LHLD	@aivec		; auxiliary input status
+	JMP	VECIST
+AUXIN:	LHLD	@aivec		; auxiliary input
+	JMP	VECIN
+AUXOST:	LHLD	@aovec		; auxiliary output status
+	JMP	VECOST
+AUXOUT:	LHLD	@aovec		; auxiliary output
+	JMP	VECOUT
 ;
 ;	list output status
 ;
@@ -500,22 +504,63 @@ LISTST:	JMP	DEVNRY		; no printer, never ready
 ;
 LIST:	RET			; no printer
 ;
-;	auxiliary input status
+;	input status of the devices vector HL selects: 0FFH if one has a
+;	character
 ;
-AUXIST:	JMP	DEVNRY		; no auxiliary, never ready
+VECIST:	MOV	A,H
+	ANI	80H		; device 0?
+	JZ	VIS1
+	CALL	TTY1IS
+	JZ	DEVRDY
+VIS1:	MOV	A,H
+	ANI	40H		; device 1?
+	JZ	DEVNRY
+	CALL	TTY2IS
+	JZ	DEVRDY
+	JMP	DEVNRY
 ;
-;	auxiliary input
+;	input from the first of them with a character, waiting for one;
+;	none selected: CTL-Z
 ;
-AUXIN:	MVI	A,01AH		; we have no auxiliary
-	RET			; so return CTL-Z
+VECIN:	MOV	A,H
+	ANI	0C0H		; any device?
+	MVI	A,01AH
+	RZ
+	MOV	A,H
+	ANI	80H		; device 0?
+	JZ	VIN1
+	CALL	TTY1IS
+	JZ	TTY1IN
+VIN1:	MOV	A,H
+	ANI	40H		; device 1?
+	JZ	VECIN
+	CALL	TTY2IS
+	JZ	TTY2IN
+	JMP	VECIN
 ;
-;	auxiliary output status
+;	output status: 0FFH if all of them can take a character
 ;
-AUXOST:	JMP	DEVNRY		; no auxiliary, never ready
+VECOST:	MOV	A,H
+	ANI	80H		; device 0?
+	JZ	VOS1
+	CALL	TTY1OS
+	JNZ	DEVNRY
+VOS1:	MOV	A,H
+	ANI	40H		; device 1?
+	JZ	DEVRDY
+	CALL	TTY2OS
+	JNZ	DEVNRY
+	JMP	DEVRDY
 ;
-;	auxiliary output
+;	output C to all of them
 ;
-AUXOUT: RET			; no auxiliary
+VECOUT:	MOV	A,H
+	ANI	80H		; device 0?
+	CNZ	TTY1OU
+	MOV	A,H
+	ANI	40H		; device 1?
+	RZ
+	JMP	TTY2OU
 ;
 ;	tty 1 input status
 ;
@@ -543,6 +588,32 @@ TTY1OU:	IN	TTY1S		; get status
 	OUT	TTY1		; send to tty 1
 	RET
 ;
+;	tty 2 input status
+;
+TTY2IS:	IN	TTY2S		; get status
+	ANI	01H		; mask bit
+	RET
+;
+;	tty 2 input
+;
+TTY2IN:	IN	TTY2		; get character
+	RET
+;
+;	tty 2 output status
+;
+TTY2OS:	IN	TTY2S		; get status
+	ANI	80H		; mask bit
+	RET
+;
+;	tty 2 output: waits while the board's transmit queue is full
+;
+TTY2OU:	IN	TTY2S		; get status
+	RLC			; test bit 7
+	JC	TTY2OU		; wait until transmitter ready
+	MOV	A,C		; get character to A
+	OUT	TTY2		; send to tty 2
+	RET
+;
 ;	return with device ready
 ;
 DEVRDY:	MVI	A,0FFH
@@ -551,11 +622,6 @@ DEVRDY:	MVI	A,0FFH
 ;	return with device not ready
 ;
 DEVNRY:	XRA	A
-	RET
-;
-;	I/O drivers for disks
-;
-DRVTBL:	LXI	H,DRIVES	; return address of disk drive table
 	RET
 ;
 	DSEG
@@ -782,6 +848,8 @@ SETBNK:	STA	BANK
 ;	set banks for following MOVE
 ;
 XMOVE: RET			; no memory to memory DMA available
+;
+	DSEG			; banked, as DEVTBL above
 ;
 ;	get/set time: C = 0FFH sets the clock from the SCB (the machine's
 ;	clock ports take writes, src/machine/machine.h): the day number,

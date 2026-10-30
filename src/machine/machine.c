@@ -153,12 +153,18 @@ static void sio1d_out(BYTE data) {
 	plat->console_out(data & 0x7f); // strip parity, some software won't
 }
 
-// SIO2: one byte held from the platform until the CPU reads it.
+// SIO2: one byte held from the platform until the CPU reads it. Bit 0 = 0:
+// a byte is there; bit 7 = 1: the platform cannot take one (its transmit
+// queue is full), so a BIOS waits instead of losing it.
 static BYTE sio2s_in(void) {
 	if (!m.aux_have && plat->aux_in(&m.aux_held)) {
 		m.aux_have = true;
 	}
-	return m.aux_have ? 0x00 : 0x01;
+	BYTE stat = m.aux_have ? 0x00 : 0x01;
+	if (plat->aux_out_ready && !plat->aux_out_ready()) {
+		stat |= 0x80;
+	}
+	return stat;
 }
 
 static BYTE sio2d_in(void) {

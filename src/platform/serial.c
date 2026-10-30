@@ -197,6 +197,11 @@ size_t serial_write(const uint8_t *data, size_t len) {
 	return n;
 }
 
+size_t serial_tx_room(void) {
+	serial_poll();
+	return SERIAL_TX_BUFFER_SIZE - (tx_head - tx_tail);
+}
+
 void serial_poll(void) {
 	// Interrupts off: the IRQ may send XON/XOFF into the same FIFO. At most
 	// 32 register writes.

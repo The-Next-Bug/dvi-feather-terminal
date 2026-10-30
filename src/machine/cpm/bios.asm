@@ -30,6 +30,8 @@ NDRV	EQU	8		;drives A-H
 ;
 CONSTA	EQU	0		;console status port
 CONDAT	EQU	1		;console data port
+AUXSTA	EQU	2		;SIO2 status port: the board's serial port
+AUXDAT	EQU	3		;SIO2 data port
 FDC	EQU	4		;port for the FDC
 DINFO	EQU	8		;drive format: OUT drive, IN 0 none, 1 floppy,
 				;2 4 MB hard disk, 3 8 MB hard disk
@@ -270,14 +272,22 @@ LISTST	XRA	A		;we have no printer
 ;
 LIST	RET			;we have no printer
 ;
-;	punch character from register C
+;	punch character from register C: to the serial port (SIO2)
 ;
-PUNCH	RET			;we have no puncher
+PUNCH	IN	AUXSTA		;get status
+	RLC			;test bit 7
+	JC	PUNCH		;wait until the transmit queue has room
+	MOV	A,C		;get character into accumulator
+	OUT	AUXDAT		;send it
+	RET
 ;
-;	read character into register A from reader
+;	read character into register A from reader: the serial port (SIO2)
 ;
-READER	MVI	A,01AH		;we have no reader
-	RET			;so return CTL-Z
+READER	IN	AUXSTA		;get status
+	RRC			;test bit 0
+	JC	READER		;not ready
+	IN	AUXDAT		;get character
+	RET
 ;
 ;	move to track 0 position on current disk
 ;

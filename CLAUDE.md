@@ -672,7 +672,9 @@ UF2 in the latter).
   vendored, MIT: UPSTREAM.md has the commit and our local changes; only
   z80core + iodevices/sd-fdc.c, built as dvt_z80pack by `src/machine/CMakeLists.txt`) configured
   by `src/machine/z80pack/{sim,simmem,simio,simport}.h`; picosim's port map (SIO1
-  0/1 console, SIO2 2/3 = UART0, FDC 4, MMU 64, clock 65/66 without
+  0/1 console, SIO2 2/3 = the board's terminal UART (status bit 7 busy
+  while the platform's aux_out_ready says no: serial_tx_room, bd qtq; the
+  host's host_aux_busy models it), FDC 4, MMU 64, clock 65/66 without
   localtime from the platform's time_get (NULL: 1.1.2026 + uptime) and,
   ours, writable through time_set (registers 0-2 a field, 3 latched for
   4's day number; machine.h; CP/M 3's BIOS TIME C=0FFH writes them, so
@@ -751,7 +753,12 @@ UF2 in the latter).
   DPHs banked, GENCPM sized by DPBMAX; READ/WRITE return 0FFH media
   changed when port 8's format or mount count differs from the log-in's;
   HD CKS 0, not 8000H: the BDOS ignores media changes on permanent
-  drives) made by build.sh at build time: cpmrun.c (machine.c on the host,
+  drives; character devices TTY1 (SIO1) and TTY2 (SIO2, AUXIN:/AUXOUT:
+  from BOOT), CON:/AUX: going to every device their vector selects, bd
+  qtq; the common part (CSEG, LINK's CODE SIZE) must stay <= 0300H or
+  GENCPM takes another page off the TPA: 02FBH after qtq, which moved the
+  CP/M 3-only DEVTBL, DEVINI, DRVTBL and TIME to DSEG, as the BDOS calls
+  them, function 50 too, in bank 0) made by build.sh at build time: cpmrun.c (machine.c on the host,
   plain 8" images, a script at the console: sysgen.run) runs DRI's RMAC,
   LINK and GENCPM under CP/M 3; the work disk ships as CPM3GEN;
   diskimg_gen.py --edit/--extract handles the images. Unchanged picosim
@@ -878,7 +885,8 @@ UF2 in the latter).
   test/diskio_ram.c has drives 0 and 1. ~4.4 KB of SRAM (msc_host.c,
   usbmsc.c, usbvol.c built -Os).
   `src/machine/cpm/`: our 62K CP/M 2.2 (bios.asm 8-drive BIOS picking the DPB per
-  drive at SELDSK, boot.asm), assembled at build time by build.sh with
+  drive at SELDSK, READER/PUNCH on SIO2 (bd qtq; IOBYTE ignored, LIST a
+  stub; PIP PUN: adds 40 NULs of leader before and after), boot.asm), assembled at build time by build.sh with
   z80pack's z80asm built by the host cc; CCP+BDOS = picosim's 64K cpm.bin
   relocated with ccpbdos.rel (from MOVCPM 62 *); diskimg_gen.py --system
   writes the system tracks of CPM22 (README there); worms.asm (Z80

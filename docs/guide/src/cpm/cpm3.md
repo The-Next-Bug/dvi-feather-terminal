@@ -31,6 +31,24 @@ The BIOS sets `SETDEF`'s defaults at every cold boot:
 CP/M 3 shows the user number in its prompt (`3A>`) and finds system files
 in user 0 from any user area.
 
+## The serial port
+
+CP/M 3 has two character devices: `TTY1`, the screen and keyboard, and
+`TTY2`, the board's serial port at SET-UP's line settings and flow control.
+AUX: (AUXIN: and AUXOUT:) is `TTY2` from the cold boot:
+
+```
+A>PIP AUX:=REPORT.TXT
+A>PIP CAPTURE.TXT=AUX:
+A>DEVICE CONOUT:=TTY1,TTY2
+```
+
+PIP reads AUX: until a ^Z (1Ah). `DEVICE` shows and changes the
+assignments; the last line above sends console output to the serial port
+as well as the screen (`DEVICE CONOUT:=TTY1` stops it). `TTY2`'s baud
+rate is SET-UP's: `DEVICE` cannot change it. The printer (LST:) is not
+connected.
+
 ## Date and time
 
 `DATE` shows the date and time, and `DATE SET` sets them, together with the

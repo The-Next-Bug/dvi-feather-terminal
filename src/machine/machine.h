@@ -32,6 +32,9 @@ typedef struct {
 	// SIO2: send, and whether a byte has arrived (then read it into *c).
 	void (*aux_out)(uint8_t c);
 	bool (*aux_in)(uint8_t *c);
+	// Whether aux_out would take a byte now (SIO2's status bit 7, which
+	// BIOSes wait on before writing). May be NULL: always.
+	bool (*aux_out_ready)(void);
 	void (*printer_out)(uint8_t c); // may be NULL
 	// Disk sectors (128 bytes; track from 0, sector from 1, within the
 	// drive's format): FDC status, 0 = OK.

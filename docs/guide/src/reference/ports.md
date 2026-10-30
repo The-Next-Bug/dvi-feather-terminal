@@ -12,9 +12,10 @@ byte, bit 0 the least; 16-bit values are little-endian (low byte first),
 as the Z80 stores them. Where the address space matters, see the
 [memory maps](memory-map.md).
 
-Every device answers at once: there are no wait states and no busy bits
-that ever stay set, so a program can write a command and read its status
-on the next instruction.
+Every device answers at once: there are no wait states, and only the
+second serial port has a busy bit that can stay set (while its transmit
+queue is full), so a program can write a command and read its status on
+the next instruction.
 
 | Port | Direction | Device | Origin |
 |---|---|---|---|
@@ -99,10 +100,14 @@ control.
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | | TXBUSY | 0 | 0 | 0 | 0 | 0 | 0 | RXEMPTY |
 
-The same layout as the console's: 00h when a byte has arrived, 01h when
-none. `IN 03h` reads the byte (the last one again when none is waiting);
-`OUT 03h` sends one, all 8 bits. Writes to port 02h are ignored. The
-console routines above work with 02h/03h in place of 00h/01h.
+The same layout as the console's: bit 0 is 0 when a byte has arrived, 1
+when none. TXBUSY is 1 while the board's transmit queue (256 bytes) is
+full, which happens when a program sends faster than the baud rate or the
+host holds it off (flow control); a byte written then is lost, so wait for
+it to clear. `IN 03h` reads the byte (the last one again when none is
+waiting); `OUT 03h` sends one, all 8 bits. Writes to port 02h are ignored.
+The console routines above work with 02h/03h in place of 00h/01h. Older
+firmware never set TXBUSY.
 
 ## Printer (05h, 06h)
 
