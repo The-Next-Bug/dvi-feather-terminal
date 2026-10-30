@@ -39,6 +39,11 @@ extern size_t aux_len;
 // Bytes the second serial port receives, one each time the CPU asks, from
 // here until the NUL (MP/M's second console; NULL: none).
 extern const char *aux_input;
+// After each byte sent, SIO2's status says the transmitter is busy (bit 7)
+// for host_aux_busy status reads, as a full transmit queue would (0: never
+// busy). host_aux_waits counts those reads, host_aux_overruns the bytes
+// written while busy (lost on the board).
+extern unsigned host_aux_busy, host_aux_waits, host_aux_overruns;
 
 // The wall clock (machine.h time_get/time_set): seconds since 31.12.1977
 // are (host_time_offset_us + host_clock_us()) / 1000000; starts at

@@ -1174,6 +1174,67 @@ static bool cpm(const char *line, const char *want) {
 	return found;
 }
 
+// The serial port (SIO2) through the BIOSes (bd qtq): a text file for PIP to
+// send, AUXTEXT.TXT on C: (EMPTY), and what came back.
+static char aux_text[3000];
+
+static void aux_file(void) {
+	size_t n = 0;
+	for (unsigned i = 0; n + 40 < sizeof aux_text; ++i) {
+		n += (size_t)snprintf(aux_text + n, sizeof aux_text - n, "Line %04u of the serial port test\r\n", i);
+	}
+	f_mkdir("/XFER"); // may be there already
+	put_fat_file("/XFER/AUXTEXT.TXT", aux_text, (unsigned)n);
+	CHECK(cpm("XPIP C:=SD:AUXTEXT.TXT", "1 copied"));
+	f_unlink("/XFER/AUXTEXT.TXT");
+}
+
+// PIP to the punch (CP/M 2.2) or AUX: (CP/M 3) with the transmitter busy
+// after every byte: every byte arrives, none written while busy. Returns
+// the leading NULs (PIP's tape leader).
+static size_t aux_send(const char *pip) {
+	aux_len = 0;
+	aux_sent[0] = '\0';
+	host_aux_busy = 3;
+	host_aux_waits = host_aux_overruns = 0;
+	CHECK(cpm(pip, ""));
+	host_aux_busy = 0;
+	// CP/M 2.2's PIP sends 40 NULs of tape leader before and after.
+	size_t lead = 0;
+	while (lead < aux_len && aux_sent[lead] == '\0') {
+		++lead;
+	}
+	CHECK(aux_len >= lead + strlen(aux_text));
+	CHECK(memcmp(aux_sent + lead, aux_text, strlen(aux_text)) == 0);
+	CHECK(host_aux_waits >= 3 * (strlen(aux_text) - 1)); // none after the last
+	CHECK_EQ(host_aux_overruns, 0);
+	return lead;
+}
+
+// PIP from the reader (AUX:) into a file, up to the ^Z, then TYPE it.
+static void aux_receive(const char *pip) {
+	aux_input = "Typed on the serial port\r\nsecond line\r\n\x1a";
+	CHECK(cpm(pip, ""));
+	CHECK(aux_input && *aux_input == '\0');
+	aux_input = NULL;
+	CHECK(cpm("TYPE C:FROMAUX.TXT", "Typed on the serial port\r\nsecond line\r\n"));
+}
+
+static void test_aux_cpm22(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM22"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("EMPTY"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	CHECK_EQ(drives_mount(2, "EMPTY"), DRIVES_OK);
+	clear_screen();
+	machine_init(&host_platform);
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	aux_file();
+	CHECK_EQ(aux_send("PIP PUN:=C:AUXTEXT.TXT"), 40);
+	aux_receive("PIP C:FROMAUX.TXT=RDR:");
+	drives_unmount_all();
+}
+
 // XLS and XPIP (src/machine/cpm) under CP/M, against /XFER on the volume.
 static void test_xfer_tools(void) {
 	static char text[300];
@@ -1995,6 +2056,35 @@ static void test_cpm3_tools(void) {
 	CHECK_EQ(run_until("Choice: ", 10), MACHINE_RUNNING);
 	CHECK(type("q"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	drives_unmount_all();
+}
+
+// CP/M 3: AUXIN:/AUXOUT: are TTY2 from the cold boot, and DEVICE moves the
+// console onto it too (bd qtq).
+static void test_cpm3_aux(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("EMPTY"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "CPM31"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "CPM32"), DRIVES_OK);
+	CHECK_EQ(drives_mount(2, "EMPTY"), DRIVES_OK);
+	cpm3_boot();
+	CHECK(cpm("DEVICE NAMES", "TTY2"));
+	CHECK(cpm("DEVICE VALUES", "AUXIN:  = TTY2"));
+	CHECK(strstr(screen, "AUXOUT: = TTY2") != NULL);
+	aux_file();
+	aux_send("PIP AUX:=C:AUXTEXT.TXT");
+	aux_receive("PIP C:FROMAUX.TXT=AUX:");
+	// The console on both: DIR's output goes to the screen and the port.
+	CHECK(cpm("DEVICE CONOUT:=TTY1,TTY2", ""));
+	aux_len = 0;
+	aux_sent[0] = '\0';
+	CHECK(cpm("DIR C:", "AUXTEXT  TXT"));
+	CHECK(strstr(aux_sent, "AUXTEXT  TXT") != NULL);
+	CHECK(cpm("DEVICE CONOUT:=TTY1", ""));
+	aux_len = 0;
+	aux_sent[0] = '\0';
+	CHECK(cpm("DIR C:", "AUXTEXT  TXT"));
+	CHECK_EQ(aux_len, 0);
 	drives_unmount_all();
 }
 
@@ -3107,6 +3197,7 @@ int main(void) {
 	RUN(test_blank_disk_chunks);
 	RUN(test_xfer_port);
 	RUN(test_xfer_tools);
+	RUN(test_aux_cpm22);
 	RUN(test_hwinfo_port);
 	RUN(test_clock_ports);
 	RUN(test_hwinfo_tool);
@@ -3115,6 +3206,7 @@ int main(void) {
 	RUN(test_ayplay_tool);
 	RUN(test_boot_cpm3);
 	RUN(test_cpm3_tools);
+	RUN(test_cpm3_aux);
 	RUN(test_cpm3_date);
 	RUN(test_cpm3_drives);
 	RUN(test_hd_guard);

@@ -68,6 +68,10 @@ size_t serial_read(uint8_t *buf, size_t max);
 // tx_dropped).
 size_t serial_write(const uint8_t *data, size_t len);
 
+// How many bytes serial_write would take now. Moves queued bytes to the
+// UART first, so a caller waiting for room sees it free up.
+size_t serial_tx_room(void);
+
 // Move queued bytes to the UART while it has room. Call from the main loop.
 void serial_poll(void);
 

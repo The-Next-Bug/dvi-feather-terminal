@@ -21,6 +21,23 @@ monitor, or reset with **F11**. Drive B: is usually `Z80TESTS`.
 - This project's tools are on the disk too: see [Tools](tools/index.md)
   and [Moving files](moving-files.md).
 
+## The serial port
+
+The board's serial port is CP/M's reader and punch (RDR: and PUN:), at
+SET-UP's line settings and flow control:
+
+```
+A>PIP PUN:=REPORT.TXT
+A>PIP CAPTURE.TXT=RDR:
+```
+
+PIP reads from the reader until a ^Z (1Ah), so end what the other side
+sends with one. Sending to the punch, PIP adds 40 NULs (00h) of paper-tape
+leader before and after the file, and a ^Z at the end; CP/M 3's PIP
+does not. The printer (LST:) is not connected. The BIOS ignores the
+IOBYTE: RDR: and PUN: are always the serial port, CON: always the screen
+and keyboard.
+
 ## Time
 
 CP/M 2.2 has no clock commands, but programs can read the machine's clock

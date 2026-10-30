@@ -102,7 +102,10 @@ zero.
 
 ## Console and devices
 
-- Console on ports 00h/01h, the second serial port on 02h/03h.
+- Console on ports 00h/01h, the second serial port on 02h/03h: CP/M 2.2's
+  READER and PUNCH, CP/M 3's `TTY2` (AUX: from the cold boot; CON: and AUX:
+  go to every device their vector selects, so `DEVICE` can put the console
+  on both). Output waits while the port's TXBUSY bit is set.
 - The clock on ports 41h/42h (CP/M 3's TIME function reads and, here, writes
   it).
 - `BYE` and `RESET` style commands through [hardware control](ports.md#hardware-control-a0h).

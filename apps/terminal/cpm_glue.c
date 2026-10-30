@@ -37,6 +37,12 @@ static bool cpm_aux_in(uint8_t *c) {
 	return serial_read(c, 1) == 1;
 }
 
+// SIO2's transmitter ready: room in the TX queue (bd qtq). Without it a
+// Z80 writing faster than the baud rate (PIP PUN:, AUX:) lost bytes.
+static bool cpm_aux_out_ready(void) {
+	return serial_tx_room() > 0;
+}
+
 static uint8_t cpm_disk_read(unsigned drive, unsigned track, unsigned sector, uint8_t *buf) {
 	return drives_read(drive, track, sector, buf);
 }
@@ -87,6 +93,7 @@ const machine_platform_t cpm_platform = {
 	.console_out = cpm_console_out,
 	.aux_out = cpm_aux_out,
 	.aux_in = cpm_aux_in,
+	.aux_out_ready = cpm_aux_out_ready,
 	.disk_read = cpm_disk_read,
 	.disk_write = cpm_disk_write,
 	.disk_format = cpm_disk_format,

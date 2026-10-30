@@ -80,7 +80,23 @@ static void console_out(uint8_t c) {
 	}
 }
 
+unsigned host_aux_busy, host_aux_waits, host_aux_overruns;
+static unsigned aux_busy_left;
+
+static bool aux_out_ready(void) {
+	if (aux_busy_left) {
+		--aux_busy_left;
+		++host_aux_waits;
+		return false;
+	}
+	return true;
+}
+
 static void aux_out(uint8_t c) {
+	if (aux_busy_left) {
+		++host_aux_overruns;
+	}
+	aux_busy_left = host_aux_busy;
 	if (aux_len < sizeof aux_sent - 1) {
 		aux_sent[aux_len++] = (char)c;
 		aux_sent[aux_len] = '\0';
@@ -166,6 +182,7 @@ const machine_platform_t host_platform = {
 	.console_out = console_out,
 	.aux_out = aux_out,
 	.aux_in = aux_in,
+	.aux_out_ready = aux_out_ready,
 	.disk_read = disk_read,
 	.disk_write = disk_write,
 	.disk_format = disk_format,
