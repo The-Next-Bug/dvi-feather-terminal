@@ -31,10 +31,13 @@ blank card with; files already on the card are replaced only if you say so.
 | `CPM31` | 8" floppy | [CP/M 3](cpm3.md) (boots) |
 | `CPM32` | 8 MB | CP/M 3's tools, with this project's tools added |
 | `CPM3GEN` | 8" floppy | CP/M 3's BIOS sources and what builds `CPM3.SYS` |
+| `MPM1` | 8" floppy | [MP/M II](mpm.md) (boots) |
+| `MPM2` | 8 MB | MP/M II's tools, XIOS source and what builds `MPM.SYS`, with this project's tools added |
 | `F83` | 8 MB | [F83 Forth](f83.md) |
 
 It also writes two [drive sets](drives.md#drive-sets) when they are
-missing: `CPM22` (CPM22, Z80TESTS) and `CPM3` (CPM31, CPM32).
+missing: `CPM22` (CPM22, Z80TESTS), `CPM3` (CPM31, CPM32) and `MPM`
+(MPM1, MPM2).
 
 ## Formatting the card (F)
 

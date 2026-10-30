@@ -2,9 +2,15 @@
 #define TEST_H
 
 // Minimal test harness: CHECK records a failure and carries on; tests_done()
-// reports and returns the process exit code.
+// reports and returns the process exit code. TEST_ONLY (environment), a
+// comma-separated list, runs only the tests whose names contain one of its
+// words (TEST_ONLY=fat32,install,mpm ./test_machine: the ones the MP/M tests
+// need first, then those); later tests may depend on earlier ones.
 
+#include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static int test_failures;
 
@@ -24,10 +30,29 @@ static int test_failures;
 	} \
 } while (0)
 
+static inline bool test_wanted(const char *name) {
+	const char *only = getenv("TEST_ONLY");
+	if (!only || !*only) {
+		return true;
+	}
+	for (const char *w = only; *w;) {
+		size_t n = strcspn(w, ",");
+		for (const char *p = name; n && *p; ++p) {
+			if (strncmp(p, w, n) == 0) {
+				return true;
+			}
+		}
+		w += n + (w[n] == ',');
+	}
+	return false;
+}
+
 #define RUN(test) do { \
-	int before_ = test_failures; \
-	test(); \
-	printf("%s %s\n", test_failures == before_ ? "ok  " : "FAIL", #test); \
+	if (test_wanted(#test)) { \
+		int before_ = test_failures; \
+		test(); \
+		printf("%s %s\n", test_failures == before_ ? "ok  " : "FAIL", #test); \
+	} \
 } while (0)
 
 static inline int tests_done(void) {

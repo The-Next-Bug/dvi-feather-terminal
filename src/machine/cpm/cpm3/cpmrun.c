@@ -1,7 +1,8 @@
 // cpmrun: run CP/M on the Z80 machine (src/machine/machine.c) on the build host,
 // with plain 8" floppy images as the drives and a script at the console.
 // src/machine/cpm/cpm3/build.sh uses it to run RMAC, LINK and GENCPM, which make
-// CPM3.SYS; built there with the host C compiler.
+// CPM3.SYS, src/machine/cpm/mpm/build.sh M80, LINK and GENSYS (MPM.SYS);
+// built by the former with the host C compiler.
 //
 //   cpmrun SCRIPT A.DSK [B.DSK ...]
 //
@@ -10,6 +11,7 @@
 //
 //   > TEXT    wait for TEXT on the console, after the last wait's text
 //   < TEXT    type TEXT and a carriage return
+//   <         a carriage return alone (a program's default answer)
 //   ! TEXT    fail if TEXT shows up on the console from here on
 //   # ...     a comment (as are blank lines)
 //
@@ -199,6 +201,10 @@ int main(int argc, char **argv) {
 	while (fgets(line, sizeof line, script)) {
 		line[strcspn(line, "\r\n")] = '\0';
 		if (line[0] == '\0' || line[0] == '#') {
+			continue;
+		}
+		if (strcmp(line, "<") == 0) {
+			type_line("");
 			continue;
 		}
 		if (strlen(line) < 3 || line[1] != ' ') {

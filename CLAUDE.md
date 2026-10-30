@@ -768,6 +768,30 @@ UF2 in the latter).
   test_cpm3_drives, test_hd_guard (raw Z80 bytes in the ROM page, as
   test_xfer_port), test_mem_banks (15 banks in a host buffer: MEM, MEM T,
   the last pass's bytes).
+  MP/M II (bd l1j): picosim's disks built in as MPM1 (boots MP/M
+  itself: picosim's boot.asm + mpmldr.bin, MPMLDR with its LDRBIOS, on the
+  system tracks) and MPM2 (the work disk on an 8 MB disk, our tools
+  added); starter set MPM. src/machine/cpm/mpm/bnkxios.mac: picosim's XIOS
+  (M80, Z80) with drives A-H via port 8 (SELDSK logs in on E bit 0 clear:
+  MP/M's BDOS passes it); banked part (before COMMONBASE: SELDSK, DPHs,
+  ALV/CSV) and common part (from COMMONBASE, must be >= C000H: console,
+  SELMEMORY, interrupt handler, WAITIO, the FDC command block, DIRBF, the
+  DPBs). MP/M II's BDOS has no media-change return (0FFH = Bad Sector) and
+  never logs a drive in again by itself (not on a checksum mismatch either:
+  tried), so READ/WRITE fail while port 8's format or mount count differs
+  from the log-in's, until DSKRESET. mpm/build.sh OUTDIR BANKS (CPMRUN,
+  Z80ASM): M80, LINK [OS], GENSYS under picosim's mpm-1 CP/M 2.2 in
+  cpmrun (its "<" alone types a bare Return), GENSYS's answers scripted
+  (gensys.run: top page FE, FF00H is not free and FF hung before the
+  sign-on; 2 consoles; no dayfile; all five RSPs, HWCLOCK sets TOD from
+  65/66; segments: MP/M II has at most 8 with the system's, so PSRAM_BANKS
+  builds banks 1-7, others MACHINE_BANKS + bank 0 below the system, trimmed
+  by GENSYS, ~28 KB). diskimg.cmake picks MPM_BANKS; the host tests also
+  build mpm7 (MPM7_DIR). test_machine: test_boot_mpm, test_mpm_drives
+  (DSKRESET), test_mpm_consoles (aux_input: console 1, which starts in
+  user 1), test_mpm_sysgen (SYSGEN.SUB under MP/M), test_mpm_psram (15
+  host banks). test.h's TEST_ONLY (comma list of name parts) runs a
+  subset: TEST_ONLY=fat32,test_install,test_mount,boot_cpm22,mpm.
   Port 12 (ours, bd 1ls.9; protocol and item numbers in machine.h): the
   hardware information device. OUT selects an item, IN reads its bytes
   (0 after the end); machine.c answers item 0 ('H' 'W' version) and keeps
@@ -1004,7 +1028,8 @@ Feather with Adalogger, no PSRAM, 0x2007db2c, ~9.4 KB; Frankless
 - Flash (4 MB): image 0-0x7e108 (504 KB at v0.6.1; the 4 KB LZ window costs 32 KB;
   ~875 KB with the CP/M 3 disks, f8w.1: ~610 KB of compressed images in all;
   1.05 MB with F83, xdu: ~810 KB of images; 1.12 MB with the sound, bd
-  1ls.18: AYTEST, AYPLAY, its tunes, AY.BLK); free to 2 MB (image growth;
+  1ls.18: AYTEST, AYPLAY, its tunes, AY.BLK; 1.52 MB with MP/M II, bd
+  l1j: MPM1 180 KB + MPM2 155 KB compressed, ~1.19 MB of images); free to 2 MB (image growth;
   fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used
   only during an update, up to the new image's length); settings
   0x3fd000-0x3fefff; last sector left blank (E10). New persistent storage

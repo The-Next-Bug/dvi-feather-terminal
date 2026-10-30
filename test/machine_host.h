@@ -3,7 +3,7 @@
 
 // The Z80 machine on the host for the tests: the console captured in a
 // buffer (optionally echoed to stdout), disks through drives.c on the FatFs
-// RAM volume (diskio_ram.c), no serial input.
+// RAM volume (diskio_ram.c), the second serial port from aux_input.
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -31,9 +31,14 @@ extern unsigned host_hwinfo_extra;
 // When set, every console byte also goes here (e.g. to a terminal, whose
 // replies the test types back with machine_key).
 extern void (*host_console_hook)(uint8_t c);
-// What the CPU sent to the second serial port (the first 256 bytes).
-extern char aux_sent[256];
+// What the CPU sent to the second serial port (the first HOST_AUX_SIZE - 1
+// bytes since aux_len was last zeroed; NUL-terminated).
+#define HOST_AUX_SIZE 8192
+extern char aux_sent[HOST_AUX_SIZE];
 extern size_t aux_len;
+// Bytes the second serial port receives, one each time the CPU asks, from
+// here until the NUL (MP/M's second console; NULL: none).
+extern const char *aux_input;
 
 // The wall clock (machine.h time_get/time_set): seconds since 31.12.1977
 // are (host_time_offset_us + host_clock_us()) / 1000000; starts at

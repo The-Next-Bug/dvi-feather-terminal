@@ -201,6 +201,7 @@ static const struct {
 } starter_sets[] = {
 	{"CPM22", "CPM22", "Z80TESTS"},
 	{"CPM3", "CPM31", "CPM32"},
+	{"MPM", "MPM1", "MPM2"},
 };
 
 static void install_sets(void) {
