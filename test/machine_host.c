@@ -16,7 +16,8 @@ bool host_echo;
 const char *host_cpr_reply;
 unsigned host_hwinfo_extra;
 void (*host_console_hook)(uint8_t c);
-char aux_sent[256];
+char aux_sent[HOST_AUX_SIZE];
+const char *aux_input;
 size_t aux_len;
 ay8910_t host_ay;
 uint8_t host_ay_log[HOST_AY_LOG][2];
@@ -80,14 +81,18 @@ static void console_out(uint8_t c) {
 }
 
 static void aux_out(uint8_t c) {
-	if (aux_len < sizeof aux_sent) {
+	if (aux_len < sizeof aux_sent - 1) {
 		aux_sent[aux_len++] = (char)c;
+		aux_sent[aux_len] = '\0';
 	}
 }
 
 static bool aux_in(uint8_t *c) {
-	(void)c;
-	return false;
+	if (!aux_input || !*aux_input) {
+		return false;
+	}
+	*c = (uint8_t)*aux_input++;
+	return true;
 }
 
 static uint8_t disk_read(unsigned drive, unsigned track, unsigned sector, uint8_t *buf) {

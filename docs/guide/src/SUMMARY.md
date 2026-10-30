@@ -29,6 +29,7 @@
 - [Drives and disk images](cpm/drives.md)
 - [CP/M 2.2](cpm/cpm22.md)
 - [CP/M 3](cpm/cpm3.md)
+- [MP/M II](cpm/mpm.md)
 - [Other systems](cpm/other-systems.md)
 - [Moving files](cpm/moving-files.md)
 - [Tools](cpm/tools/index.md)

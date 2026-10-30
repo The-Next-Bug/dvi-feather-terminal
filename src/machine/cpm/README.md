@@ -62,9 +62,9 @@ changing a disk type `^C` at the prompt.
 
 cpmtools definitions for them are in `docs/cpmtools-diskdefs`.
 
-The MP/M II images z80pack ships keep their own BIOS: four floppy drives,
+The MP/M II images z80pack ships keep their own XIOS: four floppy drives,
 A-D, which never asks port 8, so the machine refuses it hard-disk images
-(`machine.h`). On `CPM22` itself, `BIOS.ASM`, `MOVCPM.COM` and
+(`machine.h`); the built-in `MPM1` has ours (below). On `CPM22` itself, `BIOS.ASM`, `MOVCPM.COM` and
 `SYSGEN64.SUB` are still picosim's 64K four-drive system: running them would
 replace this one.
 
@@ -105,3 +105,40 @@ default, A:, B:; COM before SUB; temporary files on B:; bd f8w.9).
 
 `diskimg_gen.py --edit IMAGE` changes a raw image in place (`--delete`,
 `--file`, `--extract`), for the work disks.
+
+## MP/M II (`mpm/`)
+
+picosim's MP/M II disks are built in as `MPM1` (boot disk) and `MPM2`
+(picosim's work disk, converted to an 8 MB disk with our tools added; bd
+l1j). Both are made by `mpm/build.sh`:
+
+- `mpm/bnkxios.mac`: picosim's banked XIOS (Z80, M80) with eight drives,
+  A-H, of any of the formats above. The banked part (before COMMONBASE,
+  bank 0 only, the banked BDOS's) has SELDSK, which asks port 8 at a log-in
+  (E bit 0 clear, as MP/M's BDOS passes it) and puts that format's DPB and
+  skew in the drive's DPH, the DPHs and the allocation and checksum vectors
+  (as large as any format needs). The common part (from COMMONBASE, above
+  C000H) has what runs with a user's bank selected: the console, memory
+  and clock entries, the interrupt handler, the disk I/O itself (the
+  controller reads the command block and moves the data in the user's
+  bank), the command block, the directory buffer and the DPBs (BDOS
+  function 31). MP/M II's BDOS has no media change return and logs a drive
+  in again only on a reset (`DSKRESET`), so READ and WRITE fail while port
+  8's format or mount count differs from the log-in's. Console 1's output
+  status tests bit 7, as console 0's (picosim's tested bit 1, never set).
+- `mpm/build.sh` (from `src/disks/diskimg.cmake`, with `cpm3/`'s cpmrun):
+  boots picosim's `mpm-1.dsk` (CP/M 2.2) with a copy of `mpm-2.dsk`
+  holding our XIOS on B: and types picosim's `SYSGEN.SUB` steps (M80, LINK
+  `[OS]`) and GENSYS's answers (`gensys.run`, written by the script): top
+  page FE (FF00H is not free), two consoles, no dayfile, every RSP
+  (HWCLOCK sets the time of day from ports 65/66), and the memory segments
+  for BANKS: 7 on PSRAM_BANKS builds (banks 1-7: MP/M II has eight
+  segments, the system's counted), MACHINE_BANKS on the others plus bank 0
+  below the system (GENSYS trims it). M80's fatal errors, LINK's
+  undefined symbols, GENSYS's entry errors or an XIOS common part below
+  C000H fail the build. `MPM1` is `mpm-1.dsk` with this `MPM.SYS` and,
+  on the system tracks as picosim's `putsys.c` writes them, picosim's
+  `boot.asm` and `mpmldr.bin` (MPMLDR with its LDRBIOS), so it boots MP/M
+  without CP/M 2.2. The work disk (with `SYSTEM.DAT`, so `SYSGEN.SUB`'s
+  `GENSYS $$A` makes the same system on the machine) becomes `MPM2`. The
+  host tests build both layouts (`mpm/` for 2 banks, `mpm7/`).

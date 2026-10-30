@@ -24,8 +24,8 @@ tracks on every warm boot.
 
 The assignments are kept in `/DISKS80/DRIVES.CFG`. CP/M 2.2 sees a changed
 drive after a warm boot, so type **^C** at the prompt afterwards (as after
-swapping floppies); CP/M 3 sees it at once. Don't change a drive a program
-is using.
+swapping floppies); CP/M 3 sees it at once; under MP/M II type `DSKRESET`.
+Don't change a drive a program is using.
 
 ## The Drives panel
 

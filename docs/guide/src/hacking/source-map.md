@@ -15,7 +15,7 @@ it) or RP2350-only.
 | `src/render` | portable | `raster` (cells to pixels), `splash` (the logo); `font_gen.py`, `logo_gen.py` | [Displays](../start/displays.md), [How it works](how-it-works.md) |
 | `src/input` | portable | `keyboard` (keys to codes), `keyname`, `blank` | [Keyboard](../terminal/keyboard.md), [Keys sent](../reference/keys.md) |
 | `src/settings` | portable | `settings` (the records, the fields), `uf2` (firmware file checks) | [SET-UP](../terminal/setup.md), [Firmware updates](../terminal/firmware-update.md) |
-| `src/machine` | portable | `machine` (the Z80 machine on z80pack's core); `cpm/` (the BIOSes and the CP/M tools, in assembler), `cpm/cpm3/`, `cpm/f83/`, `cpm/tunes/` | [The Z80 CP/M machine](../cpm/overview.md), [Z80 I/O ports](../reference/ports.md) |
+| `src/machine` | portable | `machine` (the Z80 machine on z80pack's core); `cpm/` (the BIOSes and the CP/M tools, in assembler), `cpm/cpm3/`, `cpm/mpm/`, `cpm/f83/`, `cpm/tunes/` | [The Z80 CP/M machine](../cpm/overview.md), [MP/M II](../cpm/mpm.md), [Z80 I/O ports](../reference/ports.md) |
 | `src/sound` | portable | `ay8910`, `mixer`, `tune` | [Bell and sound](../terminal/sound.md) |
 | `src/disks` | portable | `drives`, `drivecfg` (images, DRIVES.CFG, sets), `diskimg` (the built-in disks), `xfer` (port 0Ah), `usbvol`, `sdformat` | [Drives](../cpm/drives.md), [Moving files](../cpm/moving-files.md), [File transfer](../reference/xfer.md) |
 | `src/ui` | portable | `setup`, `clockpanel`, `drivepanel`, `fwpanel`, `monitor`, `demo` | [SET-UP](../terminal/setup.md), [The monitor](../cpm/monitor.md) |

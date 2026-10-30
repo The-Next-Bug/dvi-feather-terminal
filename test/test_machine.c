@@ -24,7 +24,7 @@
 #include "term.h"
 #include "test.h"
 
-#define VOLUME_SECTORS (40u * 1024 * 1024 / 512) // FAT32 needs 65525+ clusters
+#define VOLUME_SECTORS (64u * 1024 * 1024 / 512) // FAT32 needs 65525+ clusters
 
 static FATFS fs;
 static uint8_t window[LZ_WINDOW];
@@ -218,9 +218,9 @@ static drivepanel_action_t panel_keys(drivepanel_t *p, const char *keys) {
 static void test_drive_panel(void) {
 	static drivepanel_t p;
 	drivepanel_open(&p);
-	// On the card: CPM22 CPM31 CPM32 CPM3GEN EMPTY F83 HD4 HD8 SHORT
-	// Z80TESTS (sorted).
-	CHECK_EQ(p.n_images, 10);
+	// On the card: CPM22 CPM31 CPM32 CPM3GEN EMPTY F83 HD4 HD8 MPM1 MPM2
+	// SHORT Z80TESTS (sorted).
+	CHECK_EQ(p.n_images, 12);
 	CHECK(strcmp(p.images[p.choice[0]], "CPM22") == 0);
 	CHECK(strcmp(p.images[p.choice[4]], "HD8") == 0);
 	CHECK_EQ(p.choice[2], -1);
@@ -240,15 +240,17 @@ static void test_drive_panel(void) {
 	CHECK_EQ(p.drive, 2);
 	CHECK_EQ(panel_keys(&p, " "), DRIVEPANEL_REDRAW);
 	CHECK(p.choice[2] >= 0 && strcmp(p.images[p.choice[2]], "CPM31") == 0);
-	// B: Z80TESTS -> back one: SHORT; back again skips HD8 (E) and HD4
-	// (F): F83, then EMPTY. Forward three times: Z80TESTS.
+	// B: Z80TESTS -> back one: SHORT, then MPM2, MPM1; back again skips
+	// HD8 (E) and HD4 (F): F83, then EMPTY. Forward five times: Z80TESTS.
 	CHECK_EQ(panel_keys(&p, "\x1b[A\x1b[D"), DRIVEPANEL_REDRAW);
 	CHECK(strcmp(p.images[p.choice[1]], "SHORT") == 0);
+	CHECK_EQ(panel_keys(&p, "\x1b[D\x1b[D"), DRIVEPANEL_REDRAW);
+	CHECK(p.choice[1] >= 0 && strcmp(p.images[p.choice[1]], "MPM1") == 0);
 	CHECK_EQ(panel_keys(&p, "\x1b[D"), DRIVEPANEL_REDRAW);
 	CHECK(p.choice[1] >= 0 && strcmp(p.images[p.choice[1]], "F83") == 0);
 	CHECK_EQ(panel_keys(&p, "\x1b[D"), DRIVEPANEL_REDRAW);
 	CHECK(p.choice[1] >= 0 && strcmp(p.images[p.choice[1]], "EMPTY") == 0);
-	CHECK_EQ(panel_keys(&p, "\x1b[C\x1b[C\x1b[C"), DRIVEPANEL_REDRAW);
+	CHECK_EQ(panel_keys(&p, "\x1b[C\x1b[C\x1b[C\x1b[C\x1b[C"), DRIVEPANEL_REDRAW);
 	CHECK(p.choice[1] >= 0 && strcmp(p.images[p.choice[1]], "Z80TESTS") == 0);
 
 	CHECK_EQ(panel_keys(&p, "\r"), DRIVEPANEL_APPLY);
@@ -265,7 +267,7 @@ static void test_drive_panel(void) {
 	// A bad image fails to mount.
 	drivepanel_open(&p);
 	p.drive = 7;
-	p.choice[7] = 8; // SHORT
+	p.choice[7] = 10; // SHORT
 	CHECK_EQ(drivepanel_apply(&p, &failed), 1);
 	CHECK(failed);
 	CHECK(drives_name(7) == NULL);
@@ -505,7 +507,7 @@ static void console_text(const char *text) {
 }
 
 static const char *card_info(void) {
-	return "RAM, 40 MB";
+	return "RAM, 64 MB";
 }
 
 static unsigned flushes;
@@ -582,13 +584,13 @@ static void test_monitor_format(void) {
 	clear_screen();
 	machine_init(&host_platform);
 	monitor_start(&monitor_platform, false, 0);
-	CHECK(strstr(screen, "RAM, 40 MB, no FAT file system (error 13): F formats it") != NULL);
+	CHECK(strstr(screen, "RAM, 64 MB, no FAT file system (error 13): F formats it") != NULL);
 	CHECK(strstr(screen, "F       format the SD card (erases it)") != NULL);
 	CHECK(menu_shown());
 
 	clear_screen();
 	CHECK_EQ(keys("f"), MONITOR_NONE);
-	CHECK(strstr(screen, "Format the SD card (RAM, 40 MB) as FAT12/16?") != NULL);
+	CHECK(strstr(screen, "Format the SD card (RAM, 64 MB) as FAT12/16?") != NULL);
 	CHECK(strstr(screen, "Type FORMAT and Return") != NULL);
 	CHECK_EQ(keys("forma\r"), MONITOR_NONE);
 	CHECK(strstr(screen, "Not formatted.") != NULL);
@@ -613,7 +615,7 @@ static void test_monitor_format(void) {
 	CHECK(strstr(screen, "FORMAT\r\nFormatting (a large card takes a while)... done\r\n") != NULL);
 	CHECK(flushes >= 1);
 	CHECK(strstr(screen, "I installs the built-in disks.") != NULL);
-	CHECK(strstr(screen, "SD card:  RAM, 40 MB, FAT16") != NULL);
+	CHECK(strstr(screen, "SD card:  RAM, 64 MB, FAT16") != NULL);
 	CHECK(menu_shown());
 
 	// Formatted again with disks on it: they are gone, and so is drive A.
@@ -639,7 +641,7 @@ static void test_monitor_fresh_card(void) {
 	clear_screen();
 	machine_init(&host_platform);
 	monitor_start(&monitor_platform, true, 0);
-	CHECK(strstr(screen, "RAM, 40 MB, FAT32") != NULL);
+	CHECK(strstr(screen, "RAM, 64 MB, FAT32") != NULL);
 	CHECK(strstr(screen, "No boot disk") != NULL);
 	CHECK_EQ(monitor_tick(MONITOR_AUTOBOOT_MS), MONITOR_NONE); // nothing to boot
 
@@ -655,6 +657,9 @@ static void test_monitor_fresh_card(void) {
 	CHECK(strcmp(images[0], "CPM31") == 0 && strcmp(images[1], "CPM32") == 0 && images[2][0] == '\0');
 	CHECK(drives_set_read("CPM22", images));
 	CHECK(strcmp(images[0], "CPM22") == 0 && strcmp(images[1], "Z80TESTS") == 0);
+	CHECK(strstr(screen, "Set MPM   written") != NULL);
+	CHECK(drives_set_read("MPM", images));
+	CHECK(strcmp(images[0], "MPM1") == 0 && strcmp(images[1], "MPM2") == 0 && images[2][0] == '\0');
 	CHECK(strstr(screen, "A: CPM22") != NULL);
 	CHECK(strstr(screen, "B: Z80TESTS") != NULL);
 
@@ -2109,6 +2114,229 @@ static void test_mem_banks(void) {
 	drives_unmount_all();
 }
 
+// ---- MP/M II (picosim's with our XIOS: MPM1, MPM2; bd l1j) ----
+
+// MP/M's prompt has the user number in front of the drive: 0A>.
+static bool mpm(const char *line, const char *want) {
+	clear_screen();
+	CHECK(type(line));
+	CHECK(type("\r"));
+	CHECK_EQ(run_until("\r\n0A>", 30), MACHINE_RUNNING);
+	bool found = strstr(screen, want) != NULL;
+	if (!found) {
+		fprintf(stderr, "%s: no \"%s\" in:\n%s\n", line, want, screen);
+	}
+	return found;
+}
+
+// MPM1 boots MP/M itself: the boot loader loads MPMLDR from the system
+// tracks, which loads MPM.SYS.
+static void mpm_boot(void) {
+	clear_screen();
+	machine_reset();
+	CHECK_EQ(run_until("\r\n0A>", 30), MACHINE_RUNNING);
+}
+
+// Console 1 (the second serial port): type line there and run until want
+// shows on it.
+static bool mpm_aux(const char *line, const char *want) {
+	aux_len = 0;
+	aux_sent[0] = '\0';
+	aux_input = line;
+	for (int i = 0; i < 300 && !strstr(aux_sent, want); ++i) {
+		machine_run(10000);
+	}
+	bool found = strstr(aux_sent, want) != NULL;
+	if (!found) {
+		fprintf(stderr, "console 1, %s: no \"%s\" in:\n%s\n", line, want, aux_sent);
+	}
+	return found;
+}
+
+// The build's MPM.SYS is made for this machine's two banks (the SRAM
+// boards'): banks 1 and 2 and bank 0 below the system, never a bank 3
+// (the machine would stop). Our tools run from MPM2, an 8 MB disk.
+static void test_boot_mpm(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("MPM1"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("MPM2"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "MPM1"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "MPM2"), DRIVES_OK);
+	// 22.10.2026 13:45: HWCLOCK sets MP/M's time of day from the clock.
+	host_time_offset_us = (17827ull * DATETIME_DAY + 13 * 3600 + 45 * 60) * 1000000u - host_clock_us();
+	mpm_boot();
+	CHECK(strstr(screen, "MP/M II V2.0 Loader") != NULL);
+	CHECK(strstr(screen, "Nmb of consoles     =  2") != NULL);
+	CHECK(strstr(screen, "Memseg  Usr  0000H  C000H  Bank 1") != NULL);
+	CHECK(strstr(screen, "Memseg  Usr  0000H  C000H  Bank 2") != NULL);
+	CHECK(strstr(screen, "Bank 3") == NULL);
+	CHECK(strstr(screen, "dvi-feather-terminal: drives A-H") != NULL);
+	CHECK(strstr(screen, "MP/M II V2.0\r\n") != NULL);
+	CHECK(mpm("TOD", "Thu 10/22/26 13:4"));
+	CHECK(mpm("MPMSTAT", "Number of consoles = 02"));
+	CHECK(strstr(screen, "Bank = 02H  * Free *") != NULL);
+	CHECK(strstr(screen, "Bank = 03H") == NULL);
+	CHECK(strstr(screen, "HWClock") != NULL);
+	CHECK(mpm("DIR B:XLS.COM", "XLS      COM"));
+	CHECK(mpm("STAT B:DSK:", "8,160: Kilobyte Drive  Capacity"));
+	CHECK(mpm("B:HWINFO", "Real-time clock"));
+	CHECK(mpm("B:MEM", "MP/M"));
+	CHECK(mpm("B:MEM T", "MEM T: not under MP/M"));
+	// The work disk: our XIOS's source and what GENSYS made from it.
+	CHECK(mpm("DIR B:BNKXIOS.*", "BNKXIOS  MAC : BNKXIOS  SPR"));
+	CHECK(mpm("DIR B:SYSTEM.DAT", "SYSTEM   DAT"));
+	drives_unmount_all();
+}
+
+// Our XIOS (src/machine/cpm/mpm, bd l1j.2): drives A-H, each of the
+// formats port 8 reports, another image noticed while MP/M runs.
+static void test_mpm_drives(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("EMPTY"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("Z80TESTS"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_create("MPHD8", DRIVES_HD8, window, sizeof window, NULL, NULL), DRIVES_OK);
+	CHECK_EQ(drives_create("MPHD4", DRIVES_HD4, window, sizeof window, NULL, NULL), DRIVES_OK);
+	CHECK_EQ(drives_mount(0, "MPM1"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "MPM2"), DRIVES_OK);
+	CHECK_EQ(drives_mount(4, "MPHD8"), DRIVES_OK);
+	CHECK_EQ(drives_mount(5, "MPHD4"), DRIVES_OK);
+	CHECK_EQ(drives_mount(7, "EMPTY"), DRIVES_OK);
+	mpm_boot();
+	CHECK(mpm("STAT E:DSK:", "8,160: Kilobyte Drive  Capacity"));
+	CHECK(mpm("STAT F:DSK:", "4,080: Kilobyte Drive  Capacity"));
+	CHECK(mpm("STAT H:DSK:", "  243: Kilobyte Drive  Capacity"));
+	CHECK(mpm("PIP E:MYXLS.COM=B:XLS.COM[V]", ""));
+	CHECK(mpm("PIP F:=E:MYXLS.COM[V]", ""));
+	CHECK(mpm("PIP H:=F:MYXLS.COM[V]", ""));
+	CHECK(mpm("DIR H:MYXLS.COM", "MYXLS    COM"));
+	CHECK(strstr(screen, "Verify") == NULL);
+	CHECK(mpm("E:MYXLS NOSUCH.*", "No files"));
+	// G: has nothing mounted: a select error.
+	CHECK(mpm("DIR G:", "Select"));
+	// Another image on F: while MP/M runs, of another format: an error
+	// until DSKRESET logs the drive in again (MP/M's ^C of CP/M 2.2).
+	CHECK_EQ(drives_mount(5, "Z80TESTS"), DRIVES_OK);
+	CHECK(mpm("DIR F:", "Bdos Err On F: Bad Sector"));
+	CHECK(mpm("DSKRESET F:", ""));
+	CHECK(mpm("DIR F:TERMTEST.COM", "TERMTEST COM"));
+	CHECK_EQ(drives_mount(5, "MPHD4"), DRIVES_OK);
+	CHECK(mpm("DSKRESET F:", ""));
+	CHECK(mpm("DIR F:MYXLS.COM", "MYXLS    COM"));
+	CHECK(mpm("F:MYXLS NOSUCH.*", "No files")); // still XLS
+	// Another image of the same format on H:, a file written to it, and
+	// the first one back: its file is still there, the other's not (the
+	// BDOS must not write by the first one's allocation). Writing before
+	// DSKRESET fails too.
+	CHECK_EQ(drives_create("MPFDB", DRIVES_FLOPPY, window, sizeof window, NULL, NULL), DRIVES_OK);
+	CHECK_EQ(drives_mount(7, "MPFDB"), DRIVES_OK);
+	CHECK(mpm("PIP H:OTHER.COM=B:XLS.COM", "NONRECOVERABLE"));
+	CHECK(mpm("DSKRESET H:", ""));
+	CHECK(mpm("DIR H:", "File not found"));
+	CHECK(mpm("PIP H:OTHER.COM=B:XLS.COM", ""));
+	CHECK(mpm("DIR H:", "H: OTHER    COM"));
+	CHECK_EQ(drives_mount(7, "EMPTY"), DRIVES_OK);
+	CHECK(mpm("DSKRESET H:", ""));
+	CHECK(mpm("DIR H:", "H: MYXLS    COM"));
+	CHECK(strstr(screen, "OTHER") == NULL);
+	CHECK_EQ(drives_mount(7, "MPFDB"), DRIVES_OK);
+	CHECK(mpm("DSKRESET H:", ""));
+	CHECK(mpm("DIR H:", "H: OTHER    COM"));
+	CHECK(strstr(screen, "MYXLS") == NULL);
+	// CP/M 2.2 reads the hard disks MP/M wrote.
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	clear_screen();
+	machine_reset();
+	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
+	CHECK(cpm("DIR E:", "E: MYXLS    COM"));
+	CHECK(cpm("DIR F:", "F: MYXLS    COM"));
+	drives_unmount_all();
+	CHECK_EQ(f_unlink("/DISKS80/MPHD8.DSK"), FR_OK);
+	CHECK_EQ(f_unlink("/DISKS80/MPFDB.DSK"), FR_OK);
+	CHECK_EQ(f_unlink("/DISKS80/MPHD4.DSK"), FR_OK);
+}
+
+// MPM2's SYSGEN.SUB under MP/M itself: M80, LINK and GENSYS $$A (the
+// build's SYSTEM.DAT answers) make MPM.SYS again, which goes to A: and
+// boots.
+static void test_mpm_sysgen(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("MPM1"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("MPM2"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(drives_mount(0, "MPM1"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "MPM2"), DRIVES_OK);
+	mpm_boot();
+	clear_screen();
+	CHECK(type("SUBMIT B:SYSGEN\r"));
+	CHECK_EQ(run_until("GENSYS DONE", 120), MACHINE_RUNNING);
+	CHECK_EQ(run_until("\r\n0A>", 60), MACHINE_RUNNING);
+	CHECK(strstr(screen, "No Fatal error(s)") != NULL);
+	CHECK(strstr(screen, "Memseg  Usr  0000H  C000H  Bank 02") != NULL); // GENSYS's two digits
+	CHECK(mpm("DIR A:MPM.SYS", "MPM      SYS"));
+	mpm_boot();
+	CHECK(strstr(screen, "dvi-feather-terminal: drives A-H") != NULL);
+	CHECK(mpm("STAT B:DSK:", "8,160: Kilobyte Drive  Capacity"));
+	drives_unmount_all();
+}
+
+// Programs on both consoles at once, each in its own memory segment:
+// console 1's PIP waits for a line while console 0 lists the memory.
+// Console 1 starts in user 1 (MP/M's prompt is the user number and the
+// drive).
+static void mpm_both_consoles(const char *pip_bank) {
+	CHECK(mpm_aux("\r", "1A>"));
+	CHECK(mpm_aux("PIP\r", "*"));
+	CHECK(mpm("MPMSTAT", "Allocated to PIP"));
+	if (!strstr(screen, pip_bank)) {
+		fprintf(stderr, "no \"%s\" in:\n%s\n", pip_bank, screen);
+		CHECK(false);
+	}
+	CHECK(mpm_aux("\r", "1A>"));
+	CHECK(mpm_aux("USER 0\r", "0A>"));
+	CHECK(mpm_aux("B:XLS NOSUCH.*\r", "No files"));
+	aux_input = NULL;
+}
+
+static void test_mpm_consoles(void) {
+	drives_unmount_all();
+	CHECK_EQ(drives_mount(0, "MPM1"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "MPM2"), DRIVES_OK);
+	mpm_boot();
+	mpm_both_consoles("Bank = 00H  Allocated to PIP"); // the smallest that fits
+	drives_unmount_all();
+}
+
+// The PSRAM boards' MPM.SYS (mpm7, made by the host tests' build only):
+// seven user segments of 48 KB on a machine with 15 banks.
+static void test_mpm_psram(void) {
+	static uint8_t psram[MACHINE_MAX_BANKS * MACHINE_BANK_SIZE];
+	static uint8_t image[256256];
+	FILE *f = fopen(MPM7_DIR "/mpm1.dsk", "rb");
+	CHECK(f != NULL);
+	if (!f) {
+		return;
+	}
+	size_t len = fread(image, 1, sizeof image, f);
+	fclose(f);
+	CHECK_EQ(len, sizeof image);
+	drives_unmount_all();
+	put_fat_file("/DISKS80/MPM1P.DSK", image, sizeof image);
+	CHECK_EQ(drives_mount(0, "MPM1P"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "MPM2"), DRIVES_OK);
+	machine_set_banks(psram, MACHINE_MAX_BANKS);
+	machine_init(&host_platform);
+	mpm_boot();
+	CHECK(strstr(screen, "Memseg  Usr  0000H  C000H  Bank 7") != NULL);
+	CHECK(strstr(screen, "Bank 0\r\n") != NULL); // the system's only
+	CHECK(mpm("MPMSTAT", "Bank = 07H  * Free *"));
+	mpm_both_consoles("Bank = 07H  Allocated to PIP"); // the last free one
+	CHECK(mpm("B:MEM", "banks 1-15 48K each"));
+	machine_set_banks(NULL, 0);
+	machine_init(&host_platform);
+	CHECK_EQ(machine_banks(), 2);
+	drives_unmount_all();
+	CHECK_EQ(f_unlink("/DISKS80/MPM1P.DSK"), FR_OK);
+}
+
 // The RAM disk (bd 1ls.20): memory given as the largest format that fits,
 // listed and mounted as RAMDISK in place of a card image of that name,
 // blank at first, kept over unmounts; CP/M 2.2 writes a file to it.
@@ -2891,6 +3119,11 @@ int main(void) {
 	RUN(test_cpm3_drives);
 	RUN(test_hd_guard);
 	RUN(test_mem_banks);
+	RUN(test_boot_mpm);
+	RUN(test_mpm_drives);
+	RUN(test_mpm_consoles);
+	RUN(test_mpm_sysgen);
+	RUN(test_mpm_psram);
 	RUN(test_ramdisk);
 	RUN(test_termtest);
 	RUN(test_altscr);

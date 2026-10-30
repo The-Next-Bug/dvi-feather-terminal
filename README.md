@@ -515,16 +515,27 @@ instead of reading a hard disk as a floppy and writing over it).
   (`DATE`). `CPM3GEN` holds the BIOS sources and `GENCPM.DAT`, `GENCPM`,
   and the RELs, SPRs and `CPM3.SYS` the firmware's build made from them
   (`SYSGEN.SUB` lists the steps; `RMAC` and `LINK` are on `CPM32`).
-- **MP/M II** (copy `mpm-1.dsk` and `mpm-2.dsk` from z80pack's
-  [`picosim/disks`](https://github.com/udo-munk/z80pack/tree/master/picosim/disks)
-  into `/DISKS80`): `mpm-1.dsk` (boots) and `mpm-2.dsk`. Its `MPM.SYS` is
-  generated for picosim's six user banks, but this machine has two
-  (`MACHINE_BANKS`), and the machine stops (`MMU: no bank 3`) when MP/M
-  selects a bank it does not have. Regenerate `MPM.SYS` for two banks with
-  `GENSYS` from `mpm-2.dsk` first. The `feather-rp2350-hstx-psram` build
-  has 15 banks, enough for picosim's `MPM.SYS` as it is (not tried yet).
+- **MP/M II** (built in): mount `MPM1` on A: and `MPM2` on B: in the
+  monitor (or pick the `MPM` drive set) and boot; MP/M starts straight
+  away (`MPM1` has its loader on the system tracks) with a `0A>` prompt.
+  Two consoles: the screen and keyboard, and the serial port (press
+  Return on a terminal there for `1A>`: it starts in user 1, `USER 0`
+  for user 0's files), each running programs at the same time. Its XIOS is ours (`src/machine/cpm/mpm/bnkxios.mac`, from
+  picosim's): drives A-H of any format; after mounting another image
+  while MP/M runs, type `DSKRESET` (until then that drive gives
+  `Bad Sector`). `MPM.SYS` is made for the board's banks when the firmware
+  is built (M80, LINK and GENSYS on the Z80 machine,
+  `src/machine/cpm/mpm/build.sh`): seven 48 KB user memory segments on
+  the PSRAM boards (MP/M II's most), banks 1 and 2 and bank 0 below the
+  system (about 28 KB) on the others. `MPM2` (8 MB) is picosim's work
+  disk with our tools added (run them as `B:HWINFO`, ...) and the XIOS
+  source, `SYSTEM.DAT` and `SYSGEN.SUB` to make `MPM.SYS` again. HWCLOCK
+  sets MP/M's time of day from the clock (`TOD`).
 
-MP/M II has not been tested on this board yet.
+  picosim's own `mpm-1.dsk` and `mpm-2.dsk` boot CP/M 2.2, from which
+  `MPMLDR` starts its MP/M, with four floppy drives and six user banks:
+  on a board without PSRAM, the machine stops (`MMU: no bank 3`) when
+  that MP/M selects a bank it does not have.
 
 ### Forth (F83)
 
@@ -895,9 +906,10 @@ A after 3 seconds (any key stops that), or shows its menu:
   `CPUTEST` diagnostics; `PRELIM` needs an emulator that runs block moves
   in one go, as z80pack's cpmsim does, and wrecks CP/M here: reset after
   it), `EMPTY` (a blank disk), CP/M 3's `CPM31` (boots), `CPM32` and
-  `CPM3GEN` (see [Other operating systems](#other-operating-systems)), and
+  `CPM3GEN`, MP/M II's `MPM1` (boots) and `MPM2` (see
+  [Other operating systems](#other-operating-systems)), and
   `F83` ([Forth](#forth-f83)).
-  They are kept compressed in flash (about 810 KB) to start a blank card
+  They are kept compressed in flash (about 1.2 MB) to start a blank card
   with; existing files are only replaced if
   you say so.
 - **F**: format the SD card, for a new card or one the monitor cannot
@@ -929,7 +941,7 @@ keys:
   changes it (Up/Down a drive, Left/Right or Space a disk image from the
   card, Return mounts and saves). CP/M 2.2 sees a changed drive after a
   warm boot, so type **^C** at the prompt afterwards (as after swapping
-  floppies); CP/M 3 sees it at once. Don't change a drive a program is
+  floppies); CP/M 3 sees it at once; under MP/M II type `DSKRESET`. Don't change a drive a program is
   using.
 
   **Drive sets**: the Set row above A: steps through named sets of disks
@@ -951,7 +963,8 @@ keys:
   says how many). The monitor knows only what is mounted now.
 
   The monitor's install (**I**) writes two to start with, if they are
-  missing: `CPM22` (CPM22, Z80TESTS) and `CPM3` (CPM31, CPM32); after
+  missing: `CPM22` (CPM22, Z80TESTS), `CPM3` (CPM31, CPM32) and `MPM`
+  (MPM1, MPM2); after
   that they are yours to change or remove.
 
   **RAM disk** (boards with PSRAM: `frankless`, `feather-rp2350-hstx-psram`
@@ -990,7 +1003,7 @@ The machine is picosim's:
 | 5/6 | printer (none) |
 | 8 | the disk in a drive, for our BIOSes (ours, not picosim's): OUT the drive, IN its format (0 none, 1 8" floppy, 2 4 MB, 3 8 MB), IN again the count of images mounted on it. A hard-disk image is refused to a system that has not asked about its drive since the reset |
 | 10 | file transfer: files in the `/XFER` folder of the SD card or a USB stick, a 128-byte record at a time by DMA, for `XLS`, `XPIP` and `XERA` (ours; `src/machine/machine.h` has the commands) |
-| 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II uses as many as it was generated for, see [Other operating systems](#other-operating-systems)), or with `PSRAM_BANKS` up to 15 in the PSRAM; reads the number of banks in the high nibble (so 15 at most) and the selected one in the low |
+| 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II's `MPM.SYS` is made for them, see [Other operating systems](#other-operating-systems)), or with `PSRAM_BANKS` up to 15 in the PSRAM; reads the number of banks in the high nibble (so 15 at most) and the selected one in the low |
 | 65/66 | clock: the board's real-time clock, or without one 1 Jan 2026 at power-on; writing it is ours (CP/M 3's `DATE SET`), see [The clock](#the-clock) |
 | 12 | hardware information, for `HWINFO` (ours; see [HWINFO](#hwinfo)) |
 | 67 | 60 Hz timer interrupt |
