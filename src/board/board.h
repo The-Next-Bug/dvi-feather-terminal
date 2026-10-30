@@ -188,18 +188,11 @@
 #define BOARD_I2S_BITS 0ull
 #endif
 
-// Dropped hardware (bd 1ls.22): a header that still names it would
+// Dropped hardware (bd 1ls.22, 1ls.15): a header that still names it would
 // otherwise build as if the pin were free.
 #if defined(BOARD_BUZZER_PIN) || defined(BOARD_SD_CD_PIN) || defined(BOARD_BUTTON_PIN) || \
-	defined(BOARD_BATTERY_ADC_PIN) || defined(BOARD_CHARGER_STAT_PIN)
-#error "BOARD_BUZZER_PIN, BOARD_SD_CD_PIN, BOARD_BUTTON_PIN, BOARD_BATTERY_ADC_PIN and BOARD_CHARGER_STAT_PIN were dropped: remove them"
-#endif
-
-// An RGB LED (WS2812).
-#ifdef BOARD_NEOPIXEL_PIN
-#define BOARD_NEOPIXEL_BIT BOARD_PIN_BIT(BOARD_NEOPIXEL_PIN)
-#else
-#define BOARD_NEOPIXEL_BIT 0ull
+	defined(BOARD_BATTERY_ADC_PIN) || defined(BOARD_CHARGER_STAT_PIN) || defined(BOARD_NEOPIXEL_PIN)
+#error "BOARD_BUZZER_PIN, BOARD_SD_CD_PIN, BOARD_BUTTON_PIN, BOARD_BATTERY_ADC_PIN, BOARD_CHARGER_STAT_PIN and BOARD_NEOPIXEL_PIN were dropped: remove them"
 #endif
 
 // --- Every pin used once ---
@@ -239,7 +232,7 @@
 	BOARD_CTS_BIT op BOARD_RTS_BIT op BOARD_PIN_BIT(BOARD_SD_MISO_PIN) op                           \
 	BOARD_PIN_BIT(BOARD_SD_CS_PIN) op BOARD_PIN_BIT(BOARD_SD_SCK_PIN) op                            \
 	BOARD_PIN_BIT(BOARD_SD_MOSI_PIN) op BOARD_VBUS_BIT op BOARD_LED_BIT op BOARD_PSRAM_BIT op       \
-	BOARD_RTC_BITS op BOARD_SQW_BIT op BOARD_I2S_BITS op BOARD_NEOPIXEL_BIT)
+	BOARD_RTC_BITS op BOARD_SQW_BIT op BOARD_I2S_BITS)
 #if BOARD_OTHER_PINS(+) != BOARD_OTHER_PINS(|)
 #error "the board header uses a pin twice (UART, SD card, USB VBUS enable, LED, PSRAM, RTC, other hardware)"
 #endif

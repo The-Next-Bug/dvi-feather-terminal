@@ -1,8 +1,7 @@
 // The Z80 machine's hardware information device (port 12, machine.h; bd
 // 1ls.9): the board and its hardware for HWINFO.COM, from the board header
-// and what the firmware found. Hardware the board header names but the
-// firmware does not drive yet is HWINFO_ST_PLANNED (bd 1ls.4); what the
-// board does not have gets no record (0 bytes: HWINFO skips it). Cold code
+// and what the firmware found. What the board does not have gets no
+// record (0 bytes: HWINFO skips it). Cold code
 // in flash (ld/): it runs only when a program asks.
 
 #include <stdio.h>
@@ -227,20 +226,6 @@ static size_t sound_record(uint8_t *buf) {
 #endif
 }
 
-// Hardware the board header names that has no driver yet (bd 1ls.4):
-// planned, with its pin; nothing for what the board does not have.
-static size_t planned_record(uint8_t item, uint8_t *buf) {
-	switch (item) {
-#ifdef BOARD_NEOPIXEL_PIN
-	case HWINFO_NEOPIXEL:
-		return hwinfo_record(buf, HWINFO_ST_PLANNED, "RGB status LED", GP(BOARD_NEOPIXEL_PIN) ": not supported yet");
-#endif
-	default:
-		(void)buf;
-		return 0;
-	}
-}
-
 static size_t drives_record(uint8_t *buf) {
 	char text[DRIVES * (DRIVES_NAME_MAX + 5) + 1];
 	size_t n = 0;
@@ -284,13 +269,10 @@ size_t cpm_hwinfo(uint8_t item, uint8_t *buf) {
 		return drives_record(buf);
 	case HWINFO_SOUND:
 		return sound_record(buf);
-	// Planned (bd 1ls): not driven by this firmware yet.
 	case HWINFO_RTC:
 		return rtc_record(buf);
 	case HWINFO_BELL:
 		return bell_record(buf);
-	case HWINFO_NEOPIXEL:
-		return planned_record(item, buf);
 	default:
 		return 0;
 	}

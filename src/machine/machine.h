@@ -152,9 +152,7 @@ typedef struct {
 #define HWINFO_BOARD 2    // the board: its header's name (boards/<name>.h)
 #define HWINFO_RECORD 16  // the first record
 
-// Records. Hardware the board has but this firmware does not drive yet has
-// a record too (HWINFO_ST_PLANNED); what the board does not have has none
-// (status 0).
+// Records. What the board does not have has none (status 0).
 #define HWINFO_CPU 16          // the chip, its clock and flash
 #define HWINFO_MEMORY 17       // the Z80's memory: bank 0 and the banks, where they are
 #define HWINFO_PSRAM 18        // PSRAM on the QSPI bus
@@ -167,9 +165,9 @@ typedef struct {
 #define HWINFO_LED 25          // the status LED
 #define HWINFO_RTC 26          // a real-time clock (bd 1ls.6.1)
 #define HWINFO_BELL 27         // a DAC for BEL (bd 1ls.7)
-#define HWINFO_NEOPIXEL 28     // an RGB status LED (planned: bd 1ls.15)
-// 29-31 were card detect, user button, battery: dropped (bd 1ls.22); not
-// to be reused, older HWINFO users may know them.
+// 28 was the RGB status LED (NeoPixel), 29-31 card detect, user button,
+// battery: dropped (bd 1ls.22, 1ls.15); not to be reused, older HWINFO
+// users may know them.
 #define HWINFO_DRIVES 32       // the disk images on drives A-H
 #define HWINFO_SOUND 33        // the AY-3-8910 on the Z80's ports (bd 1ls.18.4)
 
@@ -177,7 +175,7 @@ typedef struct {
 #define HWINFO_ST_PRESENT 1   // there and in use
 #define HWINFO_ST_ABSENT 2    // supported, but nothing is plugged in, or this build does not use it
 #define HWINFO_ST_NOT_FOUND 3 // the board should have it, but it did not answer
-#define HWINFO_ST_PLANNED 4   // the board has it, this firmware does not support it yet
+#define HWINFO_ST_PLANNED 4   // the board has it, this firmware does not support it yet (none today)
 
 #define HWINFO_VERSION 1
 #define HWINFO_MAX 128 // the longest item

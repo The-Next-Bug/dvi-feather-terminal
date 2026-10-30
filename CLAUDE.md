@@ -123,15 +123,16 @@ bd 1ls.19.3) + BOARD_RTC_I2C + BOARD_RTC_SDA/SCL_PIN (GPIO n
 is I2C (n >> 1) & 1, SDA even, SCL odd) and BOARD_RTC_SQW_PIN (the 1 Hz
 tick, DS3231 only, needs a chip; bd 1ls.6.1, 1ls.6.2; HWINFO's record
 names the chip, rtc_chip_name, and says "battery low", rtc_battery_low), optional BOARD_AUDIO_I2S_{BCK,WS,DATA}_PIN (WS
-= BCK + 1: PIO side-set) + _NAME (src/platform/bell.c, bd 1ls.7), and the
-planned hardware's pins, named before any driver exists (bd 1ls.4):
-BOARD_NEOPIXEL_PIN. All count in board.h's used-once check. Dropped
+= BCK + 1: PIO side-set) + _NAME (src/platform/bell.c, bd 1ls.7). All
+count in board.h's used-once check. Dropped
 hardware (bd 1ls.22: BOARD_BUZZER_PIN, BOARD_SD_CD_PIN, BOARD_BUTTON_PIN,
-BOARD_BATTERY_ADC_PIN, BOARD_CHARGER_STAT_PIN) is an #error in board.h, its
-HWINFO items 29-31 retired; dropping a feature later: remove its record,
-pin bits, checks and docs the same way. apps/terminal/hwinfo_glue.c gives no record
-(0 bytes, HWINFO skips it) for hardware the header does not name, PLANNED
-for what it names without a driver.
+BOARD_BATTERY_ADC_PIN, BOARD_CHARGER_STAT_PIN; 1ls.15: BOARD_NEOPIXEL_PIN)
+is an #error in board.h, its HWINFO items 28-31 retired; dropping a feature
+later: remove its record, pin bits, checks and docs the same way.
+apps/terminal/hwinfo_glue.c gives no record (0 bytes, HWINFO skips it) for
+hardware the header does not name. HWINFO_ST_PLANNED (named without a
+driver) stays in the protocol and HWINFO.COM, but no item uses it now
+(machine_host.c's item 34 tests it).
 `src/board/board.h` (RP2350 code only) #errors on missing settings, wrong
 function pins, pins used twice or off the chip; test/test_board.sh (ctest
 `board`) runs it on every board header and on broken variants. Pin values
@@ -798,10 +799,9 @@ UF2 in the latter).
   the item in a 128-byte buffer, the platform's hwinfo hook fills the
   rest (NULL: port 12 reads 0xFF, as on older firmware or picosim).
   Items 1/2 firmware and board text; 16+ a record per piece of hardware
-  at a fixed number (status yes/no/missing/planned, name, detail): planned
-  hardware (now only the NeoPixel, 1ls.15) is listed as HWINFO_ST_PLANNED
-  until its bead lands, and its driver should then report the real state
-  there; 29-31 (card detect, button, battery) are retired (bd 1ls.22). `apps/terminal/hwinfo_glue.c` (cold, in
+  at a fixed number (status yes/no/missing/planned, name, detail; no
+  hardware is planned now); 28-31 (NeoPixel, card detect, button,
+  battery) are retired (bd 1ls.22, 1ls.15). `apps/terminal/hwinfo_glue.c` (cold, in
   flash via ld/) builds them from board.h and runtime state; 32 lists the
   mounted images (HWINFO cannot ask port 8: that would unlock hard disks
   for BIOSes that never ask, f8w.7). src/machine/cpm/hwinfo.asm (1ls.10)

@@ -178,9 +178,6 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 // #define BOARD_AUDIO_I2S_WS_PIN 10
 // #define BOARD_AUDIO_I2S_DATA_PIN 11
 // #define BOARD_AUDIO_I2S_NAME "TDA1387"
-//
-// Planned (no driver yet): an RGB status LED (WS2812).
-// #define BOARD_NEOPIXEL_PIN 21
 
 // --- LED ---
 //

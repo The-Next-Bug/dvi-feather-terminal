@@ -43,10 +43,11 @@ at once, which is status 00h.
 
 {{#include ../generated/hwinfo-items.md}}
 
-Hardware the board does not have gives no record (status 00h). Hardware the
-board header names but this firmware does not drive yet is listed as
-planned. Items 1Dh-1Fh (29-31) once listed hardware that was dropped; they stay
-unused, as older programs may know them.
+Hardware the board does not have gives no record (status 00h). Status 04h,
+planned, is for hardware the board header names but this firmware does not
+drive yet; no item uses it today. Items 1Ch-1Fh (28-31) once listed hardware
+that was dropped (an RGB status LED, card detect, a button, a battery); they
+stay unused, as older programs may know them.
 
 ## Examples
 

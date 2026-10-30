@@ -131,8 +131,8 @@ static size_t hwinfo(uint8_t item, uint8_t *buf) {
 		return hwinfo_record(buf, HWINFO_ST_ABSENT, "USB stick", "none");
 	case HWINFO_RTC:
 		return hwinfo_record(buf, HWINFO_ST_PRESENT, "Real-time clock", "DS3231 on I2C1: GP10 SDA, GP11 SCL");
-	case HWINFO_NEOPIXEL:
-		return hwinfo_record(buf, HWINFO_ST_PLANNED, "RGB status LED", "GP21: not supported yet");
+	case 34: // no firmware item is planned today; HWINFO.COM still shows the status
+		return hwinfo_record(buf, HWINFO_ST_PLANNED, "Planned thing", "GP21: not supported yet");
 	case 200:
 		return hwinfo_record(buf, 9, "Future thing", "a status HWINFO does not know");
 	default:
