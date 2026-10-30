@@ -124,9 +124,7 @@ check "I2S WS not after BCK" "must be BOARD_AUDIO_I2S_BCK_PIN + 1" "$sock" "$(i2
 check "I2S without DATA" "needs BOARD_AUDIO_I2S_BCK_PIN" "$sock" "#define BOARD_AUDIO_I2S_BCK_PIN 9" \
   "#define BOARD_AUDIO_I2S_WS_PIN 10"
 check "I2S on the SD card" "uses a pin twice" "$sock" "$(i2s 4 5 8)"
-check "planned hardware" "" "$sock" "#define BOARD_NEOPIXEL_PIN 9"
-check "NeoPixel on the LED" "uses a pin twice" "$sock" "#define BOARD_NEOPIXEL_PIN 25"
-for pin in BUZZER SD_CD BUTTON BATTERY_ADC CHARGER_STAT; do
+for pin in BUZZER SD_CD BUTTON BATTERY_ADC CHARGER_STAT NEOPIXEL; do
   check "dropped BOARD_${pin}_PIN" "were dropped" "$sock" "#define BOARD_${pin}_PIN 9"
 done
 check "no LED" "" "$sock" "#undef PICO_DEFAULT_LED_PIN"

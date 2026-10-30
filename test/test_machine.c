@@ -1489,13 +1489,13 @@ static void hwinfo_report_checks(void) {
 	CHECK(strstr(screen, "PSRAM            missing  none answered on CS1 (GP8)\r\n") != NULL);
 	CHECK(strstr(screen, "USB stick        no       none\r\n") != NULL);
 	CHECK(strstr(screen, "Real-time clock  yes      DS3231 on I2C1: GP10 SDA, GP11 SCL\r\n") != NULL);
-	CHECK(strstr(screen, "RGB status LED   planned  GP21: not supported yet\r\n") != NULL);
+	CHECK(strstr(screen, "Planned thing    planned  GP21: not supported yet\r\n") != NULL);
 	CHECK(strstr(screen, "Future thing     ?        a status HWINFO does not know\r\n") != NULL);
 	// Wrapped at 79 columns, the rest under the detail column.
 	CHECK(strstr(screen, "SD card          yes      SDHC/SDXC, 29.7 GB; SPI0: GP4 MISO, GP5 CS, GP6 SCK,\r\n"
 		"                          GP7 MOSI\r\n") != NULL);
 	// In item order.
-	const char *cpu = strstr(screen, "CPU "), *rtc = strstr(screen, "Real-time"), *rgb = strstr(screen, "RGB status"),
+	const char *cpu = strstr(screen, "CPU "), *rtc = strstr(screen, "Real-time"), *rgb = strstr(screen, "Planned thing"),
 		*future = strstr(screen, "Future");
 	CHECK(cpu && rtc && rgb && future && cpu < rtc && rtc < rgb && rgb < future);
 }

@@ -14,7 +14,7 @@
 // the USB pin. Flashing is over the same socket (BOOT + RESET).
 //
 // The board's other pins, which the firmware leaves alone: GP21 the
-// NeoPixel, GP2/3 SDA/SCL (STEMMA QT, I2C1; also CTS/RTS below), D5/D6/D9/
+// NeoPixel (not supported), GP2/3 SDA/SCL (STEMMA QT, I2C1; also CTS/RTS below), D5/D6/D9/
 // D11/D12/D24/D25 and A0-A3 on the headers.
 
 // -----------------------------------------------------

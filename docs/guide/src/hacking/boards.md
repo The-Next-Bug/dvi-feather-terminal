@@ -22,7 +22,6 @@ crystal: include one of the SDK's, as the Pico DVI Sock's includes
 | `BOARD_RTC_SQW_PIN` | no | the DS3231's 1 Hz output |
 | `BOARD_AUDIO_I2S_{BCK,WS,DATA}_PIN`, `BOARD_AUDIO_I2S_NAME` | no | an I2S DAC for sound (WS = BCK + 1) |
 | `BOARD_SYS_KHZ` | no | the CPU clock, a multiple of 48 MHz (default 384000) |
-| `BOARD_NEOPIXEL_PIN` | no | planned: named but not driven yet |
 
 And as CMake settings, in the header as `pico_board_cmake_set(...)`:
 
