@@ -21,7 +21,8 @@
 #define CFG_TUH_ENUMERATION_BUFSIZE 256
 
 // Three hubs (bd rsu): the Frankless's own, one plugged into it and a
-// keyboard's built-in one behind that; ~340 bytes of SRAM each. Devices
+// keyboard's built-in one behind that (tried with two; the third, and the
+// refusal of a fourth, not yet on hardware); ~340 bytes of SRAM each. Devices
 // (not hubs) get CFG_TUH_DEVICE_MAX addresses: keyboards and sticks
 // (usbvol.c uses one at a time). A hub or device past these limits is
 // never set up and, as TinyUSB leaves its setup unfinished, no device

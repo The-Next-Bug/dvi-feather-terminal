@@ -14,7 +14,8 @@ Turn on [flow control](../start/host.md#flow-control), RTS/CTS if the board
 and adapter have the wires, otherwise XON/XOFF.
 
 **Can I use two hubs?**
-Yes: up to three, the Frankless's own included. See
+Yes: up to three, the Frankless's own included (two have been tried; a
+third is experimental). See
 [Keyboard](../terminal/keyboard.md).
 
 **My USB stick is not seen.**

@@ -1124,7 +1124,9 @@ Feather with Adalogger, no PSRAM, 0x2007db2c, ~9.4 KB; Frankless
   - Pin functions for CTS/RTS use `GPIO_FUNC_UART` (UART_FUNCSEL_NUM is
     wrong for GPIO 2/3 on RP2350).
   - Three USB hubs (CFG_TUH_HUB 3, CFG_TUH_DEVICE_MAX 7, ~340 bytes of
-    SRAM a hub; bd rsu: the Frankless's own, one on it, a keyboard's).
+    SRAM a hub; bd rsu: the Frankless's own, one on it, a keyboard's;
+    two tried on the Frankless, 2026-10-31; a third hub and the refusal
+    of a fourth untried: documented as experimental).
     A hub or device past the limits gets no address and TinyUSB leaves
     its setup unfinished (usbh.c's TU_ASSERT(new_addr != 0) skips
     enum_full_complete), so every later attach waits behind it. Not fixed

@@ -7,6 +7,8 @@ Pico 2 and the Feathers through an OTG adapter or cable, on the Frankless
 into its hub (with the USB switch on the hub). Hubs work too, and
 keyboards with one built in: up to three hubs in all (the Frankless's own
 counts), so on the Frankless one more hub with a hub keyboard behind it.
+Two hubs have been tried; a third is experimental (not yet tried on
+hardware).
 A fourth hub is refused: after about 20 s its port is turned off, and
 devices plugged in meanwhile are set up then.
 

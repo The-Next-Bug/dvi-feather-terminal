@@ -23,7 +23,8 @@
   needs 5 V, from a powered OTG adapter or fed into VBUS (a Feather's USB
   pin; see [Keyboard](keyboard.md)); on the Frankless the USB switch must be
   on the hub.
-- Up to three hubs are supported (the Frankless's own counts). A fourth
+- Up to three hubs are supported (the Frankless's own counts; a third is
+  experimental, not yet tried on hardware). A fourth
   shows on the monitor's `USB:` line as `0 (hub n port p) setting up`
   for about 20 s, while devices plugged in meanwhile wait; then its port
   is turned off and the line says `1 refused (too many hubs or devices)`.
