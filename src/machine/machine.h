@@ -35,6 +35,12 @@ typedef struct {
 	// Whether aux_out would take a byte now (SIO2's status bit 7, which
 	// BIOSes wait on before writing). May be NULL: always.
 	bool (*aux_out_ready)(void);
+	// SIO2's rate (port 14, MACHINE_SERIAL_RATE): the one in use, and
+	// setting one until SET-UP's line settings are applied again (0: back
+	// to them now), false if it cannot be had. Both or neither; NULL: port
+	// 14 reads 0xFF, as on picosim.
+	unsigned (*aux_rate)(void);
+	bool (*aux_set_rate)(unsigned rate);
 	void (*printer_out)(uint8_t c); // may be NULL
 	// Disk sectors (128 bytes; track from 0, sector from 1, within the
 	// drive's format): FDC status, 0 = OK.
@@ -88,6 +94,17 @@ typedef struct {
 // layout in use (1-3, as written) in bits 4-5, so 0xFF (older firmware, or
 // a real chip) means no stereo.
 #define MACHINE_AY_STEREO 16
+
+// Port 14, ours (bd c2d): SIO2's rate as a CP/M 3 baud code (DEVICE's):
+// 1-15 = 50, 75, 110, 134, 150, 300, 600, 1200, 1800, 2400, 3600, 4800,
+// 7200, 9600, 19200. IN: the code of the rate in use, 0 if it has none
+// (115200: SET-UP's rates above 19200), 0xFF without the device (picosim,
+// older firmware). OUT 1-15: that rate, until SET-UP's line settings are
+// applied again (saved) or the machine is reset; one the board cannot have
+// (too slow for its UART) is ignored, so IN after OUT says what was done.
+// OUT 0: back to SET-UP's rate now. 16-255 are ignored. Data bits, parity
+// and stop bits stay SET-UP's. CP/M 3's DEVINI (bnkbios3.asm) uses it.
+#define MACHINE_SERIAL_RATE 14
 
 // Ports 68/69, ours: a free-running millisecond count of the platform's
 // clock, for timing without interrupts (F83, AYTEST): IN 68 its low byte,

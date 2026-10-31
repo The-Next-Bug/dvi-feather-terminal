@@ -1682,6 +1682,54 @@ static void test_ay_ports(void) {
 	machine_init(&host_platform);
 }
 
+// ---- SIO2's rate (port 14, MACHINE_SERIAL_RATE; bd c2d) ----
+
+// In raw Z80 bytes: the code in use, 9600 set, 110 refused (below the
+// UART's slowest), 16 ignored, 0 back to SET-UP's; without the hooks the
+// port reads 0xFF.
+static void rate_program(void) {
+	z80.n = 0;
+	emit(1, 0xf3); // DI
+	emit(5, 0xdb, MACHINE_SERIAL_RATE, 0x32, 0x00, 0xf0); // IN A,(0EH); LD (F000H),A
+	emit(4, 0x3e, 14, 0xd3, MACHINE_SERIAL_RATE); // 9600
+	emit(5, 0xdb, MACHINE_SERIAL_RATE, 0x32, 0x01, 0xf0);
+	emit(4, 0x3e, 3, 0xd3, MACHINE_SERIAL_RATE); // 110
+	emit(5, 0xdb, MACHINE_SERIAL_RATE, 0x32, 0x02, 0xf0);
+	emit(4, 0x3e, 16, 0xd3, MACHINE_SERIAL_RATE);
+	emit(5, 0xdb, MACHINE_SERIAL_RATE, 0x32, 0x03, 0xf0);
+	emit(4, 0x3e, 0, 0xd3, MACHINE_SERIAL_RATE); // SET-UP's
+	emit(5, 0xdb, MACHINE_SERIAL_RATE, 0x32, 0x04, 0xf0);
+	run_program();
+}
+
+static void test_rate_port(void) {
+	extern uint8_t bnk0[65536];
+	machine_init(&host_platform);
+	host_aux_rate_sets = 0;
+	rate_program();
+	CHECK_EQ(bnk0[0xf000], 0); // 115200: no code
+	CHECK_EQ(bnk0[0xf001], 14);
+	CHECK_EQ(bnk0[0xf002], 14); // still 9600
+	CHECK_EQ(bnk0[0xf003], 14);
+	CHECK_EQ(bnk0[0xf004], 0);
+	CHECK_EQ(host_aux_rate_sets, 4); // run_program's reset, then the program's three
+	CHECK_EQ(host_aux_rate, 115200);
+	host_aux_rate = 19200;
+	machine_reset();
+	CHECK_EQ(host_aux_rate, 115200); // the reset's back to SET-UP's
+
+	machine_platform_t none = host_platform;
+	none.aux_rate = NULL;
+	none.aux_set_rate = NULL;
+	machine_init(&none);
+	host_aux_rate_sets = 0;
+	rate_program();
+	CHECK_EQ(bnk0[0xf000], 0xff);
+	CHECK_EQ(bnk0[0xf001], 0xff);
+	CHECK_EQ(host_aux_rate_sets, 0);
+	machine_init(&host_platform);
+}
+
 // Channel ch's tone periods as written since host_ay_clear: one when its
 // coarse register is written, 0s (QUIET) left out.
 static unsigned ay_periods(unsigned ch, uint16_t *out, unsigned max) {
@@ -2085,6 +2133,20 @@ static void test_cpm3_aux(void) {
 	aux_sent[0] = '\0';
 	CHECK(cpm("DIR C:", "AUXTEXT  TXT"));
 	CHECK_EQ(aux_len, 0);
+	// TTY2's rate (bd c2d): BOOT found 115200, which has no code; DEVICE
+	// sets one through DEVINI, a rate the UART cannot have stays as it was.
+	CHECK(cpm("DEVICE TTY2", "Baud Rate:        NONE"));
+	CHECK(strstr(screen, "SOFT-BAUD") != NULL);
+	CHECK(cpm("DEVICE TTY2[9600]", ""));
+	CHECK_EQ(host_aux_rate, 9600);
+	CHECK(cpm("DEVICE TTY2", "9600"));
+	CHECK(cpm("DEVICE TTY2[110]", ""));
+	CHECK_EQ(host_aux_rate, 9600);
+	CHECK(cpm("DEVICE TTY2", "9600"));
+	CHECK(cpm("DEVICE TTY2[19200]", ""));
+	CHECK_EQ(host_aux_rate, 19200);
+	machine_reset(); // F11: SET-UP's rate again
+	CHECK_EQ(host_aux_rate, 115200);
 	drives_unmount_all();
 }
 
@@ -3202,6 +3264,7 @@ int main(void) {
 	RUN(test_clock_ports);
 	RUN(test_hwinfo_tool);
 	RUN(test_ay_ports);
+	RUN(test_rate_port);
 	RUN(test_aytest_tool);
 	RUN(test_ayplay_tool);
 	RUN(test_boot_cpm3);

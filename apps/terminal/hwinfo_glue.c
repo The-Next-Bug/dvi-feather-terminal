@@ -116,7 +116,7 @@ static size_t serial_record(uint8_t *buf) {
 	char parity;
 	settings_framing(&settings, &data, &parity, &stop);
 	snprintf(text, sizeof text, BOARD_UART_NAME " TX " GP(BOARD_UART_TX_PIN) " / RX " GP(BOARD_UART_RX_PIN)
-		", %u %u%c%u (SIO2)", settings_baud_rate(&settings), data, parity, stop);
+		", %u %u%c%u (SIO2)", serial_baud(), data, parity, stop);
 	return hwinfo_record(buf, HWINFO_ST_PRESENT, "Serial port", text);
 }
 

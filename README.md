@@ -1007,6 +1007,7 @@ The machine is picosim's:
 | 64 | MMU: bank 0 plus `MACHINE_BANKS` 48 KB banks (default 2: enough for CP/M 3; MP/M II's `MPM.SYS` is made for them, see [Other operating systems](#other-operating-systems)), or with `PSRAM_BANKS` up to 15 in the PSRAM; reads the number of banks in the high nibble (so 15 at most) and the selected one in the low |
 | 65/66 | clock: the board's real-time clock, or without one 1 Jan 2026 at power-on; writing it is ours (CP/M 3's `DATE SET`), see [The clock](#the-clock) |
 | 12 | hardware information, for `HWINFO` (ours; see [HWINFO](#hwinfo)) |
+| 14 | the second serial port's rate as a CP/M 3 baud code, for CP/M 3's `DEVICE TTY2[9600]` (ours): IN the rate in use (0 when it has no code, as 115200), OUT 1-15 one until the reset or SET-UP's save, OUT 0 back to SET-UP's |
 | 67 | 60 Hz timer interrupt |
 | 68/69 | a millisecond count, low byte then high (ours: for timing without interrupts, as the CPU has no fixed speed) |
 | 160 | hardware control |

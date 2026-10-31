@@ -43,6 +43,13 @@ static bool cpm_aux_out_ready(void) {
 	return serial_tx_room() > 0;
 }
 
+// SIO2's rate for port 14 (bd c2d): CP/M 3's DEVICE TTY2 [9600] through
+// DEVINI. Not saved; SET-UP's save and the machine's reset put the saved
+// line back.
+static unsigned cpm_aux_rate(void) {
+	return serial_baud();
+}
+
 static uint8_t cpm_disk_read(unsigned drive, unsigned track, unsigned sector, uint8_t *buf) {
 	return drives_read(drive, track, sector, buf);
 }
@@ -94,6 +101,8 @@ const machine_platform_t cpm_platform = {
 	.aux_out = cpm_aux_out,
 	.aux_in = cpm_aux_in,
 	.aux_out_ready = cpm_aux_out_ready,
+	.aux_rate = cpm_aux_rate,
+	.aux_set_rate = line_rate,
 	.disk_read = cpm_disk_read,
 	.disk_write = cpm_disk_write,
 	.disk_format = cpm_disk_format,

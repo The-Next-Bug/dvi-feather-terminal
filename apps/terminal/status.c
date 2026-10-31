@@ -297,14 +297,15 @@ static const char *term_type_name(void) {
 }
 
 status_t status_now(void) {
-	status_t st = {usbkbd_count(), last_key.count, settings, "", term_type_name()};
+	status_t st = {usbkbd_count(), last_key.count, settings, serial_baud(), "", term_type_name()};
 	usb_label(st.usb, sizeof st.usb);
 	return st;
 }
 
 bool status_equal(const status_t *a, const status_t *b) {
 	return a->keyboards == b->keyboards && a->keys_sent == b->keys_sent &&
-		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0 && strcmp(a->usb, b->usb) == 0 &&
+		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0 && a->baud == b->baud &&
+		strcmp(a->usb, b->usb) == 0 &&
 		a->type == b->type;
 }
 
@@ -327,7 +328,7 @@ void draw_status(const status_t *st) {
 	settings_framing(&st->settings, &data_bits, &parity, &stop_bits);
 	char text[SCREEN_MAX_COLS + 1];
 	snprintf(text, sizeof text, " %s %ux24 | %s | %u %u%c%u%s%s%s%s%s%s",
-		st->type, screen.cols, TERM_BUILD_ID, settings_baud_rate(&st->settings), data_bits, parity, stop_bits,
+		st->type, screen.cols, TERM_BUILD_ID, st->baud, data_bits, parity, stop_bits,
 		serial_flow() == SERIAL_FLOW_RTSCTS ? " RTS/CTS" : serial_flow() == SERIAL_FLOW_XONXOFF ? " XON/XOFF" : "",
 		st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "", st->usb,
 		st->settings.local_echo ? " | echo" : "", key);

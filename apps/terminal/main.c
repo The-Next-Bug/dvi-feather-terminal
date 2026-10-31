@@ -136,6 +136,21 @@ static void apply_line(const settings_t *s) {
 		: s->flow == SETTINGS_FLOW_XONXOFF ? SERIAL_FLOW_XONXOFF : SERIAL_FLOW_NONE);
 }
 
+bool line_rate(unsigned rate) {
+	if (!rate) {
+		apply_line(&settings);
+		return true;
+	}
+	if (!serial_baud_possible(rate)) {
+		return false;
+	}
+	unsigned data_bits, stop_bits;
+	char parity;
+	settings_framing(&settings, &data_bits, &parity, &stop_bits);
+	serial_configure(rate, data_bits, parity, stop_bits);
+	return true;
+}
+
 // Use settings s: the line, the modes RIS resets to (also set now) and the
 // palette (the status line follows at its next redraw). In CP/M mode LNM stays off: CP/M wants Return as CR alone (a
 // following LF waits as a key, which stops DIR and TYPE early) and sends

@@ -30,6 +30,7 @@ the next instruction.
 | 08h | in, out | the disk in a drive | this firmware |
 | 0Ah | in, out | file transfer device | this firmware |
 | 0Ch | in, out | hardware information | this firmware |
+| 0Eh | in, out | second serial port's baud rate | this firmware |
 | 40h | in, out | MMU | picosim |
 | 41h | in, out | clock: format, register select | picosim |
 | 42h | in, out | clock: data | picosim; setting it is this firmware's |
@@ -108,6 +109,25 @@ it to clear. `IN 03h` reads the byte (the last one again when none is
 waiting); `OUT 03h` sends one, all 8 bits. Writes to port 02h are ignored.
 The console routines above work with 02h/03h in place of 00h/01h. Older
 firmware never set TXBUSY.
+
+## Serial port baud rate (0Eh)
+
+The second serial port's rate as a CP/M 3 baud code, for `DEVICE` (CP/M
+3's BIOS uses it in its cold boot and in DEVINI):
+
+| Code | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Baud | none | 50 | 75 | 110 | 134 | 150 | 300 | 600 | 1200 | 1800 | 2400 | 3600 | 4800 | 7200 | 9600 | 19200 |
+
+- `IN 0Eh`: the code of the rate in use; 0 for a rate without one (SET-UP's
+  38400, 57600 and 115200). FFh on older firmware and on picosim, which
+  have no such port: the rate cannot be changed.
+- `OUT 0Eh` 1-15: run at that rate until the machine is reset or SET-UP's
+  settings are saved. A rate the board's UART cannot reach (below about
+  120 baud: codes 1-3) is ignored, so read the port again to see what was
+  done. `OUT 0Eh` 0: back to SET-UP's rate now. 16-FFh are ignored.
+
+Data bits, parity, stop bits and flow control stay SET-UP's.
 
 ## Printer (05h, 06h)
 

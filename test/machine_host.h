@@ -44,6 +44,10 @@ extern const char *aux_input;
 // busy). host_aux_waits counts those reads, host_aux_overruns the bytes
 // written while busy (lost on the board).
 extern unsigned host_aux_busy, host_aux_waits, host_aux_overruns;
+// SIO2's rate (port 14): host_aux_rate in use, back to host_aux_saved on
+// a set to 0 (SET-UP's); rates below host_aux_min_rate refused, as the
+// board's UART cannot go that slow. host_aux_rate_sets counts the calls.
+extern unsigned host_aux_rate, host_aux_saved, host_aux_min_rate, host_aux_rate_sets;
 
 // The wall clock (machine.h time_get/time_set): seconds since 31.12.1977
 // are (host_time_offset_us + host_clock_us()) / 1000000; starts at
