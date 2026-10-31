@@ -107,8 +107,24 @@ const char *usbmsc_info(void) {
 		}
 		++devices;
 	}
+	if (tuh_connected(0) && n < sizeof text) {
+		// Not given an address yet; one that stays so is past the limits
+		// (tusb_config.h) and holds up the rest until the watchdog
+		// refuses it (usbkbd.c refuse_dev0).
+		tuh_bus_info_t bus;
+		tuh_bus_info_get(0, &bus);
+		n += (size_t)snprintf(text + n, sizeof text - n, "%s 0 (hub %u port %u) setting up", devices ? "," : "",
+			bus.hub_addr, bus.hub_port);
+		++devices;
+	}
 	if (!devices && n < sizeof text) {
 		n += (size_t)snprintf(text + n, sizeof text - n, " no devices");
+	}
+	uint8_t hub, port;
+	unsigned refused = usbkbd_refused(&hub, &port);
+	if (refused && n < sizeof text) {
+		n += (size_t)snprintf(text + n, sizeof text - n,
+			"\r\n          %u refused (too many hubs or devices), last on hub %u port %u", refused, hub, port);
 	}
 	if (usbkbd_resets() && n < sizeof text) {
 		n += (size_t)snprintf(text + n, sizeof text - n, "\r\n          host restarted %u times (looked stuck)",

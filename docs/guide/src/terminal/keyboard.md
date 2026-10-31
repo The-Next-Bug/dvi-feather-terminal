@@ -4,11 +4,11 @@
 
 The board is the USB host. Plug a USB keyboard into its USB port: on the
 Pico 2 and the Feathers through an OTG adapter or cable, on the Frankless
-into its hub (with the USB switch on the hub). A hub works too, or a keyboard with one built
-in, but only one: the firmware has room for a single hub (the Frankless's
-own hub counts), and with a second hub behind it the USB host may
-misbehave: new devices are no longer found, while those already connected
-keep working.
+into its hub (with the USB switch on the hub). Hubs work too, and
+keyboards with one built in: up to three hubs in all (the Frankless's own
+counts), so on the Frankless one more hub with a hub keyboard behind it.
+A fourth hub is refused: after about 20 s its port is turned off, and
+devices plugged in meanwhile are set up then.
 
 On the Pico 2 and the Feathers the port is no longer the board's power
 input, and the board does not switch 5 V onto the connector by itself, so

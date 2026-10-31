@@ -29,7 +29,7 @@ HDMI connector into one of two machines, chosen in [SET-UP](terminal/setup.md):
   alternate screen of xterm, line drawing; the VT100's VT52 mode; a Lear
   Siegler ADM-3A. See [Terminal types](terminal/terminal-types.md) and the
   [escape sequence reference](reference/vt100.md).
-- **Keyboard**: a USB keyboard (through one hub, with USB sticks beside it).
+- **Keyboard**: a USB keyboard (through up to three hubs, with USB sticks beside it).
   See [Keyboard](terminal/keyboard.md).
 - **Settings in flash**: line settings, colors, display mode, terminal
   type and more, edited in [SET-UP](terminal/setup.md).

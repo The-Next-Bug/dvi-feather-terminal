@@ -23,8 +23,11 @@
   needs 5 V, from a powered OTG adapter or fed into VBUS (a Feather's USB
   pin; see [Keyboard](keyboard.md)); on the Frankless the USB switch must be
   on the hub.
-- Only one hub is supported: with a second hub behind the first, new
-  devices are no longer found.
+- Up to three hubs are supported (the Frankless's own counts). A fourth
+  shows on the monitor's `USB:` line as `0 (hub n port p) setting up`
+  for about 20 s, while devices plugged in meanwhile wait; then its port
+  is turned off and the line says `1 refused (too many hubs or devices)`.
+  Unplugging it and plugging it in again tries it again.
 - The screen is blanked: the first key only wakes it.
 - `key ...` on the status line changes but the host sees nothing: check the
   serial wiring and line settings ([Connecting a host](../start/host.md)),

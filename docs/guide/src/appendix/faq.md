@@ -14,7 +14,8 @@ Turn on [flow control](../start/host.md#flow-control), RTS/CTS if the board
 and adapter have the wires, otherwise XON/XOFF.
 
 **Can I use two hubs?**
-No: one hub only. See [Keyboard](../terminal/keyboard.md).
+Yes: up to three, the Frankless's own included. See
+[Keyboard](../terminal/keyboard.md).
 
 **My USB stick is not seen.**
 It must be FAT12/16/32 with 512-byte sectors; exFAT sticks need formatting

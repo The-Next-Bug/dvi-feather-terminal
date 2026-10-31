@@ -10,6 +10,7 @@
 #include "pico/stdlib.h"
 #include "tusb.h"
 #include "host/hcd.h"
+#include "host/hub.h"
 
 #include "board.h"
 
@@ -74,7 +75,12 @@ static struct {
 	uint8_t fails;  // probes in a row that failed
 	uint8_t backoff; // times the usual delays before the next restart
 	volatile bool busy, done, ok;
+	bool refused; // refuse_dev0 sent a refusal since the host was last quiet
 } dog = {.backoff = 1};
+// Devices refused since power-on, and where the last one was.
+static unsigned refusals;
+static uint8_t refused_hub, refused_port;
+static tuh_bus_info_t refusing; // where refuse_dev0's request went
 static unsigned resets;
 static uint32_t last_reset_ms;
 static const char *reset_requested; // usbkbd_request_reset's why
@@ -233,8 +239,15 @@ bool usbkbd_device_ready(uint8_t dev_addr) {
 // of a device's setup made its next request fail, which left that device
 // half set up and TinyUSB enumerating it for good: no other device (a USB
 // stick plugged in later) was ever set up. Newer TinyUSB queues them, but
-// ours still wait for quiet.
+// ours still wait for quiet. A device still at address 0 is being set up
+// too (tuh_connected(0)): one past the address limits (a hub too many)
+// stays there for good, as TinyUSB never finishes its setup, and every
+// device plugged in later waits behind it; counting it lets the watchdog
+// refuse it after STUCK_SETUP_MS (refuse_dev0, bd rsu).
 static bool usb_quiet(void) {
+	if (tuh_connected(0)) {
+		return false;
+	}
 	for (uint8_t a = 1; a <= ADDRESSES; ++a) {
 		uint16_t vid, pid;
 		if (tuh_vid_pid_get(a, &vid, &pid) && !usbkbd_device_ready(a)) {
@@ -407,6 +420,11 @@ bool usbkbd_data_seq_error(void) {
 
 // Each device TinyUSB knows, for the text log.
 static void log_devices(void) {
+	if (tuh_connected(0)) {
+		tuh_bus_info_t bus;
+		tuh_bus_info_get(0, &bus);
+		text_printf("  device 0 (hub %u port %u) setting up\n", bus.hub_addr, bus.hub_port);
+	}
 	for (uint8_t a = 1; a <= ADDRESSES; ++a) {
 		uint16_t vid, pid;
 		if (tuh_vid_pid_get(a, &vid, &pid)) {
@@ -468,8 +486,9 @@ static void probe_done(tuh_xfer_t *xfer) {
 	dog.done = true;
 }
 
-// The device to probe: the hub if there is one (everything else is behind
-// it), else the first one set up; 0 if none.
+// The device to probe: the hub with the lowest address if there is one
+// (normally the one on the port, which everything else is behind), else
+// the first device; 0 if none.
 static uint8_t probe_target(void) {
 	for (uint8_t a = CFG_TUH_DEVICE_MAX + 1; a <= ADDRESSES; ++a) {
 		if (usbkbd_device_ready(a)) {
@@ -484,7 +503,64 @@ static uint8_t probe_target(void) {
 	return 0;
 }
 
-// Restart the USB host if it looks stuck (see STUCK_SETUP_MS).
+static void refuse_done(tuh_xfer_t *xfer) {
+	uint8_t hub = refusing.hub_addr, port = refusing.hub_port;
+	if (xfer->result != XFER_RESULT_SUCCESS) {
+		text_printf("refuse %u.%u: result %d\n", hub, port, (int)xfer->result);
+		usbkbd_request_reset("refuse!");
+		return;
+	}
+	// The port is off: end the setup as an unplug would (usbh.c's
+	// process_remove_event closes address 0, and the attaches waiting
+	// behind it go ahead), and watch the hub's ports again, which TinyUSB
+	// does only when a setup finishes. Unplugged and plugged in again, the
+	// device is tried (and refused) again.
+	hcd_event_t event = {
+		.rhport = refusing.rhport,
+		.event_id = HCD_EVENT_DEVICE_REMOVE,
+		.connection = {.hub_addr = hub, .hub_port = port},
+	};
+	hcd_event_handler(&event, false);
+	hub_edpt_status_xfer(hub);
+	++refusals;
+	refused_hub = hub;
+	refused_port = port;
+	usbkbd_log("refused", port);
+}
+
+// A device left at address 0 (past tusb_config.h's limits: TinyUSB never
+// finishes its setup) behind a hub: turn its hub port off (PORT_ENABLE
+// cleared: no traffic reaches it, so it cannot answer at address 0 while
+// the next device is set up) and end the setup (refuse_done). False if
+// there is none, it is on the root port, it is where the last refusal
+// went (again: none since the host was quiet, so that one did not help)
+// or the request cannot be sent: then only a restart helps.
+static bool refuse_dev0(bool again) {
+	tuh_bus_info_t bus;
+	if (!tuh_connected(0) || !tuh_bus_info_get(0, &bus) || !bus.hub_addr) {
+		return false;
+	}
+	if (again && bus.rhport == refusing.rhport && bus.hub_addr == refusing.hub_addr &&
+		bus.hub_port == refusing.hub_port) {
+		return false;
+	}
+	refusing = bus;
+	text_printf("refuse %u.%u\n", refusing.hub_addr, refusing.hub_port);
+	uint32_t polls = usbkbd_polls_pause();
+	bool sent = hub_port_clear_feature(refusing.hub_addr, refusing.hub_port, HUB_FEATURE_PORT_ENABLE,
+		refuse_done, 0);
+	usbkbd_polls_resume(polls);
+	return sent;
+}
+
+unsigned usbkbd_refused(uint8_t *hub, uint8_t *port) {
+	*hub = refused_hub;
+	*port = refused_port;
+	return refusals;
+}
+
+// Restart the USB host if it looks stuck (see STUCK_SETUP_MS); a device
+// stuck at address 0 behind a hub is refused instead.
 static void watchdog(bool quiet) {
 	uint32_t now = now_ms();
 	uint32_t backoff = dog.backoff;
@@ -494,11 +570,17 @@ static void watchdog(bool quiet) {
 			dog.setting_up = true;
 			dog.setup_since = now;
 		} else if (now - dog.setup_since > STUCK_SETUP_MS * backoff) {
-			usbkbd_reset("stuck");
+			if (refuse_dev0(dog.refused)) {
+				dog.refused = true;
+				dog.setup_since = now; // the next device stuck gets the full wait
+			} else {
+				usbkbd_reset("stuck");
+			}
 		}
 		return;
 	}
 	dog.setting_up = false;
+	dog.refused = false;
 	if (dog.busy) {
 		if (now - dog.probe_sent > PROBE_DEADLINE_MS * backoff) {
 			usbkbd_reset("nprobe");

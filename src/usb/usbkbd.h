@@ -62,6 +62,9 @@ void usbkbd_polls_resume(uint32_t saved);
 void usbkbd_reset(const char *why);
 // Restarts since power-on.
 unsigned usbkbd_resets(void);
+// Devices refused since power-on (past tusb_config.h's limits: their hub
+// port turned off, bd rsu); *hub and *port say where the last one was.
+unsigned usbkbd_refused(uint8_t *hub, uint8_t *port);
 // Have usbkbd_poll restart the host (from inside FatFs or a callback,
 // where it cannot be done at once); one soon after the last waits a while.
 void usbkbd_request_reset(const char *why);

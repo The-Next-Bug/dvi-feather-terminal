@@ -218,10 +218,10 @@ The status line shows `RTS/CTS` or `XON/XOFF` after the line settings.
 ### USB keyboard
 
 Plug a USB keyboard into the Pico 2's micro-USB port through an OTG adapter
-or cable; a hub (or a keyboard with one built in) works too, but only one:
-the firmware has room for a single hub (the Frankless's built-in one
-counts), and with a second hub behind it the USB host may misbehave (new
-devices no longer found, those already connected still working). The firmware is
+or cable; hubs (and keyboards with one built in) work too, up to three in
+all (the Frankless's built-in one counts). A fourth is refused: after
+about 20 s its hub port is turned off, and devices plugged in meanwhile
+are set up then. The firmware is
 the USB host, so the port is no longer the board's power input, and the
 board does not switch 5 V onto the connector's VBUS by itself: feed 5 V into
 **VBUS** (pin 40), which is the micro-USB connector's VBUS, or use a
