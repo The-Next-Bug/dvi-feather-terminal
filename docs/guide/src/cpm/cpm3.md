@@ -45,9 +45,24 @@ A>DEVICE CONOUT:=TTY1,TTY2
 
 PIP reads AUX: until a ^Z (1Ah). `DEVICE` shows and changes the
 assignments; the last line above sends console output to the serial port
-as well as the screen (`DEVICE CONOUT:=TTY1` stops it). `TTY2`'s baud
-rate is SET-UP's: `DEVICE` cannot change it. The printer (LST:) is not
-connected.
+as well as the screen (`DEVICE CONOUT:=TTY1` stops it). The printer (LST:)
+is not connected.
+
+`TTY2` starts at SET-UP's baud rate, and `DEVICE` can change it (no space
+before the bracket):
+
+```
+A>DEVICE TTY2[9600]
+A>DEVICE TTY2
+```
+
+The second line shows the rate in use. CP/M 3 knows rates from 50 to
+19200 baud only, so at SET-UP's 38400, 57600 or 115200 it shows `NONE`.
+Rates below 134 are too slow for the board's UART and are left as they
+were. Data bits, parity, stop bits and flow control stay SET-UP's. The
+new rate lasts until the machine is reset (**F11**) or SET-UP's settings
+are saved, and is never saved itself. While it is in use, the terminal's
+status line and `HWINFO` show it.
 
 ## Date and time
 

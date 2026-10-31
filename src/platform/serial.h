@@ -60,6 +60,10 @@ serial_flow_t serial_flow(void);
 // Change the line settings: baud rate, data bits (5-8), parity ('N', 'E' or
 // 'O') and stop bits (1 or 2). serial_init starts at 8N1.
 void serial_configure(unsigned baud, unsigned data_bits, char parity, unsigned stop_bits);
+// The baud rate in use (serial_init's or serial_configure's).
+unsigned serial_baud(void);
+// Whether the UART can run at baud (not below ~120 at clk_peri 128 MHz).
+bool serial_baud_possible(unsigned baud);
 
 // Copy up to max received bytes into buf; returns the number copied.
 size_t serial_read(uint8_t *buf, size_t max);

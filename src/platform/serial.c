@@ -1,5 +1,6 @@
 #include "serial.h"
 
+#include "hardware/clocks.h"
 #include "hardware/gpio.h"
 #include "hardware/irq.h"
 #include "hardware/sync.h"
@@ -15,6 +16,7 @@ static volatile uint32_t rx_tail; // written by serial_read
 static volatile bool rx_paused;   // RX interrupts off: ring buffer nearly full
 static volatile serial_stats_t stats;
 static uart_inst_t *serial_uart;
+static unsigned serial_rate; // the baud rate asked for last
 static int cts_gpio = SERIAL_NO_PIN, rts_gpio = SERIAL_NO_PIN;
 static volatile serial_flow_t flow;
 
@@ -102,6 +104,7 @@ void serial_init(uart_inst_t *uart, unsigned baud, unsigned tx_pin, unsigned rx_
 	cts_gpio = cts_pin;
 	rts_gpio = rts_pin;
 	uart_init(uart, baud);
+	serial_rate = baud;
 	uart_set_format(uart, 8, 1, UART_PARITY_NONE);
 	uart_set_fifo_enabled(uart, true);
 	gpio_set_function(tx_pin, UART_FUNCSEL_NUM(uart, tx_pin));
@@ -154,6 +157,17 @@ void serial_configure(unsigned baud, unsigned data_bits, char parity, unsigned s
 	uart_parity_t p = parity == 'E' ? UART_PARITY_EVEN : parity == 'O' ? UART_PARITY_ODD : UART_PARITY_NONE;
 	uart_set_baudrate(serial_uart, baud);
 	uart_set_format(serial_uart, data_bits, stop_bits, p);
+	serial_rate = baud;
+}
+
+unsigned serial_baud(void) {
+	return serial_rate;
+}
+
+// The UART divides clk_peri by 16 x a 16-bit integer part (plus a 6-bit
+// fraction); uart_set_baudrate quietly takes the largest for slower rates.
+bool serial_baud_possible(unsigned baud) {
+	return baud && clock_get_hz(clk_peri) / 16 / baud < 65535;
 }
 
 size_t serial_read(uint8_t *buf, size_t max) {

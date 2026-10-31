@@ -92,6 +92,25 @@ static bool aux_out_ready(void) {
 	return true;
 }
 
+unsigned host_aux_rate = 115200, host_aux_saved = 115200, host_aux_min_rate = 120, host_aux_rate_sets;
+
+static unsigned aux_rate(void) {
+	return host_aux_rate;
+}
+
+static bool aux_set_rate(unsigned rate) {
+	++host_aux_rate_sets;
+	if (!rate) {
+		host_aux_rate = host_aux_saved;
+		return true;
+	}
+	if (rate < host_aux_min_rate) {
+		return false;
+	}
+	host_aux_rate = rate;
+	return true;
+}
+
 static void aux_out(uint8_t c) {
 	if (aux_busy_left) {
 		++host_aux_overruns;
@@ -183,6 +202,8 @@ const machine_platform_t host_platform = {
 	.aux_out = aux_out,
 	.aux_in = aux_in,
 	.aux_out_ready = aux_out_ready,
+	.aux_rate = aux_rate,
+	.aux_set_rate = aux_set_rate,
 	.disk_read = disk_read,
 	.disk_write = disk_write,
 	.disk_format = disk_format,

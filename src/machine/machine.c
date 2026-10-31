@@ -186,6 +186,29 @@ static void sio2d_out(BYTE data) {
 	plat->aux_out(data);
 }
 
+// Port 14: SIO2's rate as a CP/M 3 baud code (machine.h).
+static const unsigned baud_codes[16] = {0, 50, 75, 110, 134, 150, 300, 600, 1200, 1800, 2400, 3600, 4800, 7200,
+	9600, 19200};
+
+static BYTE rate_in(void) {
+	if (!plat->aux_rate) {
+		return 0xff;
+	}
+	unsigned rate = plat->aux_rate();
+	for (BYTE code = 1; code < 16; ++code) {
+		if (baud_codes[code] == rate) {
+			return code;
+		}
+	}
+	return 0;
+}
+
+static void rate_out(BYTE data) {
+	if (plat->aux_set_rate && data < 16) {
+		plat->aux_set_rate(baud_codes[data]);
+	}
+}
+
 static BYTE prts_in(void) {
 	return plat->printer_out ? 0xff : 0x00;
 }
@@ -521,6 +544,7 @@ in_func_t *const port_in[256] = {
 	[8] = dinfo_in,
 	[10] = xfer_in,
 	[12] = hwinfo_in,
+	[MACHINE_SERIAL_RATE] = rate_in,
 	[64] = mmu_in,
 	[65] = clkc_in,
 	[66] = clkd_in,
@@ -544,6 +568,7 @@ out_func_t *const port_out[256] = {
 	[8] = dinfo_out,
 	[10] = xfer_out,
 	[12] = hwinfo_out,
+	[MACHINE_SERIAL_RATE] = rate_out,
 	[64] = mmu_out,
 	[65] = clkc_out,
 	[66] = clkd_out,
@@ -613,6 +638,9 @@ void machine_reset(void) {
 	if (plat->xfer) {
 		uint8_t buf[XFER_RECORD];
 		plat->xfer(XFER_RESET, 0, buf);
+	}
+	if (plat->aux_set_rate) {
+		plat->aux_set_rate(0); // SET-UP's rate again
 	}
 	m.ay_select = 0;
 	if (plat->sound_write) {

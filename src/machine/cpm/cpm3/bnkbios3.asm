@@ -20,7 +20,10 @@
 ;
 ;	Character devices (bd qtq): TTY1 the screen and keyboard (SIO1),
 ;	TTY2 the board's serial port (SIO2, ports 2/3), AUXIN:/AUXOUT: by
-;	default; DEVICE moves CON: and AUX: between them.
+;	default; DEVICE moves CON: and AUX: between them. TTY2's rate can
+;	be set (DEVICE TTY2 [9600], bd c2d) where the machine has port 0EH:
+;	BOOT marks it soft and puts the rate in use in CHRTBL, DEVINI sends
+;	DEVICE's code and reads back what was done.
 ;
 ; History:
 ; 03-JUL-2024 first public release
@@ -72,6 +75,8 @@ TTY2S	EQU	02H		; tty 2 status
 FDC	EQU	04H		; FDC
 DINFO	EQU	08H		; drive format: OUT drive, IN 0 none, 1 8" floppy,
 				; 2 4 MB, 3 8 MB hard disk (ours)
+RATE	EQU	0EH		; tty 2's rate as a baud code: IN the one in use
+				; (0 none, 0FFH no such port), OUT one (ours)
 MMUSEL	EQU	40H		; MMU bank select
 CLKCMD	EQU	41H		; RTC command
 CLKDAT	EQU	42H		; RTC data
@@ -202,7 +207,7 @@ CHRTBL:	DB	'TTY1  '	; device 0 (vector bit 15): the screen and keyboard
 	DB	mb$inou+mb$ser
 	DB	baud$0
 	DB	'TTY2  '	; device 1 (vector bit 14): the serial port
-	DB	mb$inou+mb$ser
+	DB	mb$inou+mb$ser	; mb$soft and the rate's code set by BOOT
 	DB	baud$0
 ;
 	DB	0
@@ -366,6 +371,15 @@ BOOT:	LXI	SP,STACK
 	MVI	H,0
 	SHLD	@lovec		; LST:=NULL
 ;
+	IN	RATE		; tty 2's rate, if the machine can change it
+	CPI	0FFH
+	JZ	BOOT0		; no: a fixed rate, as picosim's
+	STA	CHRTBL+15	; its baud code (0: none, e.g. 115200)
+	LDA	CHRTBL+14
+	ORI	mb$soft		; DEVICE may set it
+	STA	CHRTBL+14
+BOOT0:
+;
 	MVI	A,10H		; setup FDC command
 	OUT	FDC
 	LXI	H,CMD
@@ -466,7 +480,16 @@ DEVTBL:	LXI	H,CHRTBL	; return address of character I/O table (common)
 ;
 ;	initialize character I/O devices
 ;
-DEVINI: RET
+DEVINI:	MOV	A,C		; device number
+	CPI	1		; tty 2 is the only one with a rate to set
+	RNZ
+	LDA	CHRTBL+15	; the baud code DEVICE put there
+	OUT	RATE		; tty 2 at that rate, until reset or SET-UP's save
+	IN	RATE		; the rate in use: unchanged if it could not be had
+	CPI	0FFH
+	RZ
+	STA	CHRTBL+15
+	RET
 ;
 ;	I/O drivers for disks
 ;

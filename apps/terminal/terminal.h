@@ -60,6 +60,10 @@ extern bool screen_blanked;          // blank_tick's answer: the LED's heartbeat
 
 void show_palette(const settings_t *s);
 void apply_settings(const settings_t *s);
+// The serial line at rate with the saved framing, until apply_settings
+// (SET-UP's save) or line_rate(0), which puts the saved line back (CP/M
+// 3's DEVICE through port 14, bd c2d). False if the UART cannot have it.
+bool line_rate(unsigned rate);
 
 // Save s as the settings (flash, then `settings`); false if the write
 // failed.
@@ -142,6 +146,7 @@ typedef struct {
 	unsigned keyboards;
 	uint32_t keys_sent; // last_key.count
 	settings_t settings;
+	unsigned baud;      // in use: CP/M can change it (line_rate)
 	char usb[12];       // usb_label
 	const char *type;   // term_type_name: the host can switch VT52 mode
 } status_t;

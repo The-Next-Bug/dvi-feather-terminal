@@ -758,7 +758,14 @@ UF2 in the latter).
   qtq; the common part (CSEG, LINK's CODE SIZE) must stay <= 0300H or
   GENCPM takes another page off the TPA: 02FBH after qtq, which moved the
   CP/M 3-only DEVTBL, DEVINI, DRVTBL and TIME to DSEG, as the BDOS calls
-  them, function 50 too, in bank 0) made by build.sh at build time: cpmrun.c (machine.c on the host,
+  them, function 50 too, in bank 0; TTY2's rate, bd c2d: BOOT (banked)
+reads port 14 MACHINE_SERIAL_RATE into CHRTBL's TTY2 baud byte and sets
+mb$soft unless it reads 0FFH, DEVINI C=1 writes DEVICE's code and reads
+back; machine.c's baud_codes table, platform aux_rate/aux_set_rate (0 =
+SET-UP's again, also on machine_reset) = cpm_glue serial_baud / main.c
+line_rate, which refuses what serial_baud_possible says the UART cannot
+do; the status line and HWINFO show serial_baud(); DEVICE's syntax is
+TTY2[9600], no space) made by build.sh at build time: cpmrun.c (machine.c on the host,
   plain 8" images, a script at the console: sysgen.run) runs DRI's RMAC,
   LINK and GENCPM under CP/M 3; the work disk ships as CPM3GEN;
   diskimg_gen.py --edit/--extract handles the images. Unchanged picosim
