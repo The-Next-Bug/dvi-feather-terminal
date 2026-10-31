@@ -42,6 +42,7 @@
     - [AYPLAY](cpm/tools/ayplay.md)
     - [AYTRACK](cpm/tools/aytrack.md)
 - [F83 Forth](cpm/f83.md)
+- [WordStar 4](cpm/wordstar.md)
 
 # Programming interfaces
 

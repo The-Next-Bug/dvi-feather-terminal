@@ -580,6 +580,18 @@ layout) or `TUNE`. The words: `AY!` `AY@` `AY?` `TONE` `VOLUME` `NOISE`
 `TICKS` `WAIT`. Each screen's shadow (its number + 7) explains it, and
 `VIEW` shows a word's source.
 
+### WordStar 4
+
+The `WS4` disk (built in, 8 MB) holds MicroPro's WordStar 4.00 for
+CP/M-80 installed for the VT100 (`lib/wordstar`). The monitor's install
+writes the `WS4` drive set: `CPM31` on A:, `CPM32` on B:, `WS4` on C:,
+and on H: the RAM disk (PSRAM boards) or `WSTEMP`, a blank 4 MB disk it
+makes. Boot it and run `C:WS NAME`. The disk's WordStar is patched
+(`src/machine/cpm/ws4/ws4_patch.py`): it finds its overlays on C:, and
+keeps its temporary files (`$A$`, `$B$`, `$C$`) on H:, copying the text
+back to the document's own drive when it saves. WordStar 4 has no such
+setting, and its own `WS NAME d:` saved the document on d:.
+
 ### The clock
 
 The machine's clock (ports 65/66) is the board's real-time clock when it

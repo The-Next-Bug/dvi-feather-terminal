@@ -48,3 +48,9 @@ Z80 machine's monitor can write to an SD card:
   public domain ("may be freely distributed and copied, as long as the
   authors are given credit and no copyright notice is placed upon it",
   `README.80`).
+- `WS4` (`lib/wordstar`): MicroPro International's WordStar 4.00 for
+  CP/M-80, installed for the VT100, its `WS.OVR` and `WS*.COM` patched by
+  `src/machine/cpm/ws4/ws4_patch.py`. Copyright MicroPro International;
+  no license comes with these files. WordStar for CP/M is effectively
+  abandonware: MicroPro is long gone, and the CP/M versions have not
+  been sold or supported for decades.

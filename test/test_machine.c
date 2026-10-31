@@ -219,8 +219,8 @@ static void test_drive_panel(void) {
 	static drivepanel_t p;
 	drivepanel_open(&p);
 	// On the card: CPM22 CPM31 CPM32 CPM3GEN EMPTY F83 HD4 HD8 MPM1 MPM2
-	// SHORT Z80TESTS (sorted).
-	CHECK_EQ(p.n_images, 12);
+	// SHORT WS4 Z80TESTS (sorted).
+	CHECK_EQ(p.n_images, 13);
 	CHECK(strcmp(p.images[p.choice[0]], "CPM22") == 0);
 	CHECK(strcmp(p.images[p.choice[4]], "HD8") == 0);
 	CHECK_EQ(p.choice[2], -1);
@@ -240,9 +240,12 @@ static void test_drive_panel(void) {
 	CHECK_EQ(p.drive, 2);
 	CHECK_EQ(panel_keys(&p, " "), DRIVEPANEL_REDRAW);
 	CHECK(p.choice[2] >= 0 && strcmp(p.images[p.choice[2]], "CPM31") == 0);
-	// B: Z80TESTS -> back one: SHORT, then MPM2, MPM1; back again skips
-	// HD8 (E) and HD4 (F): F83, then EMPTY. Forward five times: Z80TESTS.
+	// B: Z80TESTS -> back one: WS4, then SHORT, MPM2, MPM1; back again
+	// skips HD8 (E) and HD4 (F): F83, then EMPTY. Forward six times:
+	// Z80TESTS.
 	CHECK_EQ(panel_keys(&p, "\x1b[A\x1b[D"), DRIVEPANEL_REDRAW);
+	CHECK(strcmp(p.images[p.choice[1]], "WS4") == 0);
+	CHECK_EQ(panel_keys(&p, "\x1b[D"), DRIVEPANEL_REDRAW);
 	CHECK(strcmp(p.images[p.choice[1]], "SHORT") == 0);
 	CHECK_EQ(panel_keys(&p, "\x1b[D\x1b[D"), DRIVEPANEL_REDRAW);
 	CHECK(p.choice[1] >= 0 && strcmp(p.images[p.choice[1]], "MPM1") == 0);
@@ -250,7 +253,7 @@ static void test_drive_panel(void) {
 	CHECK(p.choice[1] >= 0 && strcmp(p.images[p.choice[1]], "F83") == 0);
 	CHECK_EQ(panel_keys(&p, "\x1b[D"), DRIVEPANEL_REDRAW);
 	CHECK(p.choice[1] >= 0 && strcmp(p.images[p.choice[1]], "EMPTY") == 0);
-	CHECK_EQ(panel_keys(&p, "\x1b[C\x1b[C\x1b[C\x1b[C\x1b[C"), DRIVEPANEL_REDRAW);
+	CHECK_EQ(panel_keys(&p, "\x1b[C\x1b[C\x1b[C\x1b[C\x1b[C\x1b[C"), DRIVEPANEL_REDRAW);
 	CHECK(p.choice[1] >= 0 && strcmp(p.images[p.choice[1]], "Z80TESTS") == 0);
 
 	CHECK_EQ(panel_keys(&p, "\r"), DRIVEPANEL_APPLY);
@@ -566,6 +569,29 @@ static bool menu_shown(void) {
 		screen_len >= 2 && strcmp(screen + screen_len - 2, "> ") == 0;
 }
 
+static void put_fat_file(const char *path, const void *data, unsigned size);
+
+// Every line the console got since clear_screen fits 79 columns (the
+// monitor at 80 columns, also under the ADM-3A, which wraps in column 80;
+// bd 9cj). Backspaces (line editing) count back.
+static bool lines_fit(void) {
+	int col = 0, widest = 0;
+	for (size_t i = 0; i < screen_len; ++i) {
+		char c = screen[i];
+		if (c == '\n' || c == '\r') {
+			col = 0;
+		} else if (c == '\b') {
+			col -= col > 0;
+		} else if (++col > widest) {
+			widest = col;
+		}
+	}
+	if (widest > 79) {
+		fprintf(stderr, "a line of %d columns in:\n%s\n", widest, screen);
+	}
+	return widest <= 79;
+}
+
 static monitor_action_t keys(const char *s) {
 	monitor_action_t a = MONITOR_NONE;
 	while (*s) {
@@ -660,17 +686,69 @@ static void test_monitor_fresh_card(void) {
 	CHECK(strstr(screen, "Set MPM   written") != NULL);
 	CHECK(drives_set_read("MPM", images));
 	CHECK(strcmp(images[0], "MPM1") == 0 && strcmp(images[1], "MPM2") == 0 && images[2][0] == '\0');
+	// WS4 (bd 6on): WordStar on C:, its temporary files on H:, a blank
+	// 4 MB disk made for them (no RAM disk here).
+	CHECK(strstr(screen, "WSTEMP   ") != NULL);
+	CHECK(strstr(screen, "Set WS4   written") != NULL);
+	CHECK(drives_set_read("WS4", images));
+	CHECK(strcmp(images[0], "CPM31") == 0 && strcmp(images[1], "CPM32") == 0 && strcmp(images[2], "WS4") == 0);
+	CHECK(strcmp(images[7], "WSTEMP") == 0 && images[3][0] == '\0');
+	CHECK_EQ(drives_image_format("WSTEMP"), DRIVES_HD4);
 	CHECK(strstr(screen, "A: CPM22") != NULL);
 	CHECK(strstr(screen, "B: Z80TESTS") != NULL);
+	CHECK(lines_fit());
 
 	clear_screen();
 	CHECK_EQ(keys("mcempty\r"), MONITOR_NONE);
 	CHECK(strstr(screen, "C: EMPTY") != NULL);
 	CHECK_EQ(keys("mdnosuch\r"), MONITOR_NONE);
 	CHECK(strstr(screen, "no such disk") != NULL);
+	// L: the list, not the menu after it (bd 20w: that scrolled it off);
+	// Space (or ?) shows the menu. A full list (64 images) fits on the
+	// screen with its notes and the prompt.
+	clear_screen();
 	CHECK_EQ(keys("l"), MONITOR_NONE);
 	CHECK(strstr(screen, "Z80TESTS") != NULL);
+	CHECK(!menu_shown());
+	CHECK(screen_len >= 2 && strcmp(screen + screen_len - 2, "> ") == 0);
+	CHECK_EQ(keys(" "), MONITOR_NONE);
 	CHECK(menu_shown());
+	char path[32];
+	for (unsigned i = 0; i < DRIVES_LIST_MAX; ++i) {
+		snprintf(path, sizeof path, "/DISKS80/T%02u.DSK", i);
+		put_fat_file(path, work, 512);
+	}
+	clear_screen();
+	CHECK_EQ(keys("l"), MONITOR_NONE);
+	unsigned rows = 1;
+	for (size_t i = 0; i < screen_len; ++i) {
+		rows += screen[i] == '\n';
+	}
+	CHECK(rows <= 24);
+	CHECK(strstr(screen, "CPM22    FD") != NULL); // the first, still there
+	CHECK(lines_fit());
+	for (unsigned i = 0; i < DRIVES_LIST_MAX; ++i) {
+		snprintf(path, sizeof path, "/DISKS80/T%02u.DSK", i);
+		CHECK_EQ(f_unlink(path), FR_OK);
+	}
+	CHECK_EQ(keys("?"), MONITOR_NONE);
+	CHECK(menu_shown());
+	// Eight drives with the longest names and formats still fit.
+	static const char *const longest[DRIVES] = {"Z80TESTS", "CPM3GEN", "CPM32", "WSTEMP", "MPM2", "F83", "WS4", "EMPTY"};
+	drives_unmount_all();
+	for (unsigned d = 0; d < DRIVES; ++d) {
+		CHECK_EQ(drives_mount(d, longest[d]), DRIVES_OK);
+	}
+	drives_save_config();
+	clear_screen();
+	CHECK_EQ(keys("c"), MONITOR_NONE); // the card again: DRIVES.CFG
+	CHECK(lines_fit());
+	CHECK(strstr(screen, "Drives:  A: Z80TESTS FD  B: CPM3GEN FD") != NULL);
+	drives_unmount_all();
+	CHECK_EQ(drives_mount(0, "CPM22"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "Z80TESTS"), DRIVES_OK);
+	CHECK_EQ(drives_mount(2, "EMPTY"), DRIVES_OK);
+	drives_save_config();
 
 	// The scratch buffer has one holder at a time: while another job has
 	// it, installing and blank disks say so and write nothing.
@@ -693,11 +771,102 @@ static void test_monitor_fresh_card(void) {
 	flushes = 0;
 	busies = 0;
 	CHECK_EQ(keys("nbig\r3"), MONITOR_NONE);
-	CHECK(strstr(screen, "Writing BIG.DSK (8160 KB)... ............................... done") != NULL);
-	CHECK(flushes >= 31);
+	CHECK(strstr(screen, "Writing BIG.DSK (8160 KB)... ............... done") != NULL);
+	CHECK(flushes >= 15);
 	CHECK(busies >= 8160 * 1024 / 4096); // every 4 KB chunk
 	CHECK(menu_shown());
 	CHECK_EQ(drives_image_format("BIG"), DRIVES_HD8);
+	CHECK(lines_fit());
+	clear_screen();
+	CHECK_EQ(keys("nabcdefgh\r3"), MONITOR_NONE); // the longest name
+	CHECK(strstr(screen, "done: M mounts it") != NULL);
+	CHECK(lines_fit());
+
+	// The Drives panel's Disks page (bd 5rq): every disk, scrolling;
+	// renaming (a mounted disk stays mounted, the sets and the drives'
+	// choices follow) and deleting (a mounted one unmounted).
+	char set[DRIVES][DRIVES_NAME_MAX + 1] = {"CPM22", "BIG"};
+	CHECK(drives_set_write("BIGSET", set));
+	CHECK_EQ(keys("mdbig\r"), MONITOR_NONE);
+	static drivepanel_t p;
+	drivepanel_open(&p);
+	CHECK(panel_row_has(&p, 0, "Tab: the disks"));
+	CHECK_EQ(panel_keys(&p, "\x1b[B\x1b[B\x1b[B\x1b[B \t"), DRIVEPANEL_REDRAW); // E: a choice, not applied
+	CHECK(p.disks_page);
+	int e_choice = p.choice[4];
+	CHECK(e_choice >= 0);
+	char e_name[DRIVES_NAME_MAX + 1];
+	strcpy(e_name, p.images[e_choice]);
+	CHECK(panel_row_has(&p, 0, "Disks on the card"));
+	char heading[40];
+	snprintf(heading, sizeof heading, "%u disks in /DISKS80", p.n_images);
+	CHECK(panel_row_has(&p, 1, heading));
+	CHECK(p.n_images > DRIVEPANEL_DISK_ROWS);
+	CHECK(panel_row_has(&p, 1 + DRIVEPANEL_DISK_ROWS, "v")); // more below
+	CHECK_EQ(panel_keys(&p, "\x1b[4~"), DRIVEPANEL_REDRAW); // End
+	CHECK_EQ(p.disk, p.n_images - 1);
+	CHECK_EQ(p.disk_top, p.n_images - DRIVEPANEL_DISK_ROWS);
+	CHECK(panel_row_has(&p, 2, "^")); // more above
+	CHECK(panel_row_has(&p, 1 + DRIVEPANEL_DISK_ROWS, p.images[p.disk]));
+	CHECK_EQ(panel_keys(&p, "\x1b[5~"), DRIVEPANEL_REDRAW); // Page Up
+	CHECK_EQ(p.disk, p.n_images - 1 - DRIVEPANEL_DISK_ROWS);
+	CHECK_EQ(panel_keys(&p, "\x1b[1~"), DRIVEPANEL_REDRAW); // Home
+	CHECK_EQ(p.disk, 0);
+	CHECK_EQ(p.disk_top, 0);
+	while (p.disk + 1 < p.n_images && strcmp(p.images[p.disk], "BIG") != 0) {
+		panel_keys(&p, "\x1b[B");
+	}
+	CHECK(strcmp(p.images[p.disk], "BIG") == 0);
+	CHECK(panel_row_has(&p, 2 + p.disk - p.disk_top, "> 8 MB disk           mounted on D:"));
+
+	CHECK_EQ(panel_keys(&p, "r"), DRIVEPANEL_REDRAW);
+	CHECK_EQ(p.prompt, DRIVEPANEL_PROMPT_RENAME);
+	CHECK(panel_row_has(&p, DRIVEPANEL_ROWS - 4, "Rename BIG to: BIG_"));
+	CHECK_EQ(panel_keys(&p, "\x7f\x7f\x7fhuge\r"), DRIVEPANEL_RENAME_DISK);
+	drivepanel_rename_disk(&p);
+	CHECK(panel_row_has(&p, DRIVEPANEL_ROWS - 4, "Renamed BIG to HUGE"));
+	CHECK(strcmp(p.images[p.disk], "HUGE") == 0);
+	CHECK(drives_name(3) && strcmp(drives_name(3), "HUGE") == 0);
+	CHECK(p.choice[3] == (int)p.disk && p.mounted[3] == (int)p.disk);
+	CHECK(p.choice[4] >= 0 && strcmp(p.images[p.choice[4]], e_name) == 0);
+	CHECK_EQ(drives_image_format("HUGE"), DRIVES_HD8);
+	CHECK_EQ(drives_image_format("BIG"), DRIVES_NONE);
+	CHECK(drives_set_read("BIGSET", set));
+	CHECK(strcmp(set[0], "CPM22") == 0 && strcmp(set[1], "HUGE") == 0);
+	// Refused: a name taken, an empty name; Esc closes the prompt.
+	CHECK_EQ(panel_keys(&p, "r\x7f\x7f\x7f\x7f" "cpm22\r"), DRIVEPANEL_RENAME_DISK);
+	drivepanel_rename_disk(&p);
+	CHECK(panel_row_has(&p, DRIVEPANEL_ROWS - 4, "Not renamed: CPM22 is taken"));
+	CHECK(strcmp(p.images[p.disk], "HUGE") == 0);
+	CHECK_EQ(panel_keys(&p, "r\x7f\x7f\x7f\x7f\r"), DRIVEPANEL_REDRAW);
+	CHECK(panel_row_has(&p, DRIVEPANEL_ROWS - 5, "A disk's name is 1-8 letters and digits"));
+	CHECK(panel_row_has(&p, DRIVEPANEL_ROWS - 4, "Rename HUGE to: _"));
+	panel_keys(&p, "\x1b");
+	CHECK_EQ(drivepanel_tick(&p, DRIVEPANEL_ESC_TIMEOUT_MS), DRIVEPANEL_REDRAW);
+	CHECK_EQ(p.prompt, DRIVEPANEL_PROMPT_NONE);
+
+	CHECK_EQ(panel_keys(&p, "d"), DRIVEPANEL_REDRAW);
+	CHECK(panel_row_has(&p, DRIVEPANEL_ROWS - 4, "Delete HUGE, mounted on D: and all on it? (Y/N)"));
+	CHECK_EQ(panel_keys(&p, "n"), DRIVEPANEL_REDRAW);
+	CHECK_EQ(drives_image_format("HUGE"), DRIVES_HD8);
+	unsigned before = p.n_images;
+	CHECK_EQ(panel_keys(&p, "\x1b[3~y"), DRIVEPANEL_DELETE_DISK); // Delete
+	drivepanel_delete_disk(&p);
+	CHECK(panel_row_has(&p, DRIVEPANEL_ROWS - 4, "Deleted HUGE"));
+	CHECK_EQ(p.n_images, before - 1);
+	CHECK(drives_name(3) == NULL && p.mounted[3] == -1 && p.choice[3] == -1);
+	CHECK_EQ(drives_image_format("HUGE"), DRIVES_NONE);
+	panel_keys(&p, "\x1b[H"); // Home (as some keyboards send it)
+	CHECK_EQ(p.disk, 0);
+	while (p.disk + 1 < p.n_images && strcmp(p.images[p.disk], "ABCDEFGH") != 0) {
+		panel_keys(&p, "\x1b[B");
+	}
+	CHECK_EQ(panel_keys(&p, "Dy"), DRIVEPANEL_DELETE_DISK);
+	drivepanel_delete_disk(&p);
+	CHECK_EQ(drives_image_format("ABCDEFGH"), DRIVES_NONE);
+	CHECK_EQ(panel_keys(&p, "\t"), DRIVEPANEL_REDRAW);
+	CHECK(!p.disks_page);
+	CHECK(drives_set_remove("BIGSET"));
 
 	// The assignments survive checking the card again (DRIVES.CFG).
 	clear_screen();
@@ -2553,6 +2722,17 @@ static void test_ramdisk(void) {
 	drivepanel_open(&p);
 	CHECK(p.choice[2] >= 0 && strcmp(p.images[p.choice[2]], "RAMDISK") == 0);
 	CHECK(panel_row_has(&p, 4, "4 MB disk in PSRAM, lost at power-off"));
+	// Its Disks page: listed, neither renamed nor deleted (bd 5rq).
+	CHECK_EQ(panel_keys(&p, "\t"), DRIVEPANEL_REDRAW);
+	while (p.disk + 1 < p.n_images && strcmp(p.images[p.disk], "RAMDISK") != 0) {
+		panel_keys(&p, "\x1b[B");
+	}
+	CHECK(panel_row_has(&p, 2 + p.disk - p.disk_top, "4 MB disk in PSRAM  mounted on C:"));
+	CHECK_EQ(panel_keys(&p, "r"), DRIVEPANEL_REDRAW);
+	CHECK(p.prompt == DRIVEPANEL_PROMPT_NONE);
+	CHECK(panel_row_has(&p, DRIVEPANEL_ROWS - 4, "The RAM disk cannot be renamed"));
+	CHECK_EQ(panel_keys(&p, "d"), DRIVEPANEL_REDRAW);
+	CHECK(panel_row_has(&p, DRIVEPANEL_ROWS - 4, "The RAM disk cannot be deleted"));
 
 	// CP/M 2.2 on it (a hard disk, blank: no system tracks needed).
 	clear_screen();
@@ -2569,6 +2749,37 @@ static void test_ramdisk(void) {
 	CHECK(type("\x03"));
 	CHECK_EQ(run_until("A>", 10), MACHINE_RUNNING);
 	CHECK(cpm("DIR C:", "RAM      COM"));
+
+	// The WS4 starter set (bd 6on) puts WordStar's temporary files on the
+	// RAM disk; no WSTEMP made for it.
+	drives_set_remove("WS4"); // may be there
+	f_unlink("/DISKS80/WSTEMP.DSK");
+	static char before[DRIVES_LIST_MAX][DRIVES_NAME_MAX + 1];
+	unsigned n_before = drives_list(before, DRIVES_LIST_MAX);
+	clear_screen();
+	monitor_start(&monitor_platform, true, 0);
+	CHECK_EQ(keys(" in"), MONITOR_NONE); // a key stops the autoboot
+	CHECK(strstr(screen, "Set WS4   written") != NULL);
+	CHECK(strstr(screen, "WSTEMP") == NULL);
+	char images[DRIVES][DRIVES_NAME_MAX + 1];
+	CHECK(drives_set_read("WS4", images));
+	CHECK(strcmp(images[2], "WS4") == 0 && strcmp(images[7], "RAMDISK") == 0);
+	CHECK_EQ(drives_image_format("WSTEMP"), DRIVES_NONE);
+	// The built-in disks the install wrote: off the card again.
+	static char now[DRIVES_LIST_MAX][DRIVES_NAME_MAX + 1];
+	unsigned n_now = drives_list(now, DRIVES_LIST_MAX);
+	for (unsigned i = 0; i < n_now; ++i) {
+		bool was = false;
+		for (unsigned j = 0; j < n_before && !was; ++j) {
+			was = strcmp(now[i], before[j]) == 0;
+		}
+		if (!was) {
+			char path[32];
+			snprintf(path, sizeof path, "/DISKS80/%s.DSK", now[i]);
+			drives_unmount_all();
+			CHECK_EQ(f_unlink(path), FR_OK);
+		}
+	}
 
 	// Taken away: unmounted, and the name is no disk again.
 	drives_set_ramdisk(NULL, DRIVES_NONE);
@@ -3236,6 +3447,129 @@ static void test_f83(void) {
 	drives_unmount_all();
 }
 
+// ---- WordStar 4 (lib/wordstar on WS4, bd 6on) ----
+
+// Whether H: (WSTEMP) has a directory entry for NAME.TYP (11 bytes, as in
+// an FCB), user 0, not erased.
+static bool h_has(const char *fcb_name) {
+	uint8_t buf[DRIVES_SECTOR];
+	for (unsigned sector = 1; sector <= 128; ++sector) { // the directory: track 0
+		CHECK_EQ(drives_read(7, 0, sector, buf), 0);
+		for (unsigned e = 0; e < DRIVES_SECTOR; e += 32) {
+			if (buf[e] == 0 && memcmp(buf + e + 1, fcb_name, 11) == 0) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+// WS4's WordStar under CP/M 3 as the WS4 set mounts it (C: WS4, H: a blank
+// 4 MB disk): run as C:WS from A:, it finds its overlays on C:
+// (LGLDRV patched); a document on A: has its temporary files on H:
+// (WS.OVR patched), and saving writes it to A:, with its backup, and
+// leaves nothing on H:.
+static void test_wordstar(void) {
+	drives_unmount_all();
+	CHECK_EQ(diskimg_install(diskimg_find("CPM31"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("CPM32"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	CHECK_EQ(diskimg_install(diskimg_find("WS4"), true, window, NULL, NULL), DISKIMG_WRITTEN);
+	f_unlink("/DISKS80/WSTEMP.DSK");
+	CHECK_EQ(drives_create("WSTEMP", DRIVES_HD4, window, sizeof window, NULL, NULL), DRIVES_OK);
+	CHECK_EQ(drives_mount(0, "CPM31"), DRIVES_OK);
+	CHECK_EQ(drives_mount(1, "CPM32"), DRIVES_OK);
+	CHECK_EQ(drives_mount(2, "WS4"), DRIVES_OK);
+	CHECK_EQ(drives_mount(7, "WSTEMP"), DRIVES_OK);
+	cpm3_boot();
+	CHECK(cpm("DIR C:WS*.*", "WSPRINT  OVR"));
+
+	// A new document on A:.
+	clear_screen();
+	CHECK(type("C:WS MEMO.TXT\r"));
+	CHECK_EQ(run_until("Create a new one", 30), MACHINE_RUNNING);
+	clear_screen();
+	CHECK(type("Y"));
+	CHECK_EQ(run_until("MEMO.TXT", 30), MACHINE_RUNNING);
+	run_for(0.5);
+	CHECK(h_has("MEMO    $A$"));
+	CHECK(h_has("MEMO    $B$"));
+	CHECK(type("Temporary files on H:\r"));
+	run_for(0.5);
+	clear_screen();
+	CHECK(type("\x0b" "x")); // ^KX: save and exit
+	CHECK_EQ(run_until("A>", 30), MACHINE_RUNNING);
+	CHECK(!h_has("MEMO    $A$"));
+	CHECK(!h_has("MEMO    $B$"));
+	CHECK(cpm("TYPE MEMO.TXT", "Temporary files on H:"));
+	CHECK(cpm("DIR MEMO.*", "MEMO     TXT"));
+	CHECK(strstr(screen, "$") == NULL);
+
+	// Again: ^KS saves and goes on (the temporary files made again, on
+	// H:), ^KD back to the Opening Menu, X leaves; MEMO.BAK has the first
+	// version.
+	clear_screen();
+	CHECK(type("C:WS MEMO.TXT\r"));
+	CHECK_EQ(run_until("MEMO.TXT", 30), MACHINE_RUNNING);
+	run_for(0.5);
+	CHECK(type("Second line\r"));
+	run_for(0.5);
+	CHECK(type("\x0b" "s"));
+	run_for(1);
+	CHECK(h_has("MEMO    $B$"));
+	CHECK(type("Third line\r"));
+	run_for(0.5);
+	clear_screen();
+	CHECK(type("\x0b" "d"));
+	run_for(1);
+	CHECK(type("x"));
+	CHECK_EQ(run_until("A>", 30), MACHINE_RUNNING);
+	CHECK(!h_has("MEMO    $B$"));
+	CHECK(cpm("TYPE MEMO.TXT", "Third line"));
+	CHECK(strstr(screen, "Second line") != NULL);
+	CHECK(cpm("TYPE MEMO.BAK", "Second line"));
+	CHECK(cpm("DIR MEMO.*", "MEMO     BAK"));
+	CHECK(strstr(screen, "$") == NULL);
+
+	// A document on B: bigger than WordStar's memory: the text spills
+	// into $A$ and $B$ on H:, and the save copies about 900 records.
+	static char big[112 * 1024];
+	size_t n = 0;
+	for (unsigned i = 1; n + 80 < sizeof big; ++i) {
+		n += (size_t)snprintf(big + n, sizeof big - n, "Line %05u of a document longer than WordStar's memory\r\n", i);
+	}
+	f_mkdir("/XFER"); // may be there already
+	put_fat_file("/XFER/BIG.TXT", big, (unsigned)n);
+	CHECK(cpm("XPIP B:=SD:BIG.TXT", "1 copied"));
+	f_unlink("/XFER/BIG.TXT");
+	clear_screen();
+	CHECK(type("C:WS B:BIG.TXT\r"));
+	CHECK_EQ(run_until("BIG.TXT", 30), MACHINE_RUNNING);
+	run_for(0.5);
+	CHECK(type("\x11" "c")); // ^QC: the end
+	run_for(3);
+	CHECK(h_has("BIG     $B$"));
+	CHECK(type("THE END\r"));
+	run_for(0.5);
+	clear_screen();
+	CHECK(type("\x0b" "x"));
+	CHECK_EQ(run_until("A>", 60), MACHINE_RUNNING);
+	CHECK(!h_has("BIG     $A$") && !h_has("BIG     $B$"));
+	CHECK(cpm("XPIP SD:BIG.TXT=B:BIG.TXT", "1 copied"));
+	static char got[sizeof big + 1024];
+	FIL f;
+	UINT len = 0;
+	CHECK_EQ(f_open(&f, "/XFER/BIG.TXT", FA_READ), FR_OK);
+	CHECK_EQ(f_read(&f, got, sizeof got, &len), FR_OK);
+	f_close(&f);
+	f_unlink("/XFER/BIG.TXT");
+	// WordStar marks the page breaks it worked out: line feeds 8Ah.
+	for (UINT i = 0; i < len; ++i) {
+		got[i] &= 0x7f;
+	}
+	CHECK(len >= n + 9 && memcmp(got, big, n) == 0 && memcmp(got + n, "THE END\r\n", 9) == 0);
+	drives_unmount_all();
+}
+
 int main(void) {
 	srand(1);
 	RUN(test_fat32_volume);
@@ -3284,6 +3618,7 @@ int main(void) {
 	RUN(test_altscr);
 	RUN(test_aytrack_tool);
 	RUN(test_f83);
+	RUN(test_wordstar);
 	drives_unmount_all();
 	f_unmount("");
 	diskio_ram_free();

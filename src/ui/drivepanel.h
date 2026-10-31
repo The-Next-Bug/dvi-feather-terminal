@@ -18,6 +18,14 @@
 // saves the drives as a set (its name typed in), R or Delete removes the
 // set shown (after Y). Saving and removing touch the card, so they come
 // back as actions for the caller to run (drivepanel_save_set, _remove_set).
+//
+// Tab switches to the Disks page (bd 5rq): every image on the card in a
+// scrolling list (Up/Down, Page Up/Down, Home/End), with its format and
+// the drive it is mounted on. R renames the selected one (its new name
+// typed in), D or Delete deletes it (after Y): drivepanel_rename_disk,
+// _delete_disk, run by the caller as above. A mounted disk stays mounted
+// under its new name, and the sets naming it follow; a deleted one is
+// unmounted. The RAM disk is neither renamed nor deleted.
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -35,13 +43,19 @@ typedef enum {
 	DRIVEPANEL_CANCEL, // Escape
 	DRIVEPANEL_SAVE_SET,   // drivepanel_save_set
 	DRIVEPANEL_REMOVE_SET, // drivepanel_remove_set
+	DRIVEPANEL_RENAME_DISK, // drivepanel_rename_disk
+	DRIVEPANEL_DELETE_DISK, // drivepanel_delete_disk
 } drivepanel_action_t;
 
 typedef enum {
 	DRIVEPANEL_PROMPT_NONE,
 	DRIVEPANEL_PROMPT_NAME,   // typing the name to save the drives as
 	DRIVEPANEL_PROMPT_REMOVE, // Y removes the set shown
+	DRIVEPANEL_PROMPT_RENAME, // typing the selected disk's new name
+	DRIVEPANEL_PROMPT_DELETE, // Y deletes the selected disk
 } drivepanel_prompt_t;
+
+#define DRIVEPANEL_DISK_ROWS DRIVES // the Disks page's list rows, under its heading
 
 typedef struct {
 	char images[DRIVES_LIST_MAX][DRIVES_NAME_MAX + 1]; // on the card, sorted
@@ -59,6 +73,9 @@ typedef struct {
 	int set;     // the set shown: the one the choices match, else -1
 	drivepanel_prompt_t prompt;
 	char name[DRIVES_NAME_MAX + 1]; // the name being typed
+	bool disks_page;     // the Disks page, not the drives
+	unsigned disk;       // the disk selected there (index into images)
+	unsigned disk_top;   // the first one shown
 	uint8_t esc;         // 0, 1 after ESC, 2 inside ESC [ / ESC O
 	uint8_t esc_param;   // the CSI's first parameter digit (3: Delete)
 	uint32_t esc_ms;
@@ -80,6 +97,12 @@ unsigned drivepanel_apply(drivepanel_t *p, bool *failed);
 // read again, the drives kept as chosen, and p->message says how it went.
 void drivepanel_save_set(drivepanel_t *p);
 void drivepanel_remove_set(drivepanel_t *p);
+
+// Rename the selected disk to p->name, or delete it; the images and sets
+// are read again (the drives' choices kept, by name), and p->message says
+// how it went.
+void drivepanel_rename_disk(drivepanel_t *p);
+void drivepanel_delete_disk(drivepanel_t *p);
 
 // Draw it like SET-UP (setup_draw): a box in border, text in fg on bg.
 void drivepanel_draw(const drivepanel_t *p, screen_t *s, unsigned top, uint8_t fg, uint8_t bg, uint8_t border);

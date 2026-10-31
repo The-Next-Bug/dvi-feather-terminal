@@ -39,7 +39,26 @@ mounted on A-H, and a way to change it.
 | Return | mount the choices and save them |
 | **S** | save the drives as a named set (type a name of up to 8 letters and digits; an existing name is replaced) |
 | **R**, Delete | remove the set shown (after **Y**) |
+| Tab | the Disks page (below) |
 | Esc | back to SET-UP |
+
+## The Disks page
+
+Tab in the Drives panel switches to a list of every disk image on the
+card (and the RAM disk), with its format and the drive it is mounted on;
+Tab again goes back to the drives.
+
+| Key | Action |
+|---|---|
+| Up, Down, Page Up, Page Down, Home, End | select a disk (the list scrolls; `^` and `v` show there are more above or below) |
+| **R** | rename the disk: type its new name (up to 8 letters and digits), Return. A mounted disk stays mounted under the new name, and the drive sets naming it are changed to match |
+| **D**, Delete | delete the disk and everything on it (after **Y**). A mounted disk is unmounted first; drive sets naming it leave it out from then on |
+| Esc | back to SET-UP |
+
+The RAM disk can be neither renamed nor deleted. Deleting a disk CP/M is
+using is like pulling out a floppy: CP/M reports errors on that drive
+until another disk is mounted. New blank disks are made in the monitor
+(**N**), and the built-in ones put back by its install (**I**).
 
 ## Drive sets
 
@@ -57,8 +76,8 @@ E=HD8
 ```
 
 Drives left out are empty; a disk not on the card is left out (the panel
-says how many). The monitor's install (**I**) writes two to start with,
-`CPM22` and `CPM3`, if they are missing; after that they are yours to
+says how many). The monitor's install (**I**) writes four to start with,
+`CPM22`, `CPM3`, `MPM` and `WS4`, if they are missing; after that they are yours to
 change or remove. At most 16 sets.
 
 ## The RAM disk

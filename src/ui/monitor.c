@@ -141,11 +141,12 @@ static void show_drives(void) {
 		const char *name = drives_name(d);
 		char text[24];
 		if (name) {
-			snprintf(text, sizeof text, "%s (%s)", name, drives_geometry(drives_format(d))->short_name);
+			snprintf(text, sizeof text, "%s %s", name, drives_geometry(drives_format(d))->short_name);
 		} else {
 			snprintf(text, sizeof text, "-");
 		}
-		say("%s %c: %-15s", d % 4 ? "" : d ? "\r\n        " : "Drives: ", 'A' + d, text);
+		// 4 a row, 72 columns: every line of the monitor fits in 79 (bd 9cj).
+		say("%s %c: %-12s", d % 4 ? "" : d ? "\r\n        " : "Drives: ", 'A' + d, text);
 	}
 	say("\r\n");
 }
@@ -195,26 +196,61 @@ static_assert(LZ_WINDOW <= SCRATCH_SIZE, "the LZ window is the scratch buffer");
 // Starter sets for SET-UP's Drives panel (bd f8w.6), one per system on
 // the built-in disks. Written only when missing: once there, a set is the
 // user's to change or remove, even when the disks are replaced.
+// WS4 (bd 6on): CP/M 3 with WordStar on C:, whose patched WS.OVR keeps
+// its temporary files on H: (ws4_patch.py): the RAM disk where there is
+// one, else WSTEMP, a blank 4 MB disk made here when missing.
+#define WS4_TEMP "WSTEMP"
+
 static const struct {
 	const char *name;
-	const char *a, *b;
+	const char *a, *b, *c;
+	bool temp_h; // H: the RAM disk or WS4_TEMP
 } starter_sets[] = {
-	{"CPM22", "CPM22", "Z80TESTS"},
-	{"CPM3", "CPM31", "CPM32"},
-	{"MPM", "MPM1", "MPM2"},
+	{"CPM22", "CPM22", "Z80TESTS", NULL, false},
+	{"CPM3", "CPM31", "CPM32", NULL, false},
+	{"MPM", "MPM1", "MPM2", NULL, false},
+	{"WS4", "CPM31", "CPM32", "WS4", true},
 };
+
+// WS4_TEMP made blank if it is not there; false if it could not be.
+static bool make_ws4_temp(void) {
+	if (drives_image_format(WS4_TEMP) != DRIVES_NONE) {
+		return true;
+	}
+	uint8_t *buf = scratch_acquire();
+	if (!buf) {
+		return false;
+	}
+	say("%-9s", WS4_TEMP);
+	progress_start(PROGRESS_STEP);
+	drives_result_t r = drives_create(WS4_TEMP, DRIVES_HD4, buf, SCRATCH_SIZE, progress, NULL);
+	scratch_release(buf);
+	put(dots ? " " : "");
+	put(r == DRIVES_OK ? "written (blank 4 MB disk)\r\n" : "FAILED\r\n");
+	return r == DRIVES_OK;
+}
 
 static void install_sets(void) {
 	for (unsigned i = 0; i < sizeof starter_sets / sizeof starter_sets[0]; ++i) {
 		char images[DRIVES][DRIVES_NAME_MAX + 1] = {{0}};
-		say("Set %-6s", starter_sets[i].name);
-		if (drives_set_read(starter_sets[i].name, images)) {
-			put("already there\r\n");
+		bool there = drives_set_read(starter_sets[i].name, images);
+		if (!there) {
+			strcpy(images[0], starter_sets[i].a);
+			strcpy(images[1], starter_sets[i].b);
+			if (starter_sets[i].c) {
+				strcpy(images[2], starter_sets[i].c);
+			}
+			if (starter_sets[i].temp_h) {
+				strcpy(images[DRIVES - 1], drives_ramdisk_format() ? DRIVES_RAMDISK : WS4_TEMP);
+			}
+		}
+		// The set's temporary disk, also when it was removed since.
+		if (starter_sets[i].temp_h && strcmp(images[DRIVES - 1], WS4_TEMP) == 0 && !make_ws4_temp()) {
+			say("Set %-6sFAILED\r\n", starter_sets[i].name);
 			continue;
 		}
-		strcpy(images[0], starter_sets[i].a);
-		strcpy(images[1], starter_sets[i].b);
-		put(drives_set_write(starter_sets[i].name, images) ? "written\r\n" : "FAILED\r\n");
+		say("Set %-6s", starter_sets[i].name);
+		put(there ? "already there\r\n" : drives_set_write(starter_sets[i].name, images) ? "written\r\n" : "FAILED\r\n");
 	}
 }
 
@@ -367,8 +403,15 @@ static monitor_action_t menu_key(uint8_t c) {
 		mode = MODE_NEW_NAME;
 		return MONITOR_NONE;
 	case 'L':
+		// The list without the menu after it, which would scroll it off a
+		// 24-row screen (bd 20w): at most 64 images, 13 rows.
 		say("L\r\n");
 		list_disks();
+		put("(Space: the menu. To rename or delete one: F12, D, Tab)\r\n> ");
+		return MONITOR_NONE;
+	case ' ':
+	case '?':
+		say("\r\n");
 		break;
 	case 'I':
 		say("I\r\n");
@@ -463,7 +506,7 @@ static void create_disk(drives_format_t f) {
 		[DRIVES_EXISTS] = "there is a disk of that name",
 		[DRIVES_IO_ERROR] = "card error",
 	};
-	progress_start(PROGRESS_STEP);
+	progress_start(2 * PROGRESS_STEP); // 16 dots for 8 MB: the line fits 80 columns
 	drives_result_t r = drives_create(line, f, buf, SCRATCH_SIZE, progress, NULL);
 	scratch_release(buf);
 	say("%s%s\r\n", dots ? " " : "", r == DRIVES_OK ? "done: M mounts it" : why[r] ? why[r] : "failed");

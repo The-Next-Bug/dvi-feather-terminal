@@ -742,7 +742,23 @@ UF2 in the latter).
   shadows at n + 7), code lines <= 63 columns (a screen has no line ends:
   column 64 ran CHORD's ";" into the next ":" as ";:"), \ lines 64.
   test_f83 loads it, AY?, the periods, STEREO read back, VIEW, a shadow,
-  SCALE's writes (fine before coarse, as ay_periods pairs them). Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
+  SCALE's writes (fine before coarse, as ay_periods pairs them).
+  WS4 (bd 6on): lib/wordstar (WordStar 4.00, VT100-installed; no
+  PATCH.LST, READ.ME, WINSTALL.COM, SAMPLE1.BAK: flash, the user's
+  choice) on a blank 8 MB disk. src/machine/cpm/ws4/ws4_patch.py (checks
+  the bytes it replaces; addresses from ~/fz80/wordstar-4's wiki, WS.OVR
+  resident at file + 2480h, overlay C at file - 0A80h): TEMPFCB's drive
+  always H:; the save always takes the copy path, rewritten (record 0,
+  a record at a time to the ^Z: WordStar's read from the random record
+  past the end and failed, falling back to renaming $B$ on H:); BFCB's
+  drive = DOCFCB's before the 8B45h swap; WS*.COM LGLDRV "CAB..." so
+  C:WS finds its overlays on C:. WordStar's "WS NAME d:" meant save to
+  d:, not a temp drive. monitor.c's starter set WS4: CPM31, CPM32, WS4 on
+  C:, H: RAMDISK if drives_ramdisk_format() else WSTEMP (HD4, made by the
+  install when the set names it and it is missing). test_wordstar (temps
+  on H:, ^KX/^KS/^KD saves to A: with .BAK, a 112 KB document spilled
+  and copied back; page breaks are LF 8Ah). The Sock's image is 1.95 MB
+  with it (cap 2 MB - 12 KB). Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
   default, A:, B:; order COM,SUB; temporary drive B:; no display: f8w.9),
   so PROFILE.SUB (src/machine/cpm/cpm3/profile.sub) only loads VT100DYN, whose
   help text build.sh patches away; README.TXT (src/machine/cpm/cpm3/readme.txt)
@@ -901,9 +917,19 @@ TTY2[9600], no space) made by build.sh at build time: cpmrun.c (machine.c on the
   into the 8" CP/M directory); host tests in test_machine (machine_host
   answers ESC [ 6 n through host_cpr_reply). `src/ui/monitor.[ch]`
   (portable): menu (Return boot, R resume a stopped machine, M mount,
-  L list, N new blank disk, I install, S speed test, F format, C check
-  the card again), 3 s autoboot. `src/ui/drivepanel.[ch]` (portable): SET-UP's
-  Drives panel (D in CP/M mode); setup_glue.c defers its FatFs work (mount,
+  L list (then a prompt, not the menu, which scrolled the list off: bd
+  20w; Space or ? the menu), N new blank disk, I install, S speed test,
+  F format, C check
+  the card again), 3 s autoboot; every line it writes fits 79 columns
+  (bd 9cj: 80-column screens, the ADM-3A wraps in column 80; Drives: rows
+  "A: NAME FMT" 72 wide, N's progress a dot per 512 KB, usbmsc_info
+  breaks its device list; test_monitor_fresh_card's lines_fit checks).
+  `src/ui/drivepanel.[ch]` (portable): SET-UP's
+  Drives panel (D in CP/M mode; Tab: its Disks page, bd 5rq, a scrolling
+  list of the images, R rename / D or Delete delete through drivecfg.c's
+  drives_rename / drives_remove (bd ajr: unmounting first, a renamed
+  mount remounted, sets following; RAMDISK refused, DRIVES_RESERVED),
+  run from the main loop as DRIVEPANEL_RENAME_DISK / _DELETE_DISK); setup_glue.c defers its FatFs work (mount,
   save/remove a set: drives_work) to the main loop (setup_feed runs inside
   the USB stack). Named drive sets (bd f8w.6): /DISKS80/SETS/NAME.SET in
   DRIVES.CFG's form (A=NAME lines, hand-editable), at most 16; the panel's

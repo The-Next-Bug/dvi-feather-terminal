@@ -62,8 +62,9 @@ typedef enum {
 	DRIVES_NOT_FOUND,  // no such image
 	DRIVES_BAD_IMAGE,  // not one of the image sizes
 	DRIVES_IN_USE,     // mounted on another drive
-	DRIVES_EXISTS,     // drives_create: the name is taken
+	DRIVES_EXISTS,     // drives_create, drives_rename: the name is taken
 	DRIVES_IO_ERROR,
+	DRIVES_RESERVED,   // drives_remove, drives_rename: RAMDISK is no card file
 } drives_result_t;
 
 // Mount /DISKS80/<name>.DSK (name case-insensitive, without the extension),
@@ -104,6 +105,16 @@ bool drives_normalize(const char *name, char upper[DRIVES_NAME_MAX + 1]);
 unsigned drives_list(char names[][DRIVES_NAME_MAX + 1], unsigned max);
 
 #define DRIVES_RAMDISK "RAMDISK"
+
+// Delete /DISKS80/<name>.DSK, unmounted first where it is mounted
+// (DRIVES.CFG saved then). The sets naming it are left as they are: a set
+// leaves out a disk that is not on the card. (bd ajr)
+drives_result_t drives_remove(const char *name);
+
+// Rename image from to to (both case-insensitive, without .DSK): mounted,
+// it is mounted again on its drive under the new name (DRIVES.CFG saved),
+// and the sets naming it name the new one.
+drives_result_t drives_rename(const char *from, const char *to);
 
 // Make memory (at least drives_geometry(f)->size bytes) the RAM disk of
 // format f, blank; NULL or DRIVES_NONE: none (unmounted where mounted).

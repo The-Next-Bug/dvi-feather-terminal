@@ -15,6 +15,7 @@ z80pack's picosim (MIT).
 | z80pack (the Z80 core, picosim, z80asm) | MIT; its CPU core's `log.h` Apache-2.0 |
 | FatFs | ChaN's 1-clause BSD license |
 | F83 | public domain |
+| WordStar 4.00 | MicroPro International's; no license comes with the files (`docs/THIRD-PARTY.md`) |
 | CP/M 2.2 and CP/M 3 | Digital Research's, redistributed under the right to use, distribute and modify CP/M and its derivatives that DRDOS, Inc. stated in 2022, widening Lineo's 2001 grant to The Unofficial CP/M Web Site |
 | the Z80 exercisers | Frank D. Cringle's, GPL-2.0 or later (their sources are on the same disk image) |
 
