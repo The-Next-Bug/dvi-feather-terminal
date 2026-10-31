@@ -1123,10 +1123,23 @@ Feather with Adalogger, no PSRAM, 0x2007db2c, ~9.4 KB; Frankless
     budget".
   - Pin functions for CTS/RTS use `GPIO_FUNC_UART` (UART_FUNCSEL_NUM is
     wrong for GPIO 2/3 on RP2350).
-  - One USB hub only (CFG_TUH_HUB 1, CFG_TUH_DEVICE_MAX 5): the user's
-    choice (bd rsu). A second hub behind the first (the Frankless's own
-    hub counts) may leave the host finding no new devices while connected
-    ones keep working; the README says so. Not to be fixed for now.
+  - Three USB hubs (CFG_TUH_HUB 3, CFG_TUH_DEVICE_MAX 7, ~340 bytes of
+    SRAM a hub; bd rsu: the Frankless's own, one on it, a keyboard's;
+    two tried on the Frankless, 2026-10-31; a third hub and the refusal
+    of a fourth untried: documented as experimental).
+    A hub or device past the limits gets no address and TinyUSB leaves
+    its setup unfinished (usbh.c's TU_ASSERT(new_addr != 0) skips
+    enum_full_complete), so every later attach waits behind it. Not fixed
+    in the fork (after bd 5bc's four PRs, if at all); usbkbd.c usb_quiet
+    counts tuh_connected(0) as setting up, and after STUCK_SETUP_MS the
+    watchdog refuses it (refuse_dev0: ClearPortFeature PORT_ENABLE on its
+    hub port, then refuse_done posts HCD_EVENT_DEVICE_REMOVE for that port,
+    which usbh.c's process_remove_event takes as dev0 unplugged, and
+    re-arms the hub's status endpoint with hub_edpt_status_xfer); on the
+    root port, the request failing, or still stuck another STUCK_SETUP_MS:
+    the restart as before. The monitor's USB: line shows it as 0 (hub n
+    port p) setting up, then "n refused ... last on hub h port p"
+    (usbkbd_refused); the event log "refused <port>".
   - TinyUSB 0.18 had one control transfer for the whole host: one started
     from a TinyUSB callback (e.g. the keyboard LEDs' SET_REPORT) made a
     device still being set up lose its next request, stay half set up,

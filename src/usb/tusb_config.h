@@ -20,9 +20,15 @@
 // boot protocol).
 #define CFG_TUH_ENUMERATION_BUFSIZE 256
 
-// One hub, as many keyboards have one built in (or sit behind one); behind
-// it a keyboard and up to three sticks (usbvol.c uses one at a time).
-#define CFG_TUH_HUB 1
+// Three hubs (bd rsu): the Frankless's own, one plugged into it and a
+// keyboard's built-in one behind that (tried with two; the third, and the
+// refusal of a fourth, not yet on hardware); ~340 bytes of SRAM each. Devices
+// (not hubs) get CFG_TUH_DEVICE_MAX addresses: keyboards and sticks
+// (usbvol.c uses one at a time). A hub or device past these limits is
+// never set up and, as TinyUSB leaves its setup unfinished, no device
+// plugged in later is either, until the watchdog turns its hub port off
+// (usbkbd.c refuse_dev0).
+#define CFG_TUH_HUB 3
 #define CFG_TUH_DEVICE_MAX (CFG_TUH_HUB + 4)
 // A keyboard often has 2-3 HID interfaces (keys, media keys, mouse).
 #define CFG_TUH_HID 6
