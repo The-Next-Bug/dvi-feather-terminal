@@ -84,68 +84,97 @@ bool usbmsc_activity(void) {
 	return a;
 }
 
+// usbmsc_info's text: entries added by add_entry, a line breaking before
+// one that would pass column 79 (the monitor at 80 columns, bd 9cj).
+#define INFO_WIDTH 79
+#define INFO_INDENT "\r\n         "
+
+static char info_text[384];
+static size_t info_n, info_line; // the length; where the current line starts
+
+static void add_entry(bool first, const char *entry) {
+	if (info_n >= sizeof info_text) {
+		return;
+	}
+	if (!first) {
+		info_n += (size_t)snprintf(info_text + info_n, sizeof info_text - info_n, ",");
+	}
+	if (info_n - info_line + strlen(entry) > INFO_WIDTH && info_n < sizeof info_text) {
+		info_n += (size_t)snprintf(info_text + info_n, sizeof info_text - info_n, INFO_INDENT);
+		info_line = info_n - (sizeof INFO_INDENT - 3); // the indent counts, the CR LF not
+	}
+	if (info_n < sizeof info_text) {
+		info_n += (size_t)snprintf(info_text + info_n, sizeof info_text - info_n, "%s", entry);
+	}
+}
+
 const char *usbmsc_info(void) {
-	static char text[256];
-	size_t n = (size_t)snprintf(text, sizeof text, "USB:     ");
+	char *text = info_text;
+	const size_t size = sizeof info_text;
+	size_t n = (size_t)snprintf(text, size, "USB:     ");
+	info_n = n;
+	info_line = 0;
 	unsigned devices = 0;
-	for (uint8_t a = 1; a <= CFG_TUH_DEVICE_MAX + CFG_TUH_HUB && n < sizeof text; ++a) {
+	char entry[48];
+	for (uint8_t a = 1; a <= CFG_TUH_DEVICE_MAX + CFG_TUH_HUB; ++a) {
 		uint16_t vid, pid;
 		if (!tuh_vid_pid_get(a, &vid, &pid)) {
 			continue;
 		}
 		const char *what = a > CFG_TUH_DEVICE_MAX ? (usbkbd_device_ready(a) ? "hub" : "hub setting up")
 			: tuh_msc_mounted(a) ? "stick" : !usbkbd_device_ready(a) ? "setting up" : "ready";
-		n += (size_t)snprintf(text + n, sizeof text - n, "%s %u %04x:%04x %s", devices ? "," : "", a, vid, pid,
-			what);
+		size_t e = (size_t)snprintf(entry, sizeof entry, " %u %04x:%04x %s", a, vid, pid, what);
 		// HID interfaces set up of those found: one stuck stops the device.
 		uint8_t hids = a <= CFG_TUH_DEVICE_MAX ? tuh_hid_instance_count(a) : 0, done = 0;
 		for (uint8_t i = 0; i < hids; ++i) {
 			done += tuh_hid_mounted(a, i);
 		}
-		if (hids && n < sizeof text) {
-			n += (size_t)snprintf(text + n, sizeof text - n, " HID %u/%u", done, hids);
+		if (hids && e < sizeof entry) {
+			snprintf(entry + e, sizeof entry - e, " HID %u/%u", done, hids);
 		}
+		add_entry(!devices, entry);
 		++devices;
 	}
-	if (tuh_connected(0) && n < sizeof text) {
+	if (tuh_connected(0)) {
 		// Not given an address yet; one that stays so is past the limits
 		// (tusb_config.h) and holds up the rest until the watchdog
 		// refuses it (usbkbd.c refuse_dev0).
 		tuh_bus_info_t bus;
 		tuh_bus_info_get(0, &bus);
-		n += (size_t)snprintf(text + n, sizeof text - n, "%s 0 (hub %u port %u) setting up", devices ? "," : "",
-			bus.hub_addr, bus.hub_port);
+		snprintf(entry, sizeof entry, " 0 (hub %u port %u) setting up", bus.hub_addr, bus.hub_port);
+		add_entry(!devices, entry);
 		++devices;
 	}
-	if (!devices && n < sizeof text) {
-		n += (size_t)snprintf(text + n, sizeof text - n, " no devices");
+	if (!devices) {
+		add_entry(true, " no devices");
 	}
+	n = info_n;
 	uint8_t hub, port;
 	unsigned refused = usbkbd_refused(&hub, &port);
-	if (refused && n < sizeof text) {
-		n += (size_t)snprintf(text + n, sizeof text - n,
+	if (refused && n < size) {
+		n += (size_t)snprintf(text + n, size - n,
 			"\r\n          %u refused (too many hubs or devices), last on hub %u port %u", refused, hub, port);
 	}
-	if (usbkbd_resets() && n < sizeof text) {
-		n += (size_t)snprintf(text + n, sizeof text - n, "\r\n          host restarted %u times (looked stuck)",
+	if (usbkbd_resets() && n < size) {
+		n += (size_t)snprintf(text + n, size - n, "\r\n          host restarted %u times (looked stuck)",
 			usbkbd_resets());
 	}
-	if (n < sizeof text) {
+	if (n < size) {
 		usbmsc_status_t st = usbmsc_status();
 		if (st.mounted) {
-			n += (size_t)snprintf(text + n, sizeof text - n, "\r\n          USB: is the stick at %u, FAT%s, %lu MB",
+			n += (size_t)snprintf(text + n, size - n, "\r\n          USB: is the stick at %u, FAT%s, %lu MB",
 				vol.active, fs.fs_type == FS_FAT12 ? "12" : fs.fs_type == FS_FAT16 ? "16" : "32",
 				(unsigned long)(tuh_msc_get_block_count(vol.active, LUN) / 2048));
 		} else if (last_mount != FR_OK && last_sector != SECTOR) {
-			n += (size_t)snprintf(text + n, sizeof text - n,
+			n += (size_t)snprintf(text + n, size - n,
 				"\r\n          last stick: %lu-byte sectors (512 needed)", (unsigned long)last_sector);
 		} else if (last_mount != FR_OK) {
-			n += (size_t)snprintf(text + n, sizeof text - n,
+			n += (size_t)snprintf(text + n, size - n,
 				"\r\n          last stick: no FAT file system (FatFs error %d; exFAT?)", (int)last_mount);
 		}
 	}
-	if (n < sizeof text) {
-		snprintf(text + n, sizeof text - n, "\r\n");
+	if (n < size) {
+		snprintf(text + n, size - n, "\r\n");
 	}
 	return text;
 }

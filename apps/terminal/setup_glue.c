@@ -176,7 +176,8 @@ static void drives_feed(uint8_t c, uint32_t now) {
 	drivepanel_action_t a = drivepanel_input(&setup.drives, c, now);
 	if (a == DRIVEPANEL_REDRAW) {
 		drives_draw_panel();
-	} else if (a == DRIVEPANEL_APPLY || a == DRIVEPANEL_SAVE_SET || a == DRIVEPANEL_REMOVE_SET) {
+	} else if (a == DRIVEPANEL_APPLY || a == DRIVEPANEL_SAVE_SET || a == DRIVEPANEL_REMOVE_SET ||
+		a == DRIVEPANEL_RENAME_DISK || a == DRIVEPANEL_DELETE_DISK) {
 		setup.drives_work = a;
 	} else if (a == DRIVEPANEL_CANCEL) {
 		setup.drives_open = false;
@@ -298,11 +299,16 @@ static bool setup_save(void) {
 static void drives_service(void) {
 	drivepanel_action_t work = setup.drives_work;
 	setup.drives_work = DRIVEPANEL_NONE;
-	if (work == DRIVEPANEL_SAVE_SET || work == DRIVEPANEL_REMOVE_SET) {
+	if (work == DRIVEPANEL_SAVE_SET || work == DRIVEPANEL_REMOVE_SET || work == DRIVEPANEL_RENAME_DISK ||
+		work == DRIVEPANEL_DELETE_DISK) {
 		if (work == DRIVEPANEL_SAVE_SET) {
 			drivepanel_save_set(&setup.drives);
-		} else {
+		} else if (work == DRIVEPANEL_REMOVE_SET) {
 			drivepanel_remove_set(&setup.drives);
+		} else if (work == DRIVEPANEL_RENAME_DISK) {
+			drivepanel_rename_disk(&setup.drives);
+		} else {
+			drivepanel_delete_disk(&setup.drives);
 		}
 		drives_draw_panel();
 	} else if (work == DRIVEPANEL_APPLY) {

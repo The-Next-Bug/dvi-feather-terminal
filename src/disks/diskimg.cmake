@@ -16,6 +16,7 @@ set(DISKIMG_IMAGES
   "CPM32=${GENERATED}/cpm32.dsk"
   "CPM3GEN=${GENERATED}/cpm3/cpm3gen.dsk"
   "F83=${GENERATED}/f83.dsk"
+  "WS4=${GENERATED}/ws4.dsk"
   "MPM1=${GENERATED}/mpm/mpm1.dsk"
   "MPM2=${GENERATED}/mpm2.dsk")
 # CPM31 (boot disk) and CPM32 are picosim's banked CP/M 3: mount them on A:
@@ -35,6 +36,42 @@ set(DISKIMG_IMAGES
 set(F83_DIR "${CMAKE_CURRENT_LIST_DIR}/../../lib/f83")
 set(F83_FILES -READ.ME README.80 F83-FIXS.TXT KERNEL80.BLK META80.BLK CPU8080.BLK
   EXTEND80.BLK UTILITY.BLK HUFFMAN.BLK CLOCK.BLK EXPAND80.BLK BASIC.BLK)
+# WS4 is MicroPro's WordStar 4.00 for CP/M-80 as installed for the VT100
+# (lib/wordstar, bd 6on) on a blank 8 MB disk, its WS.OVR patched to keep
+# the temporary files on H: (the WS4 set's RAM disk or WSTEMP) and its
+# WS*.COM to find their overlays on C: (src/machine/cpm/ws4/ws4_patch.py).
+# Left out for flash room (~80 KB compressed): PATCH.LST, READ.ME,
+# WINSTALL.COM (WSCHANGE installs as well) and SAMPLE1.BAK.
+set(WS4_DIR "${CMAKE_CURRENT_LIST_DIR}/../../lib/wordstar")
+set(WS4_PATCHED WS.OVR WS.COM WS80.COM WSADM.COM)
+set(WS4_FILES ANAGRAM.COM CHAPTER1.DOC CHAPTER2.DOC CHAPTER3.DOC DIARY.DOC DICTSORT.COM
+  ERRWORDS.TXT FIND.COM HOMONYMS.TXT HYEXCEPT.TXT HYPHEN.COM LOOKUP.COM MAINDICT.CMP
+  MARKFIX.COM MOVEPRN.COM PRINT.TST REVIEW.COM RULER.DOC SAMPLE1.DOC SAMPLE2.DOC
+  SAMPLE3.DOC SPELL.COM TABLE.DOC TEXT.DOC TW.COM WC.COM WORDFREQ.COM WSCHANGE.COM
+  WSCHANGE.OVR WSCHHELP.OVR WSHELP.OVR WSINDEX.XCL WSMSGS.OVR WSPRINT.OVR WSSHORT.OVR)
+set(WS4_OUT "${GENERATED}/ws4")
+set(WS4_PATCH "${CMAKE_CURRENT_LIST_DIR}/../machine/cpm/ws4/ws4_patch.py")
+set(_ws4_patched_out)
+set(_ws4_patched_in)
+foreach(_file IN LISTS WS4_PATCHED)
+  string(TOLOWER ${_file} _host)
+  list(APPEND _ws4_patched_out ${WS4_OUT}/${_host})
+  list(APPEND _ws4_patched_in ${WS4_DIR}/${_file})
+endforeach()
+add_custom_command(
+  OUTPUT ${_ws4_patched_out}
+  COMMAND Python3::Interpreter ${WS4_PATCH} ${_ws4_patched_in} ${WS4_OUT}
+  DEPENDS ${WS4_PATCH} ${_ws4_patched_in}
+  COMMENT "Patching WordStar 4 (temporary files on H:, overlays from C:)"
+  VERBATIM)
+add_custom_command(
+  OUTPUT ${GENERATED}/ws4.dsk
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${GENERATED}
+  COMMAND Python3::Interpreter ${DISKIMG_GEN} --convert ${Z80PACK_DIR}/picosim/disks/empty.dsk HD8
+    ${GENERATED}/ws4.dsk
+  DEPENDS ${DISKIMG_GEN} ${Z80PACK_DIR}/picosim/disks/empty.dsk
+  COMMENT "Making a blank 8 MB disk for WordStar 4"
+  VERBATIM)
 set(DISKIMG_SOURCES "${GENERATED}/diskimg_data.c")
 add_custom_command(
   OUTPUT ${GENERATED}/f83.dsk
@@ -227,6 +264,16 @@ foreach(_file IN LISTS F83_FILES)
   list(APPEND _f83_paths ${F83_DIR}/${_file})
 endforeach()
 
+set(_ws4_paths ${_ws4_patched_out})
+foreach(_file IN LISTS WS4_PATCHED)
+  string(TOLOWER ${_file} _host)
+  list(APPEND DISKIMG_FILES --file WS4 ${_file} ${WS4_OUT}/${_host})
+endforeach()
+foreach(_file IN LISTS WS4_FILES)
+  list(APPEND DISKIMG_FILES --file WS4 ${_file} ${WS4_DIR}/${_file})
+  list(APPEND _ws4_paths ${WS4_DIR}/${_file})
+endforeach()
+
 set(_diskimg_files)
 foreach(_image IN LISTS DISKIMG_IMAGES)
   string(REGEX REPLACE "^[^=]*=" "" _file "${_image}")
@@ -242,7 +289,7 @@ add_custom_command(
     ${CPM_OUT}/xls.com ${CPM_OUT}/xpip.com ${CPM_OUT}/xera.com ${CPM_OUT}/termtest.com
     ${CPM_OUT}/altscr.com ${CPM_OUT}/mem.com ${CPM_OUT}/hwinfo.com ${CPM_OUT}/aytest.com ${CPM_OUT}/ayplay.com ${CPM_OUT}/aytrack.com ${Z80PACK_DIR}/picosim/srccpm2/cpm.bin ${CPM_DIR}/ccpbdos.rel
     ${CPM3_OUT}/cpm3.sys ${CPM3_OUT}/vt100dyn.com ${CPM3_OUT}/profile.sub
-    ${CPM3_OUT}/readme.txt ${GENERATED}/cpm32.dsk ${GENERATED}/f83.dsk ${_f83_paths} ${TUNES}
+    ${CPM3_OUT}/readme.txt ${GENERATED}/cpm32.dsk ${GENERATED}/f83.dsk ${_f83_paths} ${_ws4_paths} ${TUNES}
   COMMENT "Compressing the built-in CP/M disk images"
   VERBATIM)
 

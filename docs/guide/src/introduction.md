@@ -38,7 +38,8 @@ HDMI connector into one of two machines, chosen in [SET-UP](terminal/setup.md):
 - **Sound**: on boards with an I2S DAC, the bell and an emulated
   AY-3-8910 sound chip for the Z80. See [Bell and sound](terminal/sound.md).
 - **The Z80 machine**: eight drives, built-in CP/M 2.2 and CP/M 3 disks,
-  tools to move files to and from the SD card and USB sticks, F83 Forth, a
+  tools to move files to and from the SD card and USB sticks, F83 Forth,
+  WordStar 4, a
   tracker and tune player. See [The Z80 CP/M machine](cpm/overview.md).
 - **Firmware updates** from the SD card or a USB stick. See
   [Firmware updates](terminal/firmware-update.md).

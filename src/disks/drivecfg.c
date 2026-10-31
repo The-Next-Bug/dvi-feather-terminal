@@ -190,3 +190,101 @@ bool drives_set_remove(const char *set) {
 	char path[40];
 	return set_path(path, sizeof path, set) && f_unlink(path) == FR_OK;
 }
+
+// ---- removing and renaming images (bd ajr) ----
+
+// The drive image upper is mounted on, or DRIVES.
+static unsigned mounted_on(const char *upper) {
+	for (unsigned d = 0; d < DRIVES; ++d) {
+		if (drives_name(d) && strcmp(drives_name(d), upper) == 0) {
+			return d;
+		}
+	}
+	return DRIVES;
+}
+
+// upper's image, its path set; NOT_FOUND / RESERVED / OK.
+static drives_result_t image_file(const char *name, char upper[DRIVES_NAME_MAX + 1], char *path, size_t size) {
+	if (!drives_normalize(name, upper)) {
+		return DRIVES_NOT_FOUND;
+	}
+	if (strcmp(upper, DRIVES_RAMDISK) == 0) {
+		return DRIVES_RESERVED;
+	}
+	snprintf(path, size, "/DISKS80/%s.DSK", upper);
+	return DRIVES_OK;
+}
+
+drives_result_t drives_remove(const char *name) {
+	char upper[DRIVES_NAME_MAX + 1], path[32];
+	FILINFO info;
+	drives_result_t r = image_file(name, upper, path, sizeof path);
+	if (r != DRIVES_OK) {
+		return r;
+	}
+	if (f_stat(path, &info) != FR_OK) {
+		return DRIVES_NOT_FOUND;
+	}
+	unsigned d = mounted_on(upper);
+	if (d < DRIVES) {
+		drives_unmount(d);
+		drives_save_config();
+	}
+	return f_unlink(path) == FR_OK ? DRIVES_OK : DRIVES_IO_ERROR;
+}
+
+drives_result_t drives_rename(const char *from, const char *to) {
+	char old_upper[DRIVES_NAME_MAX + 1], new_upper[DRIVES_NAME_MAX + 1], old_path[32], new_path[32];
+	FILINFO info;
+	drives_result_t r = image_file(from, old_upper, old_path, sizeof old_path);
+	if (r != DRIVES_OK) {
+		return r;
+	}
+	r = image_file(to, new_upper, new_path, sizeof new_path);
+	if (r == DRIVES_RESERVED) {
+		return DRIVES_EXISTS; // the RAM disk's name is taken
+	}
+	if (r != DRIVES_OK) {
+		return r;
+	}
+	if (f_stat(old_path, &info) != FR_OK) {
+		return DRIVES_NOT_FOUND;
+	}
+	if (strcmp(old_upper, new_upper) == 0) {
+		return DRIVES_OK;
+	}
+	if (f_stat(new_path, &info) == FR_OK) {
+		return DRIVES_EXISTS;
+	}
+	unsigned d = mounted_on(old_upper);
+	if (d < DRIVES) {
+		drives_unmount(d); // open files are not renamed
+	}
+	FRESULT fr = f_rename(old_path, new_path);
+	if (d < DRIVES) {
+		drives_mount(d, fr == FR_OK ? new_upper : old_upper);
+		drives_save_config();
+	}
+	if (fr != FR_OK) {
+		return DRIVES_IO_ERROR;
+	}
+	char sets[DRIVES_SETS_MAX][DRIVES_NAME_MAX + 1];
+	unsigned n = drives_sets(sets, DRIVES_SETS_MAX);
+	for (unsigned i = 0; i < n; ++i) {
+		char images[DRIVES][DRIVES_NAME_MAX + 1];
+		bool changed = false;
+		if (!drives_set_read(sets[i], images)) {
+			continue;
+		}
+		for (unsigned k = 0; k < DRIVES; ++k) {
+			if (strcmp(images[k], old_upper) == 0) {
+				strcpy(images[k], new_upper);
+				changed = true;
+			}
+		}
+		if (changed) {
+			drives_set_write(sets[i], images);
+		}
+	}
+	return DRIVES_OK;
+}

@@ -55,7 +55,7 @@ clang-tidy and mdBook, each with its SHA-256. To upgrade one, change its
 version and checksum there; CI's toolchain cache is keyed on the file, so
 the next run installs the new one.
 pico-sdk and TinyUSB are submodules under `lib/`; z80pack (the Z80 core and
-picosim's disks), FatFs and F83 are vendored.
+picosim's disks), FatFs, F83 and WordStar 4 (`lib/wordstar`) are vendored.
 
 ## This guide
 

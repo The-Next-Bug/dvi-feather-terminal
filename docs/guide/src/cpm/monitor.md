@@ -9,7 +9,7 @@ comes back when the machine stops (`BYE`, an error) and from SET-UP's
 |---|---|
 | **Return** | boot from drive A (picosim's boot ROM loads track 0 sector 1) |
 | **M** | mount a disk image on a drive A-H: the drive, then the image's name without `.DSK`; Return alone empties the drive. The assignments are kept in `/DISKS80/DRIVES.CFG` |
-| **L** | list the images on the card (and the RAM disk), with their formats |
+| **L** | list the images on the card (and the RAM disk), with their formats; Space or **?** shows the menu again. To rename or delete one, use the Drives panel's [Disks page](drives.md#the-disks-page) |
 | **N** | make a new blank disk: a name, then 8" floppy, 4 MB or 8 MB (an 8 MB one takes a few seconds to write) |
 | **I** | install the built-in disk images onto the card (below) |
 | **F** | format the SD card (below) |
@@ -34,10 +34,13 @@ blank card with; files already on the card are replaced only if you say so.
 | `MPM1` | 8" floppy | [MP/M II](mpm.md) (boots) |
 | `MPM2` | 8 MB | MP/M II's tools, XIOS source and what builds `MPM.SYS`, with this project's tools added |
 | `F83` | 8 MB | [F83 Forth](f83.md) |
+| `WS4` | 8 MB | [WordStar 4](wordstar.md), installed for the VT100 |
 
-It also writes two [drive sets](drives.md#drive-sets) when they are
-missing: `CPM22` (CPM22, Z80TESTS), `CPM3` (CPM31, CPM32) and `MPM`
-(MPM1, MPM2).
+It also writes these [drive sets](drives.md#drive-sets) when they are
+missing: `CPM22` (CPM22, Z80TESTS), `CPM3` (CPM31, CPM32), `MPM`
+(MPM1, MPM2) and `WS4` (CPM31, CPM32, WS4 on C:, and on H: the RAM disk,
+or on boards without PSRAM `WSTEMP`, a blank 4 MB disk it makes when
+missing, for [WordStar's temporary files](wordstar.md#temporary-files-on-h)).
 
 ## Formatting the card (F)
 

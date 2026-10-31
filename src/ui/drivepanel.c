@@ -71,6 +71,104 @@ void drivepanel_open(drivepanel_t *p) {
 	read_sets(p);
 }
 
+// ---- the Disks page (bd 5rq) ----
+
+// Keep the selected disk in the list and on the screen.
+static void show_disk(drivepanel_t *p) {
+	if (p->disk >= p->n_images) {
+		p->disk = p->n_images ? p->n_images - 1 : 0;
+	}
+	if (p->disk < p->disk_top) {
+		p->disk_top = p->disk;
+	} else if (p->disk >= p->disk_top + DRIVEPANEL_DISK_ROWS) {
+		p->disk_top = p->disk - DRIVEPANEL_DISK_ROWS + 1;
+	}
+	if (p->disk_top + DRIVEPANEL_DISK_ROWS > p->n_images) {
+		p->disk_top = p->n_images > DRIVEPANEL_DISK_ROWS ? p->n_images - DRIVEPANEL_DISK_ROWS : 0;
+	}
+}
+
+// Read the images again after renaming or deleting one: the drives'
+// choices kept by name (from renamed to), the sets read again, select
+// selected if it is there.
+static void relist(drivepanel_t *p, const char *from, const char *to, const char *select) {
+	char chosen[DRIVES][DRIVES_NAME_MAX + 1];
+	for (unsigned d = 0; d < DRIVES; ++d) {
+		const char *name = p->choice[d] >= 0 ? p->images[p->choice[d]] : "";
+		strcpy(chosen[d], from && strcmp(name, from) == 0 ? to : name);
+	}
+	p->n_images = drives_list(p->images, DRIVES_LIST_MAX);
+	for (unsigned d = 0; d < DRIVES; ++d) {
+		p->mounted[d] = index_of(p, drives_name(d));
+		p->choice[d] = chosen[d][0] ? index_of(p, chosen[d]) : -1;
+	}
+	read_sets(p);
+	int at = index_of(p, select);
+	if (at >= 0) {
+		p->disk = (unsigned)at;
+	}
+	show_disk(p);
+}
+
+// The drive name is mounted on ("" if none), as "on C:".
+static const char *mounted_on(const char *name, char text[8]) {
+	text[0] = '\0';
+	for (unsigned d = 0; d < DRIVES; ++d) {
+		if (drives_name(d) && strcmp(drives_name(d), name) == 0) {
+			snprintf(text, 8, "on %c:", 'A' + d);
+		}
+	}
+	return text;
+}
+
+// R or D on the selected disk: its prompt, or why not.
+static void start_disk_prompt(drivepanel_t *p, drivepanel_prompt_t prompt) {
+	if (p->n_images == 0) {
+		p->message = "No disks on the card";
+	} else if (strcmp(p->images[p->disk], DRIVES_RAMDISK) == 0) {
+		p->message = prompt == DRIVEPANEL_PROMPT_RENAME ? "The RAM disk cannot be renamed"
+			: "The RAM disk cannot be deleted: it is blank at power-on";
+	} else {
+		p->prompt = prompt;
+		strcpy(p->name, prompt == DRIVEPANEL_PROMPT_RENAME ? p->images[p->disk] : "");
+	}
+}
+
+static drivepanel_action_t disks_cursor_key(drivepanel_t *p, uint8_t final, uint8_t param) {
+	unsigned last = p->n_images ? p->n_images - 1 : 0;
+	if (final == '~') {
+		final = param == 3 ? 'X' : param == 5 ? 'P' : param == 6 ? 'N' : param == 1 || param == 7 ? 'H'
+			: param == 4 || param == 8 ? 'F' : 0;
+	}
+	switch (final) {
+	case 'A':
+		p->disk = p->disk ? p->disk - 1 : 0;
+		break;
+	case 'B':
+		p->disk = p->disk < last ? p->disk + 1 : last;
+		break;
+	case 'P': // Page Up
+		p->disk = p->disk > DRIVEPANEL_DISK_ROWS ? p->disk - DRIVEPANEL_DISK_ROWS : 0;
+		break;
+	case 'N': // Page Down
+		p->disk = p->disk + DRIVEPANEL_DISK_ROWS < last ? p->disk + DRIVEPANEL_DISK_ROWS : last;
+		break;
+	case 'H':
+		p->disk = 0;
+		break;
+	case 'F':
+		p->disk = last;
+		break;
+	case 'X': // Delete
+		start_disk_prompt(p, DRIVEPANEL_PROMPT_DELETE);
+		break;
+	default:
+		return DRIVEPANEL_NONE;
+	}
+	show_disk(p);
+	return DRIVEPANEL_REDRAW;
+}
+
 static bool chosen_elsewhere(const drivepanel_t *p, unsigned drive, int image) {
 	for (unsigned d = 0; d < DRIVES; ++d) {
 		if (d != drive && p->choice[d] == image) {
@@ -169,7 +267,19 @@ static drivepanel_action_t prompt_key(drivepanel_t *p, uint8_t c) {
 		p->prompt = DRIVEPANEL_PROMPT_NONE;
 		return c == 'y' || c == 'Y' ? DRIVEPANEL_REMOVE_SET : DRIVEPANEL_REDRAW;
 	}
+	if (p->prompt == DRIVEPANEL_PROMPT_DELETE) {
+		p->prompt = DRIVEPANEL_PROMPT_NONE;
+		return c == 'y' || c == 'Y' ? DRIVEPANEL_DELETE_DISK : DRIVEPANEL_REDRAW;
+	}
 	size_t n = strlen(p->name);
+	if ((c == '\r' || c == '\n') && p->prompt == DRIVEPANEL_PROMPT_RENAME) {
+		if (!drives_set_name_ok(p->name)) { // the same rule as images' names (drives_normalize)
+			p->message = "A disk's name is 1-8 letters and digits";
+			return DRIVEPANEL_REDRAW;
+		}
+		p->prompt = DRIVEPANEL_PROMPT_NONE;
+		return strcmp(p->name, p->images[p->disk]) == 0 ? DRIVEPANEL_REDRAW : DRIVEPANEL_RENAME_DISK;
+	}
 	if (c == '\r' || c == '\n') {
 		if (!drives_set_name_ok(p->name)) {
 			p->message = "A set's name is 1-8 letters and digits";
@@ -212,7 +322,9 @@ drivepanel_action_t drivepanel_input(drivepanel_t *p, uint8_t c, uint32_t now_ms
 	if (p->esc == 2) {
 		if (c >= 0x40 && c <= 0x7e) {
 			p->esc = 0;
-			action = p->prompt ? DRIVEPANEL_NONE : cursor_key(p, c, p->esc_param);
+			action = p->prompt      ? DRIVEPANEL_NONE
+				: p->disks_page ? disks_cursor_key(p, c, p->esc_param)
+				: cursor_key(p, c, p->esc_param);
 		} else if (c >= '0' && c <= '9' && p->esc_param == 0) {
 			p->esc_param = (uint8_t)(c - '0');
 		} else if (c == ';') {
@@ -223,6 +335,15 @@ drivepanel_action_t drivepanel_input(drivepanel_t *p, uint8_t c, uint32_t now_ms
 		p->esc_ms = now_ms;
 	} else if (p->prompt) {
 		action = prompt_key(p, c);
+	} else if (c == '\t') {
+		p->disks_page = !p->disks_page;
+		show_disk(p);
+		action = DRIVEPANEL_REDRAW;
+	} else if (p->disks_page) {
+		if (c == 'r' || c == 'R' || c == 'd' || c == 'D') {
+			start_disk_prompt(p, c == 'r' || c == 'R' ? DRIVEPANEL_PROMPT_RENAME : DRIVEPANEL_PROMPT_DELETE);
+			action = DRIVEPANEL_REDRAW;
+		}
 	} else if (c == ' ') {
 		if (p->on_set) {
 			step_set(p, 1);
@@ -309,6 +430,55 @@ void drivepanel_remove_set(drivepanel_t *p) {
 	read_sets(p);
 }
 
+static const char *disk_error(drives_result_t r) {
+	switch (r) {
+	case DRIVES_NOT_FOUND:
+		return "is not on the card";
+	case DRIVES_EXISTS:
+		return "is taken";
+	case DRIVES_RESERVED:
+		return "is the RAM disk's";
+	default:
+		return "could not be changed (card error)";
+	}
+}
+
+void drivepanel_rename_disk(drivepanel_t *p) {
+	if (p->disk >= p->n_images) {
+		return;
+	}
+	char from[DRIVES_NAME_MAX + 1], to[DRIVES_NAME_MAX + 1];
+	strcpy(from, p->images[p->disk]);
+	strcpy(to, p->name);
+	drives_flush();
+	drives_result_t r = drives_rename(from, to);
+	if (r == DRIVES_OK) {
+		snprintf(p->message_buf, sizeof p->message_buf, "Renamed %s to %s", from, to);
+	} else {
+		snprintf(p->message_buf, sizeof p->message_buf, "Not renamed: %s %s", r == DRIVES_EXISTS ? to : from,
+			disk_error(r));
+	}
+	p->message = p->message_buf;
+	relist(p, r == DRIVES_OK ? from : NULL, to, r == DRIVES_OK ? to : from);
+}
+
+void drivepanel_delete_disk(drivepanel_t *p) {
+	if (p->disk >= p->n_images) {
+		return;
+	}
+	char name[DRIVES_NAME_MAX + 1];
+	strcpy(name, p->images[p->disk]);
+	drives_flush();
+	drives_result_t r = drives_remove(name);
+	if (r == DRIVES_OK) {
+		snprintf(p->message_buf, sizeof p->message_buf, "Deleted %s", name);
+	} else {
+		snprintf(p->message_buf, sizeof p->message_buf, "Not deleted: %s %s", name, disk_error(r));
+	}
+	p->message = p->message_buf;
+	relist(p, NULL, NULL, NULL);
+}
+
 // One row: the marker and label, the choice in reverse, then info.
 static void draw_row(screen_t *s, unsigned row, const char *label, bool selected, const char *choice,
 	const char *info, uint8_t fg, uint8_t bg) {
@@ -323,8 +493,62 @@ static void draw_row(screen_t *s, unsigned row, const char *label, bool selected
 	screen_puts(s, NAME_COL + 12, row, text, fg, bg);
 }
 
+// The Disks page: a heading, then a window of the list.
+static void draw_disks(const drivepanel_t *p, screen_t *s, unsigned top, uint8_t fg, uint8_t bg) {
+	char text[SCREEN_MAX_COLS + 1];
+	if (p->n_images == 0) {
+		snprintf(text, sizeof text, "   No disks on the card: the monitor's I installs the built-in ones");
+	} else {
+		snprintf(text, sizeof text, "   %u disk%s in /DISKS80%s", p->n_images, p->n_images == 1 ? "" : "s",
+			p->n_images > DRIVEPANEL_DISK_ROWS ? " (Up/Down, Page Up/Down scroll)" : "");
+	}
+	screen_puts(s, LEFT, top + 1, text, fg, bg);
+	// ^ and v beside the first and last rows: more above or below.
+	for (unsigned r = 0; r < DRIVEPANEL_DISK_ROWS && p->disk_top + r < p->n_images; ++r) {
+		unsigned i = p->disk_top + r;
+		const char *name = p->images[i];
+		const drives_geometry_t *g = drives_geometry(drives_image_format(name));
+		char where[8], format[32], info[SCREEN_MAX_COLS + 1];
+		mounted_on(name, where);
+		snprintf(format, sizeof format, "%s%s", g ? g->name : "not a disk image",
+			strcmp(name, DRIVES_RAMDISK) == 0 ? " in PSRAM" : "");
+		snprintf(info, sizeof info, "%-20s%s%s", format, where[0] ? "mounted " : "", where);
+		bool more = (r == 0 && p->disk_top > 0) || (r == DRIVEPANEL_DISK_ROWS - 1 && i + 1 < p->n_images);
+		char label[3] = {more ? (r == 0 ? '^' : 'v') : ' ', ' ', '\0'};
+		draw_row(s, top + 2 + r, label, i == p->disk, name, info, fg, bg);
+	}
+}
+
 void drivepanel_draw(const drivepanel_t *p, screen_t *s, unsigned top, uint8_t fg, uint8_t bg, uint8_t border) {
-	screen_frame(s, top, DRIVEPANEL_ROWS, "SET-UP  Drives (CP/M 2.2 sees a changed drive after ^C)", fg, bg, border);
+	if (p->disks_page) {
+		screen_frame(s, top, DRIVEPANEL_ROWS, "SET-UP  Disks on the card  (Tab: the drives)", fg, bg, border);
+		draw_disks(p, s, top, fg, bg);
+		unsigned msg_row = top + DRIVEPANEL_ROWS - 4;
+		char text[SCREEN_MAX_COLS + 1];
+		if (p->prompt && p->message) { // why the typed name was refused
+			screen_puts(s, LEFT + 3, msg_row - 1, p->message, fg, bg);
+		}
+		if (p->prompt == DRIVEPANEL_PROMPT_RENAME) {
+			snprintf(text, sizeof text, "Rename %s to: %s_  (Return renames, Esc cancels)", p->images[p->disk],
+				p->name);
+			screen_puts(s, LEFT + 3, msg_row, text, fg, bg);
+		} else if (p->prompt == DRIVEPANEL_PROMPT_DELETE) {
+			char where[8];
+			mounted_on(p->images[p->disk], where);
+			snprintf(text, sizeof text, "Delete %s%s%s and all on it? (Y/N)", p->images[p->disk],
+				where[0] ? ", mounted " : "", where);
+			screen_puts(s, LEFT + 3, msg_row, text, fg, bg);
+		} else if (p->message) {
+			screen_puts(s, LEFT + 3, msg_row, p->message, fg, bg);
+		}
+		screen_puts(s, LEFT, top + DRIVEPANEL_ROWS - 3,
+			" Up/Down/PgUp/PgDn disk   R rename   D/Delete delete   Tab drives   Esc back", fg, bg);
+		screen_puts(s, LEFT, top + DRIVEPANEL_ROWS - 2,
+			" A renamed disk stays mounted; the sets naming it follow", fg, bg);
+		return;
+	}
+	screen_frame(s, top, DRIVEPANEL_ROWS, "SET-UP  Drives  (Tab: the disks; CP/M 2.2 sees a change after ^C)", fg, bg,
+		border);
 	draw_row(s, top + 1, "Set", p->on_set, p->set >= 0 ? p->sets[p->set] : "-",
 		p->n_sets == 0 ? "no sets on the card yet"
 		: p->set < 0  ? "the drives below are no set"
@@ -347,6 +571,9 @@ void drivepanel_draw(const drivepanel_t *p, screen_t *s, unsigned top, uint8_t f
 	}
 	unsigned msg_row = top + DRIVEPANEL_ROWS - 4;
 	char text[SCREEN_MAX_COLS + 1];
+	if (p->prompt && p->message) { // why the typed name was refused
+		screen_puts(s, LEFT + 3, msg_row - 1, p->message, fg, bg);
+	}
 	if (p->prompt == DRIVEPANEL_PROMPT_NAME) {
 		snprintf(text, sizeof text, "Save these drives as set: %s_  (Return saves, Esc cancels)", p->name);
 		screen_puts(s, LEFT + 3, msg_row, text, fg, bg);
@@ -358,5 +585,6 @@ void drivepanel_draw(const drivepanel_t *p, screen_t *s, unsigned top, uint8_t f
 	}
 	screen_puts(s, LEFT, top + DRIVEPANEL_ROWS - 3,
 		" Up/Down row   Left/Right/Space disk or set   Return mount   Esc back", fg, bg);
-	screen_puts(s, LEFT, top + DRIVEPANEL_ROWS - 2, " S save these drives as a set   R/Delete remove the set shown", fg, bg);
+	screen_puts(s, LEFT, top + DRIVEPANEL_ROWS - 2,
+		" S save these drives as a set   R/Delete remove the set shown   Tab disks", fg, bg);
 }
