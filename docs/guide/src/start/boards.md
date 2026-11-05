@@ -2,7 +2,7 @@
 
 The firmware runs on RP2350 boards with the DVI signals on GP12-GP19 (the
 RP2350's HSTX pins). Each supported board has a header in `boards/` and its
-own firmware file in the release ZIP (`dvi_terminal-<target>.uf2`). The
+own firmware file in the release ZIP (`<target>/FIRMWARE.UF2`). The
 pins below are read from those headers when this guide is built.
 
 Everything but the DVI connector is optional: the serial port for the

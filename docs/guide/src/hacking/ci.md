@@ -15,8 +15,8 @@ local build. Its runners install the pinned toolchain with
 
 ## The release ZIP
 
-`scripts/package.sh` collects every built target: the UF2 and BIN per
-board, `sdcard-<target>/FIRMWARE.UF2`, the build-info files,
+`scripts/package.sh` collects every built target, one folder per board
+(`<target>/`: the UF2 once, as `FIRMWARE.UF2`, the BIN, `build-info.txt`),
 `FLASHING.txt`, `THIRD-PARTY.md` and `licenses/`, `CHANGES.md` (the commits
 since the previous tag), this guide as `guide/`, `SHA256SUMS`, and the
 source of the built commit.

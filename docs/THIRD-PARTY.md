@@ -1,6 +1,6 @@
 # Third-party components
 
-The firmware image (`dvi_terminal-*.uf2` / `.bin`) contains code and data
+The firmware image (`<target>/FIRMWARE.UF2` / `dvi_terminal.bin` in the release ZIP) contains code and data
 from the projects below. Their license texts are in `licenses/` in the
 release package (`scripts/package.sh` copies them from the sources the build
 used). The project's own code is under the MIT license, in `LICENSE`.
