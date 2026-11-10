@@ -85,13 +85,15 @@ option(PSRAM_BANKS "Z80 machine: banks in the board's PSRAM instead of SRAM" OFF
 # relies on TinyUSB's fix; ON builds the workaround back in, for a TinyUSB
 # without the fix or to compare (bd nxv). POLL_PAUSE defaults to ON again
 # (bd 008): with the fork's fix alone a stick read during a firmware update
-# came back stale (badcsw, "blocks out of order"). USB_RESTART_KEY: H in
+# came back stale (badcsw, "blocks out of order"). TinyUSB #4458 (bd pb8)
+# drops the RP2350's hardware interrupt endpoint poller (they go on EPX),
+# so INT_EP_CTRL stays 0 and the pause has nothing to stop: OFF again.
+# USB_RESTART_KEY: H in
 # SET-UP restarts the USB host, for testing the deinit path.
 set(USB_WA_DEINIT_HELP "Free the RP2350 driver's lock ourselves after tusb_deinit (TinyUSB #4310)")
 set(USB_WA_DATASEQ_HELP "Mask the data sequence error interrupt, restart the host on one (TinyUSB #4312)")
 set(USB_WA_POLL_PAUSE_HELP "Pause the interrupt endpoint polls around our EPX transfers (TinyUSB #4313)")
 set(USB_WA_CONTROL_WAIT_HELP "Finish our control transfers before usbkbd_poll returns")
-set(USB_WA_POLL_PAUSE_DEFAULT ON)
 foreach(wa DEINIT DATASEQ POLL_PAUSE CONTROL_WAIT)
   if(NOT DEFINED USB_WA_${wa}_DEFAULT)
     set(USB_WA_${wa}_DEFAULT OFF)
