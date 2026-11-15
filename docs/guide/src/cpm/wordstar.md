@@ -1,11 +1,21 @@
 # WordStar 4
 
-The `WS4` disk (built in, 8 MB) holds MicroPro's WordStar 4.00 for
-CP/M-80, installed for the VT100: `WS.COM` and its overlays, the spelling
-checker (`TW.COM`, `SPELL.COM`, `MAINDICT.CMP`), the other utilities,
-`WSCHANGE` to install it again, and the sample documents. `WS80.COM` and
-`WSADM.COM` are the same WordStar installed for other terminals; they use
-the same overlays.
+The `WS4` disk (built in, 8 MB) holds WordStar 4.00 for CP/M-80 as the
+wordstar-4 project rebuilds it from source: MicroPro's WordStar with fixes for some of its bugs
+(`FIXES.TXT` on the disk lists them) and a PostScript printer, `PS`.
+On the disk: `WS.COM` and its overlays, the spelling checker (`TW.COM`,
+`SPELL.COM`, `MAINDICT.CMP`), the other utilities, `WSCHANGE` to install
+it again, and the sample documents.
+
+| Program | Terminal |
+|---|---|
+| `WS.COM` | VT100, 132 columns: set SET-UP's Columns to 132 first (or send `ESC [ ? 3 h`); WordStar cannot switch the screen itself |
+| `WS80.COM` | VT100, 80 columns |
+| `WSADM.COM` | ADM-3A (Terminal type ADM-3A), 80 columns |
+
+All three use the same overlays. On the VT100 the arrow keys move the
+cursor, Home and End go to the start and end of the line, Page Up and
+Page Down scroll by a screen; the ^E ^X ^S ^D diamond works as ever.
 
 Sources: `lib/wordstar` (the files), `src/machine/cpm/ws4/ws4_patch.py`
 (the patches below), `src/disks/diskimg.cmake` (the disk), `src/ui/monitor.c`
@@ -31,6 +41,16 @@ A>C:WS LETTER.DOC
 WordStar looks for its overlays on the current drive, then on C:, so it
 runs from any drive as long as `WS4` is on C:. Documents go wherever you
 name them (`B:LETTER.DOC`), A: being a nearly full floppy.
+
+## Printing
+
+The machine has no printer (LST: goes nowhere), so print to a file: at
+the print menu's "Name of printer?" answer `PS>LETTER.PS` for
+PostScript (letter paper; the header comes from `WSPS.PRO`, which must be
+on C: with WordStar's other files, else "Can't store results"), or
+`ASCII` / `XTRACT` for plain text. `PRVIEW` previews the printout on the
+screen. Copy the file off the card (or with [XPIP](moving-files.md)) to print it
+elsewhere.
 
 ## Temporary files on H:
 

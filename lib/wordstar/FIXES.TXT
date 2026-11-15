@@ -1,0 +1,17 @@
+WordStar 4.00 rebuilt with these fixes (tools/patch.py, src/patches/):
+  cp_line_height (wordstar-4-8sd): .CP counts the lines left at a .LH above it on the page
+  dot_drop (wordstar-4-eka): DROP1/DROP2/DROPRULER drop the bytes their command pushed
+  dot_limit (wordstar-4-6yj): no dot command past Dot-Limit is applied
+  dot_numbers (wordstar-4-r72): a dot number ends at a blank after a digit; the prompt answer kept
+  fi_line_end (wordstar-4-66q.40): a .FI file's text ends its last line before the parent's text
+  index_first_line (wordstar-4-31e.11): $INDEX: a .IX on the document's first line ends at its return
+  index_mark_end (wordstar-4-31e.12): $INDEX (every word): the byte after a closing ^K is kept
+  merge_math_errors (wordstar-4-66q.37): .MA errors show their own message, not "Can't find that file"
+  merge_pf_margin (wordstar-4-66q.38): .PF realigns at the document's left margin (.LM)
+  merge_picture (wordstar-4-66q.39): an unknown &name/x& takes its picture with it
+  protect_menu (wordstar-4-qej.1): the protected ^O menu's B and T show their own settings
+  ps_printer (wordstar-4-31e.16): a PS printer: PostScript to the printer, or PS>FILE to a file; .PS paragraphs set again in Times
+  reform_extended (wordstar-4-qej.2): Reform keeps an extended character's code (the byte after Esc)
+  res_room (support): 30 stale bytes before RESSTART taken out, room for fixes in RES
+  ruler_change (wordstar-4-aug): putting a ruler back notes any changed byte
+

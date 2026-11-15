@@ -36,19 +36,23 @@ set(DISKIMG_IMAGES
 set(F83_DIR "${CMAKE_CURRENT_LIST_DIR}/../../lib/f83")
 set(F83_FILES -READ.ME README.80 F83-FIXS.TXT KERNEL80.BLK META80.BLK CPU8080.BLK
   EXTEND80.BLK UTILITY.BLK HUFFMAN.BLK CLOCK.BLK EXPAND80.BLK BASIC.BLK)
-# WS4 is MicroPro's WordStar 4.00 for CP/M-80 as installed for the VT100
-# (lib/wordstar, bd 6on) on a blank 8 MB disk, its WS.OVR patched to keep
+# WS4 is WordStar 4.00 for CP/M-80 as installed for the VT100, the
+# wordstar-4 project's rebuild from source with its bug fixes and a PS
+# printer (lib/wordstar, PATCHED.TXT, FIXES.TXT; bd 6on, x6d; WSADM.COM is
+# WS80.COM with an ADM-3A user area) on a blank 8 MB disk, its WS.OVR patched to keep
 # the temporary files on H: (the WS4 set's RAM disk or WSTEMP) and its
 # WS*.COM to find their overlays on C: (src/machine/cpm/ws4/ws4_patch.py).
 # Left out for flash room (~80 KB compressed): PATCH.LST, READ.ME,
-# WINSTALL.COM (WSCHANGE installs as well) and SAMPLE1.BAK.
+# WINSTALL.COM (WSCHANGE installs as well), SAMPLE1.BAK and PATCHED.TXT
+# (the rebuild's README).
 set(WS4_DIR "${CMAKE_CURRENT_LIST_DIR}/../../lib/wordstar")
 set(WS4_PATCHED WS.OVR WS.COM WS80.COM WSADM.COM)
 set(WS4_FILES ANAGRAM.COM CHAPTER1.DOC CHAPTER2.DOC CHAPTER3.DOC DIARY.DOC DICTSORT.COM
   ERRWORDS.TXT FIND.COM HOMONYMS.TXT HYEXCEPT.TXT HYPHEN.COM LOOKUP.COM MAINDICT.CMP
   MARKFIX.COM MOVEPRN.COM PRINT.TST REVIEW.COM RULER.DOC SAMPLE1.DOC SAMPLE2.DOC
   SAMPLE3.DOC SPELL.COM TABLE.DOC TEXT.DOC TW.COM WC.COM WORDFREQ.COM WSCHANGE.COM
-  WSCHANGE.OVR WSCHHELP.OVR WSHELP.OVR WSINDEX.XCL WSMSGS.OVR WSPRINT.OVR WSSHORT.OVR)
+  WSCHANGE.OVR WSCHHELP.OVR WSHELP.OVR WSINDEX.XCL WSMSGS.OVR WSPRINT.OVR WSSHORT.OVR
+  WSPS.PRO FIXES.TXT)
 set(WS4_OUT "${GENERATED}/ws4")
 set(WS4_PATCH "${CMAKE_CURRENT_LIST_DIR}/../machine/cpm/ws4/ws4_patch.py")
 set(_ws4_patched_out)
