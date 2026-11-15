@@ -745,11 +745,17 @@ UF2 in the latter).
   column 64 ran CHORD's ";" into the next ":" as ";:"), \ lines 64.
   test_f83 loads it, AY?, the periods, STEREO read back, VIEW, a shadow,
   SCALE's writes (fine before coarse, as ay_periods pairs them).
-  WS4 (bd 6on): lib/wordstar (WordStar 4.00, VT100-installed; no
-  PATCH.LST, READ.ME, WINSTALL.COM, SAMPLE1.BAK: flash, the user's
+  WS4 (bd 6on): lib/wordstar (WordStar 4.00, VT100-installed; since bd
+  x6d WS.COM/WS80.COM/WS.OVR/WSMSGS.OVR/WSPRINT.OVR/WSPS.PRO, FIXES.TXT
+  and PATCHED.TXT (its README, not on the disk) from ~/fz80/wordstar-4's
+  make release, build/patched/wordstar4-patched-vt100.zip: rebuilt from
+  source with bug fixes and a PS printer; WS.COM 132 columns, WS80 80;
+  WSADM.COM = the new WS80.COM with the old ADM-3A user area bytes
+  (0280h-0A99h); the dictionary, utilities and samples are the old ones;
+  no PATCH.LST, READ.ME, WINSTALL.COM, SAMPLE1.BAK: flash, the user's
   choice) on a blank 8 MB disk. src/machine/cpm/ws4/ws4_patch.py (checks
   the bytes it replaces; addresses from ~/fz80/wordstar-4's wiki, WS.OVR
-  resident at file + 2480h, overlay C at file - 0A80h): TEMPFCB's drive
+  resident at file + 2480h, overlay C at file - 0B00h in the rebuild, - 0A80h in MicroPro's): TEMPFCB's drive
   always H:; the save always takes the copy path, rewritten (record 0,
   a record at a time to the ^Z: WordStar's read from the random record
   past the end and failed, falling back to renaming $B$ on H:); BFCB's
@@ -759,8 +765,8 @@ UF2 in the latter).
   C:, H: RAMDISK if drives_ramdisk_format() else WSTEMP (HD4, made by the
   install when the set names it and it is missing). test_wordstar (temps
   on H:, ^KX/^KS/^KD saves to A: with .BAK, a 112 KB document spilled
-  and copied back; page breaks are LF 8Ah). The Sock's image is 1.95 MB
-  with it (cap 2 MB - 12 KB). Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
+  and copied back; page breaks are LF 8Ah). The Sock's image is 1.81 MB
+  with it (1.95 MB before bd x6d's smaller WSPRINT.OVR; cap 2 MB - 12 KB). Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
   default, A:, B:; order COM,SUB; temporary drive B:; no display: f8w.9),
   so PROFILE.SUB (src/machine/cpm/cpm3/profile.sub) only loads VT100DYN, whose
   help text build.sh patches away; README.TXT (src/machine/cpm/cpm3/readme.txt)

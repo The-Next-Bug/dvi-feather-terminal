@@ -1,0 +1,69 @@
+WordStar 4.00 (CP/M-80), patched: bug fixes, installed for a VT100
+=================================================================
+
+This is WordStar 4.00 for CP/M-80 rebuilt from source with fixes for
+some of its own bugs (FIXES.TXT lists them), and installed for an ANSI
+Standard (DEC VT-100) terminal, as WINSTALL's monitor menu choice C
+does.  It was built from your original WordStar disks by the
+wordstar-4 project (make patched-package); it is not a MicroPro release.
+
+  WS\WS.COM     WordStar, 24 lines by 132 columns
+  WS\WS80.COM   WordStar, 24 lines by 80 columns
+  WS\*.OVR, WSINDEX.XCL, WSPS.PRO
+                WordStar's overlays, messages, help and printer drivers,
+                shared by both (WSPS.PRO: the PS printer's header)
+  WS\WINSTALL.COM, WSCHANGE.COM, WSCHANGE.OVR, WSCHHELP.OVR
+                to change the terminal, the printer or WordStar's
+                defaults later
+
+Running it
+----------
+Copy all the files of WS\ to a CP/M disk (WordStar reads its overlays and
+message files from the logged drive) and type WS for 132 columns, or
+WS80 for 80.
+
+Printers: WSPRINT.OVR is disk 1's, with WordStar's generic drivers:
+DRAFT (the default), TYPEWR, AUTOLF, SIMPLE, CUSTOM, PRVIEW (preview on
+the screen), ASCII and XTRACT (to a file), and one that is new: PS.
+Type another's name at the print menu's "Name of printer?" question.
+The drivers for particular printers (Epson, Diablo, HP LaserJet, ...)
+are in disk 3's printer library, which this package does not include.
+
+PS writes PostScript (Level 2, letter paper): to the printer (LST:,
+wherever your BIOS sends it, a serial port say) when you answer PS, or
+to a file with PS>NAME.PS.  Each character goes exactly where WordStar
+puts it, in Courier at the pitch's size (12 point at 10 to the inch):
+^B and ^D bold, ^Y italic, ^S and ^X drawn as lines, ^T and ^V raised
+and lowered, extended characters as ISO Latin-1.  Under .PS a paragraph
+is set again in Times: its words broken into lines by Times' own widths
+up to the right margin, a justified paragraph spread between words, the
+text after it moved up into the lines it saved (WordStar's page breaks
+stay where they were; a paragraph a page break cuts flows on to the
+next page).  A paragraph with ^H, tabs or overprinted lines
+in it prints in Courier.  Each copy is a whole document.  PS is a large
+driver (17K): it needs about as much room as the HP LaserJet drivers.  The header comes from WSPS.PRO, which must be with
+WordStar's other files (else "Can't store results"); it is a text file
+you can change (@T is the document's name, @W and @H the paper's width
+and height, @@ an @), but positions are worked out for letter paper.
+
+The keyboard: the arrow keys move the cursor (as ^E ^X ^S ^D), Home and
+End go to the start and end of the line (^QS, ^QD), and Page Up and Page
+Down scroll by a screen (^R, ^C); the WordStar diamond works as ever.  A
+key's characters must arrive within 2 ms of each other, which at 9600
+baud or faster they do; a lone Esc is still Esc.  If the arrows type
+letters instead, raise the delay (WSCHANGE, Console, Function keys).
+
+WS.COM (132 columns) needs the terminal in 132-column mode before it
+starts (on a DEC VT100 or VT220: set it in set-up, or send ESC [ ? 3 h).
+WordStar cannot switch it itself: the user area's terminal start-up
+string (TRMINI) has room for four bytes only.  It uses 3-digit cursor
+addresses (ESC [ rr ; ccc H), which every VT100 accepts.
+
+What is different from WordStar 4.00
+------------------------------------
+Only the bugs in FIXES.TXT.  Files are the same formats, and the user
+area is where WINSTALL and WSCHANGE expect it, so they work as before.
+Each fix was checked against a C reproduction of WordStar with the same
+fix: the patched WordStar's screens and printouts match it, and every
+other test matches unpatched WordStar's.
+
