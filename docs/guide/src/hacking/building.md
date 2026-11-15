@@ -44,7 +44,7 @@ the clock change, the flash writes).
 | `PSRAM_BANKS` | the board's | the banks in the board's PSRAM instead (up to 15), and the rest a RAM disk |
 | `VIDEO_DIAG` | OFF | bring-up diagnostics on the UART's TX: boot markers, the video core's timing, fault reports |
 | `COPY_TO_RAM` | ON | run from SRAM; must stay ON |
-| `USB_WA_*` | see `CMakeLists.txt` | workarounds for TinyUSB's RP2350 host (`USB_WA_POLL_PAUSE` ON by default) |
+| `USB_WA_*` | see `CMakeLists.txt` | workarounds for TinyUSB's RP2350 host (all OFF by default) |
 | `HSTX_MODE` | | retired after v0.10.0: CMake refuses it and names `DVI_MODE` |
 
 ## Toolchain versions

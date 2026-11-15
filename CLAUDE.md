@@ -217,9 +217,11 @@ panic() text),
 machine: 48 KB banks besides bank 0, default 2; each costs 48 KB of SRAM).
 TinyUSB workaround switches (bd nxv; default OFF since 2026-10-25 = rely
 on the fork's fixes; ON builds ours back in; dvt_usb only, usbkbd.c;
-USB_WA_POLL_PAUSE defaults to ON again since 2026-10-26, bd 008: without
+USB_WA_POLL_PAUSE was ON again from 2026-10-26, bd 008: without
 it a stick read during a firmware update came back stale, badcsw and
-"blocks out of order"; the cache entry follows each switch's default via
+"blocks out of order"; OFF on branch tinyusb-4458, bd pb8: lib/tinyusb on
+hathach/tinyusb#4458 (rp2-hcd-sweep, copied to the fork as test/pr-4458; folds in #4310-#4312, supersedes
+#4313), which polls interrupt endpoints on EPX, never INT_EP_CTRL; the cache entry follows each switch's default via
 its help text): USB_WA_DEINIT
 (--wrap=rp2usb_deinit, remove-before-deinit in usbkbd_reset; #4310),
 USB_WA_DATASEQ (INTE mask in host_start, usbkbd_data_seq_error's raw INTR

@@ -4,4 +4,4 @@
 [submodule "lib/tinyusb"]
 	path = lib/tinyusb
 	url = https://github.com/arlaneenalra/tinyusb.git
-	branch = dvt/integration
+	branch = test/pr-4458
