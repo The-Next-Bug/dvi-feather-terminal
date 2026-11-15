@@ -76,6 +76,11 @@ size_t serial_write(const uint8_t *data, size_t len);
 // UART first, so a caller waiting for room sees it free up.
 size_t serial_tx_room(void);
 
+// Whether everything queued has left the line: the queue and the UART's
+// FIFO and shift register empty (the printer's +++ guard times count from
+// then, bd wt6.6).
+bool serial_tx_drained(void);
+
 // Move queued bytes to the UART while it has room. Call from the main loop.
 void serial_poll(void);
 

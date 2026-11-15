@@ -11,6 +11,7 @@
 // - status.c: the status line (terminal, CP/M, debug);
 // - input_glue.c: keys from the USB keyboard;
 // - usblog_glue.c: the USB log on the SD card (USBLOG.TXT);
+// - printer_glue.c: the Z80's printer through a Zimodem on TTY2;
 // - crash_glue.c: core 0's panics, hard faults and hangs, reported.
 // Everything here is core 0's, from the main loop or the USB stack's
 // callbacks (keys).
@@ -28,6 +29,7 @@
 #include "fwpanel.h"
 #include "machine.h"
 #include "monitor.h"
+#include "printpanel.h"
 #include "screen.h"
 #include "settings.h"
 #include "setup.h"
@@ -96,6 +98,10 @@ typedef struct {
 	// waits for the main loop.
 	bool clock_open, clock_apply;
 	clockpanel_t clock;
+	// The Printer panel (P), over the same rows.
+	bool print_open, print_apply;
+	printpanel_t print;
+	char print_last[64]; // what the last job did, as the panel shows it
 	// The firmware update panel (U), over the same rows; its work and its
 	// cancel wait for the main loop.
 	bool fw_open, fw_work, fw_cancel;
@@ -178,6 +184,28 @@ void send_key(void *ctx, const uint8_t *data, size_t len);
 void setup_key(void *ctx);
 void reset_key(void *ctx);
 void keyboard_poll(void);
+
+// ---- printer_glue.c ----
+
+typedef enum {
+	PRINTER_STATUS_OFF,    // TTY2 is the serial port
+	PRINTER_STATUS_IDLE,   // no job, the last one fine (or none)
+	PRINTER_STATUS_BUSY,   // a job is being opened, printed or ended
+	PRINTER_STATUS_FAILED, // the job, or the last one, failed
+} printer_status_t;
+
+// The Printer settings in use (apply_settings; CP/M mode only).
+void printer_configure(const settings_t *s);
+// TTY2 is the printer's (SIO2 gets nothing).
+bool printer_has_tty2(void);
+void printer_poll(void); // each main-loop pass and while the CPU waits
+// The machine's printer hooks (ports 5/6).
+void printer_out(uint8_t c);
+bool printer_ready(void);
+void printer_end(void);
+printer_status_t printer_status(void);
+void printer_last_job(char *out, size_t size); // the Printer panel's last line
+size_t printer_record(uint8_t *buf);           // HWINFO_PRINTER
 
 // ---- usblog_glue.c ----
 

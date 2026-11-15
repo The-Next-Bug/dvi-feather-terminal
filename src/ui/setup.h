@@ -9,7 +9,8 @@
 // from the host): Up/Down (ESC [ A/B or ESC O A/B) select a setting,
 // Left/Right and Space change it, Return saves, Escape cancels, T shows the
 // demo screen, R reboots the board, U opens the firmware update (fwpanel.h),
-// C the Clock panel (clockpanel.h), and with machine_menu D opens the Drives
+// C the Clock panel (clockpanel.h), P the Printer panel (printpanel.h), and
+// with machine_menu D opens the Drives
 // panel and M leaves for the Z80 machine's menu. A lone ESC
 // is only known to be the Escape key once SETUP_ESC_TIMEOUT_MS pass without
 // the rest of a sequence (setup_tick).
@@ -38,6 +39,7 @@ typedef enum {
 	SETUP_REBOOT,  // R: restart the board (unsaved changes are dropped)
 	SETUP_FIRMWARE, // U: the firmware update panel (fwpanel.h)
 	SETUP_CLOCK,    // C: the Clock and sound panel (clockpanel.h)
+	SETUP_PRINTER,  // P: the Printer panel (printpanel.h)
 } setup_action_t;
 
 typedef struct {

@@ -71,6 +71,7 @@ PLCO0	EQU	0		;poll console out #0
 PLCI0	EQU	1		;poll console in #0
 PLCO1	EQU	2		;poll console out #1
 PLCI1	EQU	3		;poll console in #1
+PLLO0	EQU	4		;poll list out #0 (the printer)
 FLAGSET	EQU	133		;xdos flag set function
 ;
 	.Z80
@@ -428,8 +429,21 @@ TXRDY1:	LD	A,C		;console 1 output
 	OUT	(CON1DAT),A
 	RET
 ;
-LIST:
-	LD	A,C
+;	the printer (ports 5/6, bd wt6.2): status 0FFH ready, 00H busy (a
+;	job being set up, the queue full); a busy printer is polled, so the
+;	other processes run meanwhile
+PTSTL0:	IN	A,(PRTSTA)	;printer status: the port reads just that
+	RET
+;
+LIST:	IN	A,(PRTSTA)	;printer ready?
+	INC	A
+	JP	Z,LSTRDY	;yes, output
+	PUSH	BC
+	LD	C,POLL		;poll the printer
+	LD	E,PLLO0
+	CALL	XDOS
+	POP	BC
+LSTRDY:	LD	A,C		;printer output
 	OUT	(PRTDAT),A
 	RET
 ;
@@ -462,6 +476,7 @@ DEVTBL:	DW	PTSTO0		;poll console 0 status out
 	DW	PTSTI0		;poll console 0 status in
 	DW	PTSTO1		;poll console 1 status out
 	DW	PTSTI1		;poll console 1 status in
+	DW	PTSTL0		;poll list 0 status out
 NMBDEV	EQU	($-DEVTBL)/2	;number of devices to poll
 	DW	RTNEMPTY	;bad device handler
 ;

@@ -49,6 +49,16 @@ extern unsigned host_aux_busy, host_aux_waits, host_aux_overruns;
 // board's UART cannot go that slow. host_aux_rate_sets counts the calls.
 extern unsigned host_aux_rate, host_aux_saved, host_aux_min_rate, host_aux_rate_sets;
 
+// The printer (ports 5/6): what was printed since host_printer_clear (the
+// first HOST_PRINTED_SIZE - 1 bytes, NUL-terminated); after each byte the
+// status says busy for host_printer_busy reads (counted in
+// host_printer_waits); host_printer_ends counts OUT 5,1.
+#define HOST_PRINTED_SIZE 16384
+extern char host_printed[HOST_PRINTED_SIZE];
+extern size_t host_printed_len;
+extern unsigned host_printer_busy, host_printer_waits, host_printer_ends;
+void host_printer_clear(void);
+
 // The wall clock (machine.h time_get/time_set): seconds since 31.12.1977
 // are (host_time_offset_us + host_clock_us()) / 1000000; starts at
 // 1.1.2026. time_set counts host_time_sets.

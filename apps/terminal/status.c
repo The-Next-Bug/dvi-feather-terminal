@@ -269,6 +269,14 @@ void draw_cpm_status(void) {
 		snprintf(text + n, sizeof text - n, " | %s", usb);
 		n = strlen(text);
 	}
+	// The printer (bd wt6.6): PRN, lit while a job runs, PRN! after one failed.
+	printer_status_t prn = printer_status();
+	unsigned prn_col = 0;
+	if (prn != PRINTER_STATUS_OFF && n + 7 < sizeof text) {
+		prn_col = (unsigned)n + 3;
+		snprintf(text + n, sizeof text - n, " | PRN%s", prn == PRINTER_STATUS_FAILED ? "!" : "");
+		n = strlen(text);
+	}
 	if (cpm.running) {
 		snprintf(text + n, sizeof text - n, " | %lu.%02lu MHz", (unsigned long)(cpm.khz / 1000),
 			(unsigned long)(cpm.khz % 1000 / 10));
@@ -287,6 +295,11 @@ void draw_cpm_status(void) {
 	if (usb_col && cpm.lit & 1u << DRIVES) {
 		for (unsigned i = 0; i < 3; ++i) {
 			screen_put(&screen, usb_col + i, STATUS_ROW, (uint8_t)usb[i], colors.status_bg, colors.status_fg);
+		}
+	}
+	if (prn_col && prn == PRINTER_STATUS_BUSY) {
+		for (unsigned i = 0; i < 3; ++i) {
+			screen_put(&screen, prn_col + i, STATUS_ROW, (uint8_t)"PRN"[i], colors.status_bg, colors.status_fg);
 		}
 	}
 }

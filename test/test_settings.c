@@ -211,7 +211,10 @@ static void test_clock_settings(void) {
 		bool panel = (f >= offsetof(settings_t, clock) && f <= offsetof(settings_t, bell))
 			|| (f >= offsetof(settings_t, sound_level) && f <= offsetof(settings_t, sound_stereo));
 		bool hidden = f == offsetof(settings_t, display_was);
-		CHECK_EQ(settings_fields[f].page, panel ? SETTINGS_PAGE_CLOCK : hidden ? SETTINGS_PAGE_NONE : SETTINGS_PAGE_MAIN);
+		bool printer = f >= offsetof(settings_t, printer) && f <= offsetof(settings_t, printer_idle);
+		CHECK_EQ(settings_fields[f].page, panel ? SETTINGS_PAGE_CLOCK : hidden ? SETTINGS_PAGE_NONE
+			: printer ? SETTINGS_PAGE_PRINTER : SETTINGS_PAGE_MAIN);
+		hidden = hidden || printer; // not on SET-UP's rows
 		main += !panel && !hidden;
 		// Each main-page field on one row.
 		unsigned rows = 0;
@@ -361,6 +364,70 @@ static void test_flow_setting(void) {
 	CHECK_EQ(out.flow, SETTINGS_FLOW_NONE);
 }
 
+// The printer (bd wt6.4): off, text, 30 s and no target unless saved; the
+// target in the text block at the page's end, which records without one
+// (erased there: older firmware's) or with a bad CRC leave at "".
+static void test_printer_settings(void) {
+	settings_t in, out;
+	uint8_t rec[SETTINGS_RECORD_SIZE];
+	uint32_t seq;
+	settings_defaults(&in);
+	CHECK_EQ(in.printer, SETTINGS_PRINTER_OFF);
+	CHECK_EQ(in.printer_text, 1);
+	CHECK_EQ(in.printer_idle, SETTINGS_PRINTER_IDLE_DEFAULT);
+	CHECK_EQ(in.printer_target[0], '\0');
+	in.printer = SETTINGS_PRINTER_IPP;
+	in.printer_text = 0;
+	in.printer_idle = 120;
+	settings_set_target(&in, "192.168.1.10:631/ipp/print");
+	settings_encode(&in, 9, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK(memcmp(&in, &out, sizeof in) == 0);
+	CHECK(strcmp(out.printer_target, "192.168.1.10:631/ipp/print") == 0);
+	CHECK_EQ(rec[SETTINGS_TEXT_OFFSET], 'T');
+	CHECK_EQ(rec[SETTINGS_TEXT_OFFSET + 1], 26);
+	// The longest target fills the page; longer is cut, control bytes dropped.
+	char long_target[100];
+	memset(long_target, 'x', sizeof long_target - 1);
+	long_target[sizeof long_target - 1] = '\0';
+	long_target[3] = '\r';
+	settings_set_target(&in, long_target);
+	CHECK_EQ(strlen(in.printer_target), SETTINGS_TARGET_MAX);
+	CHECK(strchr(in.printer_target, '\r') == NULL);
+	settings_encode(&in, 10, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK(strcmp(in.printer_target, out.printer_target) == 0);
+	CHECK_EQ(rec[SETTINGS_RECORD_SIZE - 1], 'x');
+	// A bad text CRC: the target's default, the rest as saved.
+	rec[SETTINGS_TEXT_OFFSET + 10] ^= 1;
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.printer_target[0], '\0');
+	CHECK_EQ(out.printer_idle, 120);
+	// Older firmware's record: 23 fields, the page's end erased.
+	settings_encode(&in, 11, rec);
+	memset(rec + 16 + 23, 0xff, SETTINGS_RECORD_SIZE - 16 - 23);
+	rec[5] = 23;
+	uint32_t crc = crc_of(rec, 23);
+	for (unsigned i = 0; i < 4; ++i) {
+		rec[12 + i] = (uint8_t)(crc >> 8 * i);
+	}
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.printer, SETTINGS_PRINTER_OFF);
+	CHECK_EQ(out.printer_idle, SETTINGS_PRINTER_IDLE_DEFAULT);
+	CHECK_EQ(out.printer_target[0], '\0');
+	// Out of range (2 was raw TCP, dropped): the default.
+	in.printer = 2;
+	settings_encode(&in, 13, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.printer, SETTINGS_PRINTER_OFF);
+	in.printer = 9;
+	in.printer_idle = 7;
+	settings_encode(&in, 12, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.printer, SETTINGS_PRINTER_OFF);
+	CHECK_EQ(out.printer_idle, SETTINGS_PRINTER_IDLE_DEFAULT);
+}
+
 // Stereo: mono unless saved; records from before it (19 bytes) get mono.
 static void test_stereo_setting(void) {
 	settings_t in, out;
@@ -497,6 +564,7 @@ int main(void) {
 	RUN(test_sound_settings);
 	RUN(test_stereo_setting);
 	RUN(test_flow_setting);
+	RUN(test_printer_settings);
 	RUN(test_display_setting);
 	RUN(test_usb_log_setting);
 	RUN(test_older_record);

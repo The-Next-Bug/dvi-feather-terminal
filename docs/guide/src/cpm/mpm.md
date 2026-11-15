@@ -13,7 +13,9 @@ back.
   (the terminal UART, at SET-UP's speed) is console 1. Connect a terminal
   there and press Return for its own prompt. Both run programs at the same
   time. Console 1 starts in user 1 (`1A>`); `USER 0` gets it to the files
-  in user 0, such as the tools on `MPM2`.
+  in user 0, such as the tools on `MPM2`. With SET-UP's
+  [Printer](printing.md) on, the serial port is the printer's, and
+  console 1 gets nothing.
 - Each running program gets a memory segment of its own. The firmware's
   `MPM.SYS` is made for the board's banks when the firmware is built:
 

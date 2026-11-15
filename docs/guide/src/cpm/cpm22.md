@@ -34,7 +34,8 @@ A>PIP CAPTURE.TXT=RDR:
 PIP reads from the reader until a ^Z (1Ah), so end what the other side
 sends with one. Sending to the punch, PIP adds 40 NULs (00h) of paper-tape
 leader before and after the file, and a ^Z at the end; CP/M 3's PIP
-does not. The printer (LST:) is not connected. The BIOS ignores the
+does not. The printer (LST:) is ports 05h/06h: see [Printing](printing.md),
+which takes TTY2 over (RDR: and PUN: then get nothing). The BIOS ignores the
 IOBYTE: RDR: and PUN: are always the serial port, CON: always the screen
 and keyboard.
 

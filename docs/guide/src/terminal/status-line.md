@@ -31,6 +31,8 @@ Row 24, below the 24 text rows, shows the terminal's state.
 - `USB` while a USB stick is in use as `USB:` (lit while it is read or
   written); `+1` when another stick waits to take over, `?` when one could
   not be used, `usb` when none is usable.
+- `PRN` while the [printer](../cpm/printing.md) is on: lit while a job
+  runs, `PRN!` after one failed.
 - the emulated clock rate in MHz, or `monitor` while the monitor runs,
 - `kbd` and the build, and the clock.
 

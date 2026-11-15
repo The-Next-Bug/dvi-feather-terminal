@@ -32,6 +32,7 @@
 - [MP/M II](cpm/mpm.md)
 - [Other systems](cpm/other-systems.md)
 - [Moving files](cpm/moving-files.md)
+- [Printing](cpm/printing.md)
 - [Tools](cpm/tools/index.md)
     - [HWINFO](cpm/tools/hwinfo.md)
     - [MEM](cpm/tools/mem.md)

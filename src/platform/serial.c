@@ -216,6 +216,11 @@ size_t serial_tx_room(void) {
 	return SERIAL_TX_BUFFER_SIZE - (tx_head - tx_tail);
 }
 
+bool serial_tx_drained(void) {
+	serial_poll();
+	return tx_head == tx_tail && !(uart_get_hw(serial_uart)->fr & UART_UARTFR_BUSY_BITS);
+}
+
 void serial_poll(void) {
 	// Interrupts off: the IRQ may send XON/XOFF into the same FIFO. At most
 	// 32 register writes.

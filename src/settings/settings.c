@@ -16,7 +16,10 @@
 #define PAYLOAD_MAX (SETTINGS_RECORD_SIZE - HEADER_SIZE)
 
 #define FIELD_COUNT SETTINGS_FIELDS
-_Static_assert(sizeof(settings_t) == SETTINGS_FIELDS, "one byte per setting");
+_Static_assert(offsetof(settings_t, printer_target) == SETTINGS_FIELDS, "one byte per setting, then the texts");
+_Static_assert(HEADER_SIZE + SETTINGS_FIELDS <= SETTINGS_TEXT_OFFSET, "the payload stops short of the text block");
+
+#define TEXT_MAGIC 'T'
 
 static const unsigned baud_rates[] = {300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200};
 #define BAUD_DEFAULT 8 // 115200
@@ -71,6 +74,11 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 	{"Display", 2, {SETTINGS_DISPLAY_1024, SETTINGS_DISPLAY_800}, {"1024x600", "800x600"}, SETTINGS_PAGE_MAIN},
 	{"Display before", 3, {SETTINGS_DISPLAY_NONE, SETTINGS_DISPLAY_1024, SETTINGS_DISPLAY_800},
 		{"none", "1024x600", "800x600"}, SETTINGS_PAGE_NONE},
+	{"Printer on TTY2", 2, {SETTINGS_PRINTER_OFF, SETTINGS_PRINTER_IPP},
+		{"off", "IPP (AT+PRINT)"}, SETTINGS_PAGE_PRINTER},
+	{"IPP sends", 2, {1, 0}, {"text (AT+PRINTA)", "raw (AT+PRINTR)"}, SETTINGS_PAGE_PRINTER},
+	{"Job ends after", 5, {5, 10, 30, 60, 120}, {"5 s idle", "10 s idle", "30 s idle", "60 s idle", "120 s idle"},
+		SETTINGS_PAGE_PRINTER},
 };
 
 // SET-UP's rows: the line's settings together, then the rest.
@@ -140,7 +148,18 @@ void settings_defaults(settings_t *s) {
 		.clock_seconds = 0, .clock_date = SETTINGS_DATE_NONE, .bell = SETTINGS_BELL_DEFAULT,
 		.usb_log = SETTINGS_USB_LOG_OFF, .sound_level = SETTINGS_SOUND_DEFAULT, .sound_dac = 1,
 		.sound_stereo = SETTINGS_STEREO_MONO, .flow = SETTINGS_FLOW_NONE,
-		.display = SETTINGS_DISPLAY_DEFAULT, .display_was = SETTINGS_DISPLAY_NONE};
+		.display = SETTINGS_DISPLAY_DEFAULT, .display_was = SETTINGS_DISPLAY_NONE,
+		.printer = SETTINGS_PRINTER_OFF, .printer_text = 1, .printer_idle = SETTINGS_PRINTER_IDLE_DEFAULT};
+}
+
+void settings_set_target(settings_t *s, const char *target) {
+	unsigned n = 0;
+	memset(s->printer_target, 0, sizeof s->printer_target);
+	for (; *target && n < SETTINGS_TARGET_MAX; ++target) {
+		if (*target >= 0x20 && *target < 0x7f) {
+			s->printer_target[n++] = *target;
+		}
+	}
 }
 
 void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_RECORD_SIZE]) {
@@ -152,6 +171,28 @@ void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_REC
 	put32(out + 8, seq);
 	memcpy(out + HEADER_SIZE, s, FIELD_COUNT);
 	put32(out + CRC_OFFSET, record_crc(out, FIELD_COUNT));
+	uint8_t *t = out + SETTINGS_TEXT_OFFSET;
+	size_t len = 0;
+	while (len < SETTINGS_TARGET_MAX && s->printer_target[len]) {
+		++len;
+	}
+	t[0] = TEXT_MAGIC;
+	t[1] = (uint8_t)len;
+	memcpy(t + 6, s->printer_target, len);
+	put32(t + 2, crc32_update(0, t + 6, len));
+}
+
+// The text block, if the record has a valid one.
+static void decode_texts(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s) {
+	const uint8_t *t = rec + SETTINGS_TEXT_OFFSET;
+	unsigned len = t[1];
+	if (t[0] != TEXT_MAGIC || len > SETTINGS_TARGET_MAX || get32(t + 2) != crc32_update(0, t + 6, len)) {
+		return;
+	}
+	char text[SETTINGS_TARGET_MAX + 1];
+	memcpy(text, t + 6, len);
+	text[len] = '\0';
+	settings_set_target(s, text);
 }
 
 bool settings_decode(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s, uint32_t *seq) {
@@ -170,6 +211,7 @@ bool settings_decode(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s, uin
 			}
 		}
 	}
+	decode_texts(rec, s);
 	*seq = get32(rec + 8);
 	return true;
 }

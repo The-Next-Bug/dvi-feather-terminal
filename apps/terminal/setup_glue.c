@@ -1,11 +1,13 @@
 // SET-UP and what opens over its rows (terminal.h): the panel itself
 // (setup.c), the Drives panel (drivepanel.c, CP/M mode), the Clock panel
-// (clockpanel.c), the firmware update (fwpanel.c) and the demo (T). Keys arrive from the USB stack
+// (clockpanel.c), the Printer panel (printpanel.c), the firmware update
+// (fwpanel.c) and the demo (T). Keys arrive from the USB stack
 // (setup_feed); anything slow, or touching the SD card or the flash, waits
 // for the main loop (setup_service).
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "pico/stdlib.h"
 #include "hardware/watchdog.h"
@@ -38,6 +40,7 @@ setup_state_t setup;
 static_assert(DRIVEPANEL_ROWS <= SETUP_ROWS, "the Drives panel fits SET-UP's rows");
 static_assert(FWPANEL_ROWS <= SETUP_ROWS, "the firmware panel fits SET-UP's rows");
 static_assert(CLOCKPANEL_ROWS <= SETUP_ROWS, "the Clock panel fits SET-UP's rows");
+static_assert(PRINTPANEL_ROWS <= SETUP_ROWS, "the Printer panel fits SET-UP's rows");
 
 static void ay_give_back(void);
 
@@ -78,6 +81,18 @@ static void clock_draw_panel(void) {
 		screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
 	}
 	clockpanel_draw(&setup.clock, &screen, SETUP_TOP + SETUP_ROWS - CLOCKPANEL_ROWS, PALETTE_TEXT,
+		PALETTE_BACKGROUND, c.status_bg);
+}
+
+// The Printer panel, at the bottom of SET-UP's rows like the Drives panel.
+static void print_draw_panel(void) {
+	settings_colors_t c = settings_colors(&setup.ui.values);
+	for (unsigned r = 0; r < SETUP_ROWS - PRINTPANEL_ROWS; ++r) {
+		screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	}
+	printer_last_job(setup.print_last, sizeof setup.print_last);
+	setup.print.last_job = setup.print_last;
+	printpanel_draw(&setup.print, &screen, SETUP_TOP + SETUP_ROWS - PRINTPANEL_ROWS, PALETTE_TEXT,
 		PALETTE_BACKGROUND, c.status_bg);
 }
 
@@ -170,6 +185,19 @@ static void clock_feed(uint8_t c, uint32_t now) {
 	}
 }
 
+// A key for the Printer panel; its Return is taken in the main loop.
+static void print_feed(uint8_t c, uint32_t now) {
+	printpanel_action_t a = printpanel_input(&setup.print, c, now);
+	if (a == PRINTPANEL_REDRAW) {
+		print_draw_panel();
+	} else if (a == PRINTPANEL_APPLY) {
+		setup.print_apply = true;
+	} else if (a == PRINTPANEL_CANCEL) {
+		setup.print_open = false;
+		setup_draw_panel();
+	}
+}
+
 // A key for the Drives panel. Mounting and the sets' files are left for
 // the main loop.
 static void drives_feed(uint8_t c, uint32_t now) {
@@ -195,13 +223,17 @@ void setup_feed(const uint8_t *data, size_t len) {
 		return;
 	}
 	for (size_t i = 0; i < len && setup.action == SETUP_NONE && !setup.drives_work && !setup.fw_work &&
-		!setup.fw_cancel && !setup.clock_apply; ++i) {
+		!setup.fw_cancel && !setup.clock_apply && !setup.print_apply; ++i) {
 		if (setup.fw_open) {
 			fw_feed(data[i]);
 			continue;
 		}
 		if (setup.clock_open) {
 			clock_feed(data[i], now);
+			continue;
+		}
+		if (setup.print_open) {
+			print_feed(data[i], now);
 			continue;
 		}
 		if (setup.drives_open) {
@@ -252,6 +284,7 @@ void setup_enter(bool from_host) {
 	setup.drives_work = DRIVEPANEL_NONE;
 	setup.fw_open = setup.fw_work = setup.fw_cancel = false;
 	setup.clock_open = setup.clock_apply = false;
+	setup.print_open = setup.print_apply = false;
 	setup.from_host = from_host;
 	setup.action = SETUP_NONE;
 	setup.demo = false;
@@ -273,6 +306,7 @@ static void setup_leave(bool apply) {
 	setup.drives_open = false;
 	setup.drives_work = DRIVEPANEL_NONE;
 	setup.clock_open = setup.clock_apply = false;
+	setup.print_open = setup.print_apply = false;
 	fw_close();
 	ay_give_back(); // a chime still sounding
 	if (!apply) {
@@ -362,6 +396,31 @@ static void clock_service(void) {
 		: set ? "Clock set"
 		: changed ? "Return here saves the clock and sound settings"
 		: NULL;
+	setup_draw_panel();
+}
+
+// The Printer panel's Return: its choices into SET-UP's edited settings
+// (its Return saves them, and apply_settings hands them to the printer);
+// or its Escape key timeout.
+static void print_service(void) {
+	if (!setup.print_apply) {
+		if (printpanel_tick(&setup.print, to_ms_since_boot(get_absolute_time())) == PRINTPANEL_CANCEL) {
+			setup.print_open = false;
+			setup_draw_panel();
+		}
+		return;
+	}
+	setup.print_apply = false;
+	setup.print_open = false;
+	const settings_t *v = &setup.print.values;
+	settings_t *u = &setup.ui.values;
+	bool changed = v->printer != u->printer || v->printer_text != u->printer_text ||
+		v->printer_idle != u->printer_idle || strcmp(v->printer_target, u->printer_target) != 0;
+	u->printer = v->printer;
+	u->printer_text = v->printer_text;
+	u->printer_idle = v->printer_idle;
+	settings_set_target(u, v->printer_target);
+	setup.ui.message = changed ? "Return here saves the printer settings" : NULL;
 	setup_draw_panel();
 }
 
@@ -506,6 +565,10 @@ void setup_service(void) {
 		clock_service();
 		return;
 	}
+	if (setup.print_open && setup.action == SETUP_NONE) {
+		print_service();
+		return;
+	}
 	if (setup.fw_open && setup.action == SETUP_NONE) {
 		if (setup.fw_cancel) {
 			fw_close();
@@ -538,6 +601,10 @@ void setup_service(void) {
 			BOARD_AUDIO_I2S != 0);
 		setup.clock_open = true;
 		clock_draw_panel();
+	} else if (a == SETUP_PRINTER) {
+		printpanel_open(&setup.print, &setup.ui.values);
+		setup.print_open = true;
+		print_draw_panel();
 	} else if (a == SETUP_DRIVES) {
 		drivepanel_open(&setup.drives);
 		setup.drives_open = true;

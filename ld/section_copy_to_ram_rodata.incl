@@ -30,6 +30,7 @@ SECTIONS
         *tinyusb/src/class/hid/hid_host.c.o(.text* .rodata*)
         *tinyusb/src/class/msc/msc_host.c.o(.text* .rodata*)
         *libdvt_ui.a:*(.text* .rodata*)
+        *libdvt_printer.a:*(.text* .rodata*)
         *libdvt_disks.a:drivecfg.c.o(.text* .rodata*)
         *libdvt_screen.a:palette.c.o(.text* .rodata*)
         *libdvt_disks.a:xfer.c.o(.text* .rodata*)
@@ -43,6 +44,7 @@ SECTIONS
         *libdvt_machine.a:machine.c.o(.rodata*)
         *dvi_terminal.dir/hwinfo_glue.c.o(.text* .rodata*)
         *dvi_terminal.dir/usblog_glue.c.o(.text* .rodata*)
+        *dvi_terminal.dir/printer_glue.c.o(.text* .rodata*)
         *libg.a:libc_a-qsort.o(.text* .rodata*)
         . = ALIGN(4);
         __cold_text_end__ = .;

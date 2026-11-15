@@ -41,7 +41,12 @@ typedef struct {
 	// 14 reads 0xFF, as on picosim.
 	unsigned (*aux_rate)(void);
 	bool (*aux_set_rate)(unsigned rate);
-	void (*printer_out)(uint8_t c); // may be NULL
+	// The printer (ports 5/6, MACHINE_PRINTER_*): send a byte, whether it
+	// would take one now, and the end of a job (OUT 5,1). Each may be
+	// NULL: bytes go nowhere, always ready, no end.
+	void (*printer_out)(uint8_t c);
+	bool (*printer_ready)(void);
+	void (*printer_end)(void);
 	// Disk sectors (128 bytes; track from 0, sector from 1, within the
 	// drive's format): FDC status, 0 = OK.
 	uint8_t (*disk_read)(unsigned drive, unsigned track, unsigned sector, uint8_t *buf);
@@ -94,6 +99,19 @@ typedef struct {
 // layout in use (1-3, as written) in bits 4-5, so 0xFF (older firmware, or
 // a real chip) means no stereo.
 #define MACHINE_AY_STEREO 16
+
+// Ports 5/6, the printer (picosim's, bd wt6.1): OUT 6 sends a byte, CR and
+// NUL included (picosim dropped both for its host file; a printer needs
+// CR); IN 5 reads 0FFH when the printer takes a byte now, 00H while busy
+// (a job being set up, the line's queue full), so BIOSes wait on it before
+// OUT 6. Ours: OUT 5,MACHINE_PRINTER_END ends the job now instead of after
+// the platform's idle time; other OUT 5 values are ignored. IN 6 reads
+// 1AH (picosim's).
+#define MACHINE_PRINTER_STATUS 5
+#define MACHINE_PRINTER_DATA 6
+#define MACHINE_PRINTER_READY 0xff
+#define MACHINE_PRINTER_BUSY 0x00
+#define MACHINE_PRINTER_END 1
 
 // Port 14, ours (bd c2d): SIO2's rate as a CP/M 3 baud code (DEVICE's):
 // 1-15 = 50, 75, 110, 134, 150, 300, 600, 1200, 1800, 2400, 3600, 4800,
@@ -190,6 +208,7 @@ typedef struct {
 // users may know them.
 #define HWINFO_DRIVES 32       // the disk images on drives A-H
 #define HWINFO_SOUND 33        // the AY-3-8910 on the Z80's ports (bd 1ls.18.4)
+#define HWINFO_PRINTER 35      // the printer on TTY2 (ports 5/6, bd wt6.6)
 
 #define HWINFO_ST_NONE 0      // no record
 #define HWINFO_ST_PRESENT 1   // there and in use
