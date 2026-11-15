@@ -33,6 +33,8 @@ CONDAT	EQU	1		;console data port
 AUXSTA	EQU	2		;SIO2 status port: the board's serial port
 AUXDAT	EQU	3		;SIO2 data port
 FDC	EQU	4		;port for the FDC
+PRTSTA	EQU	5		;printer status: 0FFH ready, 00H busy
+PRTDAT	EQU	6		;printer data
 DINFO	EQU	8		;drive format: OUT drive, IN 0 none, 1 floppy,
 				;2 4 MB hard disk, 3 8 MB hard disk
 LEDS	EQU	0FFH		;frontpanel LED's
@@ -263,14 +265,19 @@ CONOUT	IN	CONSTA		;get status
 	OUT	CONDAT		;send to console
 	RET
 ;
-;	printer status, return 0FFH if character ready, 00H if not
+;	printer status (ports 5/6, machine.h): 0FFH ready, 00H busy
 ;
-LISTST	XRA	A		;we have no printer
-	RET			;so never ready
+LISTST	IN	PRTSTA		;the port reads just that
+	RET
 ;
-;	line printer output
+;	line printer output: wait until the printer takes a byte
 ;
-LIST	RET			;we have no printer
+LIST	IN	PRTSTA		;get status
+	INR	A		;0FFH: ready
+	JNZ	LIST		;busy (a job being set up, the queue full)
+	MOV	A,C		;get character into accumulator
+	OUT	PRTDAT		;send it
+	RET
 ;
 ;	punch character from register C: to the serial port (SIO2)
 ;

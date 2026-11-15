@@ -3,6 +3,7 @@
 
 #include "setup.h"
 #include "clockpanel.h"
+#include "printpanel.h"
 #include "datetime.h"
 #include "font.h"
 #include "palette.h"
@@ -233,7 +234,7 @@ static void test_machine_menu_key(void) {
 	for (unsigned c = 0; c < 80; ++c) {
 		help[c] = (char)screen_glyph(&s, c, SCREEN_ROWS - 3);
 	}
-	CHECK(strstr(help, "R reboot  C clock & sound  D drives  M monitor") != NULL);
+	CHECK(strstr(help, "R reboot  C clock  P printer  D drives  M monitor") != NULL);
 }
 
 // T shows the demo screen, in either mode.
@@ -297,6 +298,70 @@ static void test_clock_key(void) {
 		// SET-UP's own rows stop before the clock's settings.
 		CHECK(!row_contains(&s, SCREEN_ROWS - 1 - SETUP_ROWS + 1 + SETUP_ITEMS + 2, "Status line clock"));
 	}
+}
+
+// ---- the Printer panel (printpanel.h, bd wt6.5) ----
+
+static printpanel_t pp;
+
+static printpanel_action_t print_send(const char *keys) {
+	printpanel_action_t last = PRINTPANEL_NONE;
+	for (const char *k = keys; *k; ++k) {
+		printpanel_action_t a = printpanel_input(&pp, (uint8_t)*k, 0);
+		if (a != PRINTPANEL_NONE) {
+			last = a;
+		}
+	}
+	return last;
+}
+
+// P opens it, in either mode; its rows step the choices, the Target takes
+// typing and Backspace; Return wants a target unless the printer is off.
+static void test_printer_panel(void) {
+	for (int machine = 0; machine <= 1; ++machine) {
+		open_with(80);
+		u.machine_menu = machine;
+		CHECK_EQ(send("p", 0), SETUP_PRINTER);
+		CHECK_EQ(send("P", 0), SETUP_PRINTER);
+		static screen_t s;
+		screen_init(&s, 80, FG, BG);
+		setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG, BORDER);
+		CHECK(row_contains(&s, SCREEN_ROWS - 3, "P printer"));
+	}
+	settings_t v;
+	settings_defaults(&v);
+	printpanel_open(&pp, &v);
+	CHECK_EQ(print_send(" "), PRINTPANEL_REDRAW); // off -> IPP
+	CHECK_EQ(pp.values.printer, SETTINGS_PRINTER_IPP);
+	CHECK_EQ(print_send("\r"), PRINTPANEL_REDRAW); // no target yet
+	CHECK(pp.message != NULL);
+	print_send("\x1b[B\x1b[D"); // IPP sends: text -> raw
+	CHECK_EQ(pp.values.printer_text, 0);
+	print_send("\x1b[B\x1b[C"); // Job ends after: 30 -> 60 s
+	CHECK_EQ(pp.values.printer_idle, 60);
+	print_send("\x1b[B");
+	CHECK_EQ(pp.line, PRINTPANEL_TARGET);
+	print_send("192.168.1.10:631/ipp/printx \x7f"); // the space is dropped
+	CHECK(strcmp(pp.values.printer_target, "192.168.1.10:631/ipp/print") == 0);
+	CHECK_EQ(print_send(" "), PRINTPANEL_NONE); // Space types nothing here
+	static screen_t s;
+	screen_init(&s, 80, FG, BG);
+	const unsigned top = SCREEN_ROWS - 1 - PRINTPANEL_ROWS;
+	pp.last_job = "OK, 2 jobs";
+	printpanel_draw(&pp, &s, top, FG, BG, BORDER);
+	CHECK(row_contains(&s, top + 1, "Printer on TTY2") && row_contains(&s, top + 1, "IPP (AT+PRINT)"));
+	CHECK(row_contains(&s, top + 4, "> Target") && row_contains(&s, top + 4, "192.168.1.10:631/ipp/print"));
+	CHECK(row_contains(&s, top + 8, "Last job: OK, 2 jobs"));
+	CHECK_EQ(print_send("\r"), PRINTPANEL_APPLY);
+	// Off and IPP only (raw TCP was dropped): Space goes round.
+	printpanel_open(&pp, &v);
+	print_send("  ");
+	CHECK_EQ(pp.values.printer, SETTINGS_PRINTER_OFF);
+	CHECK_EQ(print_send("\x1b"), PRINTPANEL_NONE);
+	CHECK_EQ(printpanel_tick(&pp, PRINTPANEL_ESC_TIMEOUT_MS), PRINTPANEL_CANCEL);
+	// Off needs no target.
+	printpanel_open(&pp, &v);
+	CHECK_EQ(print_send("\r"), PRINTPANEL_APPLY);
 }
 
 // USB log is SET-UP's last row: off unless saved, or the SD card.
@@ -695,6 +760,7 @@ int main(void) {
 	RUN(test_clock_panel_format);
 	RUN(test_clock_panel_sound);
 	RUN(test_clock_panel_escape);
+	RUN(test_printer_panel);
 	RUN(test_mode_setting);
 	RUN(test_status_line_setting);
 	RUN(test_blank_after_setting);

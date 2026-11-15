@@ -29,6 +29,7 @@ setting's current choice is shown in reverse video.
 | **R** | restart the board, as at power-on (unsaved changes are dropped; CP/M drives are written back first): the last resort when the terminal is stuck |
 | **U** | [update the firmware](firmware-update.md) from `FIRMWARE.UF2` on the SD card or a USB stick |
 | **C** | the [Clock and sound panel](#the-clock-and-sound-panel) |
+| **P** | the Printer panel: the Z80 machine's printer through a WiFi modem; see [Printing](../cpm/printing.md#the-printer-panel) |
 | **D** | CP/M mode: the [Drives panel](../cpm/drives.md#the-drives-panel) |
 | **M** | CP/M mode: back to the [monitor](../cpm/monitor.md) |
 

@@ -210,7 +210,7 @@ static void rate_out(BYTE data) {
 }
 
 static BYTE prts_in(void) {
-	return plat->printer_out ? 0xff : 0x00;
+	return !plat->printer_ready || plat->printer_ready() ? MACHINE_PRINTER_READY : MACHINE_PRINTER_BUSY;
 }
 
 static BYTE prtd_in(void) {
@@ -218,11 +218,13 @@ static BYTE prtd_in(void) {
 }
 
 static void prts_out(BYTE data) {
-	UNUSED(data);
+	if (data == MACHINE_PRINTER_END && plat->printer_end) {
+		plat->printer_end();
+	}
 }
 
 static void prtd_out(BYTE data) {
-	if (plat->printer_out && data != '\r' && data != 0) {
+	if (plat->printer_out) {
 		plat->printer_out(data);
 	}
 }
@@ -539,8 +541,8 @@ in_func_t *const port_in[256] = {
 	[2] = sio2s_in,
 	[3] = sio2d_in,
 	[4] = fdc_in,
-	[5] = prts_in,
-	[6] = prtd_in,
+	[MACHINE_PRINTER_STATUS] = prts_in,
+	[MACHINE_PRINTER_DATA] = prtd_in,
 	[8] = dinfo_in,
 	[10] = xfer_in,
 	[12] = hwinfo_in,
@@ -563,8 +565,8 @@ out_func_t *const port_out[256] = {
 	[2] = sio2s_out,
 	[3] = sio2d_out,
 	[4] = fdc_out,
-	[5] = prts_out,
-	[6] = prtd_out,
+	[MACHINE_PRINTER_STATUS] = prts_out,
+	[MACHINE_PRINTER_DATA] = prtd_out,
 	[8] = dinfo_out,
 	[10] = xfer_out,
 	[12] = hwinfo_out,

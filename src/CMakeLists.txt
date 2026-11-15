@@ -14,6 +14,7 @@ add_subdirectory(settings)
 add_subdirectory(machine)
 add_subdirectory(disks)
 add_subdirectory(ui)
+add_subdirectory(printer)
 
 if(DVT_FIRMWARE)
   add_subdirectory(board)

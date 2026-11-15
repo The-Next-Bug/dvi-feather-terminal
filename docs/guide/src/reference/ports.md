@@ -25,7 +25,7 @@ the next instruction.
 | 02h | in | second serial port status | picosim |
 | 03h | in, out | second serial port data (the board's UART at the SET-UP line settings) | picosim |
 | 04h | in, out | disk controller: status, command | picosim |
-| 05h | in | printer status (none fitted) | picosim |
+| 05h | in, out | printer status; out: end of job | picosim; the end of job is this firmware's |
 | 06h | in, out | printer data | picosim |
 | 08h | in, out | the disk in a drive | this firmware |
 | 0Ah | in, out | file transfer device | this firmware |
@@ -131,8 +131,18 @@ Data bits, parity, stop bits and flow control stay SET-UP's.
 
 ## Printer (05h, 06h)
 
-No printer is fitted: `IN 05h` reads 00h (not ready; picosim reads FFh
-with a printer), `IN 06h` reads 1Ah (^Z), and `OUT 06h` is discarded.
+The printer is TTY2 when SET-UP's Printer panel turns it on (see
+[Printing](../cpm/printing.md)); otherwise bytes sent to it go nowhere.
+
+- `IN 05h`: FFh when the printer takes a byte now, 00h while it is busy
+  (a job being opened, the serial line's queue full). Wait for FFh before
+  each `OUT 06h`; the BIOSes do. With the Printer off it always reads FFh.
+- `OUT 06h`: a byte to print. Every byte goes as it is, CR and NUL
+  included (picosim drops both).
+- `OUT 05h` 01h: end the job now rather than after the idle time: it
+  takes no more data, and the modem sends it after its own idle time.
+  Other values are ignored.
+- `IN 06h` reads 1Ah (^Z).
 
 ## Disk controller (04h)
 

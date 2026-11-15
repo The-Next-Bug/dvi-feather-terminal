@@ -45,8 +45,9 @@ A>DEVICE CONOUT:=TTY1,TTY2
 
 PIP reads AUX: until a ^Z (1Ah). `DEVICE` shows and changes the
 assignments; the last line above sends console output to the serial port
-as well as the screen (`DEVICE CONOUT:=TTY1` stops it). The printer (LST:)
-is not connected.
+as well as the screen (`DEVICE CONOUT:=TTY1` stops it). LST: is `LPT`, the
+printer on ports 05h/06h: see [Printing](printing.md), which takes TTY2
+over (AUX: then gets nothing). `DEVICE LST:=NULL` turns it off.
 
 `TTY2` starts at SET-UP's baud rate, and `DEVICE` can change it (no space
 before the bracket):

@@ -169,6 +169,7 @@ void apply_settings(const settings_t *s) {
 	audio_set_ay_level(s->sound_level);
 	audio_set_stereo(s->sound_stereo);
 	audio_set_fitted(s->sound_dac != 0);
+	printer_configure(s);
 }
 
 bool settings_store(const settings_t *s) {
@@ -481,6 +482,12 @@ int main(void) {
 			if (drive_lights(to_ms_since_boot(get_absolute_time())) != cpm.lit) {
 				draw_cpm_status();
 			}
+			// So does the printer's PRN (a job started, ended, failed).
+			static printer_status_t prn_shown;
+			if (printer_status() != prn_shown) {
+				prn_shown = printer_status();
+				draw_cpm_status();
+			}
 			// The Z80's output asked for SET-UP (CSI ? 999 ~).
 			if (term.setup_requests != setup_requests) {
 				setup_requests = term.setup_requests;
@@ -506,6 +513,7 @@ int main(void) {
 		keyboard_poll();
 		usbmsc_poll(); // a USB stick plugged in or pulled: mount or unmount it
 		usblog_poll();
+		printer_poll();
 		if (setup.open_requested) {
 			setup.open_requested = false;
 			if (!setup.active) {

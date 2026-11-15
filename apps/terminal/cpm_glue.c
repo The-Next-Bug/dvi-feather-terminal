@@ -29,18 +29,23 @@ static void cpm_console_out(uint8_t c) {
 	term_write(&term, &c, 1);
 }
 
+// SIO2 is the terminal UART, unless the Printer setting gives that to the
+// printer (printer_glue.c): then nothing arrives and what is sent goes
+// nowhere, at once (a BIOS waiting on SIO2 must not hang).
 static void cpm_aux_out(uint8_t c) {
-	serial_write(&c, 1);
+	if (!printer_has_tty2()) {
+		serial_write(&c, 1);
+	}
 }
 
 static bool cpm_aux_in(uint8_t *c) {
-	return serial_read(c, 1) == 1;
+	return !printer_has_tty2() && serial_read(c, 1) == 1;
 }
 
 // SIO2's transmitter ready: room in the TX queue (bd qtq). Without it a
 // Z80 writing faster than the baud rate (PIP PUN:, AUX:) lost bytes.
 static bool cpm_aux_out_ready(void) {
-	return serial_tx_room() > 0;
+	return printer_has_tty2() || serial_tx_room() > 0;
 }
 
 // SIO2's rate for port 14 (bd c2d): CP/M 3's DEVICE TTY2 [9600] through
@@ -79,6 +84,7 @@ static void cpm_feed_keys(uint32_t now_ms) {
 static void cpm_idle(void) {
 	keyboard_poll();
 	serial_poll();
+	printer_poll();
 	led_poll(screen_blanked);
 	if (cpm.running) {
 		cpm_feed_keys(to_ms_since_boot(get_absolute_time()));
@@ -103,6 +109,9 @@ const machine_platform_t cpm_platform = {
 	.aux_out_ready = cpm_aux_out_ready,
 	.aux_rate = cpm_aux_rate,
 	.aux_set_rate = line_rate,
+	.printer_out = printer_out,
+	.printer_ready = printer_ready,
+	.printer_end = printer_end,
 	.disk_read = cpm_disk_read,
 	.disk_write = cpm_disk_write,
 	.disk_format = cpm_disk_format,

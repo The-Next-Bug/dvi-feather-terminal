@@ -14,12 +14,20 @@
 // payload is one byte per setting in the order of settings_t; settings are
 // only appended, so an older record just lacks the newer ones (they keep
 // their defaults). The version changes only if the layout ever has to.
+//
+// Text settings (the printer's target, bd wt6.4) are in a block of their own
+// at the page's end (SETTINGS_TEXT_OFFSET): 'T', the length, CRC-32 of the
+// text, the text (printable ASCII). Firmware from before it never reads
+// there, and its records leave it erased (0xFF): no block, the default.
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #define SETTINGS_RECORD_SIZE 256 // one flash page
+#define SETTINGS_TARGET_MAX 63   // the printer's target (= PRINTJOB_TARGET_MAX)
+// The text block: 'T', length, CRC-32 (4), the text.
+#define SETTINGS_TEXT_OFFSET (SETTINGS_RECORD_SIZE - 6 - SETTINGS_TARGET_MAX)
 #define SETTINGS_SLOTS 2         // flash sectors used in turn
 
 // One byte per setting; the payload stores them in this order (append only).
@@ -53,7 +61,20 @@ typedef struct {
 	uint8_t flow;          // SETTINGS_FLOW_*: flow control on the serial line (bd dmt.27)
 	uint8_t display;       // SETTINGS_DISPLAY_*: the DVI mode, used from the next boot (bd cpx.6)
 	uint8_t display_was;   // not in SET-UP: the mode before an unconfirmed change, or SETTINGS_DISPLAY_NONE
+	// The printer on TTY2 (SET-UP's Printer panel, bd wt6.4; printjob.h):
+	uint8_t printer;       // SETTINGS_PRINTER_*: off (TTY2 a serial port) or IPP
+	uint8_t printer_text;  // IPP: 1 text (AT+PRINTA), 0 raw (AT+PRINTR)
+	uint8_t printer_idle;  // seconds without a byte that end a job
+	// New one-byte settings go above this line. Text settings, in the
+	// record's text block, not the payload:
+	char printer_target[SETTINGS_TARGET_MAX + 1]; // host:port/path, NUL-padded
 } settings_t;
+
+// The printer (settings_t.printer; printjob.h's PRINTJOB_* values).
+#define SETTINGS_PRINTER_OFF 0
+#define SETTINGS_PRINTER_IPP 1
+// 2 was raw TCP (JetDirect), dropped: such a record comes back as off.
+#define SETTINGS_PRINTER_IDLE_DEFAULT 30
 
 #define SETTINGS_MODE_TERMINAL 0 // a serial terminal on UART0
 #define SETTINGS_MODE_CPM 1      // the console of the Z80 CP/M machine (machine.h)
@@ -119,13 +140,14 @@ typedef struct {
 // first choice need not be the default), their names and the SET-UP page
 // they are on: SET-UP's own rows (SETTINGS_MAIN_FIELDS of them, in
 // settings_main_field's order) or its Clock panel (clockpanel.h).
-#define SETTINGS_FIELDS 23
+#define SETTINGS_FIELDS 26
 #define SETTINGS_MAIN_FIELDS 15
 #define SETTINGS_MAX_CHOICES 11
 
 #define SETTINGS_PAGE_MAIN 0
 #define SETTINGS_PAGE_CLOCK 1 // the Clock and sound panel (clockpanel.h)
 #define SETTINGS_PAGE_NONE 2  // kept, not shown (display_was)
+#define SETTINGS_PAGE_PRINTER 3 // the Printer panel (printpanel.h)
 
 typedef struct {
 	const char *name;
@@ -148,6 +170,10 @@ static inline uint8_t *settings_field(settings_t *s, unsigned i) {
 }
 
 unsigned settings_baud_rate(const settings_t *s);
+
+// Set the printer's target (cut at SETTINGS_TARGET_MAX, anything but
+// printable ASCII dropped), NUL-padded so settings compare with memcmp.
+void settings_set_target(settings_t *s, const char *target);
 
 // The width in use: the Columns setting, but 80 for the ADM-3A.
 unsigned settings_columns(const settings_t *s);

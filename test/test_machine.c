@@ -1380,6 +1380,17 @@ static size_t aux_send(const char *pip) {
 	return lead;
 }
 
+// PIP to LST: (bd wt6.2) with the printer busy after every byte: every
+// byte arrives through ports 5/6, CR LF included.
+static void print_send(const char *pip) {
+	host_printer_clear();
+	host_printer_busy = 3;
+	CHECK(cpm(pip, ""));
+	host_printer_busy = 0;
+	CHECK(strstr(host_printed, aux_text) != NULL);
+	CHECK(host_printer_waits >= 3 * (strlen(aux_text) - 1));
+}
+
 // PIP from the reader (AUX:) into a file, up to the ^Z, then TYPE it.
 static void aux_receive(const char *pip) {
 	aux_input = "Typed on the serial port\r\nsecond line\r\n\x1a";
@@ -1401,6 +1412,7 @@ static void test_aux_cpm22(void) {
 	aux_file();
 	CHECK_EQ(aux_send("PIP PUN:=C:AUXTEXT.TXT"), 40);
 	aux_receive("PIP C:FROMAUX.TXT=RDR:");
+	print_send("PIP LST:=C:AUXTEXT.TXT");
 	drives_unmount_all();
 }
 
@@ -1851,6 +1863,53 @@ static void test_ay_ports(void) {
 	machine_init(&host_platform);
 }
 
+// ---- The printer (ports 5/6; bd wt6.1) ----
+
+// In raw Z80 bytes: wait for the status to read ready, then send each of
+// "A\r\n\0B" (CR and NUL kept), OUT 5,1 (the end of the job) and 5,2
+// (ignored); IN 6 reads 1AH.
+static void printer_program(void) {
+	static const uint8_t text[] = {'A', '\r', '\n', 0, 'B'};
+	z80.n = 0;
+	emit(1, 0xf3); // DI
+	for (unsigned i = 0; i < sizeof text; ++i) {
+		emit(4, 0xdb, MACHINE_PRINTER_STATUS, 0x3c, 0x20); // IN A,(5); INC A; JR NZ,
+		emit(1, 0xfb);                                     // back to the IN
+		emit(4, 0x3e, text[i], 0xd3, MACHINE_PRINTER_DATA);
+	}
+	emit(4, 0x3e, MACHINE_PRINTER_END, 0xd3, MACHINE_PRINTER_STATUS);
+	emit(4, 0x3e, 2, 0xd3, MACHINE_PRINTER_STATUS);
+	emit(5, 0xdb, MACHINE_PRINTER_DATA, 0x32, 0x00, 0xf0); // IN A,(6); LD (F000H),A
+	emit(5, 0xdb, MACHINE_PRINTER_STATUS, 0x32, 0x01, 0xf0);
+	run_program();
+}
+
+static void test_printer_port(void) {
+	extern uint8_t bnk0[65536];
+	machine_init(&host_platform);
+	host_printer_clear();
+	host_printer_busy = 3;
+	printer_program();
+	CHECK_EQ(host_printed_len, 5);
+	CHECK(memcmp(host_printed, "A\r\n\0B", 5) == 0);
+	CHECK_EQ(host_printer_waits, 4 * 3 + 1); // after each byte, the last by the IN at the end
+	CHECK_EQ(bnk0[0xf001], MACHINE_PRINTER_BUSY);
+	CHECK_EQ(host_printer_ends, 1);
+	CHECK_EQ(bnk0[0xf000], 0x1a);
+	host_printer_busy = 0;
+
+	machine_platform_t none = host_platform; // no printer: always ready, nowhere
+	none.printer_out = NULL;
+	none.printer_ready = NULL;
+	none.printer_end = NULL;
+	machine_init(&none);
+	host_printer_clear();
+	printer_program();
+	CHECK_EQ(host_printed_len, 0);
+	CHECK_EQ(bnk0[0xf001], MACHINE_PRINTER_READY);
+	machine_init(&host_platform);
+}
+
 // ---- SIO2's rate (port 14, MACHINE_SERIAL_RATE; bd c2d) ----
 
 // In raw Z80 bytes: the code in use, 9600 set, 110 refused (below the
@@ -2291,6 +2350,14 @@ static void test_cpm3_aux(void) {
 	aux_file();
 	aux_send("PIP AUX:=C:AUXTEXT.TXT");
 	aux_receive("PIP C:FROMAUX.TXT=AUX:");
+	// The printer (bd wt6.2): LPT, LST: by default; LST:=NULL prints nothing.
+	CHECK(cpm("DEVICE VALUES", "LST:    = LPT"));
+	print_send("PIP LST:=C:AUXTEXT.TXT");
+	CHECK(cpm("DEVICE LST:=NULL", ""));
+	host_printer_clear();
+	CHECK(cpm("PIP LST:=C:AUXTEXT.TXT", ""));
+	CHECK_EQ(host_printed_len, 0);
+	CHECK(cpm("DEVICE LST:=LPT", ""));
 	// The console on both: DIR's output goes to the screen and the port.
 	CHECK(cpm("DEVICE CONOUT:=TTY1,TTY2", ""));
 	aux_len = 0;
@@ -2623,6 +2690,13 @@ static void test_mpm_consoles(void) {
 	CHECK_EQ(drives_mount(1, "MPM2"), DRIVES_OK);
 	mpm_boot();
 	mpm_both_consoles("Bank = 00H  Allocated to PIP"); // the smallest that fits
+	// The printer (bd wt6.2): LIST polls while it is busy.
+	host_printer_clear();
+	host_printer_busy = 3;
+	CHECK(mpm("PIP LST:=B:SYSGEN.SUB", ""));
+	host_printer_busy = 0;
+	CHECK(strstr(host_printed, "gensys $$a\r\n") != NULL);
+	CHECK(host_printer_waits > 100);
 	drives_unmount_all();
 }
 
@@ -3599,6 +3673,7 @@ int main(void) {
 	RUN(test_hwinfo_tool);
 	RUN(test_ay_ports);
 	RUN(test_rate_port);
+	RUN(test_printer_port);
 	RUN(test_aytest_tool);
 	RUN(test_ayplay_tool);
 	RUN(test_boot_cpm3);

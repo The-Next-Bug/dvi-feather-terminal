@@ -20,7 +20,8 @@
 ;
 ;	Character devices (bd qtq): TTY1 the screen and keyboard (SIO1),
 ;	TTY2 the board's serial port (SIO2, ports 2/3), AUXIN:/AUXOUT: by
-;	default; DEVICE moves CON: and AUX: between them. TTY2's rate can
+;	default; DEVICE moves CON: and AUX: between them. LPT the printer
+;	(ports 5/6, bd wt6.2), LST: by default; DEVICE LST:=NULL turns it off. TTY2's rate can
 ;	be set (DEVICE TTY2 [9600], bd c2d) where the machine has port 0EH:
 ;	BOOT marks it soft and puts the rate in use in CHRTBL, DEVINI sends
 ;	DEVICE's code and reads back what was done.
@@ -73,6 +74,8 @@ TTY1S	EQU	00H		; tty 1 status
 TTY2	EQU	03H		; tty 2 data: SIO2, the board's serial port
 TTY2S	EQU	02H		; tty 2 status
 FDC	EQU	04H		; FDC
+PRTSTA	EQU	05H		; printer status: 0FFH ready, 00H busy
+PRTDAT	EQU	06H		; printer data
 DINFO	EQU	08H		; drive format: OUT drive, IN 0 none, 1 8" floppy,
 				; 2 4 MB, 3 8 MB hard disk (ours)
 RATE	EQU	0EH		; tty 2's rate as a baud code: IN the one in use
@@ -209,6 +212,9 @@ CHRTBL:	DB	'TTY1  '	; device 0 (vector bit 15): the screen and keyboard
 	DB	'TTY2  '	; device 1 (vector bit 14): the serial port
 	DB	mb$inou+mb$ser	; mb$soft and the rate's code set by BOOT
 	DB	baud$0
+	DB	'LPT   '	; device 2 (vector bit 13): the printer (ports 5/6)
+	DB	mb$out
+	DB	baud$0
 ;
 	DB	0
 ;
@@ -219,10 +225,10 @@ CCPFCB:	DB	1,'CCP     COM',0,0,0,0
 CCPCR:	DB	0
 CCPREC:	DB	0,0,0
 ;
-;	BIOS error messages
+;	BIOS error message (one for opening and reading: the common part
+;	has no room for two)
 ;
-OPNERR:	DB	'Open error CCP.COM',13,10,'$'
-RDRERR:	DB	'Read error CCP.COM',13,10,'$'
+CCPERR:	DB	'CCP.COM error',13,10,'$'
 ;
 BANK:	DB	0		; bank to select for DMA
 SDISK:	DB	0		; selected disk
@@ -368,8 +374,8 @@ BOOT:	LXI	SP,STACK
 	MVI	H,40H		; device 1
 	SHLD	@aivec		; AUXIN:=TTY2
 	SHLD	@aovec		; AUXOUT:=TTY2
-	MVI	H,0
-	SHLD	@lovec		; LST:=NULL
+	MVI	H,20H		; device 2
+	SHLD	@lovec		; LST:=LPT
 ;
 	IN	RATE		; tty 2's rate, if the machine can change it
 	CPI	0FFH
@@ -447,7 +453,6 @@ WBOOT:	LXI	SP,STACK
 	LXI	D,CCPFCB	; open file CCP.COM
 	MVI	C,OPEN
 	CALL	BDOS
-	LXI	D,OPNERR
 	INR	A
 	JZ	CPPERR		; file open error
 	LXI	D,TPA		; setup DMA to TPA
@@ -459,11 +464,11 @@ WBOOT:	LXI	SP,STACK
 	LXI	D,CCPFCB	; read the CCP into memory
 	MVI	C,READS
 	CALL	BDOS
-	LXI	D,RDRERR
 	INR	A
 	JNZ	TPA		; start CCP
 ;
-CPPERR:	MVI	C,PRINT		; error loading CCP, print error message
+CPPERR:	LXI	D,CCPERR	; error loading CCP, print error message
+	MVI	C,PRINT
 	CALL	BDOS
 	HLT			; and halt the machine
 ;
@@ -519,13 +524,24 @@ AUXOST:	LHLD	@aovec		; auxiliary output status
 AUXOUT:	LHLD	@aovec		; auxiliary output
 	JMP	VECOUT
 ;
-;	list output status
+;	list output status: the printer's (ports 5/6: 0FFH ready, 00H busy),
+;	whatever @lovec says (there is no room here to ask it)
 ;
-LISTST:	JMP	DEVNRY		; no printer, never ready
+LISTST:	IN	PRTSTA
+	RET
 ;
-;	list output
+;	list output: to the printer if LST: selects it (device 2), waiting
+;	while it is busy (a job being set up, the queue full)
 ;
-LIST:	RET			; no printer
+LIST:	LDA	@lovec+1
+	ANI	20H		; device 2?
+	RZ
+LIST1:	IN	PRTSTA		; get status
+	INR	A		; 0FFH: ready
+	JNZ	LIST1
+	MOV	A,C		; get character to A
+	OUT	PRTDAT		; send to the printer
+	RET
 ;
 ;	input status of the devices vector HL selects: 0FFH if one has a
 ;	character

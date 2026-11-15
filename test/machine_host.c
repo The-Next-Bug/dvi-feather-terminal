@@ -130,6 +130,39 @@ static bool aux_in(uint8_t *c) {
 	return true;
 }
 
+char host_printed[HOST_PRINTED_SIZE];
+size_t host_printed_len;
+unsigned host_printer_busy, host_printer_waits, host_printer_ends;
+static unsigned printer_busy_left;
+
+static void printer_out(uint8_t c) {
+	printer_busy_left = host_printer_busy;
+	if (host_printed_len < sizeof host_printed - 1) {
+		host_printed[host_printed_len++] = (char)c;
+		host_printed[host_printed_len] = '\0';
+	}
+}
+
+static bool printer_ready(void) {
+	if (printer_busy_left) {
+		--printer_busy_left;
+		++host_printer_waits;
+		return false;
+	}
+	return true;
+}
+
+static void printer_end(void) {
+	++host_printer_ends;
+}
+
+void host_printer_clear(void) {
+	host_printed_len = 0;
+	host_printed[0] = '\0';
+	host_printer_waits = host_printer_ends = 0;
+	printer_busy_left = 0;
+}
+
 static uint8_t disk_read(unsigned drive, unsigned track, unsigned sector, uint8_t *buf) {
 	return drives_read(drive, track, sector, buf);
 }
@@ -204,6 +237,9 @@ const machine_platform_t host_platform = {
 	.aux_out_ready = aux_out_ready,
 	.aux_rate = aux_rate,
 	.aux_set_rate = aux_set_rate,
+	.printer_out = printer_out,
+	.printer_ready = printer_ready,
+	.printer_end = printer_end,
 	.disk_read = disk_read,
 	.disk_write = disk_write,
 	.disk_format = disk_format,

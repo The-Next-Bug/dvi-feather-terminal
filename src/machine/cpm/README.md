@@ -89,7 +89,10 @@ default, A:, B:; COM before SUB; temporary files on B:; bd f8w.9).
   return 0FFH, media changed, when the drive's format or mount count
   differs from its log-in's, so the BDOS logs it in again. Hard disks have
   no checksums but are not marked permanent (8000H), whose media changes
-  the BDOS ignores. No hashing, as in picosim's.
+  the BDOS ignores. No hashing, as in picosim's. Character devices TTY1,
+  TTY2 and LPT (the printer on ports 5/6, LST: at boot; bd wt6.2). The
+  common part (CSEG) must stay within 0300H or the TPA loses a page: 02F5H
+  with LPT, room made by one CCP.COM error message for open and read.
 - `cpm3/gencpm.dat`: picosim's, with 16 directory buffers for E-H too and
   bank 0's segment cut to 0000H-76FFH (the BIOS's vectors and buffers grew
   into the rest). The TPA is 61K, a page more than picosim's.

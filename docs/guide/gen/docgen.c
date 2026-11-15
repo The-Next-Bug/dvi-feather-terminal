@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "clockpanel.h"
+#include "printpanel.h"
 #include "datetime.h"
 #include "demo.h"
 #include "palette.h"
@@ -204,6 +205,24 @@ static void shot_clockpanel(void) {
 	write_ppm("clockpanel.ppm", false);
 }
 
+static void shot_printpanel(void) {
+	raster_set_width(RASTER_WIDTH_1024);
+	start_terminal(80);
+	settings_t v = settings;
+	v.printer = SETTINGS_PRINTER_IPP;
+	settings_set_target(&v, "192.168.1.10:631/ipp/print");
+	printpanel_t p;
+	printpanel_open(&p, &v);
+	p.line = PRINTPANEL_TARGET;
+	p.last_job = "OK (3 jobs, 0 failed, 18342 bytes sent)";
+	for (unsigned r = 0; r < SETUP_ROWS; ++r) {
+		screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	}
+	printpanel_draw(&p, &screen, SETUP_TOP + SETUP_ROWS - PRINTPANEL_ROWS, PALETTE_TEXT, PALETTE_BACKGROUND,
+		colors.status_bg);
+	write_ppm("printpanel.ppm", false);
+}
+
 static void shot_terminal(const char *name, unsigned hue, bool mono) {
 	raster_set_width(RASTER_WIDTH_1024);
 	settings.colors = (uint8_t)hue;
@@ -260,6 +279,7 @@ int main(int argc, char **argv) {
 	settings_defaults(&settings);
 	setup_rows_table();
 	settings_table("settings-panel.md", SETTINGS_PAGE_CLOCK);
+	settings_table("settings-printer.md", SETTINGS_PAGE_PRINTER);
 	shot_demo(RASTER_WIDTH_1024, 80, "demo-1024-80.ppm");
 	shot_demo(RASTER_WIDTH_1024, 132, "demo-1024-132.ppm");
 	shot_demo(RASTER_WIDTH_800, 80, "demo-800-80.ppm");
@@ -269,6 +289,7 @@ int main(int argc, char **argv) {
 	shot_terminal("terminal-amber.ppm", 2, true);
 	shot_setup();
 	shot_clockpanel();
+	shot_printpanel();
 	shot_display_prompt();
 	shot_charset(RASTER_WIDTH_1024, 80, "charset-80.ppm");
 	shot_charset(RASTER_WIDTH_1024, 132, "charset-132.ppm");

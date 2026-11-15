@@ -18,6 +18,7 @@ set(TERMINAL_SOURCES
   hwinfo_glue.c
   input_glue.c
   main.c
+  printer_glue.c
   setup_glue.c
   status.c
   usblog_glue.c
@@ -60,6 +61,7 @@ target_link_libraries(dvi_terminal
   dvt_input
   dvt_machine
   dvt_platform
+  dvt_printer
   dvt_render
   dvt_rtc
   dvt_rtc_chips

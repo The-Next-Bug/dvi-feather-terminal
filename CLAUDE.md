@@ -639,6 +639,31 @@ UF2 in the latter).
   columns). ay_write only stores the masked byte
   (a shape write bumps env_writes; ay_render restarts the envelope), so
   the Z80 writing on core 0 under the IRQ is safe; never two cores.
+- Printer (bd wt6): picosim's ports 5/6 (machine.h MACHINE_PRINTER_*:
+  IN 5 FFh ready / 00h busy from the platform's printer_ready, OUT 6 every
+  byte (CR, NUL kept), ours OUT 5,1 printer_end) -> apps/terminal/
+  printer_glue.c (cold) -> `src/printer/printjob.[ch]` (portable, cold,
+  test_printjob against a fake Zimodem): per job CR ATE0Q0V1, AT/OK (else
+  +++ with 1.5 s guards counted from serial_tx_drained, ATH, again), IPP:
+  ATS61=idle, AT+PRINTA|R:target (no answer = connected after 2 s,
+  ERROR = refused), data straight on, the end = Zimodem's own S61 timeout
+  and its OK (the engine stops taking data at its idle time / OUT 5,1).
+  No +++ at a job's end: Zimodem times pluses as it reads them, so after a
+  backlog they were data and printed (user's tests, 2026-11-15). Raw TCP
+  (JetDirect: ATD stream, then ATC/ATTn) was tried and dropped by the
+  user, 2026-11-15; printer value 2 now decodes as off. 128 bytes pending while opening; a
+  failed job's bytes go to printjob_spool_t (NULL: dropped, bd wt6.8
+  defers the spool) and the port stays ready. Settings fields 23-25
+  (printer, printer_text, printer_idle; SETTINGS_PAGE_PRINTER) and
+  printer_target, settings_t's trailing char array, kept in a text block
+  at the page's end (SETTINGS_TEXT_OFFSET: 'T', len, CRC-32, text; older
+  records leave it erased); SET-UP's P = src/ui/printpanel.[ch]. CP/M mode
+  only: with it on, cpm_glue's SIO2 hooks give nothing and drop output.
+  BIOSes: bios.asm LIST/LISTST; bnkbios3.asm LPT (device 2, @lovec 2000H
+  at BOOT; LIST checks it, LISTST does not), common part 02F5H after
+  merging the CCP.COM error messages; bnkxios.mac LIST polls device 4
+  (PTSTL0). Status line PRN / lit / PRN!; HWINFO item 35. Zimodem notes
+  and the two-modem idea: docs/ideas/second-modem.md.
 - `src/platform/serial.[ch]`: the terminal UART's RX ring (IRQ) + TX
   queue, and the Flow control setting at runtime (serial_set_flow, bd
   dmt.27/68t.1): RTS/CTS = uart_set_hw_flow with the board's pins on
@@ -1066,7 +1091,9 @@ Sock, so no audio engine running) to 0x20074840, ~45.9 KB free; flow
 control (dmt.27, xonxoff.c, the SET-UP row) and the RAM disk (1ls.20) to
 0x200754b4, ~42 KB free (v0.9.5; Frankless 0x20060598, PSRAM Feather
 0x2005dc98); the 1024x600 mode's buffers and 12x24 fonts (bd cpx.4,
-cpx.7) to 0x2007d098. Now (v0.11.6): Sock 0x2007d178, ~11.6 KB free;
+cpx.7) to 0x2007d098. v0.14.1: Sock 0x2007dbb8, Adalogger Feather 0x2007e574; the printer
+(bd wt6) +2.7 KB: Sock 0x2007e670 (~6.5 KB free), Adalogger Feather
+0x2007f020 (~4 KB). Earlier (v0.11.6): Sock 0x2007d178, ~11.6 KB free;
 Feather with Adalogger, no PSRAM, 0x2007db2c, ~9.4 KB; Frankless
 0x200683f8, ~97 KB; PSRAM Feather 0x20065968. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster

@@ -44,7 +44,9 @@ name them (`B:LETTER.DOC`), A: being a nearly full floppy.
 
 ## Printing
 
-The machine has no printer (LST: goes nowhere), so print to a file: at
+With a [Zimodem printer](printing.md) set up, WordStar prints to it (the
+`PS` printer wants IPP sends: raw). Without one, LST: goes nowhere, so
+print to a file: at
 the print menu's "Name of printer?" answer `PS>LETTER.PS` for
 PostScript (letter paper; the header comes from `WSPS.PRO`, which must be
 on C: with WordStar's other files, else "Can't store results"), or
