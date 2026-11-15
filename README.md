@@ -203,7 +203,7 @@ The status line shows `RTS/CTS` or `XON/XOFF` after the line settings.
 
 ## Getting started
 
-1. Flash `dvi_terminal-pico2-dvi-sock.uf2` from a release ZIP: hold BOOTSEL
+1. Flash `pico2-dvi-sock/FIRMWARE.UF2` from a release ZIP: hold BOOTSEL
    while plugging the Pico 2 into a PC and copy the file onto the `RP2350`
    drive. `docs/FLASHING.txt` (also in the ZIP) has the details.
 2. Connect a DVI/HDMI monitor and a 3.3 V serial adapter (see
@@ -1036,7 +1036,7 @@ more per T-state).
 
 Copy the new `dvi_terminal.uf2` to the root of the SD card or of a USB
 stick as `FIRMWARE.UF2` (8.3 names only; the release ZIP has it as
-`sdcard-<target>/FIRMWARE.UF2`, and `SDCARD=/media/<you>/<card>
+`<target>/FIRMWARE.UF2`, and `SDCARD=/media/<you>/<card>
 scripts/build.sh` copies it there), put the card or stick in, and press
 **U** in SET-UP (either mode; in terminal mode the card is mounted only for
 the update). The stick is the one the status line shows as `USB`; with

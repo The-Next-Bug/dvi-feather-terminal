@@ -6,10 +6,9 @@ Each release (`dvi-terminal-<version>.zip`) holds:
 
 | File | What it is |
 |---|---|
-| `dvi_terminal-<target>.uf2` | the firmware for one board (see [Boards](boards.md)) |
-| `dvi_terminal-<target>.bin` | the same as a raw binary, for other flashing tools |
-| `sdcard-<target>/FIRMWARE.UF2` | the same UF2 under the name the [firmware update](../terminal/firmware-update.md) looks for |
-| `build-info-<target>.txt` | how it was built: versions, options |
+| `<target>/FIRMWARE.UF2` | the firmware for one board (see [Boards](boards.md)), for BOOTSEL and, under this name, the [firmware update](../terminal/firmware-update.md) |
+| `<target>/dvi_terminal.bin` | the same as a raw binary, for other flashing tools |
+| `<target>/build-info.txt` | how it was built: versions, options |
 | `guide/` | this guide (`guide/index.html`) |
 | `FLASHING.txt` | these steps in short |
 | `CHANGES.md` | what changed since the previous release |
@@ -26,7 +25,7 @@ Each release (`dvi-terminal-<version>.zip`) holds:
 2. Hold the **BOOTSEL** button and plug the board into a PC by USB (on the
    Frankless, set the USB switch to the USB-C socket). A drive named
    `RP2350` appears.
-3. Copy `dvi_terminal-<target>.uf2` for your board onto that drive. The
+3. Copy `<target>/FIRMWARE.UF2` for your board onto that drive. The
    board restarts with the new firmware.
 
 This always works, whatever state the firmware is in, so it is also the

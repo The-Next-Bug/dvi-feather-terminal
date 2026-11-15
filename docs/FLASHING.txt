@@ -4,7 +4,8 @@ Flashing the DVI terminal firmware
 The user guide is in guide/ in this ZIP: open guide/index.html in a web
 browser. It covers everything below in more detail.
 
-Files: dvi_terminal-<target>.uf2 for each supported board:
+Files: a folder for each supported board, <target>/, holding FIRMWARE.UF2
+(the firmware), dvi_terminal.bin and build-info.txt:
 
   pico2-dvi-sock                      Raspberry Pi Pico 2 with the Pico DVI Sock
   frankless                           Frankless (a reworked MicroFRANK)
@@ -21,10 +22,10 @@ longer supported.
    (Or hold BOOT while plugging in USB.) The board appears as a USB drive
    named RP2350.
 
-2. Copy the .uf2 for your board onto that drive. The board reboots into
+2. Copy <target>/FIRMWARE.UF2 for your board onto that drive. The board reboots into
    the new firmware when the copy finishes.
 
-   picotool also works: picotool load -x dvi_terminal-<target>.uf2
+   picotool also works: picotool load -x <target>/FIRMWARE.UF2
 
 3. Connect a DVI/HDMI monitor. The display runs at 1024x600 60 Hz; SET-UP
    (F12) switches it to 800x600 (Display), and asks to keep the new mode
@@ -49,15 +50,15 @@ longer supported.
    See the guide, "The Z80 CP/M machine".
 
 6. Later updates without a PC connection: copy the UF2 to the root of the
-   SD card or a USB stick as FIRMWARE.UF2 (sdcard-<target>/FIRMWARE.UF2 in
-   this ZIP), and press U in SET-UP (F12, either mode; with the file on
+   SD card or a USB stick (<target>/FIRMWARE.UF2 in this ZIP, under the
+   same name), and press U in SET-UP (F12, either mode; with the file on
    both, S or U picks one). It checks the file, asks,
    writes it beside the running firmware, then installs it and restarts;
    do not power off while it says so. If the power fails then, the board
    does not start: flash it again as in steps 1-2 (the boot ROM's BOOTSEL
    mode always works). See the guide, "Firmware updates".
 
-The BIN files are the same images as raw flash contents, for SWD programmers
+The BIN files (<target>/dvi_terminal.bin) are the same images as raw flash contents, for SWD programmers
 (load at 0x10000000). SHA256SUMS covers the UF2 and BIN files.
 
 THIRD-PARTY.md lists the open-source components and data built into the

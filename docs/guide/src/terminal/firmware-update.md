@@ -5,7 +5,7 @@ mode, without a PC.
 
 1. Copy the new firmware for your board to the root of the SD card or a
    USB stick as `FIRMWARE.UF2` (8.3 names only). The release ZIP has it as
-   `sdcard-<target>/FIRMWARE.UF2`.
+   `<target>/FIRMWARE.UF2`.
 2. Put the card or stick in. The stick is the one the status line shows as
    `USB`.
 3. Open SET-UP and press **U**. In terminal mode the card is mounted only
