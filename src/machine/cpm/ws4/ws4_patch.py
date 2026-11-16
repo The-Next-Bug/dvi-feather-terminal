@@ -11,8 +11,9 @@ broken.
 
 Addresses are from the WordStar 4 reconstruction (~/fz80/wordstar-4,
 docs/wiki/ref): WS.OVR's resident part runs at file offset + 2480h,
-overlay C at file offset - 0B00h (- 0A80h in MicroPro's 4.00: the
-rebuild's fixes made an earlier overlay a record longer; overlay C's
+overlay C at file offset - 0C00h (- 0A80h in MicroPro's 4.00: the
+rebuild's fixes made earlier overlays three records longer, one for
+x6d's rebuild, two more for help_onoff and spell_specials; overlay C's
 code and every address used here are the same); WS.COM's user area at
 file offset + 100h.
 
@@ -53,6 +54,13 @@ WS*.COM: overlays from C:
 LGLDRV's first drive is where WordStar looks for its files (WS.OVR,
 WSMSGS.OVR, ...) after the current drive. "CAB..." in place of "ABC..."
 lets C:WS run from A: with the WS4 disk on C:, as the WS4 set mounts it.
+
+WS*.COM: help level 2
+
+INIHLP (083Bh), the help level WordStar starts at, is 2 in place of 3
+(bd 5jr): the prefix menus (^K, ^O, ^P, ^Q) still appear after a pause,
+but the Edit Menu no longer stays above the text, which gets those lines.
+^JH changes the level for the session.
 """
 
 import os
@@ -64,9 +72,9 @@ OVR_PATCHES = [
     # (file offset, original bytes, new bytes, what)
     (0x168d, "3a 87 1c b7 c2 15 3b 7e", f"3e {TEMP_DRIVE:02x} 00 00 00 00 00 00",
      "TEMPFCB: temporary files on H:"),
-    (0x958e, "3a 57 23", "c3 a9 8a",
+    (0x968e, "3a 57 23", "c3 a9 8a",
      "KCMD_SAVEDOC: copy $B$ to the document, never rename it"),
-    (0x95bb,
+    (0x96bb,
      "cd bb 0a 2a 2a 1b eb 21 86 1c cd ad 10 ca 17 8b 3a 2c 1b 91 ca 02 8b 2a 2a 1b 2b 47"
      " 0e 00 16 80 0c 23 7e fe 1a ca eb 8a 15 c2 dc 8a 05 c2 d9 8a e5 2a 2a 1b eb 21 f2"
      " 1b 06 00 cd c8 10 e1 ca 17 8b 7e fe 1a c2 bb 8a",
@@ -84,15 +92,16 @@ OVR_PATCHES = [
      " c3 c7 8a"                # 8AF7 next record
      " 00 00 00 00 00 00 00 00",  # 8AFA to 8B01
      "the copy: from record 0, a record at a time"),
-    (0x9591, "b7 c2 26 8b 2a a8 1c 11 04", "3a cd 1b 32 87 1c c3 2f 8b",
+    (0x9691, "b7 c2 26 8b 2a a8 1c 11 04", "3a cd 1b 32 87 1c c3 2f 8b",
      "8A91h: BFCB's drive = DOCFCB's, then on to 8B2Fh"),
-    (0x9614, "c3 2f 8b", "c3 91 8a",
+    (0x9714, "c3 2f 8b", "c3 91 8a",
      "the copy's success goes through 8A91h"),
 ]
 
 COM_PATCHES = [
     (0x05e3, b"ABCDEFGHIJKLMNOP\0".hex(" "), b"CABDEFGHIJKLMNOP\0".hex(" "),
      "LGLDRV: WordStar's files on C:"),
+    (0x073b, "03", "02", "INIHLP: help level 2"),
 ]
 
 

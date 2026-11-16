@@ -780,12 +780,14 @@ UF2 in the latter).
   no PATCH.LST, READ.ME, WINSTALL.COM, SAMPLE1.BAK: flash, the user's
   choice) on a blank 8 MB disk. src/machine/cpm/ws4/ws4_patch.py (checks
   the bytes it replaces; addresses from ~/fz80/wordstar-4's wiki, WS.OVR
-  resident at file + 2480h, overlay C at file - 0B00h in the rebuild, - 0A80h in MicroPro's): TEMPFCB's drive
+  resident at file + 2480h, overlay C at file - 0C00h in the rebuild, - 0A80h in MicroPro's): TEMPFCB's drive
   always H:; the save always takes the copy path, rewritten (record 0,
   a record at a time to the ^Z: WordStar's read from the random record
   past the end and failed, falling back to renaming $B$ on H:); BFCB's
   drive = DOCFCB's before the 8B45h swap; WS*.COM LGLDRV "CAB..." so
-  C:WS finds its overlays on C:. WordStar's "WS NAME d:" meant save to
+  C:WS finds its overlays on C:, and INIHLP (083Bh) help level 2 for 3
+  (bd 5jr; lib/wordstar from wordstar-4 058d92d: help_onoff,
+  spell_specials). WordStar's "WS NAME d:" meant save to
   d:, not a temp drive. monitor.c's starter set WS4: CPM31, CPM32, WS4 on
   C:, H: RAMDISK if drives_ramdisk_format() else WSTEMP (HD4, made by the
   install when the set names it and it is missing). test_wordstar (temps
