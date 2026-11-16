@@ -216,12 +216,12 @@ panic() text),
 `COPY_TO_RAM` (default ON; must stay ON, see below), `MACHINE_BANKS` (Z80
 machine: 48 KB banks besides bank 0, default 2; each costs 48 KB of SRAM).
 TinyUSB workaround switches (bd nxv; default OFF since 2026-10-25 = rely
-on the fork's fixes; ON builds ours back in; dvt_usb only, usbkbd.c;
+on TinyUSB's fixes; ON builds ours back in; dvt_usb only, usbkbd.c;
 USB_WA_POLL_PAUSE was ON again from 2026-10-26, bd 008: without
 it a stick read during a firmware update came back stale, badcsw and
-"blocks out of order"; OFF on branch tinyusb-4458, bd pb8: lib/tinyusb on
-hathach/tinyusb#4458 (rp2-hcd-sweep, copied to the fork as test/pr-4458; folds in #4310-#4312, supersedes
-#4313), which polls interrupt endpoints on EPX, never INT_EP_CTRL; the cache entry follows each switch's default via
+"blocks out of order"; OFF since hathach/tinyusb#4458 (bd pb8; folds in
+#4310-#4312, supersedes #4313), which polls interrupt endpoints on EPX,
+never INT_EP_CTRL; the cache entry follows each switch's default via
 its help text): USB_WA_DEINIT
 (--wrap=rp2usb_deinit, remove-before-deinit in usbkbd_reset; #4310),
 USB_WA_DATASEQ (INTE mask in host_start, usbkbd_data_seq_error's raw INTR
@@ -407,10 +407,11 @@ UF2 in the latter).
   sticks, usbmsc.c); keys
   go to the serial TX queue. The board does not power VBUS in host mode
   (5 V fed into the VBUS pin). TinyUSB is `lib/tinyusb` (our submodule,
-  for now github.com/arlaneenalra/tinyusb's dvt/integration: upstream
-  master after 0.21.0 plus our four proposed hcd/usbh fixes, one fork
-  branch each, until upstream has them: bd 5bc's notes say what to watch
-  and how to switch back; before that pinned to upstream master, bd xv0),
+  pinned to upstream hathach/tinyusb master: 719252a00, the merge of
+  #4458, which folds in our proposed hcd/usbh fixes, bd 5bc; the fork
+  github.com/arlaneenalra/tinyusb is no longer used; master's MSC host
+  fences the interface after a failed CBW/CSW until tuh_msc_reset, and
+  usbmsc.c then restarts the host, "fenced"),
   not pico-sdk's 0.18: its
   hcd_rp2040 never completed a transfer the device stopped answering and
   usbh had no control-transfer timeout, so pulling a stick could leave the
@@ -423,8 +424,9 @@ UF2 in the latter).
   (up to x16) until 60 s healthy. usbmsc.c asks for a restart
   (usbkbd_request_reset, done from usbkbd_poll; one within 10 s x backoff
   of the last waits, "rstwait") after a stick command times out or gets a
-  CSW that is not its own (signature/tag; residue 0 required): TinyUSB has
-  no Bulk-Only reset, the stick stays stuck. Workarounds for TinyUSB
+  CSW that is not its own (signature/tag; residue 0 required): the stick stays
+  stuck (TinyUSB master's tuh_msc_reset, Bulk-Only Reset Recovery, is
+  not used yet). Workarounds for TinyUSB
   master on the RP2350, all in our code (bd xv0, upstream report bd 5bc;
   since 2026-10-25 built only with their USB_WA_* switch ON, as the fork
   has the fixes, except the INT_EP_CTRL pause, ON by default again (bd

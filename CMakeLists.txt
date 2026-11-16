@@ -81,7 +81,8 @@ set(MACHINE_BANKS 2 CACHE STRING "Z80 machine: number of 48 KB banks (MMU port 6
 option(PSRAM_BANKS "Z80 machine: banks in the board's PSRAM instead of SRAM" OFF)
 
 # Our workarounds for TinyUSB's RP2350 host bugs (src/usb/usbkbd.c), each
-# fixed in the fork lib/tinyusb builds (PRs #4310-#4313, bd 5bc). OFF
+# fixed in the TinyUSB master lib/tinyusb builds (PRs #4310-#4313, folded
+# into #4458, merged 2026-11-16; bd 5bc). OFF
 # relies on TinyUSB's fix; ON builds the workaround back in, for a TinyUSB
 # without the fix or to compare (bd nxv). POLL_PAUSE defaults to ON again
 # (bd 008): with the fork's fix alone a stick read during a firmware update
