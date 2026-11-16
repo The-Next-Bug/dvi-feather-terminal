@@ -12,10 +12,11 @@ byte, bit 0 the least; 16-bit values are little-endian (low byte first),
 as the Z80 stores them. Where the address space matters, see the
 [memory maps](memory-map.md).
 
-Every device answers at once: there are no wait states, and only the
-second serial port has a busy bit that can stay set (while its transmit
-queue is full), so a program can write a command and read its status on
-the next instruction.
+Every device answers at once: there are no wait states, so a program can
+write a command and read its status on the next instruction. Only two
+devices have a busy status that can stay set: the second serial port
+(while its transmit queue is full) and the printer (while a job is being
+opened or ended, or the line's queue is full).
 
 | Port | Direction | Device | Origin |
 |---|---|---|---|
@@ -131,18 +132,149 @@ Data bits, parity, stop bits and flow control stay SET-UP's.
 
 ## Printer (05h, 06h)
 
-The printer is TTY2 when SET-UP's Printer panel turns it on (see
-[Printing](../cpm/printing.md)); otherwise bytes sent to it go nowhere.
+picosim's printer ports, with one addition of this firmware's: the end of
+a job. The printer is TTY2 when SET-UP's Printer panel turns it on: each
+job goes through a Zimodem WiFi modem to an IPP printer (see
+[Printing](../cpm/printing.md)). With the Printer off, bytes sent to it
+go nowhere, as fast as the Z80 sends them.
 
-- `IN 05h`: FFh when the printer takes a byte now, 00h while it is busy
-  (a job being opened, the serial line's queue full). Wait for FFh before
-  each `OUT 06h`; the BIOSes do. With the Printer off it always reads FFh.
-- `OUT 06h`: a byte to print. Every byte goes as it is, CR and NUL
-  included (picosim drops both).
-- `OUT 05h` 01h: end the job now rather than after the idle time: it
-  takes no more data, and the modem sends it after its own idle time.
-  Other values are ignored.
-- `IN 06h` reads 1Ah (^Z).
+| Port | Direction | What |
+|---|---|---|
+| 05h | in | status: FFh ready, 00h busy |
+| 05h | out | 01h: end the job now; other values ignored |
+| 06h | out | a byte to print |
+| 06h | in | reads 1Ah (^Z), as on picosim |
+
+**`IN 05h`: status**
+
+| Value | Meaning |
+|---|---|
+| FFh | ready: the next `OUT 06h` is taken |
+| 00h | busy: wait |
+
+The whole byte is the status, with no separate bits: a BIOS can return
+it from LISTST as it is (CP/M's 0FFh = ready, 00h = not ready), or test
+it with `INC A` (FFh becomes 00h and sets Z).
+
+**`OUT 06h`: a byte to print.** All 8 bits go as they are, CR, LF, NUL,
+^Z and bytes with bit 7 set included (picosim drops CR and NUL for its
+host file; a printer needs CR). Nothing is translated here. With IPP sends
+text, Zimodem makes the line ends CR LF and wraps lines at 80 columns;
+with raw, the printer gets exactly what the Z80 sent.
+
+**Wait for ready before every byte.** A byte written while the port reads
+00h may be lost: while a job prints, the firmware takes a byte only when
+the serial line's transmit queue has room, and drops it otherwise. The
+port tells the truth at once (no wait states), so reading it and then
+writing is enough; the BIOSes do.
+
+### When it reads busy
+
+The status follows the print job (`src/printer/printjob.c`):
+
+| Job state | `IN 05h` | Bytes written |
+|---|---|---|
+| Printer off (SET-UP), or nothing behind the port | FFh | dropped |
+| No job (idle) | FFh | the first byte starts a job |
+| Opening: getting the modem's attention, `ATS61`, `AT+PRINT` (2 s up to about 10 s) | FFh until 128 bytes wait, then 00h | kept, up to 128 |
+| Printing | FFh while the kept bytes have gone and the line has room, else 00h | sent to the modem |
+| Closing: waiting for Zimodem's `OK` after the job's last byte | 00h | (not taken: the next job waits for this one's end) |
+| Failed: no modem, refused, or the connection lost | FFh | dropped until the job ends |
+
+Busy can last a while: opening a job takes at least 2 s (the firmware
+waits that long for an `ERROR` from Zimodem before the data starts), and
+with a modem left in an earlier job, the `+++` escape and its guard times
+add 3 s or more. While printing, the line runs at SET-UP's baud rate and
+flow control, and a printer slow to take the data holds the modem off
+with RTS/CTS. Closing lasts about the idle time again (Zimodem ends a job
+after the same idle time, counted from the last byte it read), and at
+most the idle time plus 10 s. So a program that polls port 05h may sit in
+the loop for seconds, and should poll a key meanwhile if the user may
+want out.
+
+A failed job never holds the port busy: the Z80 does not hang on a dead
+modem or printer. Its bytes are dropped (a spool for them is planned),
+the status line shows `PRN!`, and the next job starts from the
+beginning, attention first.
+
+### Jobs
+
+There is no command to start a job: **the first byte after the printer
+has been idle starts one.** A job ends:
+
+- after the **Job ends after** time (SET-UP's Printer panel: 5, 10, 30,
+  60 or 120 s; 30 by default) with no byte written; or
+- at once with **`OUT 05h,01h`** (this firmware's). The firmware takes no
+  more data for that job; the bytes already taken still go out, then
+  Zimodem sends the job after its own idle time and answers `OK`.
+
+`OUT 05h,01h` with no job running does nothing. During a failed job it
+ends that job, so the next byte opens a new one. Port 05h reads busy from
+the end until Zimodem has answered, so the first byte of the next job
+waits there; that keeps two jobs from running into each other.
+
+Ending a job explicitly is worth it when a program knows where its output
+ends (one document, one page, one label): the printer starts at once
+instead of after the idle time, and a pause in the program's output
+cannot split the job. The idle time is for programs that know nothing of
+the port, which is every CP/M program: CP/M has no "end of listing" call,
+and the BIOSes never write port 05h.
+
+A line beginning with `+++` after more than a second without data ends a
+job early: that is Zimodem's escape, which the firmware cannot hide.
+
+### Example: print a string as one job
+
+```
+; Print the string at HL (ending with 00h) as one job, then end it.
+PRINT:  LD   A,(HL)
+        OR   A
+        JR   Z,PEND
+        CALL LPUT
+        INC  HL
+        JR   PRINT
+PEND:   LD   A,01H          ; end the job now
+        OUT  (05H),A
+        RET
+
+; Write A to the printer, waiting while it is busy.
+LPUT:   PUSH AF
+LWAIT:  IN   A,(05H)        ; FFh ready, 00h busy
+        INC  A
+        JR   NZ,LWAIT
+        POP  AF
+        OUT  (06H),A
+        RET
+```
+
+To print through CP/M instead (BDOS function 5, or LST: from PIP), the
+BIOS's LIST does the waiting; a program can still end the job with
+`OUT 05h,01h` after its last BDOS 5 call. LIST has sent each byte by the
+time it returns, so the end cannot overtake the data.
+
+### Under CP/M and MP/M
+
+| System | LISTST | LIST |
+|---|---|---|
+| CP/M 2.2 (`bios.asm`) | `IN 05h` as it is | waits for FFh, then `OUT 06h`; the IOBYTE is ignored |
+| CP/M 3 (`bnkbios3.asm`) | `IN 05h` as it is | only when LST: includes device 2, `LPT` (the cold boot sets it; `DEVICE LST:=NULL` turns it off); waits for FFh, then `OUT 06h` |
+| MP/M II (`bnkxios.mac`) | (not used) | `OUT 06h` at once when ready; busy: XDOS POLL on device 4 (its poll routine reads port 05h), so other processes run until the printer is ready |
+
+None of them ever writes port 05h: their jobs end after the idle time.
+picosim's own BIOSes, and programs written for picosim, use the ports the
+same way and work unchanged, as port 05h reads FFh whenever the printer is
+off.
+
+### Inside the firmware
+
+Port 05h and 06h call the machine platform's `printer_ready`,
+`printer_out` and `printer_end` hooks (`machine.h`; each may be NULL:
+always ready, bytes dropped, no end). In the firmware they are
+`apps/terminal/printer_glue.c`'s, which hand the bytes to the print-job
+engine; reading the status also runs the engine, so a BIOS spinning on
+port 05h keeps the job moving. HWINFO's Printer record (item 35, see
+[Hardware information](hwinfo.md)) shows the target and how the last job
+went.
 
 ## Disk controller (04h)
 
