@@ -44,6 +44,17 @@ typedef struct {
 	uint32_t tx_level;  // bytes waiting in the transmit queue (of SERIAL_TX_BUFFER_SIZE)
 } serial_stats_t;
 
+// Which side is throttling (bd xir.2), for the status line. holding and
+// held are the state now; the counts go up each time one starts (a CTS
+// change, for RTS/CTS), so a hold shorter than the caller's polling still
+// shows as a change.
+typedef struct {
+	bool holding;           // the terminal holds the host off: RTS down (ring nearly full) or XOFF sent
+	bool held;              // the host holds the terminal off: CTS down, or the host's XOFF
+	uint32_t holding_count; // holds the terminal started
+	uint32_t held_count;    // the host's: CTS changes (either way) or XOFFs
+} serial_flow_state_t;
+
 // Call after the system clock is final (the baud divisor depends on it).
 // cts_pin/rts_pin are the pins SERIAL_FLOW_RTSCTS uses (SERIAL_NO_PIN:
 // none); it starts with no flow control.
@@ -56,6 +67,8 @@ void serial_init(uart_inst_t *uart, unsigned baud, unsigned tx_pin, unsigned rx_
 void serial_set_flow(serial_flow_t flow);
 
 serial_flow_t serial_flow(void);
+
+serial_flow_state_t serial_flow_state(void);
 
 // Change the line settings: baud rate, data bits (5-8), parity ('N', 'E' or
 // 'O') and stop bits (1 or 2). serial_init starts at 8N1.

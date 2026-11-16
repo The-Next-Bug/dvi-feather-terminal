@@ -67,7 +67,8 @@ setting. On the host: `stty -F /dev/ttyUSB0 ixon ixoff`, or
 `tools/hostbridge.py --xonxoff ...`.
 
 The [status line](../terminal/status-line.md) shows `RTS/CTS` or
-`XON/XOFF` after the line settings.
+`XON/XOFF` after the line settings, lit while either side is holding the
+other off.
 
 ## Trying it from a PC: hostbridge.py
 

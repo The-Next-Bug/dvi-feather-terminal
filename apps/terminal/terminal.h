@@ -164,6 +164,7 @@ void draw_status(const status_t *st);
 void draw_cpm_status(void);
 uint16_t drive_lights(uint32_t now);
 void status_clock_poll(void); // each main-loop pass: the clock's colon and minute
+void status_flow_poll(void);  // each main-loop pass: the flow control field's lit names
 bool debug_status_on(void);
 void debug_status_start(void);
 void debug_status_pass(void);

@@ -19,6 +19,7 @@ static uart_inst_t *serial_uart;
 static unsigned serial_rate; // the baud rate asked for last
 static int cts_gpio = SERIAL_NO_PIN, rts_gpio = SERIAL_NO_PIN;
 static volatile serial_flow_t flow;
+static volatile uint32_t holding_count, held_count; // serial_flow_state_t's
 
 // XON/XOFF: changed by the IRQ, and by the main loop with interrupts off.
 static xonxoff_t xon;
@@ -57,7 +58,11 @@ static void __not_in_flash_func(send_control)(void) {
 
 // XON/XOFF: whether the receive buffer's level calls for either.
 static void __not_in_flash_func(check_level)(uint32_t level) {
+	bool was = xon.held;
 	uint8_t c = xonxoff_level(&xon, level);
+	if (xon.held && !was) {
+		++holding_count;
+	}
 	if (c) {
 		tx_control = c;
 	}
@@ -66,6 +71,10 @@ static void __not_in_flash_func(check_level)(uint32_t level) {
 
 static void __not_in_flash_func(serial_irq)(void) {
 	uart_hw_t *hw = uart_get_hw(serial_uart);
+	if (hw->mis & UART_UARTMIS_CTSMMIS_BITS) { // RTS/CTS only: the host's RTS changed
+		hw->icr = UART_UARTICR_CTSMIC_BITS;
+		++held_count;
+	}
 	uint32_t h = rx_head;
 	while (!(hw->fr & UART_UARTFR_RXFE_BITS)) {
 		if (SERIAL_RX_BUFFER_SIZE - (h - rx_tail) < RX_PAUSE_ROOM) {
@@ -73,6 +82,7 @@ static void __not_in_flash_func(serial_irq)(void) {
 			set_rx_irqs(false);
 			rx_paused = true;
 			++stats.throttled;
+			++holding_count;
 			break;
 		}
 		uint32_t dr = hw->dr;
@@ -85,8 +95,14 @@ static void __not_in_flash_func(serial_irq)(void) {
 			++stats.errors;
 			continue;
 		}
-		if (flow == SERIAL_FLOW_XONXOFF && xonxoff_received(&xon, (uint8_t)dr)) {
-			continue; // the host stops or restarts what we send
+		if (flow == SERIAL_FLOW_XONXOFF) {
+			bool was = xon.stopped;
+			if (xonxoff_received(&xon, (uint8_t)dr)) {
+				if (xon.stopped && !was) {
+					++held_count;
+				}
+				continue; // the host stops or restarts what we send
+			}
 		}
 		++stats.received;
 		rx_buffer[h % SERIAL_RX_BUFFER_SIZE] = (uint8_t)dr;
@@ -146,11 +162,36 @@ void serial_set_flow(serial_flow_t f) {
 	if (rts_gpio != SERIAL_NO_PIN) {
 		gpio_set_function((unsigned)rts_gpio, hw ? GPIO_FUNC_UART : GPIO_FUNC_NULL);
 	}
+	// CTS changes interrupt, for serial_flow_state's count; cleared first,
+	// as the pin's change of function may have flagged one.
+	uart_hw_t *u = uart_get_hw(serial_uart);
+	u->icr = UART_UARTICR_CTSMIC_BITS;
+	if (hw && cts_gpio != SERIAL_NO_PIN) {
+		hw_set_bits(&u->imsc, UART_UARTIMSC_CTSMIM_BITS);
+	} else {
+		hw_clear_bits(&u->imsc, UART_UARTIMSC_CTSMIM_BITS);
+	}
 	serial_poll();
 }
 
 serial_flow_t serial_flow(void) {
 	return flow;
+}
+
+serial_flow_state_t serial_flow_state(void) {
+	uart_hw_t *hw = uart_get_hw(serial_uart);
+	uint32_t saved = save_and_disable_interrupts();
+	serial_flow_state_t s = {false, false, holding_count, held_count};
+	if (flow == SERIAL_FLOW_RTSCTS) {
+		s.holding = rx_paused;
+		// UARTFR's CTS is the host's RTS, set while it lets us send.
+		s.held = cts_gpio != SERIAL_NO_PIN && !(hw->fr & UART_UARTFR_CTS_BITS);
+	} else if (flow == SERIAL_FLOW_XONXOFF) {
+		s.holding = xon.held;
+		s.held = xon.stopped;
+	}
+	restore_interrupts(saved);
+	return s;
 }
 
 void serial_configure(unsigned baud, unsigned data_bits, char parity, unsigned stop_bits) {

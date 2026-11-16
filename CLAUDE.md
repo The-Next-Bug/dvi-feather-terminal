@@ -665,7 +665,17 @@ UF2 in the latter).
   at BOOT; LIST checks it, LISTST does not), common part 02F5H after
   merging the CCP.COM error messages; bnkxios.mac LIST polls device 4
   (PTSTL0). Status line PRN / lit / PRN!; HWINFO item 35. Zimodem notes
-  and the two-modem idea: docs/ideas/second-modem.md.
+  and the two-modem idea: docs/ideas/second-modem.md. Zimodem itself is
+  `lib/zimodem` (bd xir.1: submodule, github.com/arlaneenalra/Zimodem
+  branch frankless-build, upstream bozimmerman/Zimodem; not built by our
+  scripts or CI, its own scripts/build.sh and BUILDING.md; ~/fz80/Zimodem
+  is the older working copy, remote fork). Its throughput (one byte per
+  loop() into an empty FIFO on the ESP8266), telnet (WONT NAWS) and the
+  J8 rewiring for hardware RTS/CTS (GPIO13 U0CTS / GPIO15 U0RTS):
+  docs/ideas/zimodem-flow-telnet.md. The status line's flow field (bd
+  xir.3, status.c draw_flow/status_flow_poll, serial_flow_state: counts
+  and the PL011's CTS change interrupt) lights its left name while we
+  hold the host, its right while the host holds us, >= 250 ms.
 - `src/platform/serial.[ch]`: the terminal UART's RX ring (IRQ) + TX
   queue, and the Flow control setting at runtime (serial_set_flow, bd
   dmt.27/68t.1): RTS/CTS = uart_set_hw_flow with the board's pins on

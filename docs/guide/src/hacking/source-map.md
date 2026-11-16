@@ -42,6 +42,6 @@ it) or RP2350-only.
 | `docs/guide/` | this guide: `src/` (pages), `gen/` (its generators) |
 | `scripts/` | build, test, lint, package, docs, toolchain |
 | `tools/hostbridge.py` | run a PC program with the terminal as its display |
-| `lib/` | pico-sdk and TinyUSB (submodules), z80pack, FatFs, F83, WordStar 4 (vendored) |
+| `lib/` | pico-sdk and TinyUSB (submodules), Zimodem (submodule, the J8 modem's firmware, not built here), z80pack, FatFs, F83, WordStar 4 (vendored) |
 | `assets/` | the fonts and the logo |
 | `ld/` | the linker script override: the code that stays in flash |

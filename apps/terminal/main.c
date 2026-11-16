@@ -571,6 +571,7 @@ int main(void) {
 			bell_ring();
 		}
 		status_clock_poll();
+		status_flow_poll();
 		video_update(&screen);
 		diag_poll();
 		debug_status_pass();
