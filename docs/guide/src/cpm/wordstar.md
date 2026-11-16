@@ -17,6 +17,11 @@ All three use the same overlays. On the VT100 the arrow keys move the
 cursor, Home and End go to the start and end of the line, Page Up and
 Page Down scroll by a screen; the ^E ^X ^S ^D diamond works as ever.
 
+WordStar starts at help level 2: the menus after ^K, ^O, ^P and ^Q
+appear when you pause, but the Edit Menu does not stay above the text,
+so the document gets those lines of the screen. ^J H sets another level
+until you leave WordStar (3 brings the Edit Menu back).
+
 Sources: `lib/wordstar` (the files), `src/machine/cpm/ws4/ws4_patch.py`
 (the patches below), `src/disks/diskimg.cmake` (the disk), `src/ui/monitor.c`
 (the `WS4` drive set).
@@ -77,7 +82,7 @@ nothing over a power cycle.
 ## The patches
 
 WordStar 4 has no setting for a temporary drive, so `ws4_patch.py` changes
-four places in `WS.OVR` and one in each `WS*.COM`, checking the original
+four places in `WS.OVR` and two in each `WS*.COM`, checking the original
 bytes first (addresses as WordStar runs them):
 
 | Where | Change |
@@ -87,6 +92,7 @@ bytes first (addresses as WordStar runs them):
 | `WS.OVR` 8ABBh-8B01h, the copy | from record 0, a record at a time, up to the record with the ^Z |
 | `WS.OVR` 8A91h, after the copy | the document stays on its drive |
 | `WS*.COM` LGLDRV | `CAB...` for `ABC...`: WordStar's own files on C: |
+| `WS*.COM` 083Bh, INIHLP | help level 2 for 3 |
 
 `WSCHANGE` starts from the disk's `WS.COM`, so a new installation keeps
 the C: search unless you change the legal drives, and the temporary files

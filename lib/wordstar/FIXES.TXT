@@ -4,6 +4,7 @@ WordStar 4.00 rebuilt with these fixes (tools/patch.py, src/patches/):
   dot_limit (wordstar-4-6yj): no dot command past Dot-Limit is applied
   dot_numbers (wordstar-4-r72): a dot number ends at a blank after a digit; the prompt answer kept
   fi_line_end (wordstar-4-66q.40): a .FI file's text ends its last line before the parent's text
+  help_onoff (wordstar-4-66q.41): help's menus show the on/off marks of the settings
   index_first_line (wordstar-4-31e.11): $INDEX: a .IX on the document's first line ends at its return
   index_mark_end (wordstar-4-31e.12): $INDEX (every word): the byte after a closing ^K is kept
   merge_math_errors (wordstar-4-66q.37): .MA errors show their own message, not "Can't find that file"
@@ -14,4 +15,5 @@ WordStar 4.00 rebuilt with these fixes (tools/patch.py, src/patches/):
   reform_extended (wordstar-4-qej.2): Reform keeps an extended character's code (the byte after Esc)
   res_room (support): 30 stale bytes before RESSTART taken out, room for fixes in RES
   ruler_change (wordstar-4-aug): putting a ruler back notes any changed byte
+  spell_specials (wordstar-4-31e.13): S has SPELL read SPECIALS.CMP, the special dictionary
 

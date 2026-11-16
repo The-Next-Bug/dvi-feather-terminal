@@ -66,7 +66,7 @@ add_custom_command(
   OUTPUT ${_ws4_patched_out}
   COMMAND Python3::Interpreter ${WS4_PATCH} ${_ws4_patched_in} ${WS4_OUT}
   DEPENDS ${WS4_PATCH} ${_ws4_patched_in}
-  COMMENT "Patching WordStar 4 (temporary files on H:, overlays from C:)"
+  COMMENT "Patching WordStar 4 (temporary files on H:, overlays from C:, help level 2)"
   VERBATIM)
 add_custom_command(
   OUTPUT ${GENERATED}/ws4.dsk
