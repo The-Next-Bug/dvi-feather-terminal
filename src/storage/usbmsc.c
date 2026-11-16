@@ -193,8 +193,9 @@ static bool io_done(uint8_t dev_addr, tuh_msc_complete_data_t const *data) {
 	return true;
 }
 
-// The stick's commands are stuck after a lost or garbled one (TinyUSB has
-// no Bulk-Only reset): the USB host is restarted, from the main loop.
+// The stick's commands are stuck after a lost or garbled one: the USB host
+// is restarted, from the main loop. (TinyUSB now has tuh_msc_reset, Bulk-Only
+// Reset Recovery, which could replace the restart: not tried yet.)
 static DRESULT io_failed(const char *why, uint8_t dev) {
 	usbkbd_log(why, dev);
 	usbkbd_request_reset("mscrst");
@@ -229,6 +230,11 @@ static DRESULT io_wait(uint8_t dev) {
 	}
 	if (io_bad_csw) {
 		return io_failed("badcsw", dev);
+	}
+	if (!io_ok && !tuh_msc_ready(dev)) {
+		// TinyUSB fenced the interface (a failed CBW or CSW: its own Phase
+		// Error CSW): every command is refused until a reset.
+		return io_failed("fenced", dev);
 	}
 	if (!io_ok) {
 		usbkbd_log("ioerr", dev); // the stick says so: it still answers

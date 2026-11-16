@@ -70,8 +70,8 @@ older record lacks the newer ones, which keep their defaults
 
 ## The USB host
 
-TinyUSB (a fork with fixes for the RP2350's host controller, proposed
-upstream) with the boot keyboard and mass storage classes. Up to three
+TinyUSB (upstream master, newer than pico-sdk's, with the fixes for the
+RP2350's host controller) with the boot keyboard and mass storage classes. Up to three
 hubs. A watchdog turns off the hub port of a device past the limits
 (which never gets an address), and restarts the USB host when a device
 stays half set up or the hub stops answering; see [Troubleshooting](../terminal/troubleshooting.md).
