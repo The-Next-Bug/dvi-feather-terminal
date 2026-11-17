@@ -689,8 +689,12 @@ static void test_reverse_screen(void) {
 	CHECK_EQ(s.reverse_rows, (1u << ROWS) - 1);
 	put("\x1b[?5l");
 	CHECK_EQ(s.reverse_rows, 0);
+	unsigned resets = t.host_resets;
 	put("\x1b[?5h\x1b" "c"); // RIS clears it
 	CHECK_EQ(s.reverse_rows, 0);
+	CHECK_EQ(t.host_resets, resets + 1); // and counts (telnet forgets its negotiation)
+	put("\x1b[?3l"); // DECCOLM is no RIS
+	CHECK_EQ(t.host_resets, resets + 1);
 }
 
 static void test_sgr_extended_colors(void) {

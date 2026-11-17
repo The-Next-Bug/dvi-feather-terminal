@@ -17,9 +17,10 @@
 
 #define FIELD_COUNT SETTINGS_FIELDS
 _Static_assert(offsetof(settings_t, printer_target) == SETTINGS_FIELDS, "one byte per setting, then the texts");
-_Static_assert(HEADER_SIZE + SETTINGS_FIELDS <= SETTINGS_TEXT_OFFSET, "the payload stops short of the text block");
+_Static_assert(HEADER_SIZE + SETTINGS_FIELDS <= SETTINGS_TEXT2_OFFSET, "the payload stops short of the text blocks");
 
 #define TEXT_MAGIC 'T'
+#define TEXT2_MAGIC 'U'
 
 static const unsigned baud_rates[] = {300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200};
 #define BAUD_DEFAULT 8 // 115200
@@ -79,6 +80,8 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 	{"IPP sends", 2, {1, 0}, {"text (AT+PRINTA)", "raw (AT+PRINTR)"}, SETTINGS_PAGE_PRINTER},
 	{"Job ends after", 5, {5, 10, 30, 60, 120}, {"5 s idle", "10 s idle", "30 s idle", "60 s idle", "120 s idle"},
 		SETTINGS_PAGE_PRINTER},
+	{"Telnet", 3, {SETTINGS_TELNET_OFF, SETTINGS_TELNET_AUTO, SETTINGS_TELNET_ON}, {"off", "auto", "on"},
+		SETTINGS_PAGE_TELNET},
 };
 
 // SET-UP's rows: the line's settings together, then the rest.
@@ -149,17 +152,32 @@ void settings_defaults(settings_t *s) {
 		.usb_log = SETTINGS_USB_LOG_OFF, .sound_level = SETTINGS_SOUND_DEFAULT, .sound_dac = 1,
 		.sound_stereo = SETTINGS_STEREO_MONO, .flow = SETTINGS_FLOW_NONE,
 		.display = SETTINGS_DISPLAY_DEFAULT, .display_was = SETTINGS_DISPLAY_NONE,
-		.printer = SETTINGS_PRINTER_OFF, .printer_text = 1, .printer_idle = SETTINGS_PRINTER_IDLE_DEFAULT};
+		.printer = SETTINGS_PRINTER_OFF, .printer_text = 1, .printer_idle = SETTINGS_PRINTER_IDLE_DEFAULT,
+		.telnet = SETTINGS_TELNET_OFF};
+}
+
+// Copy src into dst (size max + 1): printable ASCII only (and no spaces
+// unless spaces), cut at max, NUL-padded so settings compare with memcmp.
+static void set_text(char *dst, size_t max, const char *src, bool spaces) {
+	size_t n = 0;
+	memset(dst, 0, max + 1);
+	for (; *src && n < max; ++src) {
+		if (*src >= (spaces ? 0x20 : 0x21) && *src < 0x7f) {
+			dst[n++] = *src;
+		}
+	}
 }
 
 void settings_set_target(settings_t *s, const char *target) {
-	unsigned n = 0;
-	memset(s->printer_target, 0, sizeof s->printer_target);
-	for (; *target && n < SETTINGS_TARGET_MAX; ++target) {
-		if (*target >= 0x20 && *target < 0x7f) {
-			s->printer_target[n++] = *target;
-		}
-	}
+	set_text(s->printer_target, SETTINGS_TARGET_MAX, target, true);
+}
+
+void settings_set_telnet_type(settings_t *s, const char *type) {
+	set_text(s->telnet_type, SETTINGS_TYPE_MAX, type, false);
+}
+
+void settings_set_telnet_host(settings_t *s, const char *host) {
+	set_text(s->telnet_host, SETTINGS_HOST_MAX, host, false);
 }
 
 void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_RECORD_SIZE]) {
@@ -180,6 +198,15 @@ void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_REC
 	t[1] = (uint8_t)len;
 	memcpy(t + 6, s->printer_target, len);
 	put32(t + 2, crc32_update(0, t + 6, len));
+	uint8_t *u = out + SETTINGS_TEXT2_OFFSET;
+	size_t type_len = strnlen(s->telnet_type, SETTINGS_TYPE_MAX);
+	size_t host_len = strnlen(s->telnet_host, SETTINGS_HOST_MAX);
+	u[0] = TEXT2_MAGIC;
+	u[1] = (uint8_t)(type_len + 1 + host_len);
+	memcpy(u + 6, s->telnet_type, type_len);
+	u[6 + type_len] = '\0';
+	memcpy(u + 7 + type_len, s->telnet_host, host_len);
+	put32(u + 2, crc32_update(0, u + 6, u[1]));
 }
 
 // The text block, if the record has a valid one.
@@ -193,6 +220,25 @@ static void decode_texts(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s)
 	memcpy(text, t + 6, len);
 	text[len] = '\0';
 	settings_set_target(s, text);
+}
+
+// The telnet texts' block, if the record has a valid one: "type\0host".
+static void decode_texts2(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s) {
+	const uint8_t *u = rec + SETTINGS_TEXT2_OFFSET;
+	unsigned len = u[1];
+	if (u[0] != TEXT2_MAGIC || len < 1 || len > SETTINGS_TYPE_MAX + 1 + SETTINGS_HOST_MAX ||
+		get32(u + 2) != crc32_update(0, u + 6, len)) {
+		return;
+	}
+	char text[SETTINGS_TYPE_MAX + 1 + SETTINGS_HOST_MAX + 1];
+	memcpy(text, u + 6, len);
+	text[len] = '\0';
+	size_t type_len = strnlen(text, len);
+	if (type_len > SETTINGS_TYPE_MAX || type_len + 1 + SETTINGS_HOST_MAX < len) {
+		return; // no NUL where it can be: not ours
+	}
+	settings_set_telnet_type(s, text);
+	settings_set_telnet_host(s, type_len < len ? text + type_len + 1 : "");
 }
 
 bool settings_decode(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s, uint32_t *seq) {
@@ -212,6 +258,7 @@ bool settings_decode(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s, uin
 		}
 	}
 	decode_texts(rec, s);
+	decode_texts2(rec, s);
 	*seq = get32(rec + 8);
 	return true;
 }

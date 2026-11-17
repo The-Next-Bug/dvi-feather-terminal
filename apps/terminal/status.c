@@ -87,15 +87,84 @@ void status_clock_poll(void) {
 	draw_clock(false);
 }
 
-// A status line's text, ended where the clock begins.
+// The flow control field (bd xir.3): "RTS/CTS" or "XON/XOFF", its left
+// name lit while the terminal holds the host off (RTS down, or XOFF sent),
+// its right name while the host holds the terminal (CTS down, or the
+// host's XOFF). A hold lights its name at least FLOW_LIGHT_MS, so a short
+// one (a CTS change between two polls) still shows. Only its cells are
+// redrawn as it changes, from each main-loop pass.
+#define FLOW_LIGHT_MS 250
+
+static struct {
+	unsigned col;            // where the field starts on the status line; 0: not on it
+	unsigned lit;            // bit 0 left name, bit 1 right, as drawn
+	uint32_t holding_count, held_count; // serial_flow_state's at the last poll
+	uint32_t left_until, right_until;   // lit until (ms since boot)
+} flow_light;
+
+// The field's text for the Flow control setting now: empty for none.
+static const char *flow_label(void) {
+	serial_flow_t f = serial_flow();
+	return f == SERIAL_FLOW_RTSCTS ? "RTS/CTS" : f == SERIAL_FLOW_XONXOFF ? "XON/XOFF" : "";
+}
+
+static void draw_flow(bool force) {
+	const char *label = flow_label();
+	uint32_t now = to_ms_since_boot(get_absolute_time());
+	serial_flow_state_t s = serial_flow_state();
+	if (s.holding || s.holding_count != flow_light.holding_count) {
+		flow_light.left_until = now + FLOW_LIGHT_MS;
+	}
+	if (s.held || s.held_count != flow_light.held_count) {
+		flow_light.right_until = now + FLOW_LIGHT_MS;
+	}
+	flow_light.holding_count = s.holding_count;
+	flow_light.held_count = s.held_count;
+	unsigned lit = ((int32_t)(flow_light.left_until - now) > 0 ? 1u : 0u) |
+		((int32_t)(flow_light.right_until - now) > 0 ? 2u : 0u);
+	bool shown = settings.status_line && !debug_status_on() && !setup.demo; // the field is on the line
+	if (!shown || !flow_light.col || !label[0] || (lit == flow_light.lit && !force)) {
+		return;
+	}
+	flow_light.lit = lit;
+	size_t slash = strcspn(label, "/");
+	for (size_t i = 0; label[i]; ++i) {
+		bool on = i < slash ? lit & 1u : i > slash && lit & 2u;
+		screen_put(&screen, flow_light.col + (unsigned)i, STATUS_ROW, (uint8_t)label[i],
+			on ? colors.status_bg : colors.status_fg, on ? colors.status_fg : colors.status_bg);
+	}
+}
+
+void status_flow_poll(void) {
+	draw_flow(false);
+}
+
+// Append " | " and the flow control field to a status line's text (at n,
+// its length) and note where it starts; nothing for no flow control.
+static size_t put_flow_field(char *text, size_t size, size_t n) {
+	const char *label = flow_label();
+	if (label[0] && n + 3 + strlen(label) < size) {
+		flow_light.col = (unsigned)n + 3;
+		snprintf(text + n, size - n, " | %s", label);
+		n = strlen(text);
+	}
+	return n;
+}
+
+// A status line's text, ended where the clock begins; the flow control
+// field drawn lit as it is, unless the clock cut it off.
 static void put_status_text(char *text) {
 	size_t end = (size_t)screen.cols - clock_cols();
 	if (strlen(text) > end) {
 		text[end] = '\0';
 	}
+	if (flow_light.col + strlen(flow_label()) > strlen(text)) {
+		flow_light.col = 0;
+	}
 	screen_clear_line(&screen, STATUS_ROW, colors.status_fg, colors.status_bg);
 	screen_puts(&screen, 0, STATUS_ROW, text, colors.status_fg, colors.status_bg);
 	draw_clock(true);
+	draw_flow(true);
 }
 
 // The USB stick on the status line: "USB" while one is volume 1 (USB: to
@@ -284,6 +353,8 @@ void draw_cpm_status(void) {
 		snprintf(text + n, sizeof text - n, " | monitor");
 	}
 	n = strlen(text);
+	flow_light.col = 0;
+	n = put_flow_field(text, sizeof text, n); // the Z80's SIO2 and the printer use the line
 	snprintf(text + n, sizeof text - n, "%s | %s", usbkbd_count() ? " | kbd" : "", TERM_BUILD_ID);
 	put_status_text(text);
 	for (unsigned d = 0; d < DRIVES; ++d) {
@@ -310,7 +381,8 @@ static const char *term_type_name(void) {
 }
 
 status_t status_now(void) {
-	status_t st = {usbkbd_count(), last_key.count, settings, serial_baud(), "", term_type_name()};
+	status_t st = {usbkbd_count(), last_key.count, settings, serial_baud(), "", term_type_name(),
+		(uint8_t)telnet_glue_status()};
 	usb_label(st.usb, sizeof st.usb);
 	return st;
 }
@@ -319,7 +391,7 @@ bool status_equal(const status_t *a, const status_t *b) {
 	return a->keyboards == b->keyboards && a->keys_sent == b->keys_sent &&
 		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0 && a->baud == b->baud &&
 		strcmp(a->usb, b->usb) == 0 &&
-		a->type == b->type;
+		a->type == b->type && a->telnet == b->telnet;
 }
 
 void draw_status(const status_t *st) {
@@ -340,10 +412,31 @@ void draw_status(const status_t *st) {
 	char parity;
 	settings_framing(&st->settings, &data_bits, &parity, &stop_bits);
 	char text[SCREEN_MAX_COLS + 1];
-	snprintf(text, sizeof text, " %s %ux24 | %s | %u %u%c%u%s%s%s%s%s%s",
-		st->type, screen.cols, TERM_BUILD_ID, st->baud, data_bits, parity, stop_bits,
-		serial_flow() == SERIAL_FLOW_RTSCTS ? " RTS/CTS" : serial_flow() == SERIAL_FLOW_XONXOFF ? " XON/XOFF" : "",
-		st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "", st->usb,
-		st->settings.local_echo ? " | echo" : "", key);
+	snprintf(text, sizeof text, " %s %ux24 | %s | %u %u%c%u", st->type, screen.cols, TERM_BUILD_ID, st->baud,
+		data_bits, parity, stop_bits);
+	flow_light.col = 0;
+	size_t n = strlen(text);
+	const char *label = flow_label();
+	if (label[0] && n + 1 + strlen(label) < sizeof text) { // after the framing, as before: "8N1 RTS/CTS"
+		flow_light.col = (unsigned)n + 1;
+		snprintf(text + n, sizeof text - n, " %s", label);
+		n = strlen(text);
+	}
+	// Telnet (bd xir.10): "telnet" while on or auto, lit once the server
+	// negotiated; "hangup" during a hang-up's +++ and ATH.
+	unsigned telnet_col = 0;
+	if (st->telnet != TELNET_STATUS_OFF && n + 9 < sizeof text) {
+		telnet_col = (unsigned)n + 3;
+		snprintf(text + n, sizeof text - n, " | %s", st->telnet == TELNET_STATUS_HANGUP ? "hangup" : "telnet");
+		n = strlen(text);
+	}
+	snprintf(text + n, sizeof text - n, "%s%s%s%s%s", st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "",
+		st->usb, st->settings.local_echo ? " | echo" : "", key);
 	put_status_text(text);
+	if (telnet_col && st->telnet == TELNET_STATUS_ACTIVE && telnet_col + 6 <= strlen(text)) {
+		for (unsigned i = 0; i < 6; ++i) {
+			screen_put(&screen, telnet_col + i, STATUS_ROW, (uint8_t)"telnet"[i], colors.status_bg,
+				colors.status_fg);
+		}
+	}
 }

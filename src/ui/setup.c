@@ -142,6 +142,12 @@ setup_action_t setup_input(setup_t *u, uint8_t c, uint32_t now_ms) {
 	case 'p':
 	case 'P':
 		return SETUP_PRINTER;
+	case 'n':
+	case 'N':
+		if (!u->machine_menu) { // telnet is for terminal mode's host
+			return SETUP_TELNET;
+		}
+		break;
 	default:
 		break;
 	}
@@ -257,5 +263,5 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 		fg, bg);
 	screen_puts(s, LEFT, top + SETUP_ROWS - 2, u->machine_menu
 		? " T demo  U firmware update  R reboot  C clock  P printer  D drives  M monitor"
-		: " T demo  U firmware update  R reboot  C clock & sound  P printer", fg, bg);
+		: " T demo  U firmware update  R reboot  C clock & sound  P printer  N telnet", fg, bg);
 }

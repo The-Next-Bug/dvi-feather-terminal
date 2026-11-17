@@ -26,7 +26,7 @@ keys.
 | Page Up, Page Down | `ESC [ 5 ~`, `ESC [ 6 ~` | |
 | F1-F4 (PF1-PF4) | `ESC O P`, `Q`, `R`, `S` | |
 | F5, F6, F7, F8 | `ESC [ 15 ~`, `17 ~`, `18 ~`, `19 ~` | |
-| F9, F10, F11 | `ESC [ 20 ~`, `21 ~`, `23 ~` | |
+| F9, F10 | `ESC [ 20 ~`, `21 ~` | |
 | F12, Pause | open SET-UP | |
 
 The keypad with **Num Lock on** follows the keypad mode:
@@ -68,6 +68,7 @@ PC: 8 Up, 2 Down, 4 Left, 6 Right, 7 Home, 1 End, 9 Page Up, 3 Page Down,
 |---|---|
 | F12, Pause | SET-UP (nothing sent) |
 | F11 in CP/M mode | the machine's reset (nothing sent) |
+| F11 in terminal mode | the [Telnet](../terminal/telnet.md) panel, to dial or hang up (nothing sent) |
 | any key while the screen is blanked | wakes it (not sent) |
 
 Keys repeat after 0.5 s at about 30 a second.

@@ -19,6 +19,9 @@
 // at the page's end (SETTINGS_TEXT_OFFSET): 'T', the length, CRC-32 of the
 // text, the text (printable ASCII). Firmware from before it never reads
 // there, and its records leave it erased (0xFF): no block, the default.
+// The telnet texts (bd xir.10) are a second block just before it
+// (SETTINGS_TEXT2_OFFSET): 'U', the length, CRC-32, the terminal type, a
+// NUL, the host.
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -28,6 +31,10 @@
 #define SETTINGS_TARGET_MAX 63   // the printer's target (= PRINTJOB_TARGET_MAX)
 // The text block: 'T', length, CRC-32 (4), the text.
 #define SETTINGS_TEXT_OFFSET (SETTINGS_RECORD_SIZE - 6 - SETTINGS_TARGET_MAX)
+#define SETTINGS_TYPE_MAX 40 // telnet's terminal type override (= TELNET_TYPE_MAX)
+#define SETTINGS_HOST_MAX 63 // telnet's host[:port]
+// The second text block: 'U', length, CRC-32 (4), the type, NUL, the host.
+#define SETTINGS_TEXT2_OFFSET (SETTINGS_TEXT_OFFSET - 6 - SETTINGS_TYPE_MAX - 1 - SETTINGS_HOST_MAX)
 #define SETTINGS_SLOTS 2         // flash sectors used in turn
 
 // One byte per setting; the payload stores them in this order (append only).
@@ -65,10 +72,19 @@ typedef struct {
 	uint8_t printer;       // SETTINGS_PRINTER_*: off (TTY2 a serial port) or IPP
 	uint8_t printer_text;  // IPP: 1 text (AT+PRINTA), 0 raw (AT+PRINTR)
 	uint8_t printer_idle;  // seconds without a byte that end a job
+	uint8_t telnet;        // SETTINGS_TELNET_*: telnet for the host's bytes (SET-UP's Telnet panel, bd xir.10)
 	// New one-byte settings go above this line. Text settings, in the
-	// record's text block, not the payload:
+	// record's text blocks, not the payload:
 	char printer_target[SETTINGS_TARGET_MAX + 1]; // host:port/path, NUL-padded
+	char telnet_type[SETTINGS_TYPE_MAX + 1];      // TTYPE's name; empty: the Terminal type's
+	char telnet_host[SETTINGS_HOST_MAX + 1];      // the last host dialed (F11), host[:port]
 } settings_t;
+
+// Telnet (telnet.h's telnet_mode_t, same values): off, once the host sends
+// a command, or always.
+#define SETTINGS_TELNET_OFF 0
+#define SETTINGS_TELNET_AUTO 1
+#define SETTINGS_TELNET_ON 2
 
 // The printer (settings_t.printer; printjob.h's PRINTJOB_* values).
 #define SETTINGS_PRINTER_OFF 0
@@ -140,7 +156,7 @@ typedef struct {
 // first choice need not be the default), their names and the SET-UP page
 // they are on: SET-UP's own rows (SETTINGS_MAIN_FIELDS of them, in
 // settings_main_field's order) or its Clock panel (clockpanel.h).
-#define SETTINGS_FIELDS 26
+#define SETTINGS_FIELDS 27
 #define SETTINGS_MAIN_FIELDS 15
 #define SETTINGS_MAX_CHOICES 11
 
@@ -148,6 +164,7 @@ typedef struct {
 #define SETTINGS_PAGE_CLOCK 1 // the Clock and sound panel (clockpanel.h)
 #define SETTINGS_PAGE_NONE 2  // kept, not shown (display_was)
 #define SETTINGS_PAGE_PRINTER 3 // the Printer panel (printpanel.h)
+#define SETTINGS_PAGE_TELNET 4  // the Telnet panel (telnetpanel.h)
 
 typedef struct {
 	const char *name;
@@ -174,6 +191,10 @@ unsigned settings_baud_rate(const settings_t *s);
 // Set the printer's target (cut at SETTINGS_TARGET_MAX, anything but
 // printable ASCII dropped), NUL-padded so settings compare with memcmp.
 void settings_set_target(settings_t *s, const char *target);
+
+// Likewise telnet's terminal type and host (no spaces in either).
+void settings_set_telnet_type(settings_t *s, const char *type);
+void settings_set_telnet_host(settings_t *s, const char *host);
 
 // The width in use: the Columns setting, but 80 for the ADM-3A.
 unsigned settings_columns(const settings_t *s);

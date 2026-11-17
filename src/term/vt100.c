@@ -315,7 +315,10 @@ static void esc_dispatch(term_t *t, const vtparse_t *p, uint8_t final) {
 	case '=': t->vt100.keypad_app = true; break; // DECKPAM
 	case '>': t->vt100.keypad_app = false; break; // DECKPNM
 	case 'Z': device_attributes(t); break; // DECID
-	case 'c': term_reset(t); break; // RIS
+	case 'c': // RIS
+		term_reset(t);
+		++t->host_resets;
+		break;
 	default: break;
 	}
 }

@@ -46,6 +46,7 @@ set_tests_properties(board PROPERTIES ENVIRONMENT "CC=${CMAKE_C_COMPILER}")
 unit_test(screen dvt_screen)
 unit_test(vtparse dvt_term)
 unit_test(term dvt_term)
+unit_test(telnet dvt_term)
 unit_test(palette dvt_screen)
 unit_test(raster dvt_render dvt_ui)
 # The user guide's screenshots and settings tables (docs/guide/gen/docgen.c,

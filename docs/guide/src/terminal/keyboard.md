@@ -48,7 +48,7 @@ The keys (US layout) send what a VT100 sends; the full tables are in
 - The **keypad** follows the keypad mode (DECKPAM/DECKPNM) while Num Lock
   is on, and is cursor and editing keys when it is off, as on a PC. The
   PC's keypad + is the VT100's keypad comma.
-- **Home, End, Insert, Delete, Page Up/Down and F5-F11** send the
+- **Home, End, Insert, Delete, Page Up/Down and F5-F10** send the
   xterm/VT220 codes (`ESC [ H`, `ESC [ 2 ~`, ...).
 - Keys repeat after 0.5 s at about 30 a second. Caps Lock and Num Lock
   light the keyboard's LEDs.
@@ -58,7 +58,7 @@ Keys with a special meaning:
 | Key | Action |
 |---|---|
 | **F12**, **Pause** | open [SET-UP](setup.md) (nothing is sent) |
-| **F11** | in CP/M mode: reset the Z80 machine; in terminal mode it sends `ESC [ 2 3 ~` |
+| **F11** | in CP/M mode: reset the Z80 machine; in terminal mode the [Telnet](telnet.md) panel, to dial a host through a WiFi modem or hang up (it sends nothing) |
 | any key while the screen is blanked | wakes it (not sent) |
 
 In VT52 mode and on the ADM-3A the keys send what those terminals send

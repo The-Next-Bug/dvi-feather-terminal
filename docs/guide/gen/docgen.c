@@ -26,6 +26,7 @@
 #include "screen.h"
 #include "settings.h"
 #include "setup.h"
+#include "telnetpanel.h"
 #include "term.h"
 
 #define TERM_ROWS (SCREEN_ROWS - 1)
@@ -223,6 +224,23 @@ static void shot_printpanel(void) {
 	write_ppm("printpanel.ppm", false);
 }
 
+static void shot_telnetpanel(void) {
+	raster_set_width(RASTER_WIDTH_1024);
+	start_terminal(80);
+	settings_t v = settings;
+	v.telnet = SETTINGS_TELNET_AUTO;
+	settings_set_telnet_host(&v, "bbs.example.org:2323");
+	telnetpanel_t p;
+	telnetpanel_open(&p, &v, TELNETPANEL_HOST);
+	p.type_default = "VT100";
+	for (unsigned r = 0; r < SETUP_ROWS; ++r) {
+		screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	}
+	telnetpanel_draw(&p, &screen, SETUP_TOP + SETUP_ROWS - TELNETPANEL_ROWS, PALETTE_TEXT, PALETTE_BACKGROUND,
+		colors.status_bg);
+	write_ppm("telnetpanel.ppm", false);
+}
+
 static void shot_terminal(const char *name, unsigned hue, bool mono) {
 	raster_set_width(RASTER_WIDTH_1024);
 	settings.colors = (uint8_t)hue;
@@ -280,6 +298,7 @@ int main(int argc, char **argv) {
 	setup_rows_table();
 	settings_table("settings-panel.md", SETTINGS_PAGE_CLOCK);
 	settings_table("settings-printer.md", SETTINGS_PAGE_PRINTER);
+	settings_table("settings-telnet.md", SETTINGS_PAGE_TELNET);
 	shot_demo(RASTER_WIDTH_1024, 80, "demo-1024-80.ppm");
 	shot_demo(RASTER_WIDTH_1024, 132, "demo-1024-132.ppm");
 	shot_demo(RASTER_WIDTH_800, 80, "demo-800-80.ppm");
@@ -290,6 +309,7 @@ int main(int argc, char **argv) {
 	shot_setup();
 	shot_clockpanel();
 	shot_printpanel();
+	shot_telnetpanel();
 	shot_display_prompt();
 	shot_charset(RASTER_WIDTH_1024, 80, "charset-80.ppm");
 	shot_charset(RASTER_WIDTH_1024, 132, "charset-132.ppm");

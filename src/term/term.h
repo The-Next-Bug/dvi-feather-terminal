@@ -117,6 +117,7 @@ typedef struct {
 	unsigned screen_resets; // times DECCOLM cleared the whole screen
 	unsigned setup_requests; // times the host sent CSI ? 999 ~
 	unsigned bells;          // BELs received
+	unsigned host_resets;    // times the host sent RIS (telnet forgets its negotiation)
 
 	term_reply_t reply;
 	void *reply_ctx;

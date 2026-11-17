@@ -11,7 +11,7 @@ it) or RP2350-only.
 | `src/clock` | portable | `datetime` (dates, FAT timestamps), `wallclock` (the time between reads of the RTC) | [Clock](../terminal/clock.md) |
 | `src/rtc` | both | the RTC chip drivers `ds3231`, `pcf8523` (portable); `rtc` (the board's chip on I2C, RP2350) | [Clock](../terminal/clock.md) |
 | `src/screen` | portable | `screen` (cells, saved rows), `palette`, `font.h` (glyph codes) | [Colors](../terminal/colors.md), [Character set](../reference/charset.md) |
-| `src/term` | portable | `term` (the terminal), `vt100`, `vt52`, `adm3a` (its personalities), `vtparse` (the parser) | [Terminal types](../terminal/terminal-types.md), [VT100](../reference/vt100.md), [VT52 and ADM-3A](../reference/vt52-adm3a.md) |
+| `src/term` | portable | `term` (the terminal), `vt100`, `vt52`, `adm3a` (its personalities), `vtparse` (the parser), `telnet` (telnet in front of it) | [Terminal types](../terminal/terminal-types.md), [VT100](../reference/vt100.md), [VT52 and ADM-3A](../reference/vt52-adm3a.md), [Telnet](../terminal/telnet.md) |
 | `src/render` | portable | `raster` (cells to pixels), `splash` (the logo); `font_gen.py`, `logo_gen.py` | [Displays](../start/displays.md), [How it works](how-it-works.md) |
 | `src/input` | portable | `keyboard` (keys to codes), `keyname`, `blank` | [Keyboard](../terminal/keyboard.md), [Keys sent](../reference/keys.md) |
 | `src/settings` | portable | `settings` (the records, the fields), `uf2` (firmware file checks) | [SET-UP](../terminal/setup.md), [Firmware updates](../terminal/firmware-update.md) |
@@ -19,7 +19,7 @@ it) or RP2350-only.
 | `src/printer` | portable | `printjob` (print jobs through a Zimodem's AT+PRINT) | [Printing](../cpm/printing.md) |
 | `src/sound` | portable | `ay8910`, `mixer`, `tune` | [Bell and sound](../terminal/sound.md) |
 | `src/disks` | portable | `drives`, `drivecfg` (images, DRIVES.CFG, sets), `diskimg` (the built-in disks), `xfer` (port 0Ah), `usbvol`, `sdformat` | [Drives](../cpm/drives.md), [Moving files](../cpm/moving-files.md), [File transfer](../reference/xfer.md) |
-| `src/ui` | portable | `setup`, `clockpanel`, `printpanel`, `drivepanel`, `fwpanel`, `monitor`, `demo` | [SET-UP](../terminal/setup.md), [The monitor](../cpm/monitor.md) |
+| `src/ui` | portable | `setup`, `clockpanel`, `printpanel`, `telnetpanel`, `drivepanel`, `fwpanel`, `monitor`, `demo` | [SET-UP](../terminal/setup.md), [The monitor](../cpm/monitor.md) |
 | `src/board` | RP2350 | `board.h` (the board header, checked) | [Adding a board](boards.md) |
 | `src/platform` | RP2350 | `serial`, `led`, `audio`, `nvflash` (the settings' flash), `fwupdate`, `extram` (PSRAM), `diag` | [Troubleshooting](../terminal/troubleshooting.md), [Firmware updates](../terminal/firmware-update.md) |
 | `src/usb` | RP2350 | `usbkbd` (keyboards, the USB log, the watchdog), `tusb_config.h` | [Keyboard](../terminal/keyboard.md) |
@@ -30,7 +30,7 @@ it) or RP2350-only.
 
 | Path | Contents |
 |---|---|
-| `apps/terminal/` | the firmware: `main.c` (start-up, the main loop, the Display prompt), `setup_glue.c` (SET-UP and its panels), `cpm_glue.c` (the Z80 machine's platform), `status.c` (the status line), `input_glue.c` (keys), `hwinfo_glue.c` (port 0Ch's records), `printer_glue.c` (the printer on TTY2), `crash_glue.c`, `usblog_glue.c` |
+| `apps/terminal/` | the firmware: `main.c` (start-up, the main loop, the Display prompt), `setup_glue.c` (SET-UP and its panels), `cpm_glue.c` (the Z80 machine's platform), `status.c` (the status line), `input_glue.c` (keys), `hwinfo_glue.c` (port 0Ch's records), `printer_glue.c` (the printer on TTY2), `telnet_glue.c` (telnet, the dial and the Telnet panel), `crash_glue.c`, `usblog_glue.c` |
 | `apps/hstx_test/` | the HSTX test pattern |
 
 ## Elsewhere
@@ -42,6 +42,6 @@ it) or RP2350-only.
 | `docs/guide/` | this guide: `src/` (pages), `gen/` (its generators) |
 | `scripts/` | build, test, lint, package, docs, toolchain |
 | `tools/hostbridge.py` | run a PC program with the terminal as its display |
-| `lib/` | pico-sdk and TinyUSB (submodules), z80pack, FatFs, F83, WordStar 4 (vendored) |
+| `lib/` | pico-sdk and TinyUSB (submodules), Zimodem (submodule, the J8 modem's firmware, not built here), z80pack, FatFs, F83, WordStar 4 (vendored) |
 | `assets/` | the fonts and the logo |
 | `ld/` | the linker script override: the code that stays in flash |

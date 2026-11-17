@@ -170,6 +170,7 @@ void apply_settings(const settings_t *s) {
 	audio_set_stereo(s->sound_stereo);
 	audio_set_fitted(s->sound_dac != 0);
 	printer_configure(s);
+	telnet_glue_apply();
 }
 
 bool settings_store(const settings_t *s) {
@@ -313,7 +314,7 @@ static void send_reply(void *ctx, const uint8_t *data, size_t len) {
 			machine_key(data[i]);
 		}
 	} else {
-		serial_write(data, len);
+		telnet_glue_send(data, len);
 	}
 }
 
@@ -374,6 +375,9 @@ int main(void) {
 	led_init();
 	// Before the USB host logs anything: it may keep a crash's log text.
 	const char *previous_crash = crash_init();
+	// Before the keyboard: send_key goes through telnet_glue_send from the
+	// first key (one during the logo jumped to tn.send == NULL).
+	telnet_glue_init();
 	usbkbd_init(send_key, setup_key, NULL);
 	diag_mark("usbkbd_init done");
 
@@ -457,6 +461,7 @@ int main(void) {
 		usbkbd_set_reset_key(reset_key);
 		monitor_start(&cpm_monitor, true, to_ms_since_boot(get_absolute_time()));
 	} else {
+		usbkbd_set_reset_key(dial_key); // F11: the Telnet panel's Host row (bd xir.10)
 		term_puts(&term, BOARD_UART_PINS_TEXT);
 #if BOARD_HAS_RTSCTS
 		if (serial_flow() == SERIAL_FLOW_RTSCTS) {
@@ -498,15 +503,18 @@ int main(void) {
 		} else {
 			// While SET-UP is open from the keyboard, host data waits in the
 			// receive buffer; opened by the host, what it sends are keys.
-			size_t n = setup.active && !setup.from_host ? 0 : serial_read(buf, sizeof buf);
+			// Telnet commands come out first (telnet_glue.c).
+			static uint8_t data[sizeof buf + 1];
+			size_t got = setup.active && !setup.from_host ? 0 : serial_read(buf, sizeof buf);
+			size_t n = got ? telnet_glue_filter(buf, got, data) : 0;
 			if (setup.active) {
-				setup_feed(buf, n);
+				setup_feed(data, n);
 			} else {
-				size_t used = n ? term_write(&term, buf, n) : 0;
+				size_t used = n ? term_write(&term, data, n) : 0;
 				if (term.setup_requests != setup_requests) {
 					setup_requests = term.setup_requests;
 					setup_enter(true);
-					setup_feed(buf + used, n - used);
+					setup_feed(data + used, n - used);
 				}
 			}
 		}
@@ -520,6 +528,13 @@ int main(void) {
 				setup_enter(false);
 			}
 		}
+		if (setup.dial_requested) { // F11 in terminal mode
+			setup.dial_requested = false;
+			if (!setup.active) {
+				setup_open_telnet(true);
+			}
+		}
+		telnet_glue_poll();
 		if (setup.active) {
 			setup_service();
 		}
@@ -571,6 +586,7 @@ int main(void) {
 			bell_ring();
 		}
 		status_clock_poll();
+		status_flow_poll();
 		video_update(&screen);
 		diag_poll();
 		debug_status_pass();

@@ -665,7 +665,41 @@ UF2 in the latter).
   at BOOT; LIST checks it, LISTST does not), common part 02F5H after
   merging the CCP.COM error messages; bnkxios.mac LIST polls device 4
   (PTSTL0). Status line PRN / lit / PRN!; HWINFO item 35. Zimodem notes
-  and the two-modem idea: docs/ideas/second-modem.md.
+  and the two-modem idea: docs/ideas/second-modem.md. Zimodem itself is
+  `lib/zimodem` (bd xir.1: submodule, github.com/arlaneenalra/Zimodem
+  branch frankless-build, upstream bozimmerman/Zimodem; not built by our
+  scripts or CI, its own scripts/build.sh and BUILDING.md; ~/fz80/Zimodem
+  is the older working copy, remote fork). Its throughput (one byte per
+  loop() into an empty FIFO on the ESP8266), telnet (WONT NAWS) and the
+  J8 rewiring for hardware RTS/CTS (GPIO13 U0CTS / GPIO15 U0RTS):
+  docs/ideas/zimodem-flow-telnet.md. The status line's flow field (bd
+  xir.3, status.c draw_flow/status_flow_poll, serial_flow_state: counts
+  and the PL011's CTS change interrupt) lights its left name while we
+  hold the host, its right while the host holds us, >= 250 ms.
+- Telnet (bd xir.10, terminal mode only): `src/term/telnet.[ch]`
+  (portable, test_telnet; cold, in flash: only during telnet, <= 11.5 KB/s)
+  filters the host's bytes in main.c's loop (telnet_glue_filter into a
+  257-byte buffer, then term_write) and doubles 0xFF in what we send
+  (send_key, send_reply -> telnet_glue_send). Passive: answers DO NAWS
+  (WILL + the size, again on width changes), DO TTYPE (name on SEND), DO
+  SGA, WILL ECHO/SGA; refuses the rest; answers every DO NAWS/TTYPE (a new
+  call's server asks again). Forgotten on RIS (term_t.host_resets, vt100.c
+  ESC c only), a mode change, or a hang-up (the user chose no NO CARRIER
+  watching). Settings field 26 telnet off/auto/on (SETTINGS_PAGE_TELNET;
+  auto: telnet once IAC + WILL/WONT/DO/DONT/SB arrives) and two texts in a
+  second text block before the printer's (SETTINGS_TEXT2_OFFSET, 'U',
+  "type\0host": telnet_type override, empty = personality's VT100/VT52/
+  ADM3A; telnet_host). `src/ui/telnetpanel.[ch]` (SET-UP's N, terminal
+  mode; rows Telnet, Terminal type, Host (Return: save as SET-UP's Return,
+  leave, dial), Call (Return: hang up)). F11 in terminal mode (dial_key via
+  usbkbd_set_reset_key; it sent ESC [ 23 ~ before) opens it direct (Esc
+  leaves SET-UP, Return saves) at Host, or Call in a call.
+  `apps/terminal/telnet_glue.c` (cold): ATD"host" raw (no T: Zimodem
+  passes bytes), telnet on for the call; hang-up = 1.5 s quiet, +++, 1.5 s,
+  ATH (keys dropped meanwhile); the panel's glue (telnet_feed,
+  telnet_service; setup_glue.c's save_and_leave, setup_leave,
+  setup_draw_panel are shared). Status line " | telnet" (lit once
+  negotiated) / "hangup". Guide: terminal/telnet.md.
 - `src/platform/serial.[ch]`: the terminal UART's RX ring (IRQ) + TX
   queue, and the Flow control setting at runtime (serial_set_flow, bd
   dmt.27/68t.1): RTS/CTS = uart_set_hw_flow with the board's pins on
@@ -991,7 +1025,7 @@ TTY2[9600], no space) made by build.sh at build time: cpmrun.c (machine.c on the
   setup_demo_*; status line draws skip it), then term_set_columns clears
   the screen (no 13 KB copy) and SET-UP is redrawn over it. F11
   is the machine's reset key in CP/M mode (kbd_set_reset_key; terminal
-  mode keeps ESC [ 23 ~).
+  mode: the telnet dial key, xir.10).
   Firmware update (bd n3k): SET-UP's U in either mode (`src/ui/fwpanel.[ch]`,
   portable, over SET-UP's rows; setup_glue.c fw_* platform: in terminal mode it
   f_mounts the card only while open, with the monitor's FATFS
@@ -1097,7 +1131,12 @@ control (dmt.27, xonxoff.c, the SET-UP row) and the RAM disk (1ls.20) to
 0x2005dc98); the 1024x600 mode's buffers and 12x24 fonts (bd cpx.4,
 cpx.7) to 0x2007d098. v0.14.1: Sock 0x2007dbb8, Adalogger Feather 0x2007e574; the printer
 (bd wt6) +2.7 KB: Sock 0x2007e670 (~6.5 KB free), Adalogger Feather
-0x2007f020 (~4 KB). Earlier (v0.11.6): Sock 0x2007d178, ~11.6 KB free;
+0x2007f020 (~4 KB). The link needs a 2 KB heap below 0x20080000 (the
+.heap section), so the real limit is __end__ <= 0x2007f800, not
+0x20080000: the flow field (xir.3, +1 KB) and telnet (xir.10) overflowed
+the SRAM-only boards until status.c went cold; after it: Sock
+0x2007dfc4, Adalogger Feather 0x2007e97c (~3.7 KB to the limit).
+Earlier (v0.11.6): Sock 0x2007d178, ~11.6 KB free;
 Feather with Adalogger, no PSRAM, 0x2007db2c, ~9.4 KB; Frankless
 0x200683f8, ~97 KB; PSRAM Feather 0x20065968. Scratch X: core 1's stack is in .bss, so nearly all 4 KB free; scratch Y: 2 KB core 0
   stack, ~2 KB free. Biggest .bss: Z80 banks 96 KB + bank 0 64 KB, raster
@@ -1173,7 +1212,8 @@ Feather with Adalogger, no PSRAM, 0x2007db2c, ~9.4 KB; Frankless
     03h/50 MHz after nvflash_retime: FatFs, TinyUSB's usbh/hub/hid_host/
     msc_host, usblog_glue, monitor, drivepanel, drivecfg, setup, fwpanel, demo, palette, xfer,
     usbmsc, lz, diskimg, keyname, settings, uf2, qsort, machine.c's
-    .rodata (~51 KB). Hot paths (Z80 core, machine.c code, term, vtparse,
+    .rodata (~51 KB); since bd xir: status.c (the status line, ~4 KB),
+    telnet.c, telnet_glue.c, printer_glue.c. Hot paths (Z80 core, machine.c code, term, vtparse,
     raster, video, screen, sdcard, drives, serial, keyboard, hcd_rp2040,
     printf for panic) stay in SRAM. Nothing may run from flash on core 1,
     between video_init and nvflash_retime, while flash is written, or in

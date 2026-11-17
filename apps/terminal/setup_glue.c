@@ -47,7 +47,7 @@ static void ay_give_back(void);
 // The panels are boxes on the default background, the box in the status
 // line's color of the edited settings, like the preview (setup_service
 // shows their palette).
-static void setup_draw_panel(void) {
+void setup_draw_panel(void) {
 	char title[SCREEN_MAX_COLS + 1];
 	snprintf(title, sizeof title, "DVI Terminal build %s", TERM_BUILD_ID);
 	settings_colors_t c = settings_colors(&setup.ui.values);
@@ -223,7 +223,8 @@ void setup_feed(const uint8_t *data, size_t len) {
 		return;
 	}
 	for (size_t i = 0; i < len && setup.action == SETUP_NONE && !setup.drives_work && !setup.fw_work &&
-		!setup.fw_cancel && !setup.clock_apply && !setup.print_apply; ++i) {
+		!setup.fw_cancel && !setup.clock_apply && !setup.print_apply && setup.telnet_work == TELNETPANEL_NONE;
+		++i) {
 		if (setup.fw_open) {
 			fw_feed(data[i]);
 			continue;
@@ -234,6 +235,10 @@ void setup_feed(const uint8_t *data, size_t len) {
 		}
 		if (setup.print_open) {
 			print_feed(data[i], now);
+			continue;
+		}
+		if (setup.telnet_open) {
+			telnet_feed(data[i], now);
 			continue;
 		}
 		if (setup.drives_open) {
@@ -285,6 +290,8 @@ void setup_enter(bool from_host) {
 	setup.fw_open = setup.fw_work = setup.fw_cancel = false;
 	setup.clock_open = setup.clock_apply = false;
 	setup.print_open = setup.print_apply = false;
+	setup.telnet_open = setup.telnet_direct = false;
+	setup.telnet_work = TELNETPANEL_NONE;
 	setup.from_host = from_host;
 	setup.action = SETUP_NONE;
 	setup.demo = false;
@@ -294,7 +301,7 @@ void setup_enter(bool from_host) {
 
 // Put the rows back; with apply, use the edited settings now, and the width
 // if it differs (which clears the screen, as DECCOLM does).
-static void setup_leave(bool apply) {
+void setup_leave(bool apply) {
 	if (!screen_stash_pop(&stash, &screen, STASH_SETUP, PALETTE_TEXT, PALETTE_BACKGROUND)) {
 		for (unsigned r = 0; r < SETUP_ROWS; ++r) { // not saved: no room
 			screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
@@ -307,6 +314,8 @@ static void setup_leave(bool apply) {
 	setup.drives_work = DRIVEPANEL_NONE;
 	setup.clock_open = setup.clock_apply = false;
 	setup.print_open = setup.print_apply = false;
+	setup.telnet_open = setup.telnet_direct = false;
+	setup.telnet_work = TELNETPANEL_NONE;
 	fw_close();
 	ay_give_back(); // a chime still sounding
 	if (!apply) {
@@ -397,6 +406,31 @@ static void clock_service(void) {
 		: changed ? "Return here saves the clock and sound settings"
 		: NULL;
 	setup_draw_panel();
+}
+
+static void restart(void);
+
+// SET-UP's Return: save the edited settings and leave, applying them (or
+// reboot, for a new Display or Mode). False, SET-UP still open, if the
+// flash write failed.
+bool save_and_leave(void) {
+	// The erase holds core 0 for tens of ms: say so first.
+	setup.ui.message = "Saving...";
+	setup_draw_panel();
+	video_update(&screen);
+	if (!setup_save()) {
+		setup.ui.message = "Saving to flash failed";
+		setup_draw_panel();
+		return false;
+	}
+	if (settings.display != display_booted) {
+		restart(); // the DVI mode is set at boot, and asks to keep it
+	}
+	if (settings.mode != (cpm.on ? SETTINGS_MODE_CPM : SETTINGS_MODE_TERMINAL)) {
+		restart(); // the other mode starts from a clean power-on
+	}
+	setup_leave(true);
+	return true;
 }
 
 // The Printer panel's Return: its choices into SET-UP's edited settings
@@ -569,6 +603,10 @@ void setup_service(void) {
 		print_service();
 		return;
 	}
+	if (setup.telnet_open && setup.action == SETUP_NONE) {
+		telnet_service();
+		return;
+	}
 	if (setup.fw_open && setup.action == SETUP_NONE) {
 		if (setup.fw_cancel) {
 			fw_close();
@@ -613,22 +651,9 @@ void setup_service(void) {
 		setup_leave(false);
 		cpm.running = false;
 		monitor_enter(NULL, true);
+	} else if (a == SETUP_TELNET) {
+		setup_open_telnet(false);
 	} else if (a == SETUP_SAVE) {
-		// The erase holds core 0 for tens of ms: say so first.
-		setup.ui.message = "Saving...";
-		setup_draw_panel();
-		video_update(&screen);
-		if (setup_save()) {
-			if (settings.display != display_booted) {
-				restart(); // the DVI mode is set at boot, and asks to keep it
-			}
-			if (settings.mode != (cpm.on ? SETTINGS_MODE_CPM : SETTINGS_MODE_TERMINAL)) {
-				restart(); // the other mode starts from a clean power-on
-			}
-			setup_leave(true);
-		} else {
-			setup.ui.message = "Saving to flash failed";
-			setup_draw_panel();
-		}
+		save_and_leave();
 	}
 }

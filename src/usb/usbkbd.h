@@ -13,7 +13,8 @@
 // The SET-UP key (F12 or Pause) calls setup instead.
 void usbkbd_init(kbd_output_t output, kbd_setup_t setup, void *ctx);
 
-// F11 calls reset instead of sending a sequence (kbd_set_reset_key).
+// F11 calls reset instead of sending a sequence (kbd_set_reset_key): the
+// Z80's reset, or terminal mode's dial.
 void usbkbd_set_reset_key(kbd_setup_t reset);
 
 // Run the USB host stack and key repeat. Call often from the main loop.

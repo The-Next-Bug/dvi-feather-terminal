@@ -39,7 +39,7 @@ void send_key(void *ctx, const uint8_t *data, size_t len) {
 			cpm.keys[cpm.key_head++ % CPM_KEY_QUEUE] = data[i];
 		}
 	} else {
-		serial_write(data, len);
+		telnet_glue_send(data, len); // 0xFF doubled during telnet
 	}
 	last_key.len = (uint8_t)(len < sizeof last_key.data ? len : sizeof last_key.data);
 	memcpy(last_key.data, data, last_key.len);
@@ -71,6 +71,16 @@ void reset_key(void *ctx) {
 	key_pressed = true;
 	if (term_started && !key_wakes() && !setup.active) {
 		cpm.reset_requested = true;
+	}
+}
+
+// F11 in terminal mode: the Telnet panel at its Host row, to dial (the
+// main loop opens it; this runs inside the USB stack).
+void dial_key(void *ctx) {
+	(void)ctx;
+	key_pressed = true;
+	if (term_started && !key_wakes() && !setup.active) {
+		setup.dial_requested = true;
 	}
 }
 

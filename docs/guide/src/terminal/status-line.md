@@ -11,7 +11,13 @@ Row 24, below the 24 text rows, shows the terminal's state.
 - the terminal type (`VT100`, `VT52`, `ADM-3A`) and the width,
 - the firmware build,
 - the baud rate and framing, then `RTS/CTS` or `XON/XOFF` with
-  [flow control](../start/host.md#flow-control),
+  [flow control](../start/host.md#flow-control). Its left name lights up
+  in reverse video while the terminal holds the host off (its RTS down,
+  or its XOFF sent: it cannot keep up), its right name while the host
+  holds the terminal off (CTS down, or the host's XOFF). Each stays lit
+  at least a quarter of a second, so a short hold still shows.
+- `telnet` while [Telnet](telnet.md) is on or auto, lit once the server
+  has negotiated; `hangup` while a hang-up's `+++` and `ATH` go out,
 - `kbd` while a keyboard is attached,
 - the USB stick, as in CP/M mode (below),
 - `echo` when local echo is on,
@@ -34,6 +40,8 @@ Row 24, below the 24 text rows, shows the terminal's state.
 - `PRN` while the [printer](../cpm/printing.md) is on: lit while a job
   runs, `PRN!` after one failed.
 - the emulated clock rate in MHz, or `monitor` while the monitor runs,
+- `RTS/CTS` or `XON/XOFF` with flow control, lit as in terminal mode (the
+  Z80's second serial port and the printer use the line),
 - `kbd` and the build, and the clock.
 
 ## Debug lines
@@ -67,7 +75,8 @@ the device's USB address (`xN` for repeats):
 | `timeout`, `gone`, `ioerr`, `busy` | a stick transfer over 3 s, its stick pulled, failed, refused |
 | `led`, `led?` | the keyboard LEDs sent, or refused (busy) |
 | `stuck`, `probe?`, `probe!`, `nprobe` | the USB host restarted because it looked stuck |
-| `mscrst` | restarted because a USB stick stopped answering (`timeout` or `badcsw` before it) |
+| `mscrst` | restarted because a USB stick stopped answering (`timeout`, `badcsw` or `fenced` before it) |
+| `fenced` | TinyUSB refuses the stick's commands after a lost one |
 | `rstwait` | a restart waiting because the last one was too recent |
 
 See [Troubleshooting](troubleshooting.md) for what the firmware does about

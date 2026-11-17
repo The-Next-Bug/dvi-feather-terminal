@@ -212,9 +212,10 @@ static void test_clock_settings(void) {
 			|| (f >= offsetof(settings_t, sound_level) && f <= offsetof(settings_t, sound_stereo));
 		bool hidden = f == offsetof(settings_t, display_was);
 		bool printer = f >= offsetof(settings_t, printer) && f <= offsetof(settings_t, printer_idle);
+		bool telnet = f == offsetof(settings_t, telnet);
 		CHECK_EQ(settings_fields[f].page, panel ? SETTINGS_PAGE_CLOCK : hidden ? SETTINGS_PAGE_NONE
-			: printer ? SETTINGS_PAGE_PRINTER : SETTINGS_PAGE_MAIN);
-		hidden = hidden || printer; // not on SET-UP's rows
+			: printer ? SETTINGS_PAGE_PRINTER : telnet ? SETTINGS_PAGE_TELNET : SETTINGS_PAGE_MAIN);
+		hidden = hidden || printer || telnet; // not on SET-UP's rows
 		main += !panel && !hidden;
 		// Each main-page field on one row.
 		unsigned rows = 0;
@@ -362,6 +363,65 @@ static void test_flow_setting(void) {
 	settings_encode(&in, 4, rec);
 	CHECK(settings_decode(rec, &out, &seq));
 	CHECK_EQ(out.flow, SETTINGS_FLOW_NONE);
+}
+
+// Telnet (bd xir.10): off, no type, no host unless saved; the two texts in
+// the second block, which older records (erased there) or a bad CRC leave
+// empty, without touching the printer's target.
+static void test_telnet_settings(void) {
+	settings_t in, out;
+	uint8_t rec[SETTINGS_RECORD_SIZE];
+	uint32_t seq;
+	settings_defaults(&in);
+	CHECK_EQ(in.telnet, SETTINGS_TELNET_OFF);
+	CHECK_EQ(in.telnet_type[0], '\0');
+	CHECK_EQ(in.telnet_host[0], '\0');
+	in.telnet = SETTINGS_TELNET_AUTO;
+	settings_set_telnet_type(&in, "vt102");
+	settings_set_telnet_host(&in, "bbs.example.org:2323");
+	settings_set_target(&in, "printer:631/ipp");
+	settings_encode(&in, 3, rec);
+	CHECK_EQ(rec[SETTINGS_TEXT2_OFFSET], 'U');
+	CHECK_EQ(rec[SETTINGS_TEXT2_OFFSET + 1], 5 + 1 + 20);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK(memcmp(&in, &out, sizeof in) == 0);
+	// No type, only a host; then both at their longest.
+	settings_set_telnet_type(&in, "");
+	settings_encode(&in, 4, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK(memcmp(&in, &out, sizeof in) == 0);
+	char long_text[100];
+	memset(long_text, 'y', sizeof long_text - 1);
+	long_text[sizeof long_text - 1] = '\0';
+	long_text[5] = ' '; // no spaces in either
+	settings_set_telnet_type(&in, long_text);
+	settings_set_telnet_host(&in, long_text);
+	CHECK_EQ(strlen(in.telnet_type), SETTINGS_TYPE_MAX);
+	CHECK_EQ(strlen(in.telnet_host), SETTINGS_HOST_MAX);
+	CHECK(strchr(in.telnet_host, ' ') == NULL);
+	settings_set_target(&in, long_text);
+	settings_encode(&in, 5, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK(memcmp(&in, &out, sizeof in) == 0);
+	// A bad CRC: both empty, the printer's target kept.
+	rec[SETTINGS_TEXT2_OFFSET + 8] ^= 1;
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.telnet_type[0], '\0');
+	CHECK_EQ(out.telnet_host[0], '\0');
+	CHECK(strcmp(out.printer_target, in.printer_target) == 0);
+	CHECK_EQ(out.telnet, SETTINGS_TELNET_AUTO);
+	// Older firmware's record: 26 fields, erased from the payload's end.
+	settings_encode(&in, 6, rec);
+	memset(rec + 16 + 26, 0xff, SETTINGS_TEXT_OFFSET - 16 - 26);
+	rec[5] = 26;
+	uint32_t crc = crc_of(rec, 26);
+	for (unsigned i = 0; i < 4; ++i) {
+		rec[12 + i] = (uint8_t)(crc >> 8 * i);
+	}
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.telnet, SETTINGS_TELNET_OFF);
+	CHECK_EQ(out.telnet_host[0], '\0');
+	CHECK(strcmp(out.printer_target, in.printer_target) == 0);
 }
 
 // The printer (bd wt6.4): off, text, 30 s and no target unless saved; the
@@ -569,6 +629,7 @@ int main(void) {
 	RUN(test_usb_log_setting);
 	RUN(test_older_record);
 	RUN(test_retired_wide80);
+	RUN(test_telnet_settings);
 	RUN(test_term_type);
 	RUN(test_columns_in_use);
 	RUN(test_line_and_colors);
