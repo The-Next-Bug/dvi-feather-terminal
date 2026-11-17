@@ -22,7 +22,11 @@ _Static_assert(HEADER_SIZE + SETTINGS_FIELDS <= SETTINGS_TEXT2_OFFSET, "the payl
 #define TEXT_MAGIC 'T'
 #define TEXT2_MAGIC 'U'
 
-static const unsigned baud_rates[] = {300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200};
+// Appended only: the record keeps the index. 230400 and up are for a host
+// with RTS/CTS (the Frankless's Zimodem, ATB): without flow control the
+// terminal falls behind a full-screen burst at these rates.
+static const unsigned baud_rates[] = {300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800,
+	921600};
 #define BAUD_DEFAULT 8 // 115200
 
 static const struct {
@@ -43,8 +47,9 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 	{"Columns", 2, {80, 132}, {"80", "132"}, SETTINGS_PAGE_MAIN},
 	{"Backspace sends", 2, {0x7f, 0x08}, {"DEL", "BS"}, SETTINGS_PAGE_MAIN},
 	{"Local echo", 2, {0, 1}, {"off", "on"}, SETTINGS_PAGE_MAIN},
-	{"Baud rate", 9, {0, 1, 2, 3, 4, 5, 6, 7, 8},
-		{"300", "1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200"}, SETTINGS_PAGE_MAIN},
+	{"Baud rate", 12, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
+		{"300", "1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"},
+		SETTINGS_PAGE_MAIN},
 	{"Data/parity/stop", 8, {0, 1, 2, 3, 4, 5, 6, 7},
 		{"8N1", "8E1", "8O1", "8N2", "7E1", "7O1", "7N1", "7N2"}, SETTINGS_PAGE_MAIN},
 	{"New line (LNM)", 2, {0, 1}, {"off", "on"}, SETTINGS_PAGE_MAIN},

@@ -159,7 +159,7 @@ typedef struct {
 // settings_main_field's order) or its Clock panel (clockpanel.h).
 #define SETTINGS_FIELDS 27
 #define SETTINGS_MAIN_FIELDS 15
-#define SETTINGS_MAX_CHOICES 11
+#define SETTINGS_MAX_CHOICES 12
 
 #define SETTINGS_PAGE_MAIN 0
 #define SETTINGS_PAGE_CLOCK 1 // the Clock and sound panel (clockpanel.h)

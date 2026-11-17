@@ -577,6 +577,10 @@ static void test_line_and_colors(void) {
 	CHECK_EQ(settings_baud_rate(&s), 115200);
 	settings_framing(&s, &bits, &parity, &stop);
 	CHECK(bits == 8 && parity == 'N' && stop == 1);
+	s.baud = 11;
+	CHECK_EQ(settings_baud_rate(&s), 921600);
+	s.baud = 12; // past the list: the default
+	CHECK_EQ(settings_baud_rate(&s), 115200);
 	s.baud = 4;
 	s.framing = 4;
 	CHECK_EQ(settings_baud_rate(&s), 9600);
