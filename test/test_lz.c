@@ -5,7 +5,7 @@
 #include "lz.h"
 #include "test.h"
 
-static uint8_t window[LZ_WINDOW];
+static uint8_t work[LZ_WORK] __attribute__((aligned(4)));
 
 typedef struct {
 	uint8_t out[300000]; // the first bytes
@@ -32,64 +32,116 @@ static bool collect(void *ctx, const uint8_t *data, size_t len) {
 
 static bool decode(const uint8_t *src, size_t len, size_t out_size) {
 	memset(&got, 0, sizeof got);
-	return lz_decode(src, len, out_size, window, collect, &got);
+	return lz_decode(src, len, out_size, work, collect, &got);
 }
 
-static void test_literals_only(void) {
-	const uint8_t src[] = {0x50, 'h', 'e', 'l', 'l', 'o'};
-	CHECK(decode(src, sizeof src, 5));
+// Python's zlib, raw deflate (wbits -11), fixed Huffman codes.
+static const uint8_t hello[] = {0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00};
+
+static void test_fixed_literals(void) {
+	CHECK(decode(hello, sizeof hello, 5));
 	CHECK_EQ(got.len, 5);
 	CHECK(memcmp(got.out, "hello", 5) == 0);
 }
 
 static void test_overlapping_match(void) {
-	// "ab", then a 10-byte match at offset 2, then one literal.
-	const uint8_t src[] = {0x26, 'a', 'b', 2, 0, 0x10, 'c'};
+	// "ab", then a 10-byte match at distance 2, then "c".
+	const uint8_t src[] = {0x4b, 0x4c, 0x4a, 0x84, 0xc3, 0x64, 0x00};
 	CHECK(decode(src, sizeof src, 13));
 	CHECK(memcmp(got.out, "ababababababc", 13) == 0);
 }
 
-static void test_long_lengths(void) {
-	// 20 literals (15 + 5) and a run of 300 (4 + 15 + 255 + 26) at offset 1.
-	uint8_t src[64];
-	size_t n = 0;
-	src[n++] = 0xff;
-	src[n++] = 5;
-	for (int i = 0; i < 20; ++i) {
-		src[n++] = (uint8_t)('A' + i);
+static void test_stored_block(void) {
+	const uint8_t src[] = {0x01, 0x07, 0x00, 0xf8, 0xff, 's', 't', 'o', 'r', 'e', 'd', '!'};
+	CHECK(decode(src, sizeof src, 7));
+	CHECK(memcmp(got.out, "stored!", 7) == 0);
+	uint8_t bad[sizeof src];
+	memcpy(bad, src, sizeof src);
+	bad[3] = 0xf9; // NLEN not LEN's complement
+	CHECK(!decode(bad, sizeof bad, 7));
+}
+
+// A fixed-Huffman block written by hand: Huffman codes go most significant
+// bit first, everything else least significant bit first.
+typedef struct {
+	uint8_t buf[4096];
+	size_t bit;
+} writer_t;
+
+static void put_bits(writer_t *w, unsigned v, unsigned n) {
+	for (unsigned i = 0; i < n; ++i, ++w->bit) {
+		if (v >> i & 1) {
+			w->buf[w->bit / 8] |= (uint8_t)(1u << w->bit % 8);
+		}
 	}
-	src[n++] = 1;
-	src[n++] = 0;
-	src[n++] = 255;
-	src[n++] = 26;
-	src[n++] = 0x00; // final sequence: no literals
-	CHECK(decode(src, n, 320));
-	CHECK_EQ(got.len, 320);
-	CHECK_EQ(got.out[19], 'T');
-	CHECK_EQ(got.out[20], 'T');
-	CHECK_EQ(got.out[319], 'T');
+}
+
+static void put_code(writer_t *w, unsigned code, unsigned n) {
+	while (n--) {
+		put_bits(w, code >> n & 1, 1);
+	}
+}
+
+static void put_literal(writer_t *w, uint8_t c) {
+	if (c < 144) {
+		put_code(w, 0x30 + c, 8);
+	} else {
+		put_code(w, 0x190 + c - 144, 9);
+	}
+}
+
+static void test_distance_beyond_dictionary(void) {
+	// 3000 literals, then length 3 at distance 2049 (code 22, 10 extra
+	// bits 0): fine for zlib's 32 KB, but past this 2 KB dictionary.
+	static writer_t w;
+	for (unsigned d = 2048; d <= 2049; ++d) {
+		memset(&w, 0, sizeof w);
+		put_bits(&w, 1, 1); // final
+		put_bits(&w, 1, 2); // fixed
+		for (unsigned i = 0; i < 3000; ++i) {
+			put_literal(&w, (uint8_t)(i * 7));
+		}
+		put_code(&w, 1, 7);  // 257: length 3
+		put_code(&w, d == 2048 ? 21 : 22, 5); // 21: 1537 + 9 bits; 22: 2049 + 10 bits
+		put_bits(&w, d == 2048 ? 511 : 0, d == 2048 ? 9 : 10);
+		put_code(&w, 0, 7); // end of block
+		bool ok = decode(w.buf, (w.bit + 7) / 8, 3003);
+		if (d == 2048) {
+			CHECK(ok); // the whole dictionary back
+			CHECK_EQ(got.out[3000], (uint8_t)(952 * 7));
+			CHECK_EQ(got.out[3002], (uint8_t)(954 * 7));
+		} else {
+			CHECK(!ok);
+		}
+	}
 }
 
 static void test_corrupt_data(void) {
-	const uint8_t truncated[] = {0x50, 'h', 'e'};
-	CHECK(!decode(truncated, sizeof truncated, 5));
-	const uint8_t offset_zero[] = {0x10, 'a', 0, 0, 0x00};
-	CHECK(!decode(offset_zero, sizeof offset_zero, 6));
-	const uint8_t before_start[] = {0x10, 'a', 2, 0, 0x00};
-	CHECK(!decode(before_start, sizeof before_start, 6));
-	const uint8_t src[] = {0x50, 'h', 'e', 'l', 'l', 'o'};
-	CHECK(!decode(src, sizeof src, 4)); // more output than expected
-	CHECK(!decode(src, sizeof src, 6)); // less
+	CHECK(!decode(hello, 3, 5));             // truncated
+	CHECK(!decode(hello, sizeof hello, 4));  // more output than expected
+	CHECK(!decode(hello, sizeof hello, 6));  // less
+	const uint8_t reserved[] = {0x07, 0x00}; // block type 3
+	CHECK(!decode(reserved, sizeof reserved, 1));
+	static writer_t w; // a match first: length 3, distance 1, nothing before it
+	memset(&w, 0, sizeof w);
+	put_bits(&w, 1, 1);
+	put_bits(&w, 1, 2);
+	put_code(&w, 1, 7);
+	put_code(&w, 0, 5);
+	put_code(&w, 0, 7);
+	CHECK(!decode(w.buf, (w.bit + 7) / 8, 3));
+	static const uint8_t zeros[64];
+	CHECK(!decode(zeros, sizeof zeros, 1)); // stored, LEN 0 NLEN 0
 }
 
 static void test_embedded_images(void) {
 	CHECK(diskimg_count >= 1);
 	for (unsigned i = 0; i < diskimg_count; ++i) {
 		const diskimg_t *img = &diskimg_list[i];
-		CHECK(decode(img->data, img->data_len, img->size));
+		CHECK(decode(img->data, img->data_len, img->size)); // dynamic blocks, zlib's level 9
 		CHECK_EQ(got.len, img->size);
 		CHECK_EQ(got.crc, img->crc);
-		CHECK(got.max_chunk <= LZ_WINDOW / 2);
+		CHECK(got.max_chunk <= LZ_DICT / 2);
 		CHECK(diskimg_find(img->name) == img);
 	}
 	CHECK(diskimg_find("cpm22") == diskimg_find("CPM22"));
@@ -99,14 +151,15 @@ static void test_embedded_images(void) {
 static void test_sink_stops(void) {
 	const diskimg_t *img = &diskimg_list[0];
 	memset(&got, 0, sizeof got);
-	got.stop_after = LZ_WINDOW;
-	CHECK(!lz_decode(img->data, img->data_len, img->size, window, collect, &got));
+	got.stop_after = LZ_WORK;
+	CHECK(!lz_decode(img->data, img->data_len, img->size, work, collect, &got));
 }
 
 int main(void) {
-	RUN(test_literals_only);
+	RUN(test_fixed_literals);
 	RUN(test_overlapping_match);
-	RUN(test_long_lengths);
+	RUN(test_stored_block);
+	RUN(test_distance_beyond_dictionary);
 	RUN(test_corrupt_data);
 	RUN(test_embedded_images);
 	RUN(test_sink_stops);

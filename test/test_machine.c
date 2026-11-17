@@ -27,7 +27,7 @@
 #define VOLUME_SECTORS (64u * 1024 * 1024 / 512) // FAT32 needs 65525+ clusters
 
 static FATFS fs;
-static uint8_t window[LZ_WINDOW];
+static uint8_t window[LZ_WORK] __attribute__((aligned(4)));
 
 static bool fat_file_exists(const char *path) {
 	FILINFO info;

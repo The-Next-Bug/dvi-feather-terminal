@@ -39,7 +39,7 @@ typedef void (*diskimg_progress_t)(void *ctx, uint32_t done, uint32_t total);
 
 // Write img to /DISKS80/<name>.DSK on the mounted FatFs volume, creating the
 // directory if needed, unless the file exists and !overwrite. window is
-// LZ_WINDOW bytes of scratch. A failed write removes the partial file.
+// LZ_WORK bytes of scratch. A failed write removes the partial file.
 // progress, if not NULL, is called after each chunk written.
 diskimg_result_t diskimg_install(const diskimg_t *img, bool overwrite, uint8_t *window,
 	diskimg_progress_t progress, void *ctx);

@@ -484,7 +484,10 @@ UF2 in the latter).
   status_shown() leaves row 24 blank; debug: status.c debug_status_* shows
   video_stats() (late lines, compose cycles as % of the line, fps) and
   core 0's longest main-loop pass and line render, qur.21; debug usb:
-  uptime and the last four USB host events from usbkbd_log, qur.3), blank_after (minutes; `src/input/blank.[ch]`
+  uptime and the last four USB host events from usbkbd_log, qur.3; debug
+  serial, bd xir.4: serial_stats rx/tx bytes/s over a second, the RX
+  ring now/peak (serial_reset_rx_peak each refresh)/peak since on, hold
+  counts from serial_flow_state, overruns, errors, drops), blank_after (minutes; `src/input/blank.[ch]`
   portable idle timer, keys only, the waking key dropped; video_set_blank
   makes core 1 stop the DVI signal: hstx_dvi_stop (DMA aborted, FIFO
   drained, HSTX off), frame time kept on the timer (diag_frames,
@@ -526,7 +529,7 @@ UF2 in the latter).
   by F12 or Pause (keyboard.c SET-UP callback) or host `CSI ? 999 ~` (term.c bumps
   `setup_requests` and term_write stops after it; later bytes are keys).
 - `src/input/keyname.[ch]` (portable): key bytes -> "ESC [A", "^C", ... for the
-  status line's last-key field (which replaced the rx/tx/err counters).
+  debug serial status line's last-key field (off the normal line since xir.4: it showed passwords).
 - `src/platform/nvflash.[ch]`: the 2 flash sectors before the last (UF2 files' E10
   workaround block at 0x10ffff00 wraps to the last sector and erases it). Read at boot before
   video_init; `nvflash_retime()` after the clock change. SDK
@@ -829,7 +832,8 @@ UF2 in the latter).
   install when the set names it and it is missing). test_wordstar (temps
   on H:, ^KX/^KS/^KD saves to A: with .BAK, a 112 KB document spilled
   and copied back; page breaks are LF 8Ah). The Sock's image is 1.81 MB
-  with it (1.95 MB before bd x6d's smaller WSPRINT.OVR; cap 2 MB - 12 KB). Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
+  with it (1.95 MB before bd x6d's smaller WSPRINT.OVR; 1.52 MB since bd
+  pz5's deflate; cap 2 MB - 12 KB). Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
   default, A:, B:; order COM,SUB; temporary drive B:; no display: f8w.9),
   so PROFILE.SUB (src/machine/cpm/cpm3/profile.sub) only loads VT100DYN, whose
   help text build.sh patches away; README.TXT (src/machine/cpm/cpm3/readme.txt)
@@ -1011,8 +1015,12 @@ TTY2[9600], no space) made by build.sh at build time: cpmrun.c (machine.c on the
   DRIVES.CFG and the sets, split from drives.c (sector I/O, SRAM). Status line: drive letters
   only, reverse while accessed. `src/disks/diskimg.[ch]` + `src/common/lz.[ch]` (portable)
   + `src/disks/diskimg_gen.py` (`src/disks/diskimg.cmake`): CPM22, Z80TESTS, EMPTY
-  from z80pack as LZ4-format blocks (offsets < 4 KB, streamed through a
-  4 KB window: `src/common/scratch.[ch]`'s buffer) in `.flashdata.diskimg`, written to the card by the
+  from z80pack as raw deflate (bd pz5, was LZ4 blocks: 1529 KB of images
+  -> 1205 KB; zlib level 9, wbits -11 in diskimg_gen.py; lz.c a tinf-style
+  inflate, cold: a 2 KB dictionary ring plus its Huffman tables, 1.5 KB, in
+  the 4 KB `src/common/scratch.[ch]` buffer, LZ_WORK; no other RAM; a
+  4 KB dictionary would save 36 KB more but needs RAM beside the scratch
+  buffer) in `.flashdata.diskimg`, written to the card by the
   monitor. `src/storage/sdcard.[ch]` (RP2350): polled SPI0 SD driver = FatFs
   diskio (GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI; 400 kHz init, 25 MHz).
   `lib/fatfs`: ChaN FatFs R0.15a vendored (ffconf: FIND, MKFS, CP437,
@@ -1148,7 +1156,8 @@ Feather with Adalogger, no PSRAM, 0x2007db2c, ~9.4 KB; Frankless
   ~875 KB with the CP/M 3 disks, f8w.1: ~610 KB of compressed images in all;
   1.05 MB with F83, xdu: ~810 KB of images; 1.12 MB with the sound, bd
   1ls.18: AYTEST, AYPLAY, its tunes, AY.BLK; 1.52 MB with MP/M II, bd
-  l1j: MPM1 180 KB + MPM2 155 KB compressed, ~1.19 MB of images); free to 2 MB (image growth;
+  l1j: MPM1 180 KB + MPM2 155 KB compressed, ~1.19 MB of images; 1.83 MB
+  with WS4; 1.52 MB with deflate, bd pz5: 1205 KB of images); free to 2 MB (image growth;
   fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used
   only during an update, up to the new image's length); settings
   0x3fd000-0x3fefff; last sector left blank (E10). New persistent storage
