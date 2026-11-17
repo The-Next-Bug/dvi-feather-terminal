@@ -30,6 +30,7 @@
 #include "machine.h"
 #include "monitor.h"
 #include "printpanel.h"
+#include "telnetpanel.h"
 #include "screen.h"
 #include "settings.h"
 #include "setup.h"
@@ -82,6 +83,7 @@ extern uint8_t display_booted;
 typedef struct {
 	bool active, from_host;
 	bool open_requested;  // by the SET-UP key
+	bool dial_requested;  // by F11 in terminal mode: the Telnet panel's Host row
 	setup_action_t action; // a save or cancel waiting for the main loop
 	setup_t ui;
 	uint32_t saved_reverse;
@@ -101,6 +103,11 @@ typedef struct {
 	// The Printer panel (P), over the same rows.
 	bool print_open, print_apply;
 	printpanel_t print;
+	// The Telnet panel (N, or F11 straight to it: direct, where Escape
+	// leaves SET-UP too); its Return waits for the main loop.
+	bool telnet_open, telnet_direct;
+	telnetpanel_action_t telnet_work;
+	telnetpanel_t telnet;
 	char print_last[64]; // what the last job did, as the panel shows it
 	// The firmware update panel (U), over the same rows; its work and its
 	// cancel wait for the main loop.
@@ -116,6 +123,13 @@ extern setup_state_t setup;
 
 void setup_feed(const uint8_t *data, size_t len);
 void setup_enter(bool from_host);
+void setup_open_telnet(bool direct); // the Telnet panel (SET-UP entered first if it is not open)
+// For the panels kept outside setup_glue.c (telnet_glue.c):
+void setup_draw_panel(void);
+void setup_leave(bool apply);       // rows back; apply: use the edited settings
+bool save_and_leave(void);          // SET-UP's Return; false if the flash write failed
+void telnet_feed(uint8_t c, uint32_t now); // a key for the Telnet panel
+void telnet_service(void);          // its Return or Escape, from the main loop
 void setup_service(void);
 void draw_demo(unsigned cols, const char *what);
 
@@ -155,6 +169,7 @@ typedef struct {
 	unsigned baud;      // in use: CP/M can change it (line_rate)
 	char usb[12];       // usb_label
 	const char *type;   // term_type_name: the host can switch VT52 mode
+	uint8_t telnet;     // telnet_glue_status (telnet_status_t)
 } status_t;
 
 bool status_shown(void);
@@ -184,7 +199,30 @@ extern last_key_t last_key;
 void send_key(void *ctx, const uint8_t *data, size_t len);
 void setup_key(void *ctx);
 void reset_key(void *ctx);
+void dial_key(void *ctx);
 void keyboard_poll(void);
+
+// ---- telnet_glue.c ----
+
+// Telnet in terminal mode (bd xir.10): the status line's view of it.
+typedef enum {
+	TELNET_STATUS_OFF,     // off (or CP/M mode)
+	TELNET_STATUS_WAITING, // auto or on, nothing negotiated yet
+	TELNET_STATUS_ACTIVE,  // the server negotiated
+	TELNET_STATUS_HANGUP,  // a hang-up's +++ and ATH under way
+} telnet_status_t;
+
+void telnet_glue_init(void);  // after term_init, before the first apply_settings
+void telnet_glue_apply(void); // the Telnet setting changed (apply_settings)
+// The host's bytes, telnet commands taken out: out has room for n + 1.
+size_t telnet_glue_filter(const uint8_t *in, size_t n, uint8_t *out);
+void telnet_glue_send(const uint8_t *data, size_t len); // keys and replies to the host
+void telnet_glue_poll(void);  // each main-loop pass: RIS, size, type, the hang-up
+bool telnet_glue_dial(const char *host); // ATD"host", telnet on for the call
+void telnet_glue_hangup(void);
+const char *telnet_glue_call(void);   // the call's host, NULL: none
+const char *telnet_type_default(void); // TTYPE from the Terminal type now
+telnet_status_t telnet_glue_status(void);
 
 // ---- printer_glue.c ----
 

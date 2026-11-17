@@ -15,8 +15,9 @@
 // F12 (the VT100 has none) and Pause (for full-size keyboards) are the
 // SET-UP key: they send nothing and call the setup callback
 // (kbd_set_setup_key) instead. With a reset callback set
-// (kbd_set_reset_key, the Z80 machine's reset), F11 calls it instead of
-// sending its sequence.
+// (kbd_set_reset_key: the Z80 machine's reset in CP/M mode, the Telnet
+// panel's dial in terminal mode), F11 calls it instead of sending its
+// sequence.
 //
 // Boot keyboards do not repeat keys themselves: the last key pressed repeats
 // after KBD_REPEAT_DELAY_MS, every KBD_REPEAT_INTERVAL_MS, while held.

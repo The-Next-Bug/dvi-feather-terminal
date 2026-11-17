@@ -21,6 +21,7 @@ set(TERMINAL_SOURCES
   printer_glue.c
   setup_glue.c
   status.c
+  telnet_glue.c
   usblog_glue.c
 )
 add_executable(dvi_terminal ${TERMINAL_SOURCES})

@@ -148,6 +148,12 @@ let the terminal's characteristics through (size, type) are opt-in.
 
 ## Idea: telnet in the terminal
 
+Built (bd xir.10): see the guide's terminal/telnet.md. It differs from
+the sketch below in two choices the user made: Telnet is off / auto / on,
+and the dial is F11 (the Telnet panel), which turns telnet on for that
+call; the negotiation is forgotten only on RIS, a setting change or the
+hang-up, not on NO CARRIER.
+
 Instead of making Zimodem a full telnet client, the terminal could do it:
 dial raw TCP through Zimodem (no `T` modifier, so Zimodem passes bytes
 straight through) and handle telnet in the terminal, which knows what

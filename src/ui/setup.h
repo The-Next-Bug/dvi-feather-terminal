@@ -40,6 +40,7 @@ typedef enum {
 	SETUP_FIRMWARE, // U: the firmware update panel (fwpanel.h)
 	SETUP_CLOCK,    // C: the Clock and sound panel (clockpanel.h)
 	SETUP_PRINTER,  // P: the Printer panel (printpanel.h)
+	SETUP_TELNET,   // N, terminal mode only: the Telnet panel (telnetpanel.h)
 } setup_action_t;
 
 typedef struct {

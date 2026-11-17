@@ -381,7 +381,8 @@ static const char *term_type_name(void) {
 }
 
 status_t status_now(void) {
-	status_t st = {usbkbd_count(), last_key.count, settings, serial_baud(), "", term_type_name()};
+	status_t st = {usbkbd_count(), last_key.count, settings, serial_baud(), "", term_type_name(),
+		(uint8_t)telnet_glue_status()};
 	usb_label(st.usb, sizeof st.usb);
 	return st;
 }
@@ -390,7 +391,7 @@ bool status_equal(const status_t *a, const status_t *b) {
 	return a->keyboards == b->keyboards && a->keys_sent == b->keys_sent &&
 		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0 && a->baud == b->baud &&
 		strcmp(a->usb, b->usb) == 0 &&
-		a->type == b->type;
+		a->type == b->type && a->telnet == b->telnet;
 }
 
 void draw_status(const status_t *st) {
@@ -421,7 +422,21 @@ void draw_status(const status_t *st) {
 		snprintf(text + n, sizeof text - n, " %s", label);
 		n = strlen(text);
 	}
+	// Telnet (bd xir.10): "telnet" while on or auto, lit once the server
+	// negotiated; "hangup" during a hang-up's +++ and ATH.
+	unsigned telnet_col = 0;
+	if (st->telnet != TELNET_STATUS_OFF && n + 9 < sizeof text) {
+		telnet_col = (unsigned)n + 3;
+		snprintf(text + n, sizeof text - n, " | %s", st->telnet == TELNET_STATUS_HANGUP ? "hangup" : "telnet");
+		n = strlen(text);
+	}
 	snprintf(text + n, sizeof text - n, "%s%s%s%s%s", st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "",
 		st->usb, st->settings.local_echo ? " | echo" : "", key);
 	put_status_text(text);
+	if (telnet_col && st->telnet == TELNET_STATUS_ACTIVE && telnet_col + 6 <= strlen(text)) {
+		for (unsigned i = 0; i < 6; ++i) {
+			screen_put(&screen, telnet_col + i, STATUS_ROW, (uint8_t)"telnet"[i], colors.status_bg,
+				colors.status_fg);
+		}
+	}
 }

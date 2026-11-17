@@ -30,6 +30,7 @@ setting's current choice is shown in reverse video.
 | **U** | [update the firmware](firmware-update.md) from `FIRMWARE.UF2` on the SD card or a USB stick |
 | **C** | the [Clock and sound panel](#the-clock-and-sound-panel) |
 | **P** | the Printer panel: the Z80 machine's printer through a WiFi modem; see [Printing](../cpm/printing.md#the-printer-panel) |
+| **N** | terminal mode: the Telnet panel, for a host reached through a WiFi modem; see [Telnet](telnet.md#the-telnet-panel) |
 | **D** | CP/M mode: the [Drives panel](../cpm/drives.md#the-drives-panel) |
 | **M** | CP/M mode: back to the [monitor](../cpm/monitor.md) |
 

@@ -16,6 +16,8 @@ Row 24, below the 24 text rows, shows the terminal's state.
   or its XOFF sent: it cannot keep up), its right name while the host
   holds the terminal off (CTS down, or the host's XOFF). Each stays lit
   at least a quarter of a second, so a short hold still shows.
+- `telnet` while [Telnet](telnet.md) is on or auto, lit once the server
+  has negotiated; `hangup` while a hang-up's `+++` and `ATH` go out,
 - `kbd` while a keyboard is attached,
 - the USB stick, as in CP/M mode (below),
 - `echo` when local echo is on,

@@ -4,6 +4,7 @@
 #include "setup.h"
 #include "clockpanel.h"
 #include "printpanel.h"
+#include "telnetpanel.h"
 #include "datetime.h"
 #include "font.h"
 #include "palette.h"
@@ -362,6 +363,82 @@ static void test_printer_panel(void) {
 	// Off needs no target.
 	printpanel_open(&pp, &v);
 	CHECK_EQ(print_send("\r"), PRINTPANEL_APPLY);
+}
+
+// ---- the Telnet panel (telnetpanel.h, bd xir.10) ----
+
+static telnetpanel_t tp;
+
+static telnetpanel_action_t telnet_send(const char *keys) {
+	telnetpanel_action_t last = TELNETPANEL_NONE;
+	for (const char *k = keys; *k; ++k) {
+		telnetpanel_action_t a = telnetpanel_input(&tp, (uint8_t)*k, 0);
+		if (a != TELNETPANEL_NONE) {
+			last = a;
+		}
+	}
+	return last;
+}
+
+// N opens it in terminal mode only; Telnet steps off/auto/on, Terminal
+// type and Host take typing; Return on Host dials (not without one), on
+// Call hangs up (only in a call), elsewhere keeps.
+static void test_telnet_panel(void) {
+	static screen_t s;
+	for (int machine = 0; machine <= 1; ++machine) {
+		open_with(80);
+		u.machine_menu = machine;
+		CHECK_EQ(send("n", 0), machine ? SETUP_NONE : SETUP_TELNET);
+		CHECK_EQ(send("N", 0), machine ? SETUP_NONE : SETUP_TELNET);
+		screen_init(&s, 80, FG, BG);
+		setup_draw(&u, &s, SCREEN_ROWS - 1 - SETUP_ROWS, "", FG, BG, BORDER);
+		CHECK(row_contains(&s, SCREEN_ROWS - 3, "N telnet") == !machine);
+	}
+	settings_t v;
+	settings_defaults(&v);
+	telnetpanel_open(&tp, &v, TELNETPANEL_MODE);
+	CHECK_EQ(telnet_send(" "), TELNETPANEL_REDRAW);
+	CHECK_EQ(tp.values.telnet, SETTINGS_TELNET_AUTO);
+	telnet_send("\x1b[C");
+	CHECK_EQ(tp.values.telnet, SETTINGS_TELNET_ON);
+	telnet_send("\x1b[C");
+	CHECK_EQ(tp.values.telnet, SETTINGS_TELNET_OFF);
+	telnet_send("\x1b[D");
+	CHECK_EQ(tp.values.telnet, SETTINGS_TELNET_ON);
+	telnet_send("\x1b[B");
+	CHECK_EQ(tp.line, TELNETPANEL_TYPE);
+	telnet_send("vt102x \x7f");
+	CHECK(strcmp(tp.values.telnet_type, "vt102") == 0);
+	CHECK_EQ(telnet_send("\r"), TELNETPANEL_APPLY);
+	telnet_send("\x1b[B");
+	CHECK_EQ(tp.line, TELNETPANEL_HOST);
+	CHECK_EQ(telnet_send("\r"), TELNETPANEL_REDRAW); // no host yet
+	CHECK(tp.message != NULL);
+	telnet_send("bbs.example.org:2323");
+	CHECK_EQ(telnet_send("\r"), TELNETPANEL_DIAL);
+	telnet_send("\x1b[B");
+	CHECK_EQ(tp.line, TELNETPANEL_CALL);
+	CHECK_EQ(telnet_send("\r"), TELNETPANEL_REDRAW); // no call
+	tp.call = "bbs.example.org:2323";
+	CHECK_EQ(telnet_send("\r"), TELNETPANEL_HANGUP);
+	telnet_send("\x1b[B");
+	CHECK_EQ(tp.line, TELNETPANEL_MODE); // round
+	screen_init(&s, 80, FG, BG);
+	const unsigned top = SCREEN_ROWS - 1 - TELNETPANEL_ROWS;
+	tp.type_default = "VT52";
+	telnetpanel_draw(&tp, &s, top, FG, BG, BORDER);
+	CHECK(row_contains(&s, top + 1, "> Telnet") && row_contains(&s, top + 1, "auto"));
+	CHECK(row_contains(&s, top + 2, "vt102"));
+	CHECK(row_contains(&s, top + 3, "bbs.example.org:2323"));
+	CHECK(row_contains(&s, top + 4, "hangs up"));
+	settings_set_telnet_type(&tp.values, "");
+	telnetpanel_draw(&tp, &s, top, FG, BG, BORDER);
+	CHECK(row_contains(&s, top + 2, "VT52 (Terminal type's)"));
+	// F11 opens at Host; Escape goes back.
+	telnetpanel_open(&tp, &v, TELNETPANEL_HOST);
+	CHECK_EQ(tp.line, TELNETPANEL_HOST);
+	CHECK_EQ(telnet_send("\x1b"), TELNETPANEL_NONE);
+	CHECK_EQ(telnetpanel_tick(&tp, TELNETPANEL_ESC_TIMEOUT_MS), TELNETPANEL_CANCEL);
 }
 
 // USB log is SET-UP's last row: off unless saved, or the SD card.
@@ -761,6 +838,7 @@ int main(void) {
 	RUN(test_clock_panel_sound);
 	RUN(test_clock_panel_escape);
 	RUN(test_printer_panel);
+	RUN(test_telnet_panel);
 	RUN(test_mode_setting);
 	RUN(test_status_line_setting);
 	RUN(test_blank_after_setting);
