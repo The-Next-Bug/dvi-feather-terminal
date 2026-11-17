@@ -96,6 +96,12 @@ lit once the server has negotiated; `hangup` while a hang-up is under way.
 - Use the same flow control on both sides: the Frankless build of Zimodem
   defaults to RTS/CTS, as SET-UP's Flow control should be. `X` in a dial
   command (`ATDTX`) switches Zimodem to XON/XOFF for that call.
-- Throughput through an ESP8266 Zimodem is limited by the modem: it sends
-  one byte per pass of its main loop. The flow control field on the
-  status line shows which side holds the other off.
+- Throughput through an ESP8266 Zimodem is limited by the modem. Wired
+  the earlier way (its CTS on GPIO5) it sends one byte per pass of its
+  main loop; on GPIO13/GPIO15, the ESP's own RTS/CTS pins, the Frankless
+  build fills the UART instead ([wiring](../cpm/printing.md#wiring-and-the-modem)).
+  The flow control field on the status line shows which side holds the
+  other off, and the debug serial status line the bytes per second.
+- Faster than 115200: Zimodem's `ATB230400` (up to `ATB921600`) switches
+  the modem right after its OK; then set the same Baud rate in SET-UP and,
+  once both talk, `AT&W` on the modem. Only with RTS/CTS on both sides.

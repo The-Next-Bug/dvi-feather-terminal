@@ -674,13 +674,18 @@ UF2 in the latter).
   scripts or CI, its own scripts/build.sh and BUILDING.md; ~/fz80/Zimodem
   is the older working copy, remote fork). Its throughput (one byte per
   loop() into an empty FIFO on the ESP8266), telnet (WONT NAWS) and the
-  J8 rewiring for hardware RTS/CTS (GPIO13 U0CTS / GPIO15 U0RTS):
+  J8 rewiring for hardware RTS/CTS (GPIO13 U0CTS / GPIO15 U0RTS, built in
+  the Frankless build by bd xir.7: serout.ino serialHwFlowApply, pins
+  fixed at S49=13 S51=15 by FRANKLESS_HW_FLOW (default 1; build.sh
+  FRANKLESS_HW_FLOW=0 for the old 5/4 wiring), FIFO-filling deque):
   docs/ideas/zimodem-flow-telnet.md. The status line's flow field (bd
   xir.3, status.c draw_flow/status_flow_poll, serial_flow_state: counts
   and the PL011's CTS change interrupt) lights its left name while we
   hold the host, its right while the host holds us, >= 250 ms.
 - Telnet (bd xir.10, terminal mode only): `src/term/telnet.[ch]`
-  (portable, test_telnet; cold, in flash: only during telnet, <= 11.5 KB/s)
+  (portable, test_telnet; cold, in flash: only during telnet, <= 11.5 KB/s
+  at 115200; SET-UP's Baud rate goes to 921600 since bd xir.12: at 921600
+  a 1 MB cat ran ~53 KB/s with RTS never lit, the ESP8266 being the limit)
   filters the host's bytes in main.c's loop (telnet_glue_filter into a
   257-byte buffer, then term_write) and doubles 0xFF in what we send
   (send_key, send_reply -> telnet_glue_send). Passive: answers DO NAWS

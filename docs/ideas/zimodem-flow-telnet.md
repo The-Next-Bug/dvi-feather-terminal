@@ -36,7 +36,11 @@ always sees 80x24, even at 132 columns. The causes, all in Zimodem:
    `char`: if `char` is signed on xtensa-lx106, it stops at the first byte
    >= 0x80 (the IAC) and the SE byte (0xF0) is printed as data. Check:
    `xtensa-lx106-elf-gcc -dM -E - </dev/null | grep CHAR_UNSIGNED`, and look
-   for a stray 0xF0 glyph just after connecting.
+   for a stray 0xF0 glyph just after connecting. Checked (bd xir.8): char
+   is unsigned there, so that does not happen; the real bug was that the
+   loop never saw the end of the data (`*c>=0` always true, a timeout's -1
+   read as 0xFF = IAC), so an SB cut short hung Zimodem for good. Fixed in
+   pet2asc.ino: ints, stop on -1, IAC IAC as data, 1024-byte cap.
 6. **`streamAvailRead()`** waits with `delay(1)` up to 250 ms for each byte
    of a telnet command split across TCP segments, stalling the stream.
 7. **Zimodem never drives its RTS** on the ESP8266 (the overflow code in
@@ -91,7 +95,13 @@ every change is either the Frankless build's default or a new S
 register, and the stock behavior stays the stock default. The parts that
 let the terminal's characteristics through (size, type) are opt-in.
 
-- **Z1a, hardware flow control (after the rewire)**: in
+- **Z1a, hardware flow control (after the rewire)**: built (bd xir.7,
+  serout.ino serialHwFlowApply: on whenever RTS/CTS and S49=13 / S51=15;
+  the Frankless build fixes those pins (FRANKLESS_HW_FLOW, default 1:
+  saved S49/S51 ignored, others refused; 0 for the old wiring); DSR off; the pull-up
+  the core puts on GPIO13 cleared, so an undriven terminal RTS reads as
+  clear to send; reapplied after HWSerial.begin, which rewrites both
+  config registers). Untried on hardware as of 2026-11-17. The sketch: in
   `ZSerial::setFlowControlType()` for the ESP8266, with FCT_RTSCTS and the
   pins on 13/15: `pinMode(13, FUNCTION_4)`, `pinMode(15, FUNCTION_4)`,
   `USC0(0) |= 1 << UCTXHFE` (the UART stops sending when CTS goes high),
@@ -107,7 +117,8 @@ let the terminal's characteristics through (size, type) are opt-in.
   16 bytes of FIFO headroom after RTS drops: the ESP looks at CTS once per
   batch, and what is in its FIFO is sent regardless.
 - **Z1c, both**: call `serialOutDeque()` inside the socket read loop of
-  `ZStream::loop()` too, not once per pass.
+  `ZStream::loop()` too, not once per pass. Built (bd xir.7). Z1b, the
+  batched software deque for the old wiring, was not.
 - **Z2, window size (NAWS)**: answer `DO NAWS` with `WILL NAWS` and
   `IAC SB NAWS w1 w0 h1 h0 IAC SE`, the size from a new saved setting
   (S register or `AT+NAWS=132,24`, saved by AT&W). Unset: `WONT`, as now.
@@ -121,9 +132,9 @@ let the terminal's characteristics through (size, type) are opt-in.
   signed-`char` SB loop; replace `streamAvailRead()`'s busy-wait with a
   small parser state kept across `loop()` passes; Frankless default
   TTYPE `vt100` (S41).
-- **Z4, counters for measuring**: `loop()` passes per second, bytes into
-  the UART per second, TBUF's high-water mark, time with CTS held; shown
-  by an AT query after `+++`. To confirm Z1 before and after.
+- **Z4, counters for measuring**: dropped (bd xir.6, 2026-11-17). Z1 is
+  measured from the terminal instead: a `cat` with the debug serial
+  status line (bd xir.4) and the raw-TCP test below.
 
 ## Workarounds until then
 
@@ -145,6 +156,8 @@ let the terminal's characteristics through (size, type) are opt-in.
 5. The status line: `RTS` lit means this terminal is the bottleneck,
    `CTS` lit means the modem holds us (with Z1a, its RX FIFO is filling).
    Neither lit while output crawls means the time is lost upstream.
+   Status line "debug serial" (SET-UP) gives the numbers: rx bytes/s
+   against 115200's ~11.5 KB/s, the RX ring's peak, the hold counts.
 
 ## Idea: telnet in the terminal
 
