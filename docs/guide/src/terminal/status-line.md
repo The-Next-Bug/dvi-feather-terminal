@@ -5,7 +5,7 @@ Row 24, below the 24 text rows, shows the terminal's state.
 ## In terminal mode
 
 ```
- VT100 80x24 | v0.11.0 | 115200 8N1 RTS/CTS | kbd | USB | echo | key ESC [A     14:05
+ VT100 80x24 | v0.11.0 | 115200 8N1 RTS/CTS | kbd | USB | echo                 14:05
 ```
 
 - the terminal type (`VT100`, `VT52`, `ADM-3A`) and the width,
@@ -21,7 +21,6 @@ Row 24, below the 24 text rows, shows the terminal's state.
 - `kbd` while a keyboard is attached,
 - the USB stick, as in CP/M mode (below),
 - `echo` when local echo is on,
-- the last key sent to the host (`key ESC [A`, `key ^C`, `key DEL`, ...),
 - at the right, the [clock](clock.md) once its time is known. When the
   clock needs the room, the end of the line gives way to it.
 
@@ -86,3 +85,21 @@ a stuck USB host.
 
 **Status line** `hidden` leaves row 24 blank. The text area is still 24
 rows; the logo's build line and CP/M's drive lights are not shown.
+
+**debug serial**: `rx R/s tx T/s|buf N/P/M|hold H/O|ovr V err E drop D/X|key K`:
+the serial line, to tell whether this terminal is ever what slows a host
+down (a WiFi modem, say), and the last key sent. Counts start when the
+line comes on.
+
+| Field | Meaning |
+|---|---|
+| `rx R/s tx T/s` | bytes a second received and sent, over the last second (at 115200 baud at most about 11520) |
+| `buf N/P/M` | bytes waiting in the 2048-byte receive buffer: now / the most since the last refresh / the most since the line came on; the terminal holds the host off at 1984 |
+| `hold H/O` | times the terminal held the host off (RTS down or XOFF sent) / the host's holds (CTS changes, each way, or XOFFs) |
+| `ovr V` | UART overruns: bytes lost before the terminal read them |
+| `err E` | framing, parity or break errors (wrong speed or format) |
+| `drop D/X` | bytes lost to a full receive buffer / transmit queue |
+| `key K` | the last key sent to the host (`key ESC [A`, `key ^C`, `key DEL`, ...); only on this line, so the normal one never shows a password as it is typed |
+
+A slow host with `buf` near 0 and no `hold` means the time is lost on the
+host's side, not here.

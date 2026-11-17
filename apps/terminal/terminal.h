@@ -164,7 +164,6 @@ size_t cpm_hwinfo(uint8_t item, uint8_t *buf);
 
 typedef struct {
 	unsigned keyboards;
-	uint32_t keys_sent; // last_key.count
 	settings_t settings;
 	unsigned baud;      // in use: CP/M can change it (line_rate)
 	char usb[12];       // usb_label

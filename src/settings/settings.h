@@ -49,7 +49,7 @@ typedef struct {
 	uint8_t palette;    // 1: mono, every color a level of the hue (palette.h)
 	uint8_t mode;       // SETTINGS_MODE_*: what the screen and keyboard are for
 	uint8_t status_line; // 1: shown; 0: row 24 left blank (the text area stays 24 rows);
-	                     // SETTINGS_STATUS_DEBUG(_USB): video and main-loop timing (USB events) instead
+	                     // SETTINGS_STATUS_DEBUG(_USB, _SERIAL): video and main-loop timing (USB events, serial counts) instead
 	uint8_t blank_after; // minutes without a key before the screen blanks; 0: never (blank.h)
 	// Payload byte 11 held the retired 80 columns layout (0 centered 8x16,
 	// 1 full width), so term_type's values avoid 1: older records come back
@@ -101,6 +101,7 @@ typedef struct {
 
 #define SETTINGS_STATUS_DEBUG 2 // status_line: core 1 timing, late lines, frame rate, main-loop time
 #define SETTINGS_STATUS_DEBUG_USB 3 // status_line: the USB host's last events (usbkbd_log)
+#define SETTINGS_STATUS_DEBUG_SERIAL 4 // status_line: the serial line's rates, buffer, holds, errors (bd xir.4)
 
 #define SETTINGS_CLOCK_24H 24
 #define SETTINGS_CLOCK_12H 12
