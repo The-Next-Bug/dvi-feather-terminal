@@ -107,7 +107,9 @@ let the terminal's characteristics through (size, type) are opt-in.
   `USC0(0) |= 1 << UCTXHFE` (the UART stops sending when CTS goes high),
   `USC1(0) |= (1 << UCRXHFE) | (threshold << UCRXHFT)` (RTS goes high when
   the RX FIFO passes the threshold, ~100 of 128). Then `serialOutDeque()`
-  may fill the FIFO (`while (availableForWrite() > 0)`), and
+  may fill the FIFO (to 127 bytes, `availableForWrite() > 1`: built that
+  way the 128th byte spun in the core's `write()` while CTS was held, a
+  soft WDT reset, bd xir.13), and
   `isSerialOut()` need not read the pin. A build flag (the Frankless
   build: on) or an S register picks it, since other boards wire CTS
   elsewhere.
