@@ -751,27 +751,32 @@ static void test_port_row(void) {
 	v.port = SETTINGS_PORT_WIFI;
 	v.baud = 4; // 9600 and XON/XOFF kept for the serial port
 	v.flow = SETTINGS_FLOW_XONXOFF;
+	v.framing = 4; // 7E1
 	CHECK(settings_wifi(&v));
+	unsigned bits, stop;
+	char parity;
+	settings_framing(&v, &bits, &parity, &stop);
+	CHECK(bits == 8 && parity == 'N' && stop == 1);
 	CHECK_EQ(settings_baud_rate(&v), SETTINGS_MODEM_BAUD);
 	CHECK_EQ(settings_flow(&v), SETTINGS_FLOW_RTSCTS);
 	setup_open(&u, &v);
 	setup_draw(&u, &s, 0, "", FG, BG, BORDER);
 	CHECK(row_contains(&s, 1 + port, "Return: modem settings"));
 	CHECK(row_contains(&s, 1 + baud, " 921600  (WiFi modem)"));
+	CHECK(row_contains(&s, 1 + baud + 1, " 8N1  (WiFi modem)"));
 	CHECK(row_contains(&s, 1 + flow, " RTS/CTS  (WiFi modem)"));
 	CHECK(!row_contains(&s, 1 + flow, "XON/XOFF"));
 	u.item = port;
-	send("\x1b[B", 0); // past Baud rate, Data/parity/stop, past Flow control
-	CHECK_EQ(u.item, baud + 1);
-	send("\x1b[B", 0);
+	send("\x1b[B", 0); // past Baud rate, Data/parity/stop and Flow control
 	CHECK_EQ(u.item, flow + 1);
-	send("\x1b[A\x1b[A", 0);
+	send("\x1b[A", 0);
 	CHECK_EQ(u.item, port);
 	CHECK_EQ(send("\r", 0), SETUP_MODEM);
 	u.item = baud + 1;
 	CHECK_EQ(send("\r", 0), SETUP_SAVE); // elsewhere: save
 	CHECK_EQ(u.values.baud, 4);
 	CHECK_EQ(u.values.flow, SETTINGS_FLOW_XONXOFF);
+	CHECK_EQ(u.values.framing, 4);
 	// Back to serial: the line's rows count again; Return saves.
 	u.item = port;
 	send(" ", 0);

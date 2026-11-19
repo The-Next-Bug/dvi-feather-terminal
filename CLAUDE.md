@@ -166,7 +166,8 @@ in WIFI_MODEM builds, before Baud rate: SETTINGS_MAIN_FIELDS 15 +
 WIFI_MODEM, so the host tests' and the guide's SET-UP have it):
 settings_wifi(), settings_baud_rate() SETTINGS_MODEM_BAUD (= BOARD_MODEM_BAUD,
 main.c static_assert) and settings_flow() RTS/CTS for the modem;
-settings_field_fixed fixes Baud rate and Flow control ("WiFi modem"),
+settings_framing() 8N1 for the modem; settings_field_fixed fixes Baud
+rate, Data/parity/stop and Flow control ("WiFi modem"),
 settings_in_use gives the shown values; line_rate refuses CP/M's rate
 changes; a new Port saves and restarts (setup_t.saved_port); Return on
 the Port row with the modem saved -> SETUP_MODEM (the Modem panel,

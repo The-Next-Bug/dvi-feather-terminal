@@ -137,7 +137,8 @@ const char *settings_field_fixed(const settings_t *s, unsigned i) {
 	if (i == offsetof(settings_t, columns) && s->term_type == SETTINGS_TERM_ADM3A) {
 		return "ADM-3A";
 	}
-	if ((i == offsetof(settings_t, baud) || i == offsetof(settings_t, flow)) && settings_wifi(s)) {
+	if ((i == offsetof(settings_t, baud) || i == offsetof(settings_t, framing) || i == offsetof(settings_t, flow)) &&
+		settings_wifi(s)) {
 		return "WiFi modem";
 	}
 	return NULL;
@@ -148,6 +149,7 @@ settings_t settings_in_use(const settings_t *s) {
 	used.columns = (uint8_t)settings_columns(s);
 	used.flow = (uint8_t)settings_flow(s);
 	if (settings_wifi(s)) {
+		used.framing = 0; // 8N1
 		for (unsigned i = 0; i < COUNT(baud_rates); ++i) {
 			if (baud_rates[i] == SETTINGS_MODEM_BAUD) {
 				used.baud = (uint8_t)i;
@@ -158,7 +160,7 @@ settings_t settings_in_use(const settings_t *s) {
 }
 
 void settings_framing(const settings_t *s, unsigned *data_bits, char *parity, unsigned *stop_bits) {
-	unsigned i = s->framing < COUNT(framings) ? s->framing : 0;
+	unsigned i = !settings_wifi(s) && s->framing < COUNT(framings) ? s->framing : 0; // the modem: 8N1
 	*data_bits = framings[i].data_bits;
 	*parity = framings[i].parity;
 	*stop_bits = framings[i].stop_bits;

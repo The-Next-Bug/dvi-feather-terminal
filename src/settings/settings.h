@@ -116,8 +116,9 @@ typedef struct {
 
 // The terminal UART (bd xir.17.3): a plain serial port, or the board's WiFi
 // modem (WIFI_MODEM builds only; elsewhere the field is kept but has no
-// effect): the line then runs at SETTINGS_MODEM_BAUD with RTS/CTS, whatever
-// Baud rate and Flow control say. A change reboots.
+// effect): the line then runs at SETTINGS_MODEM_BAUD, 8N1, with RTS/CTS,
+// whatever Baud rate, Data/parity/stop and Flow control say. A change
+// reboots.
 #define SETTINGS_PORT_SERIAL 0
 #define SETTINGS_PORT_WIFI 1
 #define SETTINGS_MODEM_BAUD 921600 // = BOARD_MODEM_BAUD (main.c checks it)
@@ -250,13 +251,15 @@ bool settings_wifi(const settings_t *s);
 unsigned settings_flow(const settings_t *s);
 
 // s with the values in use for the fields other settings decide (Columns
-// under the ADM-3A, Baud rate and Flow control for the WiFi modem): what
+// under the ADM-3A, the WiFi modem's Baud rate, Data/parity/stop and Flow
+// control): what
 // SET-UP shows on a fixed row.
 settings_t settings_in_use(const settings_t *s);
 
 // Why field i is decided by the other settings and has no effect as it is
-// (Columns under the ADM-3A: "ADM-3A"; Baud rate and Flow control for the
-// WiFi modem: "WiFi modem"), or NULL when it can be changed.
+// (Columns under the ADM-3A: "ADM-3A"; Baud rate, Data/parity/stop and Flow
+// control for the WiFi modem: "WiFi modem"), or NULL when it can be
+// changed.
 // SET-UP skips such a field and shows the value in use; the stored value is
 // kept for when it counts again.
 const char *settings_field_fixed(const settings_t *s, unsigned i);
