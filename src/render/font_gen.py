@@ -271,6 +271,7 @@ def build(chars, width, height):
         place(0x01 + i, ch)
     for code in range(0x20, 0x7F):
         place(code, chr(code))
+    place(0x7F, "\ufffd")  # GLYPH_REPLACEMENT: UTF-8 the glyph set cannot show
     for i, ch in enumerate(EXTRAS):
         place(0x80 + i, ch)
     for code in range(0xA0, 0x100):

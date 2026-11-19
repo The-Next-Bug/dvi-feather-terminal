@@ -41,6 +41,7 @@ void term_index_up(term_t *t);
 // the current attributes (insert mode and deferred autowrap included).
 // DEL prints nothing.
 void term_print(term_t *t, uint8_t ch);
+void term_print_code(term_t *t, uint32_t code); // UTF-8: a code point from 0x80
 
 void term_set_tab(term_t *t, unsigned col, bool on);
 void term_reset_tabs(term_t *t); // every 8 columns

@@ -97,6 +97,7 @@ typedef struct {
 	uint8_t printer_idle;  // seconds without a byte that end a job
 	uint8_t telnet;        // SETTINGS_TELNET_*: telnet for the host's bytes (SET-UP's Telnet panel, bd xir.10)
 	uint8_t port;          // SETTINGS_PORT_*: the terminal UART as a serial port or the WiFi modem (bd xir.17.3)
+	uint8_t charset;       // SETTINGS_CHARSET_*: the host's bytes from 0x80 as UTF-8 or Latin-1 (bd cvc)
 	// New one-byte settings go above this line. Text settings, in the
 	// record's text blocks, not the payload:
 	char printer_target[SETTINGS_TARGET_MAX + 1]; // host:port/path, NUL-padded
@@ -121,6 +122,11 @@ typedef struct {
 // reboots.
 #define SETTINGS_PORT_SERIAL 0
 #define SETTINGS_PORT_WIFI 1
+
+// The host's bytes from 0x80 (bd cvc): UTF-8, or Latin-1 as before. UTF-8
+// only for the VT100 in terminal mode (settings_utf8).
+#define SETTINGS_CHARSET_LATIN1 0
+#define SETTINGS_CHARSET_UTF8 1
 #define SETTINGS_MODEM_BAUD 921600 // = BOARD_MODEM_BAUD (main.c checks it)
 
 // The printer (settings_t.printer; printjob.h's PRINTJOB_* values).
@@ -194,8 +200,8 @@ typedef struct {
 // first choice need not be the default), their names and the SET-UP page
 // they are on: SET-UP's own rows (SETTINGS_MAIN_FIELDS of them, in
 // settings_main_field's order) or its Clock panel (clockpanel.h).
-#define SETTINGS_FIELDS 28
-#define SETTINGS_MAIN_FIELDS (15 + WIFI_MODEM) // the Port row in WIFI_MODEM builds
+#define SETTINGS_FIELDS 29
+#define SETTINGS_MAIN_FIELDS (16 + WIFI_MODEM) // the Port row in WIFI_MODEM builds
 #define SETTINGS_MAX_CHOICES 12
 
 #define SETTINGS_PAGE_MAIN 0
@@ -245,6 +251,11 @@ unsigned settings_columns(const settings_t *s);
 
 // Whether the terminal UART is the WiFi modem (Port, in a WIFI_MODEM build).
 bool settings_wifi(const settings_t *s);
+
+// Whether the host's bytes are UTF-8: Character set UTF-8, for the VT100
+// in terminal mode (CP/M programs and the VT52 and ADM-3A send 8-bit or
+// 7-bit bytes; SET-UP shows the field fixed at Latin-1 there).
+bool settings_utf8(const settings_t *s);
 
 // The flow control in use (SETTINGS_FLOW_*): RTS/CTS for the WiFi modem,
 // else the Flow control setting.

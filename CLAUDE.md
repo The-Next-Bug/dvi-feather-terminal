@@ -351,7 +351,9 @@ UF2 in the latter).
   SET-UP's rows at 80 columns; at 132, SET-UP over the alternate screen
   has no room and its rows come back blank.
 - `src/term/vtparse.[ch]` (portable): Paul Williams' DEC parser. C1 (0x80-0x9F)
-  ignored unless `c1_controls` (keeps UTF-8 safe); OSC/DCS/APC discarded,
+  ignored unless `c1_controls`; with `utf8` (bd cvc) bytes from 0x80 in
+  ground state are UTF-8, VTPARSE_PRINT_CODE with the code point in
+  p->code (malformed: U+FFFD, the cutting byte then parsed); OSC/DCS/APC discarded,
   and ended by any C0 but NUL (BEL in OSC is the terminator), which then
   executes, or after VTPARSE_MAX_STRING (1024) bytes (dmt.36, xterm
   brokenStringTerm: an Alt+] sends ESC ]).
@@ -379,6 +381,19 @@ UF2 in the latter).
   (term_set_defaults) resets the terminal. SET-UP and the CP/M monitor
   always get VT100 ANSI-mode keys (input_glue.c keyboard_poll), whatever the
   host's modes; the host cannot open SET-UP (CSI ? 999 ~) from the ADM-3A.
+  UTF-8 (bd cvc, option A: no new glyphs): term.c term_print_code, its
+  glyph and width from `src/term/unicode.[ch]` (cold, in flash, with
+  unicode_table.c, which `src/term/unicode_gen.py` writes from Python's
+  unicodedata and font_gen.py's glyph lists; checked in, rerun by hand):
+  Latin-1 itself, box drawing/blocks to our lines and blocks (heavy as
+  light, rounded as square), punctuation look-alikes, accented letters to
+  their base, Fullwidth ASCII; zero-width dropped; East Asian Wide in two
+  cells (glyph + blank; wraps first at the last column); else
+  GLYPH_REPLACEMENT 0x7F (U+FFFD, was a blank glyph). Settings field 28
+  charset (SETTINGS_CHARSET_UTF8 default / _LATIN1), SET-UP row after
+  Terminal type; settings_utf8: VT100 in terminal mode only (fixed
+  "VT52" / "ADM-3A" / "CP/M" otherwise); term_defaults_t.utf8, RIS back to
+  it; xterm's ESC % G / ESC % @. VT52 mode and the ADM-3A stay 8-bit.
   Writes palette indices
   only (nothing depends on the palette): default fg 7, bold default 15, bg
   0; bold brightens 0-7 to 8-15; 38;5;n as is; 24-bit -> palette_nearest.

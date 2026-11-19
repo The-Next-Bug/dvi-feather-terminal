@@ -28,6 +28,9 @@ static void on_parse(vtparse_t *vp, vtparse_action_t action, uint8_t ch) {
 	case VTPARSE_EXECUTE:
 		snprintf(tok, sizeof tok, "X(%02x)", ch);
 		break;
+	case VTPARSE_PRINT_CODE:
+		snprintf(tok, sizeof tok, "U(%lx)", (unsigned long)vp->code);
+		break;
 	case VTPARSE_ESC_DISPATCH:
 		snprintf(tok, sizeof tok, "E[%.*s%c]", vp->n_intermediates, (const char *)vp->intermediates, ch);
 		break;
@@ -219,7 +222,35 @@ static void test_reset(void) {
 	EXPECT("\x9b" "1m", "C[1m]");
 }
 
+// UTF-8 (bd cvc): characters whole, malformed ones as U+FFFD, the byte
+// that cut a sequence short parsed as usual, sequences unchanged.
+static void test_utf8(void) {
+	setup();
+	p.utf8 = true;
+	EXPECT("a\xc3\xa9" "b", "P(a)U(e9)P(b)");
+	EXPECT("\xe2\x94\x80\xf0\x9f\x98\x80", "U(2500)U(1f600)");
+	EXPECT("\x80", "U(fffd)");                         // a stray continuation byte
+	EXPECT("\x9b" "1m", "U(fffd)P(1)P(m)");            // C1 bytes are not CSI
+	EXPECT("\xc0\xaf", "U(fffd)U(fffd)");             // C0 and C1 never start one
+	EXPECT("\xe0\x80\xaf", "U(fffd)");               // overlong
+	EXPECT("\xed\xa0\x80", "U(fffd)");               // a surrogate
+	EXPECT("\xf4\x90\x80\x80", "U(fffd)");          // past U+10FFFF
+	EXPECT("\xf5\xff", "U(fffd)U(fffd)");
+	EXPECT("\xc3" "A", "U(fffd)P(A)");                 // cut short by ASCII
+	EXPECT("\xe2\x94\x1b[m", "U(fffd)C[m]");         // ... by ESC
+	EXPECT("\x1b[1;2m\xc3\xa9", "C[1;2m]U(e9)");
+	EXPECT("\xe2\x94", "");                           // split across writes
+	EXPECT("\x80", "U(2500)");
+	vtparse_byte(&p, 0xe2);
+	vtparse_reset(&p);                                  // drops a sequence in progress
+	EXPECT("A", "P(A)");
+	CHECK(p.utf8);
+	p.utf8 = false;
+	EXPECT("\xc3\xa9", "P(c3)P(a9)");                 // Latin-1, as before
+}
+
 int main(void) {
+	RUN(test_utf8);
 	RUN(test_text_and_controls);
 	RUN(test_escape_sequences);
 	RUN(test_csi_params);

@@ -43,6 +43,7 @@ static void clear(vtparse_t *p) {
 void vtparse_reset(vtparse_t *p) {
 	clear(p);
 	p->state = GROUND;
+	p->utf8_need = 0;
 }
 
 static void collect(vtparse_t *p, uint8_t ch) {
@@ -81,7 +82,53 @@ static inline bool is_c0(uint8_t ch) {
 	return ch < 0x20 && ch != CAN && ch != SUB && ch != ESC;
 }
 
+static void print_code(vtparse_t *p, uint32_t code) {
+	p->code = code;
+	dispatch(p, VTPARSE_PRINT_CODE, 0);
+}
+
+// UTF-8 in ground state: true when the byte was taken (part of a
+// character); false when it is to be parsed as usual (ASCII, or what cut a
+// sequence short, after its U+FFFD).
+static bool utf8_byte(vtparse_t *p, uint8_t ch) {
+	if (p->utf8_need) {
+		if ((ch & 0xc0) == 0x80) {
+			p->utf8_code = p->utf8_code << 6 | (ch & 0x3fu);
+			if (--p->utf8_need == 0) {
+				uint32_t c = p->utf8_code;
+				bool bad = c < p->utf8_min || (c >= 0xd800 && c <= 0xdfff) || c > 0x10ffff;
+				print_code(p, bad ? VTPARSE_REPLACEMENT : c);
+			}
+			return true;
+		}
+		p->utf8_need = 0;
+		print_code(p, VTPARSE_REPLACEMENT);
+	}
+	if (ch < 0x80 || p->state != GROUND) {
+		return false;
+	}
+	if (ch >= 0xc2 && ch <= 0xdf) {
+		p->utf8_need = 1;
+		p->utf8_code = ch & 0x1fu;
+		p->utf8_min = 0x80;
+	} else if (ch >= 0xe0 && ch <= 0xef) {
+		p->utf8_need = 2;
+		p->utf8_code = ch & 0x0fu;
+		p->utf8_min = 0x800;
+	} else if (ch >= 0xf0 && ch <= 0xf4) {
+		p->utf8_need = 3;
+		p->utf8_code = ch & 0x07u;
+		p->utf8_min = 0x10000;
+	} else {
+		print_code(p, VTPARSE_REPLACEMENT); // a stray continuation byte, C0/C1 (overlong), F5-FF
+	}
+	return true;
+}
+
 void vtparse_byte(vtparse_t *p, uint8_t ch) {
+	if (p->utf8 && (p->utf8_need || ch >= 0x80) && utf8_byte(p, ch)) {
+		return;
+	}
 	// "Anywhere" transitions.
 	if (ch == CAN || ch == SUB) {
 		dispatch(p, VTPARSE_EXECUTE, ch);

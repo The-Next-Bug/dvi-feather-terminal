@@ -61,6 +61,7 @@ typedef struct {
 	bool backspace_bs; // DECBKM
 	bool newline_mode; // LNM
 	bool vt52;         // VT100 personality: VT52 mode (DECANM reset) rather than ANSI
+	bool utf8;         // VT100 personality: bytes from 0x80 are UTF-8, not Latin-1 (bd cvc)
 	term_personality_t personality;
 } term_defaults_t;
 
@@ -83,7 +84,7 @@ typedef struct {
 	term_cursor_t saved;  // DECSC
 	bool cursor_keys_app; // DECCKM, for the keyboard
 	bool keypad_app;      // DECKPAM / DECKPNM, for the keyboard
-	uint8_t last_char; // for REP: the last character printed, 0 after anything else
+	uint32_t last_char; // for REP: the last character printed (a code point in UTF-8), 0 after anything else
 
 	// VT52 mode (DECANM reset, vt52.c): bytes go to vt52_byte, not vtparse.
 	bool vt52;

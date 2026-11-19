@@ -236,7 +236,8 @@ static void test_clock_settings(void) {
 		offsetof(settings_t, baud), offsetof(settings_t, framing), offsetof(settings_t, flow),
 		offsetof(settings_t, newline), offsetof(settings_t, colors), offsetof(settings_t, palette),
 		offsetof(settings_t, display), offsetof(settings_t, mode), offsetof(settings_t, status_line),
-		offsetof(settings_t, blank_after), offsetof(settings_t, term_type), offsetof(settings_t, usb_log)};
+		offsetof(settings_t, blank_after), offsetof(settings_t, term_type), offsetof(settings_t, charset),
+		offsetof(settings_t, usb_log)};
 	CHECK_EQ(sizeof order, SETTINGS_MAIN_FIELDS);
 	for (unsigned row = 0; row < sizeof order; ++row) {
 		CHECK_EQ(settings_main_field(row), order[row]);
@@ -554,24 +555,50 @@ static void test_term_type(void) {
 	CHECK_EQ(out.term_type, SETTINGS_TERM_ADM3A);
 }
 
-// The ADM-3A has 80 columns whatever the Columns setting says, which is
-// then the only field fixed by the others.
+// The ADM-3A has 80 columns whatever the Columns setting says; the VT52
+// and the ADM-3A take Latin-1 only (Character set, then the only other
+// field fixed by the others).
 static void test_columns_in_use(void) {
+	const unsigned charset = offsetof(settings_t, charset);
 	settings_t s;
 	settings_defaults(&s);
 	s.columns = 132;
 	CHECK_EQ(settings_columns(&s), 132);
-	s.term_type = SETTINGS_TERM_VT52;
-	CHECK_EQ(settings_columns(&s), 132);
 	for (unsigned i = 0; i < SETTINGS_FIELDS; ++i) {
 		CHECK(settings_field_fixed(&s, i) == NULL);
+	}
+	s.term_type = SETTINGS_TERM_VT52;
+	CHECK_EQ(settings_columns(&s), 132);
+	CHECK(strcmp(settings_field_fixed(&s, charset), "VT52") == 0);
+	for (unsigned i = 0; i < SETTINGS_FIELDS; ++i) {
+		CHECK(i == charset || settings_field_fixed(&s, i) == NULL);
 	}
 	s.term_type = SETTINGS_TERM_ADM3A;
 	CHECK_EQ(settings_columns(&s), 80);
 	CHECK(strcmp(settings_field_fixed(&s, offsetof(settings_t, columns)), "ADM-3A") == 0);
+	CHECK(strcmp(settings_field_fixed(&s, charset), "ADM-3A") == 0);
 	for (unsigned i = 1; i < SETTINGS_FIELDS; ++i) {
-		CHECK(settings_field_fixed(&s, i) == NULL);
+		CHECK(i == charset || settings_field_fixed(&s, i) == NULL);
 	}
+}
+
+// Character set (bd cvc): UTF-8 by default, for the VT100 in terminal mode
+// only; SET-UP shows Latin-1 in use otherwise.
+static void test_charset(void) {
+	const unsigned charset = offsetof(settings_t, charset);
+	settings_t s;
+	settings_defaults(&s);
+	CHECK_EQ(s.charset, SETTINGS_CHARSET_UTF8);
+	CHECK(settings_utf8(&s));
+	s.mode = SETTINGS_MODE_CPM;
+	CHECK(!settings_utf8(&s));
+	CHECK(strcmp(settings_field_fixed(&s, charset), "CP/M") == 0);
+	CHECK_EQ(settings_in_use(&s).charset, SETTINGS_CHARSET_LATIN1);
+	CHECK_EQ(s.charset, SETTINGS_CHARSET_UTF8); // kept for terminal mode
+	s.mode = SETTINGS_MODE_TERMINAL;
+	s.charset = SETTINGS_CHARSET_LATIN1;
+	CHECK(!settings_utf8(&s));
+	CHECK(settings_field_fixed(&s, charset) == NULL);
 }
 
 static void test_line_and_colors(void) {
@@ -721,6 +748,7 @@ int main(void) {
 	RUN(test_wifi_settings);
 	RUN(test_term_type);
 	RUN(test_columns_in_use);
+	RUN(test_charset);
 	RUN(test_line_and_colors);
 	return tests_done();
 }

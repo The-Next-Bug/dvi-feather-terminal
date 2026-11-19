@@ -168,6 +168,7 @@ void apply_settings(const settings_t *s) {
 	apply_line(s);
 	term_set_defaults(&term, &(term_defaults_t){.backspace_bs = s->backspace == 0x08,
 		.newline_mode = s->newline && !cpm.on, .vt52 = s->term_type == SETTINGS_TERM_VT52,
+		.utf8 = settings_utf8(s) && !cpm.on,
 		.personality = s->term_type == SETTINGS_TERM_ADM3A ? TERM_ADM3A : TERM_VT100});
 	default_columns = settings_columns(s);
 	blank_init(&blank, s->blank_after * 60000u, to_ms_since_boot(get_absolute_time()));

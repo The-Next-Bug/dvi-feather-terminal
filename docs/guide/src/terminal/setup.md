@@ -53,6 +53,7 @@ setting's current choice is shown in reverse video.
 | Status line | shown, hidden (row 24 stays blank), or the [debug lines](status-line.md#debug-lines) |
 | Blank after | the [screen blanking](../start/displays.md#screen-blanking) time |
 | Terminal type | VT100, VT52 or ADM-3A at power-on and after a reset; see [Terminal types](terminal-types.md). Changing to or from ADM-3A clears the screen |
+| Character set | UTF-8 or Latin-1: what the host's bytes from 80h mean, for the VT100 in terminal mode; see [Character set](../reference/charset.md#utf-8). With the VT52, the ADM-3A or in CP/M mode it shows `Latin-1` with the reason and is skipped |
 | USB log | keep a log of the USB host in `USBLOG.TXT` on the SD card; see [Troubleshooting](troubleshooting.md#the-usb-log) |
 
 The panel opens with the width, Backspace mode and LNM currently in use,
