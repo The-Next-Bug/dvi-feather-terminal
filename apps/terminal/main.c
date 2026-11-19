@@ -41,6 +41,7 @@
 #include "diag.h"
 #include "extram.h"
 #include "led.h"
+#include "modem_lines.h"
 #include "nvflash.h"
 #include "palette.h"
 #include "rtc.h"
@@ -336,6 +337,9 @@ int main(void) {
 	gpio_put(BOARD_USB_VBUS_EN_PIN, BOARD_USB_VBUS_EN_LEVEL);
 	gpio_set_dir(BOARD_USB_VBUS_EN_PIN, GPIO_OUT);
 #endif
+	// The WiFi modem's lines (bd xir.15): DTR active and RST/BOOT released
+	// from the start, so the module boots from its flash as before.
+	modem_lines_init();
 	diag_init();
 	// Read the settings while the flash is still in its boot-time setup.
 	nvflash_init();

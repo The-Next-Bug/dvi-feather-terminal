@@ -148,7 +148,13 @@ SCK 2 / MOSI 3, APS6404L PSRAM CS on GP0 with PSRAM_BANKS (the Feather
 PSRAM build's mechanism; bd 1ls.3.1.1), LED GP9; DS3231M RTC on I2C1
 GP10/11 (BOARD_RTC_DS3231, bd 1ls.6.1) with its 1 Hz on GP8 (the clock's
 tick); TDA1387 DAC (U8, hand-fitted) on GP5 BCK / 6 WS / 7 DATA for the
-bell. Slide switch S1 puts the USB
+bell; the WiFi modem (bd xir.15, the user's hand-wired ESP-12F with our
+Zimodem build on J8): BOARD_MODEM_ESP8266, DCD 26 / DTR 27 / RST 24 /
+BOOT 25 on J1, BOARD_MODEM_NAME "esp12f", BOARD_MODEM_BAUD 921600
+(board.h: BOARD_HAS_MODEM, all four lines plus CTS/RTS required;
+src/platform/modem_lines.[ch]: main() first sets DTR active, RST/BOOT
+released open drain, DCD in, pulls off; the WiFi modem mode built on it:
+epic xir.17, docs/ideas/wifi-modem.md). Slide switch S1 puts the USB
 on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
 CI builds it.
 `boards/feather-rp2350-hstx.h` (bd 1ls.14.1): Adafruit Feather RP2350 with
