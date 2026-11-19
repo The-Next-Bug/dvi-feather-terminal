@@ -431,7 +431,7 @@ const char *modem_step_name(const modem_t *m) {
 	case ST_ROM:
 		return "resetting";
 	case ST_BOOT:
-		return "starting (it may be joining its network)";
+		return "starting"; // silent: maybe joining its network
 	case ST_SCAN:
 	case ST_RATE_SET:
 	case ST_RATE_CHECK:

@@ -93,6 +93,15 @@ void modem_glue_poll(void) {
 	modem_owns_line = modem_busy(&modem);
 }
 
+const char *modem_glue_notice(void) {
+	static char text[40];
+	if (!modem_glue_busy()) {
+		return NULL;
+	}
+	snprintf(text, sizeof text, "WiFi modem: %s", modem_step_name(&modem));
+	return text;
+}
+
 void modem_glue_describe(char *text, size_t size) {
 	if (!started) {
 		snprintf(text, size, "Modem: not started");
@@ -109,6 +118,10 @@ void modem_glue_describe(char *text, size_t size) {
 #else
 
 void modem_glue_start(void) {
+}
+
+const char *modem_glue_notice(void) {
+	return NULL;
 }
 
 void modem_glue_poll(void) {

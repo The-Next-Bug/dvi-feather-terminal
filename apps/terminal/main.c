@@ -259,6 +259,33 @@ static bool display_confirm(void) {
 	}
 }
 
+// The logo's status line: the build, and the WiFi modem while it starts
+// (bd xir.17.2), so a long start-up does not look like a hang. Redrawn when
+// the modem's step changes.
+static const char *logo_status;
+
+static void draw_logo_status(void) {
+	static char shown[WIFI_MODEM ? SCREEN_MAX_COLS + 1 : 1];
+	if (!logo_status || !status_shown() || (!WIFI_MODEM && shown[0])) {
+		return;
+	}
+	if (!WIFI_MODEM) { // drawn once
+		shown[0] = 1;
+		screen_clear_line(&screen, STATUS_ROW, colors.status_fg, colors.status_bg);
+		screen_puts(&screen, 0, STATUS_ROW, logo_status, colors.status_fg, colors.status_bg);
+		return;
+	}
+	char text[SCREEN_MAX_COLS + 1];
+	const char *modem = modem_glue_notice();
+	snprintf(text, sizeof text, "%s%s%s", logo_status, modem ? " | " : "", modem ? modem : "");
+	if (strcmp(text, shown) != 0) {
+		snprintf(shown, sizeof shown, "%s", text);
+		screen_clear_line(&screen, STATUS_ROW, colors.status_fg, colors.status_bg);
+		screen_puts(&screen, 0, STATUS_ROW, text, colors.status_fg, colors.status_bg);
+		video_update(&screen);
+	}
+}
+
 // Wait until `until`, UART0 receiving something (copied into buf) or a key
 // press. Returns whether either happened; *n is what arrived.
 static bool wait_for_input(absolute_time_t until, uint8_t *buf, size_t max, size_t *n) {
@@ -266,6 +293,7 @@ static bool wait_for_input(absolute_time_t until, uint8_t *buf, size_t max, size
 		if (modem_glue_busy()) {
 			modem_glue_poll(); // the WiFi modem starting: the line is its own
 		}
+		draw_logo_status(); // only when the modem's step changed
 		*n = modem_glue_busy() ? 0 : serial_read(buf, max);
 		if (*n || key_pressed) {
 			return true;
@@ -285,10 +313,8 @@ static bool show_logo(uint8_t *buf, size_t max, size_t *n) {
 	char status[SCREEN_MAX_COLS + 1];
 	snprintf(status, sizeof status, " DVI Terminal | build %s (%s, %s)",
 		TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
-	if (status_shown()) {
-		screen_clear_line(&screen, STATUS_ROW, colors.status_fg, colors.status_bg);
-		screen_puts(&screen, 0, STATUS_ROW, status, colors.status_fg, colors.status_bg);
-	}
+	logo_status = status;
+	draw_logo_status();
 	video_update(&screen);
 	*n = 0;
 	// In the hue of the Colors setting (white keeps the logo's own colors,
@@ -298,6 +324,7 @@ static bool show_logo(uint8_t *buf, size_t max, size_t *n) {
 		return false;
 	}
 	bool input = wait_for_input(make_timeout_time_ms(LOGO_MS), buf, max, n);
+	logo_status = NULL;
 	video_splash_end();
 	return input;
 }

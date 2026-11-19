@@ -169,6 +169,7 @@ typedef struct {
 	char usb[12];       // usb_label
 	const char *type;   // term_type_name: the host can switch VT52 mode
 	uint8_t telnet;     // telnet_glue_status (telnet_status_t)
+	char modem[WIFI_MODEM ? 40 : 1]; // modem_glue_notice: the WiFi modem starting, or ""
 } status_t;
 
 bool status_shown(void);
@@ -235,6 +236,9 @@ static inline bool modem_glue_busy(void) {
 }
 void modem_glue_poll(void);   // while busy: each main-loop pass, the logo's wait and the CPU's
 void modem_glue_describe(char *text, size_t size); // one line, for SET-UP
+// While busy, "WiFi modem: <step>" for the status line (so a long start-up
+// does not look like a hang); else NULL.
+const char *modem_glue_notice(void);
 
 // ---- printer_glue.c ----
 

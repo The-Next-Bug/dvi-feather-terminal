@@ -112,8 +112,9 @@ static inline bool modem_busy(const modem_t *m) {
 // Whether the module has an address (joined a network).
 bool modem_joined(const modem_t *m);
 
-// A short description of where the start-up is, for the panel
-// ("resetting", "scanning 115200", "ready", "no answer", ...).
+// A short description of where the start-up is, for the status line and
+// the panel ("resetting", "starting", "finding its rate", "joining the
+// network", "setting it up", "ready", "no answer", ...).
 const char *modem_step_name(const modem_t *m);
 
 // Whether the network's name and password can be put in an ATW command:

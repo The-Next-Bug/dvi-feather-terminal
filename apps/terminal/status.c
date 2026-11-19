@@ -379,7 +379,10 @@ void draw_cpm_status(void) {
 		draw_debug_status();
 		return;
 	}
-	char text[SCREEN_MAX_COLS + 1] = " CP/M |";
+	// The WiFi modem starting (bd xir.17.2) first: the line is not hung.
+	char text[SCREEN_MAX_COLS + 1];
+	const char *modem = modem_glue_notice();
+	snprintf(text, sizeof text, "%s%s%s CP/M |", modem ? " " : "", modem ? modem : "", modem ? " |" : "");
 	unsigned letter_col[DRIVES];
 	// The drives' letters, "-" for an empty one; SET-UP's Drives panel
 	// shows what is mounted.
@@ -442,8 +445,10 @@ static const char *term_type_name(void) {
 
 status_t status_now(void) {
 	status_t st = {usbkbd_count(), settings, serial_baud(), "", term_type_name(),
-		(uint8_t)telnet_glue_status()};
+		(uint8_t)telnet_glue_status(), ""};
 	usb_label(st.usb, sizeof st.usb);
+	const char *modem = modem_glue_notice();
+	snprintf(st.modem, sizeof st.modem, "%s", modem ? modem : "");
 	return st;
 }
 
@@ -451,7 +456,8 @@ bool status_equal(const status_t *a, const status_t *b) {
 	return a->keyboards == b->keyboards &&
 		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0 && a->baud == b->baud &&
 		strcmp(a->usb, b->usb) == 0 &&
-		a->type == b->type && a->telnet == b->telnet;
+		a->type == b->type && a->telnet == b->telnet &&
+		strcmp(a->modem, b->modem) == 0;
 }
 
 void draw_status(const status_t *st) {
@@ -466,8 +472,10 @@ void draw_status(const status_t *st) {
 	char parity;
 	settings_framing(&st->settings, &data_bits, &parity, &stop_bits);
 	char text[SCREEN_MAX_COLS + 1];
-	snprintf(text, sizeof text, " %s %ux24 | %s | %u %u%c%u", st->type, screen.cols, TERM_BUILD_ID, st->baud,
-		data_bits, parity, stop_bits);
+	// The WiFi modem starting (bd xir.17.2) first: the terminal is not hung.
+	bool modem = st->modem[0] != '\0';
+	snprintf(text, sizeof text, "%s%s%s %s %ux24 | %s | %u %u%c%u", modem ? " " : "", st->modem, modem ? " |" : "",
+		st->type, screen.cols, TERM_BUILD_ID, st->baud, data_bits, parity, stop_bits);
 	flow_light.col = 0;
 	size_t n = strlen(text);
 	const char *label = flow_label();
