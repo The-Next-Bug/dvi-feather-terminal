@@ -16,6 +16,8 @@ include(../cmake/dvt.cmake)
 # errors (FatFs and z80pack built as they come).
 set(DVT_C_OPTIONS -fsanitize=address,undefined)
 set(DVT_WARNING_OPTIONS -Werror)
+# The tests cover the WiFi modem's code (a firmware option, WIFI_MODEM).
+add_compile_definitions(WIFI_MODEM=1)
 add_subdirectory(../src src)
 
 # unit_test(<name> <sources or libraries>...): builds test_<name> from

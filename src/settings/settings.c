@@ -21,10 +21,12 @@ _Static_assert(HEADER_SIZE + SETTINGS_FIELDS <= SETTINGS_TEXT2_OFFSET, "the payl
 
 #define TEXT_MAGIC 'T'
 #define TEXT2_MAGIC 'U'
+#if WIFI_MODEM
 #define NET_MAGIC 'N'
 // What the network block holds now (it may grow: SETTINGS_NET_TEXT_MAX).
 #define NET_LEN_MAX (SETTINGS_SSID_MAX + 1 + SETTINGS_PASSWORD_MAX)
 _Static_assert(NET_LEN_MAX <= SETTINGS_NET_TEXT_MAX && SETTINGS_NET_TEXT_MAX <= 255, "the network block fits page 1");
+#endif
 
 // Appended only: the record keeps the index. 230400 and up are for a host
 // with RTS/CTS (the Frankless's Zimodem, ATB): without flow control the
@@ -189,6 +191,7 @@ void settings_set_telnet_host(settings_t *s, const char *host) {
 	set_text(s->telnet_host, SETTINGS_HOST_MAX, host, false);
 }
 
+#if WIFI_MODEM
 void settings_set_wifi_ssid(settings_t *s, const char *ssid) {
 	set_text(s->wifi_ssid, SETTINGS_SSID_MAX, ssid, true);
 }
@@ -196,6 +199,7 @@ void settings_set_wifi_ssid(settings_t *s, const char *ssid) {
 void settings_set_wifi_password(settings_t *s, const char *password) {
 	set_text(s->wifi_password, SETTINGS_PASSWORD_MAX, password, true);
 }
+#endif
 
 void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_RECORD_SIZE]) {
 	memset(out, 0xff, SETTINGS_RECORD_SIZE);
@@ -224,6 +228,7 @@ void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_REC
 	u[6 + type_len] = '\0';
 	memcpy(u + 7 + type_len, s->telnet_host, host_len);
 	put32(u + 2, crc32_update(0, u + 6, u[1]));
+#if WIFI_MODEM
 	uint8_t *n = out + SETTINGS_NET_OFFSET;
 	size_t ssid_len = strnlen(s->wifi_ssid, SETTINGS_SSID_MAX);
 	size_t pass_len = strnlen(s->wifi_password, SETTINGS_PASSWORD_MAX);
@@ -233,6 +238,7 @@ void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_REC
 	n[6 + ssid_len] = '\0';
 	memcpy(n + 7 + ssid_len, s->wifi_password, pass_len);
 	put32(n + 2, crc32_update(0, n + 6, n[1]));
+#endif
 }
 
 // The text block, if the record has a valid one.
@@ -267,6 +273,7 @@ static void decode_texts2(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s
 	settings_set_telnet_host(s, type_len < len ? text + type_len + 1 : "");
 }
 
+#if WIFI_MODEM
 // The network block, if page 1 has a valid one: NUL-separated texts, the
 // SSID and the password, then (later) more; missing ones stay empty.
 static void decode_net(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s) {
@@ -282,6 +289,7 @@ static void decode_net(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s) {
 	settings_set_wifi_ssid(s, text);
 	settings_set_wifi_password(s, ssid_len < len ? text + ssid_len + 1 : "");
 }
+#endif
 
 bool settings_decode(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s, uint32_t *seq) {
 	unsigned len = rec[5];
@@ -301,7 +309,9 @@ bool settings_decode(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s, uin
 	}
 	decode_texts(rec, s);
 	decode_texts2(rec, s);
+#if WIFI_MODEM
 	decode_net(rec, s);
+#endif
 	*seq = get32(rec + 8);
 	return true;
 }

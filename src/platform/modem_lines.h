@@ -3,8 +3,9 @@
 
 // The WiFi modem's control lines (BOARD_MODEM_*_PIN, bd xir.15): DCD in,
 // DTR out, and the module's RST and BOOT (open drain: driven low or
-// released to the module's pull-ups). Core 0 only. Without a modem in the
-// board header every call is a no-op and modem_dcd() reads false.
+// released to the module's pull-ups). Core 0 only. Without the WiFi modem
+// mode (WIFI_MODEM: a board with a modem and PSRAM) every call is a no-op,
+// the pins stay as at reset, and modem_dcd() reads false.
 
 #include <stdbool.h>
 

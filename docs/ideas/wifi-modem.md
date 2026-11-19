@@ -30,6 +30,11 @@ Decisions (user, 2026-11-19):
   profile is applied at start-up only.
 - Flashing the module checks that the image matches the board; ESP32
   modules may replace the ESP-12F later.
+- A build option (user, 2026-11-19): CMake WIFI_MODEM, off unless the
+  board header turns it on (pico_board_cmake_set(WIFI_MODEM, 1): the
+  Frankless), and refused without PSRAM_BANKS for now, as the SRAM-only
+  boards have too little SRAM left. Without it the settings record stays
+  one page and the modem lines stay as at reset.
 
 ## 1. The Port setting
 

@@ -152,6 +152,8 @@ check "modem without CTS/RTS" "needs the terminal UART's" "$sock" "$(modem 26 27
   "#undef BOARD_UART_CTS_PIN" "#undef BOARD_UART_RTS_PIN"
 check "modem rate too high" "from 1200 to 921600" "$sock" "$(modem 26 27 28 8)" "$(set_pin BOARD_MODEM_BAUD 1843200)"
 check "modem pins without a chip" "need a chip" "$sock" "#define BOARD_MODEM_DCD_PIN 26"
+check "WiFi modem mode" "" "$sock" "$(modem 26 27 28 8)" "#define WIFI_MODEM 1"
+check "WiFi modem mode without a modem" "WIFI_MODEM needs a modem" "$sock" "#define WIFI_MODEM 1"
 check "modem DCD on the LED" "uses a pin twice" "$sock" "$(modem 25 27 28 8)"
 check "modem DTR on RTS" "uses a pin twice" "$sock" "$(modem 26 3 28 8)"
 check "modem RST on a DVI pin" "DVI pin" "$sock" "$(modem 26 27 12 8)"

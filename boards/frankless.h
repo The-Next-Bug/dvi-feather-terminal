@@ -27,6 +27,9 @@
 
 pico_board_cmake_set(PICO_PLATFORM, rp2350)
 pico_board_cmake_set(PSRAM_BANKS, 1)
+// The WiFi modem mode, for the ESP-12F on J8/J1 (below). No comment on
+// the line itself: the SDK's parser would take it into the value.
+pico_board_cmake_set(WIFI_MODEM, 1)
 
 #define PICO_RP2350A 1
 

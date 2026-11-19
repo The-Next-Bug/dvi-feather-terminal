@@ -154,7 +154,13 @@ BOOT 25 on J1, BOARD_MODEM_NAME "esp12f", BOARD_MODEM_BAUD 921600
 (board.h: BOARD_HAS_MODEM, all four lines plus CTS/RTS required;
 src/platform/modem_lines.[ch]: main() first sets DTR active, RST/BOOT
 released open drain, DCD in, pulls off; the WiFi modem mode built on it:
-epic xir.17, docs/ideas/wifi-modem.md). Slide switch S1 puts the USB
+epic xir.17, docs/ideas/wifi-modem.md). The mode is the CMake option
+WIFI_MODEM (default OFF; frankless.h's pico_board_cmake_set(WIFI_MODEM, 1);
+FATAL_ERROR without PSRAM_BANKS, user 2026-11-19: no SRAM to spare on the
+others; add_compile_definitions for all firmware, the host tests build
+with WIFI_MODEM=1; board.h #errors on WIFI_MODEM without a modem;
+build-info.txt wifi_modem=). Without it: settings record 256 bytes,
+modem_lines no-ops, no wifi_* fields. Slide switch S1 puts the USB
 on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
 CI builds it.
 `boards/feather-rp2350-hstx.h` (bd 1ls.14.1): Adafruit Feather RP2350 with
@@ -482,7 +488,7 @@ UF2 in the latter).
   format, the update's file check) show STUCK harmlessly.
 - `src/settings/settings.[ch]` (portable): settings record (magic, seq, CRC-32,
   one byte per setting, append-only) in two flash sectors used in turn;
-  512 bytes since bd xir.17.1: page 0 (SETTINGS_PAGE0_SIZE) keeps the old
+  512 bytes in WIFI_MODEM builds since bd xir.17.1 (256 otherwise): page 0 (SETTINGS_PAGE0_SIZE) keeps the old
   one-page layout byte for byte (older firmware reads it; its saves leave
   page 1 erased), page 1 the network block at SETTINGS_NET_OFFSET ('N',
   length, CRC-32, NUL-separated texts: wifi_ssid, wifi_password; later

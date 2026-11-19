@@ -16,7 +16,13 @@
 #include <stdint.h>
 
 #define NVFLASH_SECTORS 2
-#define NVFLASH_RECORD_SIZE 512 // what nvflash_write programs: two flash pages
+// What nvflash_write programs: the settings record, two flash pages with
+// the WiFi modem mode (its network in the second), else one.
+#if WIFI_MODEM
+#define NVFLASH_RECORD_SIZE 512
+#else
+#define NVFLASH_RECORD_SIZE 256
+#endif
 #define NVFLASH_SECTOR_SIZE 4096u
 // Where the settings sectors start, from the start of flash.
 #define NVFLASH_OFFSET (PICO_FLASH_SIZE_BYTES - (NVFLASH_SECTORS + 1) * NVFLASH_SECTOR_SIZE)

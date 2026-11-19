@@ -3,7 +3,7 @@
 #include "board.h"
 #include "hardware/gpio.h"
 
-#if BOARD_HAS_MODEM
+#if WIFI_MODEM
 
 // An open-drain line: the output latch stays 0, the direction switches
 // between driving it low and leaving it to the module's pull-up.

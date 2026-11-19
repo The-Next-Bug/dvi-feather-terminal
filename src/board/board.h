@@ -221,6 +221,15 @@
 #define BOARD_HAS_MODEM 0
 #define BOARD_MODEM_BITS 0ull
 #endif
+// The firmware's WiFi modem mode (CMake WIFI_MODEM, from the board header:
+// PSRAM_BANKS boards only for now) needs the modem; a modem without it is
+// left alone (its lines as at reset).
+#ifndef WIFI_MODEM
+#define WIFI_MODEM 0
+#endif
+#if WIFI_MODEM && !BOARD_HAS_MODEM
+#error "WIFI_MODEM needs a modem in the board header (BOARD_MODEM_ESP8266 and its pins)"
+#endif
 
 // Dropped hardware (bd 1ls.22, 1ls.15): a header that still names it would
 // otherwise build as if the pin were free.

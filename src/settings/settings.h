@@ -23,7 +23,8 @@
 // (SETTINGS_TEXT2_OFFSET): 'U', the length, CRC-32, the terminal type, a
 // NUL, the host.
 //
-// The record was one 256-byte page until bd xir.17.1; it is two now, and
+// The record was one 256-byte page until bd xir.17.1; with the WiFi modem
+// mode (WIFI_MODEM builds) it is two, and
 // the first (SETTINGS_PAGE0_SIZE) keeps that layout byte for byte, so older
 // firmware still reads the record it finds (only its page 0). The second
 // page holds the WiFi network (SETTINGS_NET_OFFSET): 'N', the length,
@@ -36,8 +37,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define SETTINGS_RECORD_SIZE 512 // two flash pages
-#define SETTINGS_PAGE0_SIZE 256  // the old record's layout: header, payload, text blocks
+#ifndef WIFI_MODEM
+#define WIFI_MODEM 0
+#endif
+#define SETTINGS_PAGE0_SIZE 256 // the one-page record's layout: header, payload, text blocks
+#if WIFI_MODEM
+#define SETTINGS_RECORD_SIZE 512 // two flash pages, the network in the second
+#else
+#define SETTINGS_RECORD_SIZE SETTINGS_PAGE0_SIZE // builds without the WiFi modem
+#endif
 #define SETTINGS_TARGET_MAX 63   // the printer's target (= PRINTJOB_TARGET_MAX)
 // The text block: 'T', length, CRC-32 (4), the text.
 #define SETTINGS_TEXT_OFFSET (SETTINGS_PAGE0_SIZE - 6 - SETTINGS_TARGET_MAX)
@@ -93,8 +101,10 @@ typedef struct {
 	char printer_target[SETTINGS_TARGET_MAX + 1]; // host:port/path, NUL-padded
 	char telnet_type[SETTINGS_TYPE_MAX + 1];      // TTYPE's name; empty: the Terminal type's
 	char telnet_host[SETTINGS_HOST_MAX + 1];      // the last host dialed (F11), host[:port]
+#if WIFI_MODEM
 	char wifi_ssid[SETTINGS_SSID_MAX + 1];        // the WiFi modem's network (page 1)
 	char wifi_password[SETTINGS_PASSWORD_MAX + 1]; // its passphrase, plain text
+#endif
 } settings_t;
 
 // Telnet (telnet.h's telnet_mode_t, same values): off, once the host sends
@@ -214,9 +224,11 @@ void settings_set_target(settings_t *s, const char *target);
 void settings_set_telnet_type(settings_t *s, const char *type);
 void settings_set_telnet_host(settings_t *s, const char *host);
 
+#if WIFI_MODEM
 // The WiFi network (spaces allowed, printable ASCII only).
 void settings_set_wifi_ssid(settings_t *s, const char *ssid);
 void settings_set_wifi_password(settings_t *s, const char *password);
+#endif
 
 // The width in use: the Columns setting, but 80 for the ADM-3A.
 unsigned settings_columns(const settings_t *s);
