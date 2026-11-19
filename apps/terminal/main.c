@@ -41,6 +41,7 @@
 #include "diag.h"
 #include "extram.h"
 #include "led.h"
+#include "modem_lines.h"
 #include "nvflash.h"
 #include "palette.h"
 #include "rtc.h"
@@ -65,8 +66,8 @@
 #define LOGO_MS 10000
 #endif
 
-static_assert(NVFLASH_SECTORS == SETTINGS_SLOTS && NVFLASH_PAGE_SIZE == SETTINGS_RECORD_SIZE,
-	"a settings slot is a flash sector holding one page");
+static_assert(NVFLASH_SECTORS == SETTINGS_SLOTS && NVFLASH_RECORD_SIZE == SETTINGS_RECORD_SIZE,
+	"a settings slot is a flash sector holding one record");
 
 screen_t screen;
 term_t term;
@@ -81,6 +82,7 @@ screen_stash_t stash;
 bool term_started;
 bool key_pressed;
 bool keys_held;
+bool modem_owns_line; // modem_glue.c's start-up has the terminal UART
 
 settings_t settings;
 settings_target_t save_target;
@@ -126,14 +128,20 @@ void show_palette(const settings_t *s) {
 	palette.mono = s->palette;
 }
 
-// The serial line settings of s.
+#if WIFI_MODEM
+static_assert(BOARD_MODEM_BAUD == SETTINGS_MODEM_BAUD, "the WiFi modem's rate is the settings' SETTINGS_MODEM_BAUD");
+#endif
+
+// The serial line settings of s (the WiFi modem's fixed rate and RTS/CTS
+// when the Port is the modem: settings_baud_rate, settings_flow).
 static void apply_line(const settings_t *s) {
 	unsigned data_bits, stop_bits;
 	char parity;
 	settings_framing(s, &data_bits, &parity, &stop_bits);
 	serial_configure(settings_baud_rate(s), data_bits, parity, stop_bits);
-	serial_set_flow(s->flow == SETTINGS_FLOW_RTSCTS ? SERIAL_FLOW_RTSCTS
-		: s->flow == SETTINGS_FLOW_XONXOFF ? SERIAL_FLOW_XONXOFF : SERIAL_FLOW_NONE);
+	unsigned flow = settings_flow(s);
+	serial_set_flow(flow == SETTINGS_FLOW_RTSCTS ? SERIAL_FLOW_RTSCTS
+		: flow == SETTINGS_FLOW_XONXOFF ? SERIAL_FLOW_XONXOFF : SERIAL_FLOW_NONE);
 }
 
 bool line_rate(unsigned rate) {
@@ -141,7 +149,7 @@ bool line_rate(unsigned rate) {
 		apply_line(&settings);
 		return true;
 	}
-	if (!serial_baud_possible(rate)) {
+	if (settings_wifi(&settings) || !serial_baud_possible(rate)) { // the modem's rate is fixed
 		return false;
 	}
 	unsigned data_bits, stop_bits;
@@ -174,9 +182,9 @@ void apply_settings(const settings_t *s) {
 }
 
 bool settings_store(const settings_t *s) {
-	static uint8_t page[SETTINGS_RECORD_SIZE]; // RAM, for the flash ROM routines
-	settings_encode(s, save_target.seq, page);
-	if (!nvflash_write(save_target.slot, page)) {
+	static uint8_t record[SETTINGS_RECORD_SIZE]; // RAM, for the flash ROM routines
+	settings_encode(s, save_target.seq, record);
+	if (!nvflash_write(save_target.slot, record)) {
 		return false;
 	}
 	settings = *s;
@@ -251,11 +259,44 @@ static bool display_confirm(void) {
 	}
 }
 
+// The logo's status line: the build, and the WiFi modem while it starts
+// (bd xir.17.2), so a long start-up does not look like a hang. Redrawn when
+// the modem's step changes.
+static const char *logo_status;
+
+static void draw_logo_status(void) {
+	static char shown[WIFI_MODEM ? SCREEN_MAX_COLS + 1 : 1];
+	if (!logo_status || !status_shown() || (!WIFI_MODEM && shown[0])) {
+		return;
+	}
+	if (!WIFI_MODEM) { // drawn once
+		shown[0] = 1;
+		screen_clear_line(&screen, STATUS_ROW, colors.status_fg, colors.status_bg);
+		screen_puts(&screen, 0, STATUS_ROW, logo_status, colors.status_fg, colors.status_bg);
+		return;
+	}
+	char text[SCREEN_MAX_COLS + 1];
+	const char *modem = modem_glue_notice();
+	// The modem first: the build's text may not all fit.
+	snprintf(text, sizeof text, "%s%s%s", modem ? " " : "", modem ? modem : "", modem ? " |" : "");
+	snprintf(text + strlen(text), sizeof text - strlen(text), "%s", logo_status);
+	if (strcmp(text, shown) != 0) {
+		snprintf(shown, sizeof shown, "%s", text);
+		screen_clear_line(&screen, STATUS_ROW, colors.status_fg, colors.status_bg);
+		screen_puts(&screen, 0, STATUS_ROW, text, colors.status_fg, colors.status_bg);
+		video_update(&screen);
+	}
+}
+
 // Wait until `until`, UART0 receiving something (copied into buf) or a key
 // press. Returns whether either happened; *n is what arrived.
 static bool wait_for_input(absolute_time_t until, uint8_t *buf, size_t max, size_t *n) {
 	while (!time_reached(until)) {
-		*n = serial_read(buf, max);
+		if (modem_glue_busy()) {
+			modem_glue_poll(); // the WiFi modem starting: the line is its own
+		}
+		draw_logo_status(); // only when the modem's step changed
+		*n = modem_glue_busy() ? 0 : serial_read(buf, max);
 		if (*n || key_pressed) {
 			return true;
 		}
@@ -272,12 +313,10 @@ static bool wait_for_input(absolute_time_t until, uint8_t *buf, size_t max, size
 // whether input ended it; *n is what arrived.
 static bool show_logo(uint8_t *buf, size_t max, size_t *n) {
 	char status[SCREEN_MAX_COLS + 1];
-	snprintf(status, sizeof status, " DVI Terminal | build %s (%s, %s)",
+	snprintf(status, sizeof status, " build %s (%s, %s)",
 		TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
-	if (status_shown()) {
-		screen_clear_line(&screen, STATUS_ROW, colors.status_fg, colors.status_bg);
-		screen_puts(&screen, 0, STATUS_ROW, status, colors.status_fg, colors.status_bg);
-	}
+	logo_status = status;
+	draw_logo_status();
 	video_update(&screen);
 	*n = 0;
 	// In the hue of the Colors setting (white keeps the logo's own colors,
@@ -287,6 +326,7 @@ static bool show_logo(uint8_t *buf, size_t max, size_t *n) {
 		return false;
 	}
 	bool input = wait_for_input(make_timeout_time_ms(LOGO_MS), buf, max, n);
+	logo_status = NULL;
 	video_splash_end();
 	return input;
 }
@@ -336,6 +376,9 @@ int main(void) {
 	gpio_put(BOARD_USB_VBUS_EN_PIN, BOARD_USB_VBUS_EN_LEVEL);
 	gpio_set_dir(BOARD_USB_VBUS_EN_PIN, GPIO_OUT);
 #endif
+	// The WiFi modem's lines (bd xir.15): DTR active and RST/BOOT released
+	// from the start, so the module boots from its flash as before.
+	modem_lines_init();
 	diag_init();
 	// Read the settings while the flash is still in its boot-time setup.
 	nvflash_init();
@@ -378,6 +421,9 @@ int main(void) {
 	// Before the keyboard: send_key goes through telnet_glue_send from the
 	// first key (one during the logo jumped to tn.send == NULL).
 	telnet_glue_init();
+	// The WiFi modem (Port, bd xir.17.2): reset and set up while the logo
+	// shows; the line is the start-up's until it is done.
+	modem_glue_start();
 	usbkbd_init(send_key, setup_key, NULL);
 	diag_mark("usbkbd_init done");
 
@@ -505,7 +551,7 @@ int main(void) {
 			// receive buffer; opened by the host, what it sends are keys.
 			// Telnet commands come out first (telnet_glue.c).
 			static uint8_t data[sizeof buf + 1];
-			size_t got = setup.active && !setup.from_host ? 0 : serial_read(buf, sizeof buf);
+			size_t got = (setup.active && !setup.from_host) || modem_glue_busy() ? 0 : serial_read(buf, sizeof buf);
 			size_t n = got ? telnet_glue_filter(buf, got, data) : 0;
 			if (setup.active) {
 				setup_feed(data, n);
@@ -521,6 +567,9 @@ int main(void) {
 		keyboard_poll();
 		usbmsc_poll(); // a USB stick plugged in or pulled: mount or unmount it
 		usblog_poll();
+		if (modem_glue_busy()) {
+			modem_glue_poll();
+		}
 		printer_poll();
 		if (setup.open_requested) {
 			setup.open_requested = false;

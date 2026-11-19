@@ -148,7 +148,67 @@ SCK 2 / MOSI 3, APS6404L PSRAM CS on GP0 with PSRAM_BANKS (the Feather
 PSRAM build's mechanism; bd 1ls.3.1.1), LED GP9; DS3231M RTC on I2C1
 GP10/11 (BOARD_RTC_DS3231, bd 1ls.6.1) with its 1 Hz on GP8 (the clock's
 tick); TDA1387 DAC (U8, hand-fitted) on GP5 BCK / 6 WS / 7 DATA for the
-bell. Slide switch S1 puts the USB
+bell; the WiFi modem (bd xir.15, the user's hand-wired ESP-12F with our
+Zimodem build on J8): BOARD_MODEM_ESP8266, DCD 26 / DTR 27 / RST 24 /
+BOOT 25 on J1, BOARD_MODEM_NAME "esp12f", BOARD_MODEM_BAUD 921600
+(board.h: BOARD_HAS_MODEM, all four lines plus CTS/RTS required;
+src/platform/modem_lines.[ch]: main() first sets DTR active, RST/BOOT
+released open drain, DCD in, pulls off; the WiFi modem mode built on it:
+epic xir.17, docs/ideas/wifi-modem.md). The mode is the CMake option
+WIFI_MODEM (default OFF; frankless.h's pico_board_cmake_set(WIFI_MODEM, 1);
+FATAL_ERROR without PSRAM_BANKS, user 2026-11-19: no SRAM to spare on the
+others; add_compile_definitions for all firmware, the host tests build
+with WIFI_MODEM=1; board.h #errors on WIFI_MODEM without a modem;
+build-info.txt wifi_modem=). Without it: settings record 256 bytes,
+modem_lines no-ops, no wifi_* fields. Port (field 27, bd xir.17.3:
+SETTINGS_PORT_SERIAL / _WIFI; in every build's record, a SET-UP row only
+in WIFI_MODEM builds, before Baud rate: SETTINGS_MAIN_FIELDS 15 +
+WIFI_MODEM, so the host tests' and the guide's SET-UP have it):
+settings_wifi(), settings_baud_rate() SETTINGS_MODEM_BAUD (= BOARD_MODEM_BAUD,
+main.c static_assert) and settings_flow() RTS/CTS for the modem;
+settings_framing() 8N1 for the modem; settings_field_fixed fixes Baud
+rate, Data/parity/stop and Flow control ("WiFi modem"),
+settings_in_use gives the shown values; line_rate refuses CP/M's rate
+changes; a new Port saves and restarts (setup_t.saved_port); Return on
+the Port row with the modem saved -> SETUP_MODEM (the Modem panel,
+xir.17.4; a placeholder message until then). The start-up (bd xir.17.2):
+src/modem/modem.[ch] (portable dvt_modem, cold, linked only in WIFI_MODEM
+builds; test_modem's fake Zimodem: rates, ROM text, silent joins, echo,
+the profile, ATW, AT&W) and apps/terminal/modem_glue.c (cold): reset, ROM
+text at 74880, AT at 921600 (silence = joining, up to 35 s; noise = another
+rate), the scan (115200 first, 74880, ... 1200), ATB921600, ATI5's
+profile diffed (E per mode, Q0 V1 F0 R1 S46=0 S47=4 S54=0 S55=12 S63=2),
+ATI3/ATI2, ATW"ssid,password" from our settings when not on it, AT&W
+only after a change, ATI4. Started before the logo; while it runs
+modem_owns_line (main.c, SRAM; modem_glue_busy inline) keeps the terminal,
+SIO2, keys, dials and print jobs off the line. check_sram_only.py's
+OPTIONAL_COLD lets its cold patterns place nothing in builds without it.
+Calls on the lines (bd xir.17.5): src/modem/carrier.[ch] (DCD debounced
+50 ms; hang-up = DTR inactive >= 100 ms until DCD drops, CARRIER_STUCK
+after 2 s), run by telnet_glue.c's carrier_service in terminal mode once
+the start-up is done: the panel's hang-up drops DTR (HANG_DTR; +++/ATH
+on STUCK), DCD going inactive ends the call and the telnet negotiation;
+printjob_io_t.carrier (printer_glue: DCD) starts a job's data as soon as
+the connection is up instead of after PRINTJOB_OPEN_US. CP/M mode keeps
+DTR active (Hayes programs on SIO2). Local echo is off while
+telnet_glue_connected() (F11 call, telnet negotiated, or DCD). The Modem
+panel (bd xir.17.4): src/ui/modempanel.[ch] (portable, WIFI_MODEM only,
+test_setup's test_modem_panel; 16 rows: Network, Password (stars),
+Address DHCP, Reset modem, Defaults (Return twice), then Status/Firmware/
+Problem from modempanel_status_t), opened by SETUP_MODEM; its glue in
+modem_glue.c (modem_panel_open/feed/service, setup.modem* fields under
+#if WIFI_MODEM in setup_state_t): Return on Network/Password stores the
+network (settings_store, setup.ui.values too) and modem_join (forced ATW,
+no reset), Reset = modem_start, Defaults = modem_factory (AT&F, 1.5 s,
+then the whole start-up: it is back at 115200); redrawn when the
+start-up's step/IP/problem changes. Status and HWINFO (bd xir.17.6):
+modem_glue_status() (terminal.h modem_status_t: NONE / STARTING / WIFI
+= joined at start-up, never re-asked / NO_WIFI / FAILED) and
+modem_glue_carrier() (raw DCD); status.c's wifi_label "wifi" / "no wifi"
+/ "modem?" in place of the baud and framing (terminal), before the flow
+field as " | wifi RTS/CTS" (CP/M), lit while DCD; HWINFO_MODEM 36,
+modem_glue.c modem_record (0 bytes without WIFI_MODEM). Guide:
+terminal/wifi-modem.md (wiring, start-up, troubleshooting). Slide switch S1 puts the USB
 on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
 CI builds it.
 `boards/feather-rp2350-hstx.h` (bd 1ls.14.1): Adafruit Feather RP2350 with
@@ -475,7 +535,13 @@ UF2 in the latter).
   clears the NMI mask before the commit. Long blocking operations (card
   format, the update's file check) show STUCK harmlessly.
 - `src/settings/settings.[ch]` (portable): settings record (magic, seq, CRC-32,
-  one byte per setting, append-only) in two flash sectors used in turn.
+  one byte per setting, append-only) in two flash sectors used in turn;
+  512 bytes in WIFI_MODEM builds since bd xir.17.1 (256 otherwise): page 0 (SETTINGS_PAGE0_SIZE) keeps the old
+  one-page layout byte for byte (older firmware reads it; its saves leave
+  page 1 erased), page 1 the network block at SETTINGS_NET_OFFSET ('N',
+  length, CRC-32, NUL-separated texts: wifi_ssid, wifi_password; later
+  parts appended, missing ones empty); nvflash_write programs
+  NVFLASH_RECORD_SIZE.
   Settings (settings_fields[] drives the record, validation and SET-UP
   labels; append only): columns, backspace (DECBKM RIS value; default BS
   0x08, as CP/M wants), local_echo,
@@ -484,7 +550,10 @@ UF2 in the latter).
   status_shown() leaves row 24 blank; debug: status.c debug_status_* shows
   video_stats() (late lines, compose cycles as % of the line, fps) and
   core 0's longest main-loop pass and line render, qur.21; debug usb:
-  uptime and the last four USB host events from usbkbd_log, qur.3), blank_after (minutes; `src/input/blank.[ch]`
+  uptime and the last four USB host events from usbkbd_log, qur.3; debug
+  serial, bd xir.4: serial_stats rx/tx bytes/s over a second, the RX
+  ring now/peak (serial_reset_rx_peak each refresh)/peak since on, hold
+  counts from serial_flow_state, overruns, errors, drops), blank_after (minutes; `src/input/blank.[ch]`
   portable idle timer, keys only, the waking key dropped; video_set_blank
   makes core 1 stop the DVI signal: hstx_dvi_stop (DMA aborted, FIFO
   drained, HSTX off), frame time kept on the timer (diag_frames,
@@ -526,7 +595,7 @@ UF2 in the latter).
   by F12 or Pause (keyboard.c SET-UP callback) or host `CSI ? 999 ~` (term.c bumps
   `setup_requests` and term_write stops after it; later bytes are keys).
 - `src/input/keyname.[ch]` (portable): key bytes -> "ESC [A", "^C", ... for the
-  status line's last-key field (which replaced the rx/tx/err counters).
+  debug serial status line's last-key field (off the normal line since xir.4: it showed passwords).
 - `src/platform/nvflash.[ch]`: the 2 flash sectors before the last (UF2 files' E10
   workaround block at 0x10ffff00 wraps to the last sector and erases it). Read at boot before
   video_init; `nvflash_retime()` after the clock change. SDK
@@ -671,13 +740,18 @@ UF2 in the latter).
   scripts or CI, its own scripts/build.sh and BUILDING.md; ~/fz80/Zimodem
   is the older working copy, remote fork). Its throughput (one byte per
   loop() into an empty FIFO on the ESP8266), telnet (WONT NAWS) and the
-  J8 rewiring for hardware RTS/CTS (GPIO13 U0CTS / GPIO15 U0RTS):
+  J8 rewiring for hardware RTS/CTS (GPIO13 U0CTS / GPIO15 U0RTS, built in
+  the Frankless build by bd xir.7: serout.ino serialHwFlowApply, pins
+  fixed at S49=13 S51=15 by FRANKLESS_HW_FLOW (default 1; build.sh
+  FRANKLESS_HW_FLOW=0 for the old 5/4 wiring), FIFO-filling deque):
   docs/ideas/zimodem-flow-telnet.md. The status line's flow field (bd
   xir.3, status.c draw_flow/status_flow_poll, serial_flow_state: counts
   and the PL011's CTS change interrupt) lights its left name while we
   hold the host, its right while the host holds us, >= 250 ms.
 - Telnet (bd xir.10, terminal mode only): `src/term/telnet.[ch]`
-  (portable, test_telnet; cold, in flash: only during telnet, <= 11.5 KB/s)
+  (portable, test_telnet; cold, in flash: only during telnet, <= 11.5 KB/s
+  at 115200; SET-UP's Baud rate goes to 921600 since bd xir.12: at 921600
+  a 1 MB cat ran ~53 KB/s with RTS never lit, the ESP8266 being the limit)
   filters the host's bytes in main.c's loop (telnet_glue_filter into a
   257-byte buffer, then term_write) and doubles 0xFF in what we send
   (send_key, send_reply -> telnet_glue_send). Passive: answers DO NAWS
@@ -829,7 +903,8 @@ UF2 in the latter).
   install when the set names it and it is missing). test_wordstar (temps
   on H:, ^KX/^KS/^KD saves to A: with .BAK, a 112 KB document spilled
   and copied back; page breaks are LF 8Ah). The Sock's image is 1.81 MB
-  with it (1.95 MB before bd x6d's smaller WSPRINT.OVR; cap 2 MB - 12 KB). Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
+  with it (1.95 MB before bd x6d's smaller WSPRINT.OVR; 1.52 MB since bd
+  pz5's deflate; cap 2 MB - 12 KB). Our BIOS's cold boot sets SETDEF's defaults in the SCB (search
   default, A:, B:; order COM,SUB; temporary drive B:; no display: f8w.9),
   so PROFILE.SUB (src/machine/cpm/cpm3/profile.sub) only loads VT100DYN, whose
   help text build.sh patches away; README.TXT (src/machine/cpm/cpm3/readme.txt)
@@ -1011,8 +1086,12 @@ TTY2[9600], no space) made by build.sh at build time: cpmrun.c (machine.c on the
   DRIVES.CFG and the sets, split from drives.c (sector I/O, SRAM). Status line: drive letters
   only, reverse while accessed. `src/disks/diskimg.[ch]` + `src/common/lz.[ch]` (portable)
   + `src/disks/diskimg_gen.py` (`src/disks/diskimg.cmake`): CPM22, Z80TESTS, EMPTY
-  from z80pack as LZ4-format blocks (offsets < 4 KB, streamed through a
-  4 KB window: `src/common/scratch.[ch]`'s buffer) in `.flashdata.diskimg`, written to the card by the
+  from z80pack as raw deflate (bd pz5, was LZ4 blocks: 1529 KB of images
+  -> 1205 KB; zlib level 9, wbits -11 in diskimg_gen.py; lz.c a tinf-style
+  inflate, cold: a 2 KB dictionary ring plus its Huffman tables, 1.5 KB, in
+  the 4 KB `src/common/scratch.[ch]` buffer, LZ_WORK; no other RAM; a
+  4 KB dictionary would save 36 KB more but needs RAM beside the scratch
+  buffer) in `.flashdata.diskimg`, written to the card by the
   monitor. `src/storage/sdcard.[ch]` (RP2350): polled SPI0 SD driver = FatFs
   diskio (GP4 MISO, GP5 CS, GP6 SCK, GP7 MOSI; 400 kHz init, 25 MHz).
   `lib/fatfs`: ChaN FatFs R0.15a vendored (ffconf: FIND, MKFS, CP437,
@@ -1148,7 +1227,8 @@ Feather with Adalogger, no PSRAM, 0x2007db2c, ~9.4 KB; Frankless
   ~875 KB with the CP/M 3 disks, f8w.1: ~610 KB of compressed images in all;
   1.05 MB with F83, xdu: ~810 KB of images; 1.12 MB with the sound, bd
   1ls.18: AYTEST, AYPLAY, its tunes, AY.BLK; 1.52 MB with MP/M II, bd
-  l1j: MPM1 180 KB + MPM2 155 KB compressed, ~1.19 MB of images); free to 2 MB (image growth;
+  l1j: MPM1 180 KB + MPM2 155 KB compressed, ~1.19 MB of images; 1.83 MB
+  with WS4; 1.52 MB with deflate, bd pz5: 1205 KB of images); free to 2 MB (image growth;
   fwupdate caps images at 2 MB - 12 KB); staging 0x200000-0x3fcfff (used
   only during an update, up to the new image's length); settings
   0x3fd000-0x3fefff; last sector left blank (E10). New persistent storage

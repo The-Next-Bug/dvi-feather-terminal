@@ -32,7 +32,7 @@ static FATFS fs;
 
 // A card with CPM22 on A: and Z80TESTS on B:, booted to the A> prompt.
 static bool boot(void) {
-	static uint8_t work[4096], window[LZ_WINDOW];
+	static uint8_t work[4096], window[LZ_WORK] __attribute__((aligned(4)));
 	const MKFS_PARM opt = {.fmt = FM_FAT32, .au_size = 512};
 	diskio_ram_init(VOLUME_SECTORS);
 	if (f_mkfs("", &opt, work, sizeof work) != FR_OK || f_mount(&fs, "", 1) != FR_OK) {

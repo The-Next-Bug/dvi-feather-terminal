@@ -15,6 +15,9 @@
 #include "printjob.h"
 #include "serial.h"
 #include "terminal.h"
+#if WIFI_MODEM
+#include "modem_lines.h"
+#endif
 
 static printjob_t job;
 static bool printer_active; // CP/M mode with the Printer setting on
@@ -27,11 +30,21 @@ static bool line_get(uint8_t *c) {
 	return serial_read(c, 1) == 1;
 }
 
+// The WiFi modem's DCD (bd xir.17.5): the job's connection is open.
+static bool line_carrier(void) {
+#if WIFI_MODEM
+	return settings_wifi(&settings) && modem_dcd();
+#else
+	return false;
+#endif
+}
+
 static const printjob_io_t line_io = {
 	.room = serial_tx_room,
 	.put = line_put,
 	.get = line_get,
 	.drained = serial_tx_drained,
+	.carrier = WIFI_MODEM ? line_carrier : NULL,
 };
 
 void printer_configure(const settings_t *s) {
@@ -60,7 +73,7 @@ bool printer_has_tty2(void) {
 }
 
 void printer_poll(void) {
-	if (printer_active) {
+	if (printer_active && !modem_glue_busy()) { // the job waits for the modem's start-up
 		printjob_poll(&job, time_us_64());
 	}
 }

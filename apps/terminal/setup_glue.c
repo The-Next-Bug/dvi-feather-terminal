@@ -223,7 +223,11 @@ void setup_feed(const uint8_t *data, size_t len) {
 		return;
 	}
 	for (size_t i = 0; i < len && setup.action == SETUP_NONE && !setup.drives_work && !setup.fw_work &&
-		!setup.fw_cancel && !setup.clock_apply && !setup.print_apply && setup.telnet_work == TELNETPANEL_NONE;
+		!setup.fw_cancel && !setup.clock_apply && !setup.print_apply && setup.telnet_work == TELNETPANEL_NONE
+#if WIFI_MODEM
+		&& setup.modem_work == MODEMPANEL_NONE
+#endif
+		;
 		++i) {
 		if (setup.fw_open) {
 			fw_feed(data[i]);
@@ -241,6 +245,12 @@ void setup_feed(const uint8_t *data, size_t len) {
 			telnet_feed(data[i], now);
 			continue;
 		}
+#if WIFI_MODEM
+		if (setup.modem_open) {
+			modem_panel_feed(data[i], now);
+			continue;
+		}
+#endif
 		if (setup.drives_open) {
 			drives_feed(data[i], now);
 			continue;
@@ -292,6 +302,10 @@ void setup_enter(bool from_host) {
 	setup.print_open = setup.print_apply = false;
 	setup.telnet_open = setup.telnet_direct = false;
 	setup.telnet_work = TELNETPANEL_NONE;
+#if WIFI_MODEM
+	setup.modem_open = false;
+	setup.modem_work = MODEMPANEL_NONE;
+#endif
 	setup.from_host = from_host;
 	setup.action = SETUP_NONE;
 	setup.demo = false;
@@ -316,6 +330,10 @@ void setup_leave(bool apply) {
 	setup.print_open = setup.print_apply = false;
 	setup.telnet_open = setup.telnet_direct = false;
 	setup.telnet_work = TELNETPANEL_NONE;
+#if WIFI_MODEM
+	setup.modem_open = false;
+	setup.modem_work = MODEMPANEL_NONE;
+#endif
 	fw_close();
 	ay_give_back(); // a chime still sounding
 	if (!apply) {
@@ -428,6 +446,9 @@ bool save_and_leave(void) {
 	}
 	if (settings.mode != (cpm.on ? SETTINGS_MODE_CPM : SETTINGS_MODE_TERMINAL)) {
 		restart(); // the other mode starts from a clean power-on
+	}
+	if (settings.port != setup.ui.saved_port) {
+		restart(); // the WiFi modem, or not, from power-on (bd xir.17.3)
 	}
 	setup_leave(true);
 	return true;
@@ -607,6 +628,12 @@ void setup_service(void) {
 		telnet_service();
 		return;
 	}
+#if WIFI_MODEM
+	if (setup.modem_open && setup.action == SETUP_NONE) {
+		modem_panel_service();
+		return;
+	}
+#endif
 	if (setup.fw_open && setup.action == SETUP_NONE) {
 		if (setup.fw_cancel) {
 			fw_close();
@@ -653,6 +680,10 @@ void setup_service(void) {
 		monitor_enter(NULL, true);
 	} else if (a == SETUP_TELNET) {
 		setup_open_telnet(false);
+#if WIFI_MODEM
+	} else if (a == SETUP_MODEM) {
+		modem_panel_open();
+#endif
 	} else if (a == SETUP_SAVE) {
 		save_and_leave();
 	}

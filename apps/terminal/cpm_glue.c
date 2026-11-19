@@ -32,20 +32,25 @@ static void cpm_console_out(uint8_t c) {
 // SIO2 is the terminal UART, unless the Printer setting gives that to the
 // printer (printer_glue.c): then nothing arrives and what is sent goes
 // nowhere, at once (a BIOS waiting on SIO2 must not hang).
+// Likewise while the WiFi modem starts (modem_glue.c): the line is its own.
+static bool aux_elsewhere(void) {
+	return printer_has_tty2() || modem_glue_busy();
+}
+
 static void cpm_aux_out(uint8_t c) {
-	if (!printer_has_tty2()) {
+	if (!aux_elsewhere()) {
 		serial_write(&c, 1);
 	}
 }
 
 static bool cpm_aux_in(uint8_t *c) {
-	return !printer_has_tty2() && serial_read(c, 1) == 1;
+	return !aux_elsewhere() && serial_read(c, 1) == 1;
 }
 
 // SIO2's transmitter ready: room in the TX queue (bd qtq). Without it a
 // Z80 writing faster than the baud rate (PIP PUN:, AUX:) lost bytes.
 static bool cpm_aux_out_ready(void) {
-	return printer_has_tty2() || serial_tx_room() > 0;
+	return aux_elsewhere() || serial_tx_room() > 0;
 }
 
 // SIO2's rate for port 14 (bd c2d): CP/M 3's DEVICE TTY2 [9600] through
@@ -84,6 +89,9 @@ static void cpm_feed_keys(uint32_t now_ms) {
 static void cpm_idle(void) {
 	keyboard_poll();
 	serial_poll();
+	if (modem_glue_busy()) {
+		modem_glue_poll();
+	}
 	printer_poll();
 	led_poll(screen_blanked);
 	if (cpm.running) {

@@ -45,9 +45,10 @@ release's) and in every release ZIP as `guide/`.
   [ALTSCR](#altscr).
 - **Keyboard**: a USB keyboard on the Pico 2's USB port; see
   [USB keyboard](#usb-keyboard).
-- **Status line** (row 24): the terminal's state and the last key sent, for
-  checking a keyboard without a host; in CP/M mode, the drives and the
-  emulated clock rate. See [Status line](#status-line).
+- **Status line** (row 24): the terminal's state; in CP/M mode, the
+  drives and the emulated clock rate; debug choices for the video, the
+  USB host and the serial line (with the last key sent, for checking a
+  keyboard without a host). See [Status line](#status-line).
 - **SET-UP**: power-on width, Backspace (DEL/BS), local echo, baud rate,
   data/parity/stop bits, new line mode, colors, palette, display mode
   (1024x600 or 800x600), mode and terminal type, kept in
@@ -287,8 +288,9 @@ Row 24 shows, in terminal mode: the terminal type (`VT100`, `VT52` or
 `ADM-3A`) and the width (`80x24`), the build,
 the baud rate and framing (`115200 8N1`, plus `RTS/CTS` or `XON/XOFF`
 with [flow control](#flow-control)), `kbd` while a keyboard is attached, the USB stick (as in CP/M
-mode, below), `echo` when local echo is on, and the last key sent to the
-host (`key ESC [A`, `key ^C`, `key DEL`, ...).
+mode, below) and `echo` when local echo is on. The last key sent to the
+host (`key ESC [A`, `key ^C`, `key DEL`, ...) is on the **debug serial**
+line only, so a password never shows as it is typed.
 
 In CP/M mode it shows `CP/M`, the drives A-H as letters (`-` for an empty
 one; a letter lights up in reverse video while that drive is read or
@@ -1244,7 +1246,7 @@ has the helpers; `src/CMakeLists.txt` lists the libraries.
 
 | Library | | |
 |---|---|---|
-| `common` | portable | `crc32`, `lz` (LZ4-format decoder), `scratch` (the shared 4 KB buffer), `xonxoff` (XON/XOFF flow control's decisions) |
+| `common` | portable | `crc32`, `lz` (the disk images' deflate decoder), `scratch` (the shared 4 KB buffer), `xonxoff` (XON/XOFF flow control's decisions) |
 | `clock` | portable | `datetime` (dates without the C library's `localtime`, FAT timestamps), `wallclock` (the time kept between reads of the RTC) |
 | `rtc` | portable / RP2350 | `rtc_chip.h` (the chip-driver interface, on a register bus), `ds3231` and `pcf8523` (the drivers): portable `dvt_rtc_chips`; `rtc` (the wall clock and the board's RTC on I2C): RP2350 `dvt_rtc` |
 | `screen` | portable | `screen` (cell buffer, saved rows), `palette` (the 256-color palette per Colors/Palette setting), `font.h` (glyph codes) |

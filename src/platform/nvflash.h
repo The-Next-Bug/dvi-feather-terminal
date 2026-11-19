@@ -16,7 +16,13 @@
 #include <stdint.h>
 
 #define NVFLASH_SECTORS 2
-#define NVFLASH_PAGE_SIZE 256
+// What nvflash_write programs: the settings record, two flash pages with
+// the WiFi modem mode (its network in the second), else one.
+#if WIFI_MODEM
+#define NVFLASH_RECORD_SIZE 512
+#else
+#define NVFLASH_RECORD_SIZE 256
+#endif
 #define NVFLASH_SECTOR_SIZE 4096u
 // Where the settings sectors start, from the start of flash.
 #define NVFLASH_OFFSET (PICO_FLASH_SIZE_BYTES - (NVFLASH_SECTORS + 1) * NVFLASH_SECTOR_SIZE)
@@ -34,12 +40,13 @@ void nvflash_retime(void);
 bool nvflash_quad(void);
 uint32_t nvflash_read_hz(void);
 
-// Sector i's contents (the first page is enough for a settings record).
+// Sector i's contents (a settings record is its first NVFLASH_RECORD_SIZE bytes).
 const uint8_t *nvflash_sector(unsigned i);
 
-// Erase sector i and program page (in RAM: the ROM reads it while the flash
-// is out of XIP mode) to its start. Returns whether it reads back correctly.
-bool nvflash_write(unsigned i, const uint8_t page[NVFLASH_PAGE_SIZE]);
+// Erase sector i and program record (in RAM: the ROM reads it while the
+// flash is out of XIP mode) to its start. Returns whether it reads back
+// correctly.
+bool nvflash_write(unsigned i, const uint8_t record[NVFLASH_RECORD_SIZE]);
 
 // Raw access for the firmware update (fwupdate.c), at offsets from the
 // start of flash. Interrupts on this core are off during each erase and

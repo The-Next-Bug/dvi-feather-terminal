@@ -31,6 +31,7 @@
 #include "monitor.h"
 #include "printpanel.h"
 #include "telnetpanel.h"
+#include "modempanel.h"
 #include "screen.h"
 #include "settings.h"
 #include "setup.h"
@@ -109,6 +110,13 @@ typedef struct {
 	telnetpanel_action_t telnet_work;
 	telnetpanel_t telnet;
 	char print_last[64]; // what the last job did, as the panel shows it
+#if WIFI_MODEM
+	// The Modem panel (Return on the Port row, bd xir.17.4); its Return
+	// waits for the main loop (modem_glue.c).
+	bool modem_open;
+	modempanel_action_t modem_work;
+	modempanel_t modem;
+#endif
 	// The firmware update panel (U), over the same rows; its work and its
 	// cancel wait for the main loop.
 	bool fw_open, fw_work, fw_cancel;
@@ -164,12 +172,15 @@ size_t cpm_hwinfo(uint8_t item, uint8_t *buf);
 
 typedef struct {
 	unsigned keyboards;
-	uint32_t keys_sent; // last_key.count
 	settings_t settings;
 	unsigned baud;      // in use: CP/M can change it (line_rate)
 	char usb[12];       // usb_label
 	const char *type;   // term_type_name: the host can switch VT52 mode
 	uint8_t telnet;     // telnet_glue_status (telnet_status_t)
+	char modem[WIFI_MODEM ? 40 : 1]; // modem_glue_notice: the WiFi modem starting, or ""
+	uint8_t wifi;       // modem_glue_status (modem_status_t)
+	bool carrier;       // modem_glue_carrier: a connection open
+	bool echo;          // local echo in effect (the setting, off while connected)
 } status_t;
 
 bool status_shown(void);
@@ -221,8 +232,47 @@ void telnet_glue_poll(void);  // each main-loop pass: RIS, size, type, the hang-
 bool telnet_glue_dial(const char *host); // ATD"host", telnet on for the call
 void telnet_glue_hangup(void);
 const char *telnet_glue_call(void);   // the call's host, NULL: none
+// A connection is open (a call dialed here, a server negotiating telnet,
+// or the WiFi modem's DCD): local echo is off meanwhile, as the far end
+// echoes.
+bool telnet_glue_connected(void);
 const char *telnet_type_default(void); // TTYPE from the Terminal type now
 telnet_status_t telnet_glue_status(void);
+
+// ---- modem_glue.c ----
+
+// The WiFi modem's start-up (bd xir.17.2; WIFI_MODEM builds with the Port
+// on the modem, else no-ops). While busy the line is its own: nothing else
+// reads or writes the terminal UART.
+void modem_glue_start(void);  // at boot: reset the module and set it up
+extern bool modem_owns_line;  // in SRAM (main.c): read on every SIO2 byte
+static inline bool modem_glue_busy(void) {
+	return modem_owns_line;
+}
+void modem_glue_poll(void);   // while busy: each main-loop pass, the logo's wait and the CPU's
+#if WIFI_MODEM
+void modem_panel_open(void);                  // SET-UP's Modem panel
+void modem_panel_feed(uint8_t c, uint32_t now); // a key for it
+void modem_panel_service(void);               // its work and its redraws, from the main loop
+#endif
+// While busy, "WiFi modem: <step>" for the status line (so a long start-up
+// does not look like a hang); else NULL.
+const char *modem_glue_notice(void);
+
+// The modem as the status line and HWINFO see it (bd xir.17.6). What the
+// start-up found: the module is not asked again later, so a network lost
+// after it still reads WIFI until the next start-up (Reset modem, a reboot).
+typedef enum {
+	MODEM_STATUS_NONE,     // Port is the serial line (or no WIFI_MODEM)
+	MODEM_STATUS_STARTING, // the start-up has the line
+	MODEM_STATUS_WIFI,     // set up, on a network (it has an address)
+	MODEM_STATUS_NO_WIFI,  // set up, no network
+	MODEM_STATUS_FAILED,   // no answer at any rate
+} modem_status_t;
+
+modem_status_t modem_glue_status(void);
+bool modem_glue_carrier(void); // DCD active: the modem has a connection open
+size_t modem_record(uint8_t *buf); // HWINFO_MODEM: none (0) without WIFI_MODEM
 
 // ---- printer_glue.c ----
 

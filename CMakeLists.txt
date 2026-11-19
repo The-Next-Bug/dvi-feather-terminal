@@ -79,6 +79,12 @@ set(MACHINE_BANKS 2 CACHE STRING "Z80 machine: number of 48 KB banks (MMU port 6
 # it on with pico_board_cmake_set(PSRAM_BANKS, 1)
 # (boards/feather-rp2350-hstx-psram.h).
 option(PSRAM_BANKS "Z80 machine: banks in the board's PSRAM instead of SRAM" OFF)
+# The WiFi modem mode (bd xir.17: the Port setting, the modem's start-up,
+# its panel, the network in the settings record's second page). A board
+# header with a modem (BOARD_MODEM_*) turns it on with
+# pico_board_cmake_set(WIFI_MODEM, 1) (boards/frankless.h). PSRAM_BANKS
+# boards only for now: the SRAM-only boards have too little SRAM left.
+option(WIFI_MODEM "The WiFi modem mode (a board with BOARD_MODEM_* pins)" OFF)
 
 # Our workarounds for TinyUSB's RP2350 host bugs (src/usb/usbkbd.c), each
 # fixed in the TinyUSB master lib/tinyusb builds (PRs #4310-#4313, folded
@@ -137,6 +143,17 @@ else()
 endif()
 set(DVI_MODE_USED ${DVT_DVI_MODE} CACHE INTERNAL "the DVI mode built (build-info.txt)")
 message(STATUS "DVI_MODE ${DVT_DVI_MODE}")
+if(WIFI_MODEM AND NOT PSRAM_BANKS)
+  message(FATAL_ERROR "WIFI_MODEM needs PSRAM_BANKS for now (the SRAM-only boards lack the room)")
+endif()
+if(WIFI_MODEM)
+  message(STATUS "WiFi modem mode (WIFI_MODEM)")
+  set(WIFI_MODEM_USED ON CACHE INTERNAL "the WiFi modem mode built (build-info.txt)")
+else()
+  set(WIFI_MODEM_USED OFF CACHE INTERNAL "the WiFi modem mode built (build-info.txt)")
+endif()
+# Every firmware file sees it (board.h, settings.h, nvflash.h).
+add_compile_definitions(WIFI_MODEM=$<BOOL:${WIFI_MODEM}>)
 if(PSRAM_BANKS)
   set(MACHINE_BANKS 0) # all of them in the PSRAM: 96 KB of SRAM free
   message(STATUS "Z80 banks in PSRAM (PSRAM_BANKS)")

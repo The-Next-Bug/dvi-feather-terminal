@@ -30,7 +30,8 @@
   is turned off and the line says `1 refused (too many hubs or devices)`.
   Unplugging it and plugging it in again tries it again.
 - The screen is blanked: the first key only wakes it.
-- `key ...` on the status line changes but the host sees nothing: check the
+- `key ...` on the **debug serial** status line changes but the host
+  sees nothing: check the
   serial wiring and line settings ([Connecting a host](../start/host.md)),
   and Flow control (`RTS/CTS` without the wires holds every key back).
 

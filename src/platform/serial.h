@@ -42,6 +42,8 @@ typedef struct {
 	uint32_t tx_dropped; // queued bytes lost because the TX queue was full
 	uint32_t rx_level;  // bytes waiting in the receive buffer (of SERIAL_RX_BUFFER_SIZE)
 	uint32_t tx_level;  // bytes waiting in the transmit queue (of SERIAL_TX_BUFFER_SIZE)
+	uint32_t sent;      // bytes moved into the UART (XON/XOFF control bytes not counted)
+	uint32_t rx_peak;   // the receive buffer's fullest since serial_reset_rx_peak (bd xir.4)
 } serial_stats_t;
 
 // Which side is throttling (bd xir.2), for the status line. holding and
@@ -98,5 +100,7 @@ bool serial_tx_drained(void);
 void serial_poll(void);
 
 serial_stats_t serial_stats(void);
+// Start rx_peak again from the buffer's level now.
+void serial_reset_rx_peak(void);
 
 #endif

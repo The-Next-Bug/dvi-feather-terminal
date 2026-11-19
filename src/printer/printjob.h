@@ -16,7 +16,8 @@
 // up CR LF and wraps at 80 columns) or AT+PRINTR:target
 // (application/octet-stream), target host:port/path. Zimodem says nothing
 // when it has connected and ERROR when it could not, so the data starts
-// after PRINTJOB_OPEN_US without an ERROR. The job ends when Zimodem has
+// after PRINTJOB_OPEN_US without an ERROR, or as soon as the modem's DCD
+// says it is connected (io carrier). The job ends when Zimodem has
 // read nothing for n seconds: it sends the request's end and OK. The
 // engine stops taking data after its own idle time (or printjob_end, OUT
 // 5,1) and waits for that OK.
@@ -65,6 +66,8 @@ typedef struct {
 	bool (*get)(uint8_t *c);    // a byte from the modem, if one has arrived
 	bool (*drained)(void);      // everything put has left the line (the attention's
 	                            // +++ guard times count from then); NULL: at once
+	bool (*carrier)(void);      // the modem's DCD: a connection is open (bd xir.17.5),
+	                            // so the job's data starts at once; NULL: not wired
 } printjob_io_t;
 
 // The spool (bd wt6.8, not implemented yet): offered each byte of a job the

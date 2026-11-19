@@ -121,7 +121,7 @@ The second serial port's rate as a CP/M 3 baud code, for `DEVICE` (CP/M
 | Baud | none | 50 | 75 | 110 | 134 | 150 | 300 | 600 | 1200 | 1800 | 2400 | 3600 | 4800 | 7200 | 9600 | 19200 |
 
 - `IN 0Eh`: the code of the rate in use; 0 for a rate without one (SET-UP's
-  38400, 57600 and 115200). FFh on older firmware and on picosim, which
+  38400 and above). FFh on older firmware and on picosim, which
   have no such port: the rate cannot be changed.
 - `OUT 0Eh` 1-15: run at that rate until the machine is reset or SET-UP's
   settings are saved. A rate the board's UART cannot reach (below about

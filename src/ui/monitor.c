@@ -191,7 +191,7 @@ static void list_disks(void) {
 	}
 }
 
-static_assert(LZ_WINDOW <= SCRATCH_SIZE, "the LZ window is the scratch buffer");
+static_assert(LZ_WORK <= SCRATCH_SIZE, "the LZ work area is the scratch buffer");
 
 // Starter sets for SET-UP's Drives panel (bd f8w.6), one per system on
 // the built-in disks. Written only when missing: once there, a set is the

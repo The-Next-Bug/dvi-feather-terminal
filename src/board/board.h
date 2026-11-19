@@ -188,6 +188,49 @@
 #define BOARD_I2S_BITS 0ull
 #endif
 
+// A WiFi modem on the terminal UART (bd xir.15, docs/ideas/wifi-modem.md):
+// a module running our Zimodem build, with its modem lines on four GPIOs.
+// The chip: BOARD_MODEM_ESP8266 (only one so far). DCD is an input (low:
+// a call is open), DTR an output (low: active), RST and BOOT are open drain
+// (driven low or released; the module pulls them up): RST to the chip's
+// reset/enable, BOOT to its boot loader strap (the ESP8266's GPIO0).
+// BOARD_MODEM_NAME is the module a firmware image must name, and
+// BOARD_MODEM_BAUD the fixed link rate; RTS/CTS is always on.
+#ifdef BOARD_MODEM_ESP8266
+#define BOARD_HAS_MODEM 1
+#define BOARD_MODEM_CHIP_NAME "ESP8266"
+#if !defined(BOARD_MODEM_DCD_PIN) || !defined(BOARD_MODEM_DTR_PIN) || !defined(BOARD_MODEM_RST_PIN) || \
+	!defined(BOARD_MODEM_BOOT_PIN)
+#error "a modem needs BOARD_MODEM_DCD_PIN, BOARD_MODEM_DTR_PIN, BOARD_MODEM_RST_PIN and BOARD_MODEM_BOOT_PIN (see boards/example.h)"
+#endif
+#if !defined(BOARD_MODEM_NAME) || !defined(BOARD_MODEM_BAUD)
+#error "a modem needs BOARD_MODEM_NAME and BOARD_MODEM_BAUD (see boards/example.h)"
+#endif
+#if !defined(BOARD_UART_CTS_PIN) || !defined(BOARD_UART_RTS_PIN)
+#error "a modem needs the terminal UART's BOARD_UART_CTS_PIN and BOARD_UART_RTS_PIN (RTS/CTS)"
+#endif
+#if BOARD_MODEM_BAUD < 1200 || BOARD_MODEM_BAUD > 921600
+#error "BOARD_MODEM_BAUD must be from 1200 to 921600"
+#endif
+#define BOARD_MODEM_BITS (BOARD_PIN_BIT(BOARD_MODEM_DCD_PIN) | BOARD_PIN_BIT(BOARD_MODEM_DTR_PIN) | \
+	BOARD_PIN_BIT(BOARD_MODEM_RST_PIN) | BOARD_PIN_BIT(BOARD_MODEM_BOOT_PIN))
+#elif defined(BOARD_MODEM_DCD_PIN) || defined(BOARD_MODEM_DTR_PIN) || defined(BOARD_MODEM_RST_PIN) || \
+	defined(BOARD_MODEM_BOOT_PIN) || defined(BOARD_MODEM_NAME) || defined(BOARD_MODEM_BAUD)
+#error "BOARD_MODEM_* need a chip: BOARD_MODEM_ESP8266"
+#else
+#define BOARD_HAS_MODEM 0
+#define BOARD_MODEM_BITS 0ull
+#endif
+// The firmware's WiFi modem mode (CMake WIFI_MODEM, from the board header:
+// PSRAM_BANKS boards only for now) needs the modem; a modem without it is
+// left alone (its lines as at reset).
+#ifndef WIFI_MODEM
+#define WIFI_MODEM 0
+#endif
+#if WIFI_MODEM && !BOARD_HAS_MODEM
+#error "WIFI_MODEM needs a modem in the board header (BOARD_MODEM_ESP8266 and its pins)"
+#endif
+
 // Dropped hardware (bd 1ls.22, 1ls.15): a header that still names it would
 // otherwise build as if the pin were free.
 #if defined(BOARD_BUZZER_PIN) || defined(BOARD_SD_CD_PIN) || defined(BOARD_BUTTON_PIN) || \
@@ -232,9 +275,9 @@
 	BOARD_CTS_BIT op BOARD_RTS_BIT op BOARD_PIN_BIT(BOARD_SD_MISO_PIN) op                           \
 	BOARD_PIN_BIT(BOARD_SD_CS_PIN) op BOARD_PIN_BIT(BOARD_SD_SCK_PIN) op                            \
 	BOARD_PIN_BIT(BOARD_SD_MOSI_PIN) op BOARD_VBUS_BIT op BOARD_LED_BIT op BOARD_PSRAM_BIT op       \
-	BOARD_RTC_BITS op BOARD_SQW_BIT op BOARD_I2S_BITS)
+	BOARD_RTC_BITS op BOARD_SQW_BIT op BOARD_I2S_BITS op BOARD_MODEM_BITS)
 #if BOARD_OTHER_PINS(+) != BOARD_OTHER_PINS(|)
-#error "the board header uses a pin twice (UART, SD card, USB VBUS enable, LED, PSRAM, RTC, other hardware)"
+#error "the board header uses a pin twice (UART, SD card, USB VBUS enable, LED, PSRAM, RTC, modem, other hardware)"
 #endif
 #if BOARD_OTHER_PINS(|) & 0xff000ull
 #error "the board header gives a DVI pin (GP12-19) another job"

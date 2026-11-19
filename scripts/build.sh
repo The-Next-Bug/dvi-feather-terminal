@@ -77,6 +77,7 @@ git_rev() { git -C "$1" rev-parse HEAD 2>/dev/null || echo unknown; }
   echo "dvi_mode=$(sed -n 's/^DVI_MODE_USED:INTERNAL=//p' "$out/CMakeCache.txt")"
   echo "build_type=$BUILD_TYPE"
   echo "machine_banks=$(sed -n 's/^MACHINE_BANKS:STRING=//p' "$out/CMakeCache.txt")"
+  echo "wifi_modem=$(sed -n 's/^WIFI_MODEM_USED:INTERNAL=//p' "$out/CMakeCache.txt")"
   # TinyUSB workarounds kept (ON) or built out for testing (bd nxv)
   echo "usb_workarounds=$(for o in DEINIT DATASEQ POLL_PAUSE CONTROL_WAIT; do
     printf '%s=%s ' "$o" "$(sed -n "s/^USB_WA_$o:BOOL=//p" "$out/CMakeCache.txt")"; done)restart_key=$(sed -n 's/^USB_RESTART_KEY:BOOL=//p' "$out/CMakeCache.txt")"

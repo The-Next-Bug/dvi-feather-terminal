@@ -48,16 +48,30 @@ has_cts() {
     "$CC" -fsyntax-only -I"$ROOT/lib/pico-sdk/src/boards/include" -x c - 2>/dev/null
 }
 
+# has_modem BOARD: the header names a modem chip.
+has_modem() {
+  printf '%s\n' '#define pico_board_cmake_set(var, value)' '#define pico_board_cmake_set_default(var, value)' \
+    "#include \"$1\"" '#ifndef BOARD_MODEM_ESP8266' '#error no modem' '#endif' |
+    "$CC" -fsyntax-only -I"$ROOT/lib/pico-sdk/src/boards/include" -x c - 2>/dev/null
+}
+
 # Every board passes; one with CTS/RTS pins offers RTS/CTS (the Flow
 # control setting), one without (their pins have another job: the
-# Adalogger's RTC) does not.
+# Adalogger's RTC) does not; one naming a modem has BOARD_HAS_MODEM.
 for board in "$ROOT"/boards/*.h "$ROOT"/boards/experimental/*.h; do
   rtscts=0
   if has_cts "$board"; then
     rtscts=1
   fi
+  modem=0
+  if has_modem "$board"; then
+    modem=1
+  fi
   after="#if BOARD_HAS_RTSCTS != $rtscts
 #error BOARD_HAS_RTSCTS is not $rtscts
+#endif
+#if BOARD_HAS_MODEM != $modem
+#error BOARD_HAS_MODEM is not $modem
 #endif"
   check "$(basename "$board")" "" "#include \"$board\""
 done
@@ -127,6 +141,22 @@ check "I2S on the SD card" "uses a pin twice" "$sock" "$(i2s 4 5 8)"
 for pin in BUZZER SD_CD BUTTON BATTERY_ADC CHARGER_STAT NEOPIXEL; do
   check "dropped BOARD_${pin}_PIN" "were dropped" "$sock" "#define BOARD_${pin}_PIN 9"
 done
+modem() { echo "#define BOARD_MODEM_ESP8266 1"; echo "#define BOARD_MODEM_DCD_PIN $1"
+  echo "#define BOARD_MODEM_DTR_PIN $2"; echo "#define BOARD_MODEM_RST_PIN $3"
+  echo "#define BOARD_MODEM_BOOT_PIN $4"; echo '#define BOARD_MODEM_NAME "esp12f"'
+  echo "#define BOARD_MODEM_BAUD 921600"; }
+check "modem" "" "$sock" "$(modem 26 27 28 8)"
+check "modem without RST" "needs BOARD_MODEM_DCD_PIN" "$sock" "$(modem 26 27 28 8)" "#undef BOARD_MODEM_RST_PIN"
+check "modem without a name" "needs BOARD_MODEM_NAME" "$sock" "$(modem 26 27 28 8)" "#undef BOARD_MODEM_NAME"
+check "modem without CTS/RTS" "needs the terminal UART's" "$sock" "$(modem 26 27 28 8)" \
+  "#undef BOARD_UART_CTS_PIN" "#undef BOARD_UART_RTS_PIN"
+check "modem rate too high" "from 1200 to 921600" "$sock" "$(modem 26 27 28 8)" "$(set_pin BOARD_MODEM_BAUD 1843200)"
+check "modem pins without a chip" "need a chip" "$sock" "#define BOARD_MODEM_DCD_PIN 26"
+check "WiFi modem mode" "" "$sock" "$(modem 26 27 28 8)" "#define WIFI_MODEM 1"
+check "WiFi modem mode without a modem" "WIFI_MODEM needs a modem" "$sock" "#define WIFI_MODEM 1"
+check "modem DCD on the LED" "uses a pin twice" "$sock" "$(modem 25 27 28 8)"
+check "modem DTR on RTS" "uses a pin twice" "$sock" "$(modem 26 3 28 8)"
+check "modem RST on a DVI pin" "DVI pin" "$sock" "$(modem 26 27 12 8)"
 check "no LED" "" "$sock" "#undef PICO_DEFAULT_LED_PIN"
 check "DVI drive 8 mA" "" "$sock" "#define BOARD_DVI_DRIVE_MA 8"
 check "DVI drive 6 mA" "must be 2, 4, 8 or 12" "$sock" "#define BOARD_DVI_DRIVE_MA 6"

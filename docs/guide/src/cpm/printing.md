@@ -20,9 +20,13 @@ One modem cannot dial in to MP/M and print at the same time.
 ## Wiring and the modem
 
 On the Frankless, the modem goes on header J8: GP20 TX to the ESP's RXD,
-GP21 RX from its TXD, GP23 RTS to its GPIO5 (Zimodem's CTS), GP22 CTS from
-its GPIO4 (Zimodem's RTS), and 3V3 and GND. Put 100-470 µF across the
-module's supply for its transmit peaks. The modem and SET-UP must agree
+GP21 RX from its TXD, GP23 RTS to its GPIO13 (the ESP's hardware CTS),
+GP22 CTS from its GPIO15 (its hardware RTS, with a 10 kΩ pull-down: the
+ESP does not boot with GPIO15 high), and 3V3 and GND. Put 100-470 µF
+across the module's supply for its transmit peaks. Zimodem's Frankless
+build uses those two pins from bd xir.7 on; the earlier wiring to GPIO5
+and GPIO4 needs a build with `FRANKLESS_HW_FLOW=0` (lib/zimodem's
+BUILDING.md). The modem and SET-UP must agree
 on the line: 115200 8N1 and RTS/CTS are what the Frankless build of
 Zimodem starts with.
 
@@ -81,7 +85,9 @@ A job goes like this:
    once more.
 3. `ATS61=` the idle time, then `AT+PRINTA:` or `AT+PRINTR:` and the
    target. Zimodem answers nothing when it has connected and `ERROR` when
-   it could not; the data starts 2 s after the command if no `ERROR` came.
+   it could not; the data starts 2 s after the command if no `ERROR` came,
+   or at once once the WiFi modem's DCD line says it has connected (the
+   Port setting on the modem).
 4. The data goes straight to the modem.
 5. The end, after the idle time without a byte, or after `OUT 05h,01h`
    (see [the ports](../reference/ports.md#printer-05h-06h)): the firmware

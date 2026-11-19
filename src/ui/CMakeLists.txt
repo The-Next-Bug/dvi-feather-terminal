@@ -11,6 +11,7 @@ add_library(dvt_ui STATIC
   monitor.c
   printpanel.c
   setup.c
+  modempanel.c
   telnetpanel.c
 )
 target_include_directories(dvt_ui PUBLIC ${CMAKE_CURRENT_LIST_DIR})

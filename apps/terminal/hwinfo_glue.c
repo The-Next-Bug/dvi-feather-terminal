@@ -271,6 +271,8 @@ size_t cpm_hwinfo(uint8_t item, uint8_t *buf) {
 		return sound_record(buf);
 	case HWINFO_PRINTER:
 		return printer_record(buf);
+	case HWINFO_MODEM:
+		return modem_record(buf);
 	case HWINFO_RTC:
 		return rtc_record(buf);
 	case HWINFO_BELL:

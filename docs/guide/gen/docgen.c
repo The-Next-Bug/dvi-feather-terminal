@@ -104,7 +104,7 @@ static void draw_status(const char *text) {
 
 static void terminal_status(void) {
 	char text[SCREEN_MAX_COLS + 1];
-	snprintf(text, sizeof text, " VT100 %ux24 | %s | 115200 8N1 | kbd | key ESC [A", screen.cols, BUILD);
+	snprintf(text, sizeof text, " VT100 %ux24 | %s | 115200 8N1 | kbd", screen.cols, BUILD);
 	draw_status(text);
 }
 

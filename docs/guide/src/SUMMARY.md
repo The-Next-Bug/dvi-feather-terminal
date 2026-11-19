@@ -14,6 +14,7 @@
 - [Keyboard](terminal/keyboard.md)
 - [SET-UP](terminal/setup.md)
 - [Status line](terminal/status-line.md)
+- [WiFi modem](terminal/wifi-modem.md)
 - [Telnet](terminal/telnet.md)
 - [Terminal types](terminal/terminal-types.md)
 - [Colors and palettes](terminal/colors.md)

@@ -16,6 +16,8 @@ include(../cmake/dvt.cmake)
 # errors (FatFs and z80pack built as they come).
 set(DVT_C_OPTIONS -fsanitize=address,undefined)
 set(DVT_WARNING_OPTIONS -Werror)
+# The tests cover the WiFi modem's code (a firmware option, WIFI_MODEM).
+add_compile_definitions(WIFI_MODEM=1)
 add_subdirectory(../src src)
 
 # unit_test(<name> <sources or libraries>...): builds test_<name> from
@@ -67,6 +69,7 @@ unit_test(ay dvt_sound)
 unit_test(rtc dvt_rtc_chips)
 unit_test(xonxoff dvt_common)
 unit_test(printjob dvt_printer)
+unit_test(modem dvt_modem)
 unit_test(uf2 dvt_settings)
 # Also checks the firmware build/pico2-dvi-sock made, if there is one.
 target_compile_definitions(test_uf2 PRIVATE

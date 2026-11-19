@@ -1,7 +1,8 @@
 // The status line, row 24 (terminal.h): the terminal's (type, width,
-// line settings, keyboard, stick, echo, last key), CP/M mode's (drive
+// line settings, keyboard, stick, echo), CP/M mode's (drive
 // letters lit while accessed, the stick, the Z80's speed) or the debug
-// choices' (timing, the USB host's events); blank when hidden. The first
+// choices' (timing, the USB host's events, the serial line's counts and
+// the last key); blank when hidden. The first
 // two end in the clock once the time is real.
 
 #include <stdio.h>
@@ -141,11 +142,11 @@ void status_flow_poll(void) {
 
 // Append " | " and the flow control field to a status line's text (at n,
 // its length) and note where it starts; nothing for no flow control.
-static size_t put_flow_field(char *text, size_t size, size_t n) {
+static size_t put_flow_field(char *text, size_t size, size_t n, const char *sep) {
 	const char *label = flow_label();
-	if (label[0] && n + 3 + strlen(label) < size) {
-		flow_light.col = (unsigned)n + 3;
-		snprintf(text + n, size - n, " | %s", label);
+	if (label[0] && n + strlen(sep) + strlen(label) < size) {
+		flow_light.col = (unsigned)(n + strlen(sep));
+		snprintf(text + n, size - n, "%s%s", sep, label);
 		n = strlen(text);
 	}
 	return n;
@@ -165,6 +166,33 @@ static void put_status_text(char *text) {
 	screen_puts(&screen, 0, STATUS_ROW, text, colors.status_fg, colors.status_bg);
 	draw_clock(true);
 	draw_flow(true);
+}
+
+// The WiFi modem once started (bd xir.17.6): "wifi" on a network, lit
+// while the modem has a connection open (DCD); "no wifi" without one;
+// "modem?" when it did not answer. NULL for the serial line, and while it
+// starts (the notice at the line's start says more).
+static const char *wifi_label(uint8_t status) {
+	switch (status) {
+	case MODEM_STATUS_WIFI:
+		return "wifi";
+	case MODEM_STATUS_NO_WIFI:
+		return "no wifi";
+	case MODEM_STATUS_FAILED:
+		return "modem?";
+	default:
+		return NULL;
+	}
+}
+
+// The label at col drawn lit (reverse), if the line's text reached it.
+static void light_label(unsigned col, const char *label, const char *text) {
+	if (!col || col + strlen(label) > strlen(text)) {
+		return;
+	}
+	for (unsigned i = 0; label[i]; ++i) {
+		screen_put(&screen, col + i, STATUS_ROW, (uint8_t)label[i], colors.status_bg, colors.status_fg);
+	}
 }
 
 // The USB stick on the status line: "USB" while one is volume 1 (USB: to
@@ -197,7 +225,63 @@ static struct {
 } debug_status;
 
 bool debug_status_on(void) {
-	return settings.status_line == SETTINGS_STATUS_DEBUG || settings.status_line == SETTINGS_STATUS_DEBUG_USB;
+	return settings.status_line == SETTINGS_STATUS_DEBUG || settings.status_line == SETTINGS_STATUS_DEBUG_USB ||
+		settings.status_line == SETTINGS_STATUS_DEBUG_SERIAL;
+}
+
+// debug serial (bd xir.4): is this terminal ever the bottleneck? The
+// rates over the last whole second; the rest since the line came on.
+static struct {
+	uint32_t rate_ms;            // the last rate's end
+	serial_stats_t rate_at;      // the counts then
+	unsigned rx_rate, tx_rate;   // bytes a second
+	uint32_t peak;               // the receive buffer's fullest since on
+	serial_stats_t base;         // the counts when the line came on
+	serial_flow_state_t flow_base;
+} debug_serial;
+
+// " rx R/s tx T/s|buf N/P/M|hold H/O|ovr V err E drop D/X|key K": bytes a
+// second each way; the receive buffer now / fullest this refresh / since
+// on (of 2048: the terminal holds the host at 1984); holds the terminal
+// started / the host's (CTS changes, either way, or XOFFs); UART
+// overruns, framing/parity/break errors, bytes lost to a full receive
+// buffer / transmit queue; the last key sent (only here, not on the
+// normal line, where it showed passwords as they were typed). Fits 80
+// columns.
+static void debug_serial_text(char *t, size_t size, uint32_t now, bool restart) {
+	serial_stats_t st = serial_stats();
+	serial_flow_state_t fl = serial_flow_state();
+	if (restart) {
+		debug_serial.base = debug_serial.rate_at = st;
+		debug_serial.flow_base = fl;
+		debug_serial.rate_ms = now;
+		debug_serial.rx_rate = debug_serial.tx_rate = 0;
+		debug_serial.peak = 0;
+	}
+	uint32_t ms = now - debug_serial.rate_ms;
+	if (ms >= 1000) {
+		debug_serial.rx_rate = (unsigned)((uint64_t)(st.received - debug_serial.rate_at.received) * 1000 / ms);
+		debug_serial.tx_rate = (unsigned)((uint64_t)(st.sent - debug_serial.rate_at.sent) * 1000 / ms);
+		debug_serial.rate_at = st;
+		debug_serial.rate_ms = now;
+	}
+	if (st.rx_peak > debug_serial.peak) {
+		debug_serial.peak = st.rx_peak;
+	}
+	serial_reset_rx_peak();
+	int n = snprintf(t, size, " rx %u/s tx %u/s|buf %lu/%lu/%lu|hold %lu/%lu|ovr %lu err %lu drop %lu/%lu",
+		debug_serial.rx_rate, debug_serial.tx_rate, (unsigned long)st.rx_level, (unsigned long)st.rx_peak,
+		(unsigned long)debug_serial.peak, (unsigned long)(fl.holding_count - debug_serial.flow_base.holding_count),
+		(unsigned long)(fl.held_count - debug_serial.flow_base.held_count),
+		(unsigned long)(st.overruns - debug_serial.base.overruns),
+		(unsigned long)(st.errors - debug_serial.base.errors),
+		(unsigned long)(st.dropped - debug_serial.base.dropped),
+		(unsigned long)(st.tx_dropped - debug_serial.base.tx_dropped));
+	if (last_key.count && n > 0 && (size_t)n < size) {
+		char name[24];
+		keyname(last_key.data, last_key.len, name, sizeof name);
+		snprintf(t + n, size - (size_t)n, "|key %s", name);
+	}
 }
 
 // The main loop starts.
@@ -229,7 +313,8 @@ void debug_status_refresh(void) {
 	uint32_t now = to_ms_since_boot(get_absolute_time());
 	video_stats_t st = video_stats();
 	uint32_t ms = now - debug_status.last_ms;
-	if (ms > 4 * STATUS_INTERVAL_MS) {
+	bool restart = ms > 4 * STATUS_INTERVAL_MS;
+	if (restart) {
 		// Just turned on (or the first time): the peaks start again.
 		debug_status.line_peak = debug_status.pass_peak_us = debug_status.render_peak_us = 0;
 		ms = 0;
@@ -274,6 +359,8 @@ void debug_status_refresh(void) {
 		if (n > 0 && (size_t)n < size) {
 			usbkbd_log_text(t + n, size - (size_t)n);
 		}
+	} else if (settings.status_line == SETTINGS_STATUS_DEBUG_SERIAL) {
+		debug_serial_text(t, size, now, restart);
 	}
 }
 
@@ -319,7 +406,10 @@ void draw_cpm_status(void) {
 		draw_debug_status();
 		return;
 	}
-	char text[SCREEN_MAX_COLS + 1] = " CP/M |";
+	// The WiFi modem starting (bd xir.17.2) first: the line is not hung.
+	char text[SCREEN_MAX_COLS + 1];
+	const char *modem = modem_glue_notice();
+	snprintf(text, sizeof text, "%s%s%s CP/M |", modem ? " " : "", modem ? modem : "", modem ? " |" : "");
 	unsigned letter_col[DRIVES];
 	// The drives' letters, "-" for an empty one; SET-UP's Drives panel
 	// shows what is mounted.
@@ -353,8 +443,16 @@ void draw_cpm_status(void) {
 		snprintf(text + n, sizeof text - n, " | monitor");
 	}
 	n = strlen(text);
+	// The WiFi modem, then the flow control on its line: "wifi RTS/CTS".
+	const char *wifi = wifi_label((uint8_t)modem_glue_status());
+	unsigned wifi_col = 0;
+	if (wifi && n + 3 + strlen(wifi) < sizeof text) {
+		wifi_col = (unsigned)n + 3;
+		snprintf(text + n, sizeof text - n, " | %s", wifi);
+		n = strlen(text);
+	}
 	flow_light.col = 0;
-	n = put_flow_field(text, sizeof text, n); // the Z80's SIO2 and the printer use the line
+	n = put_flow_field(text, sizeof text, n, wifi_col ? " " : " | "); // the Z80's SIO2 and the printer use the line
 	snprintf(text + n, sizeof text - n, "%s | %s", usbkbd_count() ? " | kbd" : "", TERM_BUILD_ID);
 	put_status_text(text);
 	for (unsigned d = 0; d < DRIVES; ++d) {
@@ -373,6 +471,9 @@ void draw_cpm_status(void) {
 			screen_put(&screen, prn_col + i, STATUS_ROW, (uint8_t)"PRN"[i], colors.status_bg, colors.status_fg);
 		}
 	}
+	if (wifi && modem_glue_carrier()) {
+		light_label(wifi_col, wifi, text);
+	}
 }
 
 // The terminal type now, for the status line.
@@ -381,17 +482,28 @@ static const char *term_type_name(void) {
 }
 
 status_t status_now(void) {
-	status_t st = {usbkbd_count(), last_key.count, settings, serial_baud(), "", term_type_name(),
-		(uint8_t)telnet_glue_status()};
+	status_t st = {
+		.keyboards = usbkbd_count(),
+		.settings = settings,
+		.baud = serial_baud(),
+		.type = term_type_name(),
+		.telnet = (uint8_t)telnet_glue_status(),
+		.wifi = (uint8_t)modem_glue_status(),
+		.carrier = modem_glue_carrier(),
+	};
 	usb_label(st.usb, sizeof st.usb);
+	const char *modem = modem_glue_notice();
+	snprintf(st.modem, sizeof st.modem, "%s", modem ? modem : "");
+	st.echo = settings.local_echo && !telnet_glue_connected();
 	return st;
 }
 
 bool status_equal(const status_t *a, const status_t *b) {
-	return a->keyboards == b->keyboards && a->keys_sent == b->keys_sent &&
+	return a->keyboards == b->keyboards &&
 		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0 && a->baud == b->baud &&
 		strcmp(a->usb, b->usb) == 0 &&
-		a->type == b->type && a->telnet == b->telnet;
+		a->type == b->type && a->telnet == b->telnet &&
+		strcmp(a->modem, b->modem) == 0 && a->echo == b->echo && a->wifi == b->wifi && a->carrier == b->carrier;
 }
 
 void draw_status(const status_t *st) {
@@ -402,18 +514,25 @@ void draw_status(const status_t *st) {
 		draw_debug_status();
 		return;
 	}
-	char key[32] = "";
-	if (st->keys_sent) {
-		char name[24];
-		keyname(last_key.data, last_key.len, name, sizeof name);
-		snprintf(key, sizeof key, " | key %s", name);
-	}
 	unsigned data_bits, stop_bits;
 	char parity;
 	settings_framing(&st->settings, &data_bits, &parity, &stop_bits);
 	char text[SCREEN_MAX_COLS + 1];
-	snprintf(text, sizeof text, " %s %ux24 | %s | %u %u%c%u", st->type, screen.cols, TERM_BUILD_ID, st->baud,
-		data_bits, parity, stop_bits);
+	// The WiFi modem starting (bd xir.17.2) first: the terminal is not hung.
+	bool modem = st->modem[0] != '\0';
+	int n0 = snprintf(text, sizeof text, "%s%s%s %s %ux24 | %s | ", modem ? " " : "", st->modem, modem ? " |" : "",
+		st->type, screen.cols, TERM_BUILD_ID);
+	// The WiFi modem's line is fixed (921600 8N1): its state in their place.
+	const char *wifi = wifi_label(st->wifi);
+	unsigned wifi_col = 0;
+	if (n0 > 0 && (size_t)n0 < sizeof text) {
+		if (wifi) {
+			wifi_col = (unsigned)n0;
+			snprintf(text + n0, sizeof text - (size_t)n0, "%s", wifi);
+		} else {
+			snprintf(text + n0, sizeof text - (size_t)n0, "%u %u%c%u", st->baud, data_bits, parity, stop_bits);
+		}
+	}
 	flow_light.col = 0;
 	size_t n = strlen(text);
 	const char *label = flow_label();
@@ -430,13 +549,13 @@ void draw_status(const status_t *st) {
 		snprintf(text + n, sizeof text - n, " | %s", st->telnet == TELNET_STATUS_HANGUP ? "hangup" : "telnet");
 		n = strlen(text);
 	}
-	snprintf(text + n, sizeof text - n, "%s%s%s%s%s", st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "",
-		st->usb, st->settings.local_echo ? " | echo" : "", key);
+	snprintf(text + n, sizeof text - n, "%s%s%s%s", st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "",
+		st->usb, st->echo ? " | echo" : "");
 	put_status_text(text);
-	if (telnet_col && st->telnet == TELNET_STATUS_ACTIVE && telnet_col + 6 <= strlen(text)) {
-		for (unsigned i = 0; i < 6; ++i) {
-			screen_put(&screen, telnet_col + i, STATUS_ROW, (uint8_t)"telnet"[i], colors.status_bg,
-				colors.status_fg);
-		}
+	if (st->telnet == TELNET_STATUS_ACTIVE) {
+		light_label(telnet_col, "telnet", text);
+	}
+	if (wifi && st->carrier) {
+		light_label(wifi_col, wifi, text);
 	}
 }

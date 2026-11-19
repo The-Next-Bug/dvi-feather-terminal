@@ -44,7 +44,8 @@ void send_key(void *ctx, const uint8_t *data, size_t len) {
 	last_key.len = (uint8_t)(len < sizeof last_key.data ? len : sizeof last_key.data);
 	memcpy(last_key.data, data, last_key.len);
 	++last_key.count;
-	if (term_started && settings.local_echo && !cpm.on) {
+	// Local echo, but not while a connection is open: the far end echoes.
+	if (term_started && settings.local_echo && !cpm.on && !telnet_glue_connected()) {
 		term_write(&term, data, len);
 	}
 }

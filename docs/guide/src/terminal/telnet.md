@@ -38,6 +38,13 @@ up. The terminal waits until the line has been quiet for 1.5 s, sends
 guard time on both sides: keys typed meanwhile are dropped). The status
 line shows `hangup` until it is done.
 
+With the WiFi modem (the Port setting, on boards wired for it) the
+terminal hangs up with the modem's DTR line instead: DTR goes inactive
+until the modem drops the call (its DCD line goes inactive), which takes
+a fraction of a second. If the call is still up after 2 s, the `+++` and
+`ATH` above follow. The modem's DCD also shows when the far end closes the
+connection: the call is over at once, and the telnet negotiation with it.
+
 ## The Telnet panel
 
 **N** in SET-UP (terminal mode) opens the panel at its first row.
@@ -82,6 +89,14 @@ forgotten on RIS (`ESC c`), when the Telnet setting changes, or when a call
 dialed with F11 is hung up. A server that ends the call by itself leaves
 the terminal in telnet until one of those: the window size updates it
 then sends would reach the modem's AT prompt (which answers `ERROR`).
+With the WiFi modem's DCD line the end of the connection counts as a
+hang-up.
+
+Local echo (SET-UP) is off while a connection is open, as the far end
+echoes what it gets: during a call dialed with F11, once a server has
+negotiated telnet, and with the WiFi modem whenever its DCD line says a
+connection is up (a call dialed by hand too). The status line's `echo`
+shows only while it is in effect.
 
 ## The status line
 
@@ -96,6 +111,12 @@ lit once the server has negotiated; `hangup` while a hang-up is under way.
 - Use the same flow control on both sides: the Frankless build of Zimodem
   defaults to RTS/CTS, as SET-UP's Flow control should be. `X` in a dial
   command (`ATDTX`) switches Zimodem to XON/XOFF for that call.
-- Throughput through an ESP8266 Zimodem is limited by the modem: it sends
-  one byte per pass of its main loop. The flow control field on the
-  status line shows which side holds the other off.
+- Throughput through an ESP8266 Zimodem is limited by the modem. Wired
+  the earlier way (its CTS on GPIO5) it sends one byte per pass of its
+  main loop; on GPIO13/GPIO15, the ESP's own RTS/CTS pins, the Frankless
+  build fills the UART instead ([wiring](../cpm/printing.md#wiring-and-the-modem)).
+  The flow control field on the status line shows which side holds the
+  other off, and the debug serial status line the bytes per second.
+- Faster than 115200: Zimodem's `ATB230400` (up to `ATB921600`) switches
+  the modem right after its OK; then set the same Baud rate in SET-UP and,
+  once both talk, `AT&W` on the modem. Only with RTS/CTS on both sides.

@@ -58,7 +58,7 @@ A>DEVICE TTY2
 ```
 
 The second line shows the rate in use. CP/M 3 knows rates from 50 to
-19200 baud only, so at SET-UP's 38400, 57600 or 115200 it shows `NONE`.
+19200 baud only, so at SET-UP's 38400 and above it shows `NONE`.
 Rates below 134 are too slow for the board's UART and are left as they
 were. Data bits, parity, stop bits and flow control stay SET-UP's. The
 new rate lasts until the machine is reset (**F11**) or SET-UP's settings

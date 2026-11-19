@@ -27,6 +27,9 @@
 
 pico_board_cmake_set(PICO_PLATFORM, rp2350)
 pico_board_cmake_set(PSRAM_BANKS, 1)
+// The WiFi modem mode, for the ESP-12F on J8/J1 (below). No comment on
+// the line itself: the SDK's parser would take it into the value.
+pico_board_cmake_set(WIFI_MODEM, 1)
 
 #define PICO_RP2350A 1
 
@@ -71,6 +74,22 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 #define BOARD_UART_RX_PIN 21
 #define BOARD_UART_CTS_PIN 22 // used with the Flow control setting's RTS/CTS
 #define BOARD_UART_RTS_PIN 23
+
+// --- WiFi modem (bd xir.15) ---
+//
+// The user's hand-wired ESP-12F running our Zimodem build (lib/zimodem):
+// UART and RTS/CTS on J8 as above, its modem lines on header J1 (pins
+// 5-8; wiring in docs/ideas/modem-carrier.md). J1.6 GP26 <- GPIO4 (DCD,
+// ATS47=4), J1.5 GP27 -> GPIO12 (DTR), J1.8 GP24 -> RST and J1.7 GP25 ->
+// GPIO0, both with pull-ups at the module (4.7k-5.1k: they hold against
+// the RP2350's reset pull-downs).
+#define BOARD_MODEM_ESP8266 1
+#define BOARD_MODEM_DCD_PIN 26
+#define BOARD_MODEM_DTR_PIN 27
+#define BOARD_MODEM_RST_PIN 24
+#define BOARD_MODEM_BOOT_PIN 25
+#define BOARD_MODEM_NAME "esp12f"
+#define BOARD_MODEM_BAUD 921600
 
 #define PICO_DEFAULT_UART BOARD_UART
 #define PICO_DEFAULT_UART_TX_PIN BOARD_UART_TX_PIN

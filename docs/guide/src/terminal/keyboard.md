@@ -68,5 +68,6 @@ always get the VT100's keys.
 ## Checking a keyboard
 
 The [status line](status-line.md) shows `kbd` while a keyboard is
-attached and the last key sent (`key ESC [A`, `key ^C`, ...), so a
-keyboard can be checked without a host.
+attached. Its **debug serial** choice (SET-UP's Status line) also shows
+the last key sent (`key ESC [A`, `key ^C`, ...), so a keyboard can be
+checked without a host.

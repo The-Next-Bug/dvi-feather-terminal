@@ -109,6 +109,9 @@ static void __not_in_flash_func(serial_irq)(void) {
 		++h;
 	}
 	rx_head = h;
+	if (h - rx_tail > stats.rx_peak) {
+		stats.rx_peak = h - rx_tail;
+	}
 	if (flow == SERIAL_FLOW_XONXOFF) {
 		check_level(h - rx_tail);
 	}
@@ -279,7 +282,14 @@ serial_stats_t serial_stats(void) {
 	uint32_t saved = save_and_disable_interrupts();
 	serial_stats_t s = stats;
 	s.rx_level = rx_head - rx_tail;
+	s.sent = tx_tail; // counts up for good, as a free-running index
 	restore_interrupts(saved);
 	s.tx_level = tx_head - tx_tail;
 	return s;
+}
+
+void serial_reset_rx_peak(void) {
+	uint32_t saved = save_and_disable_interrupts();
+	stats.rx_peak = rx_head - rx_tail;
+	restore_interrupts(saved);
 }

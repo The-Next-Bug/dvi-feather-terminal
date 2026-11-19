@@ -10,7 +10,7 @@ Usage: diskimg_gen.py OUTPUT.c [--system NAME BOOT BIOS CPMBIN RELOC MSIZE]
        diskimg_gen.py --convert IMAGE LAYOUT OUTPUT
 
 Each IMAGE is compressed as an LZ4 block with match offsets below
-LZ_WINDOW (src/common/lz.h), which src/common/lz.c decodes a window at a time while the
+LZ_WORK (src/common/lz.h), which src/common/lz.c decodes a window at a time while the
 image is written to the SD card as /DISKS80/NAME.DSK. Compiled with
 DISKIMG_IN_FLASH=1 (firmware), the compressed data goes in a .flashdata
 section, which the SDK's copy_to_ram link leaves in flash; the host tests
@@ -46,106 +46,20 @@ blank image of LAYOUT (FD or HD8) written to OUTPUT.
 import sys
 import zlib
 
-WINDOW = 4096           # LZ_WINDOW in src/common/lz.h
-MAX_OFFSET = WINDOW - 1
-MIN_MATCH = 4
-CHAIN = 64              # candidates tried per position
+DICT_BITS = 11          # LZ_DICT (2048) in src/common/lz.h
 
 
 def compress(data):
-    """Greedy LZ4 block compression with hash chains."""
-    n = len(data)
-    out = bytearray()
-    head = {}
-    prev = [0] * n
-    anchor = 0
-    i = 0
-
-    def length_bytes(v):
-        while v >= 255:
-            out.append(255)
-            v -= 255
-        out.append(v)
-
-    def insert(pos):
-        if pos + MIN_MATCH <= n:
-            key = data[pos:pos + MIN_MATCH]
-            prev[pos] = head.get(key, -1)
-            head[key] = pos
-
-    while i + MIN_MATCH <= n:
-        key = data[i:i + MIN_MATCH]
-        cand = head.get(key, -1)
-        best_len, best_off = 0, 0
-        tries = CHAIN
-        while cand >= 0 and i - cand <= MAX_OFFSET and tries:
-            length = 0
-            while i + length < n and data[cand + length] == data[i + length]:
-                length += 1
-            if length > best_len:
-                best_len, best_off = length, i - cand
-            cand = prev[cand]
-            tries -= 1
-        if best_len < MIN_MATCH:
-            insert(i)
-            i += 1
-            continue
-        literals = i - anchor
-        match = best_len - MIN_MATCH
-        out.append((min(literals, 15) << 4) | min(match, 15))
-        if literals >= 15:
-            length_bytes(literals - 15)
-        out += data[anchor:i]
-        out += bytes((best_off & 255, best_off >> 8))
-        if match >= 15:
-            length_bytes(match - 15)
-        # Only the last window of the match can be matched again.
-        for p in range(max(i, i + best_len - WINDOW), i + best_len):
-            insert(p)
-        i += best_len
-        anchor = i
-
-    literals = n - anchor
-    out.append(min(literals, 15) << 4)
-    if literals >= 15:
-        length_bytes(literals - 15)
-    out += data[anchor:]
-    return bytes(out)
+    """Raw deflate, zlib's best (level 9, the most memory for matching)."""
+    c = zlib.compressobj(9, zlib.DEFLATED, -DICT_BITS, 9)
+    return c.compress(data) + c.flush()
 
 
 def decompress(src, size):
-    """Reference decoder, to check the compressor."""
-    out = bytearray()
-    p = 0
-    while p < len(src):
-        token = src[p]
-        p += 1
-        lit = token >> 4
-        if lit == 15:
-            while True:
-                b = src[p]
-                p += 1
-                lit += b
-                if b != 255:
-                    break
-        out += src[p:p + lit]
-        p += lit
-        if p == len(src):
-            break
-        off = src[p] | src[p + 1] << 8
-        p += 2
-        m = token & 15
-        if m == 15:
-            while True:
-                b = src[p]
-                p += 1
-                m += b
-                if b != 255:
-                    break
-        for _ in range(m + MIN_MATCH):
-            out.append(out[-off])
+    """zlib's decoder, to check the compressor."""
+    out = zlib.decompress(src, -DICT_BITS)
     assert len(out) == size
-    return bytes(out)
+    return out
 
 
 SECTOR = 128

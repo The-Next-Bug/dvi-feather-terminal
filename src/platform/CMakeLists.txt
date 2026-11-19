@@ -2,13 +2,15 @@
 # (led.c), VIDEO_DIAG's UART diagnostics (diag.c), the settings' flash
 # sectors (nvflash.c), the firmware update's staging and commit
 # (fwupdate.c), the PSRAM (extram.c, PSRAM_BANKS builds) and the audio
-# engine on its DAC: the bell and the AY-3-8910 (audio.c).
+# engine on its DAC: the bell and the AY-3-8910 (audio.c), the WiFi
+# modem's control lines (modem_lines.c).
 add_library(dvt_platform STATIC
   audio.c
   diag.c
   extram.c
   fwupdate.c
   led.c
+  modem_lines.c
   nvflash.c
   serial.c
 )

@@ -130,12 +130,12 @@ void __no_inline_not_in_flash_func(nvflash_retime)(void) {
 
 // Interrupts off throughout, as in nvflash_erase/program: XIP is off, and
 // some handlers' code is in flash (the USB host's, ld/, bd qur.24).
-static void write_sector(uint32_t offset, const uint8_t *page) {
+static void write_sector(uint32_t offset, const uint8_t *record) {
 	uint32_t irq = save_and_disable_interrupts();
 	audio_silence(); // the DMA replays its blocks meanwhile
 	nvflash_busy = true;
 	flash_range_erase(offset, FLASH_SECTOR_SIZE);
-	flash_range_program(offset, page, FLASH_PAGE_SIZE);
+	flash_range_program(offset, record, NVFLASH_RECORD_SIZE);
 	nvflash_retime();
 	nvflash_busy = false;
 	restore_interrupts(irq);
@@ -170,10 +170,10 @@ void nvflash_program(uint32_t offset, const uint8_t *data, uint32_t len) {
 	restore_interrupts(irq);
 }
 
-bool nvflash_write(unsigned i, const uint8_t page[NVFLASH_PAGE_SIZE]) {
+bool nvflash_write(unsigned i, const uint8_t record[NVFLASH_RECORD_SIZE]) {
 	if (!usable || i >= NVFLASH_SECTORS) {
 		return false;
 	}
-	write_sector(NVFLASH_OFFSET + i * FLASH_SECTOR_SIZE, page);
-	return memcmp(nvflash_sector(i), page, NVFLASH_PAGE_SIZE) == 0;
+	write_sector(NVFLASH_OFFSET + i * FLASH_SECTOR_SIZE, record);
+	return memcmp(nvflash_sector(i), record, NVFLASH_RECORD_SIZE) == 0;
 }

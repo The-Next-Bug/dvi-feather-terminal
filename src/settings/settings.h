@@ -5,8 +5,8 @@
 // pico-sdk), host-tested; nvflash.c does the flash access.
 //
 // Two flash sectors are used in turn: each save erases the sector that does
-// not hold the newest valid record and programs one record (one flash page)
-// at its start. Power lost during a save leaves the other sector's record,
+// not hold the newest valid record and programs one record (two flash
+// pages, bd xir.17.1) at its start. Power lost during a save leaves the other sector's record,
 // so the previous settings stand.
 //
 // Record (little-endian): magic "DVTS", version, payload length, 2 reserved,
@@ -22,19 +22,42 @@
 // The telnet texts (bd xir.10) are a second block just before it
 // (SETTINGS_TEXT2_OFFSET): 'U', the length, CRC-32, the terminal type, a
 // NUL, the host.
+//
+// The record was one 256-byte page until bd xir.17.1; with the WiFi modem
+// mode (WIFI_MODEM builds) it is two, and
+// the first (SETTINGS_PAGE0_SIZE) keeps that layout byte for byte, so older
+// firmware still reads the record it finds (only its page 0). The second
+// page holds the WiFi network (SETTINGS_NET_OFFSET): 'N', the length,
+// CRC-32, then NUL-separated texts: the SSID, the password; parts added
+// later go after them, and a block without them leaves them empty. A save
+// by older firmware programs page 0 only, so page 1 reads erased: no
+// network, nothing else lost.
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#define SETTINGS_RECORD_SIZE 256 // one flash page
+#ifndef WIFI_MODEM
+#define WIFI_MODEM 0
+#endif
+#define SETTINGS_PAGE0_SIZE 256 // the one-page record's layout: header, payload, text blocks
+#if WIFI_MODEM
+#define SETTINGS_RECORD_SIZE 512 // two flash pages, the network in the second
+#else
+#define SETTINGS_RECORD_SIZE SETTINGS_PAGE0_SIZE // builds without the WiFi modem
+#endif
 #define SETTINGS_TARGET_MAX 63   // the printer's target (= PRINTJOB_TARGET_MAX)
 // The text block: 'T', length, CRC-32 (4), the text.
-#define SETTINGS_TEXT_OFFSET (SETTINGS_RECORD_SIZE - 6 - SETTINGS_TARGET_MAX)
+#define SETTINGS_TEXT_OFFSET (SETTINGS_PAGE0_SIZE - 6 - SETTINGS_TARGET_MAX)
 #define SETTINGS_TYPE_MAX 40 // telnet's terminal type override (= TELNET_TYPE_MAX)
 #define SETTINGS_HOST_MAX 63 // telnet's host[:port]
 // The second text block: 'U', length, CRC-32 (4), the type, NUL, the host.
 #define SETTINGS_TEXT2_OFFSET (SETTINGS_TEXT_OFFSET - 6 - SETTINGS_TYPE_MAX - 1 - SETTINGS_HOST_MAX)
+#define SETTINGS_SSID_MAX 32     // a WiFi network's name
+#define SETTINGS_PASSWORD_MAX 63 // a WPA2 passphrase
+// The network block in page 1: 'N', length, CRC-32 (4), "ssid\0password".
+#define SETTINGS_NET_OFFSET SETTINGS_PAGE0_SIZE
+#define SETTINGS_NET_TEXT_MAX (SETTINGS_RECORD_SIZE - SETTINGS_NET_OFFSET - 6)
 #define SETTINGS_SLOTS 2         // flash sectors used in turn
 
 // One byte per setting; the payload stores them in this order (append only).
@@ -49,7 +72,7 @@ typedef struct {
 	uint8_t palette;    // 1: mono, every color a level of the hue (palette.h)
 	uint8_t mode;       // SETTINGS_MODE_*: what the screen and keyboard are for
 	uint8_t status_line; // 1: shown; 0: row 24 left blank (the text area stays 24 rows);
-	                     // SETTINGS_STATUS_DEBUG(_USB): video and main-loop timing (USB events) instead
+	                     // SETTINGS_STATUS_DEBUG(_USB, _SERIAL): video and main-loop timing (USB events, serial counts) instead
 	uint8_t blank_after; // minutes without a key before the screen blanks; 0: never (blank.h)
 	// Payload byte 11 held the retired 80 columns layout (0 centered 8x16,
 	// 1 full width), so term_type's values avoid 1: older records come back
@@ -73,11 +96,16 @@ typedef struct {
 	uint8_t printer_text;  // IPP: 1 text (AT+PRINTA), 0 raw (AT+PRINTR)
 	uint8_t printer_idle;  // seconds without a byte that end a job
 	uint8_t telnet;        // SETTINGS_TELNET_*: telnet for the host's bytes (SET-UP's Telnet panel, bd xir.10)
+	uint8_t port;          // SETTINGS_PORT_*: the terminal UART as a serial port or the WiFi modem (bd xir.17.3)
 	// New one-byte settings go above this line. Text settings, in the
 	// record's text blocks, not the payload:
 	char printer_target[SETTINGS_TARGET_MAX + 1]; // host:port/path, NUL-padded
 	char telnet_type[SETTINGS_TYPE_MAX + 1];      // TTYPE's name; empty: the Terminal type's
 	char telnet_host[SETTINGS_HOST_MAX + 1];      // the last host dialed (F11), host[:port]
+#if WIFI_MODEM
+	char wifi_ssid[SETTINGS_SSID_MAX + 1];        // the WiFi modem's network (page 1)
+	char wifi_password[SETTINGS_PASSWORD_MAX + 1]; // its passphrase, plain text
+#endif
 } settings_t;
 
 // Telnet (telnet.h's telnet_mode_t, same values): off, once the host sends
@@ -85,6 +113,15 @@ typedef struct {
 #define SETTINGS_TELNET_OFF 0
 #define SETTINGS_TELNET_AUTO 1
 #define SETTINGS_TELNET_ON 2
+
+// The terminal UART (bd xir.17.3): a plain serial port, or the board's WiFi
+// modem (WIFI_MODEM builds only; elsewhere the field is kept but has no
+// effect): the line then runs at SETTINGS_MODEM_BAUD, 8N1, with RTS/CTS,
+// whatever Baud rate, Data/parity/stop and Flow control say. A change
+// reboots.
+#define SETTINGS_PORT_SERIAL 0
+#define SETTINGS_PORT_WIFI 1
+#define SETTINGS_MODEM_BAUD 921600 // = BOARD_MODEM_BAUD (main.c checks it)
 
 // The printer (settings_t.printer; printjob.h's PRINTJOB_* values).
 #define SETTINGS_PRINTER_OFF 0
@@ -101,6 +138,7 @@ typedef struct {
 
 #define SETTINGS_STATUS_DEBUG 2 // status_line: core 1 timing, late lines, frame rate, main-loop time
 #define SETTINGS_STATUS_DEBUG_USB 3 // status_line: the USB host's last events (usbkbd_log)
+#define SETTINGS_STATUS_DEBUG_SERIAL 4 // status_line: the serial line's rates, buffer, holds, errors (bd xir.4)
 
 #define SETTINGS_CLOCK_24H 24
 #define SETTINGS_CLOCK_12H 12
@@ -156,9 +194,9 @@ typedef struct {
 // first choice need not be the default), their names and the SET-UP page
 // they are on: SET-UP's own rows (SETTINGS_MAIN_FIELDS of them, in
 // settings_main_field's order) or its Clock panel (clockpanel.h).
-#define SETTINGS_FIELDS 27
-#define SETTINGS_MAIN_FIELDS 15
-#define SETTINGS_MAX_CHOICES 11
+#define SETTINGS_FIELDS 28
+#define SETTINGS_MAIN_FIELDS (15 + WIFI_MODEM) // the Port row in WIFI_MODEM builds
+#define SETTINGS_MAX_CHOICES 12
 
 #define SETTINGS_PAGE_MAIN 0
 #define SETTINGS_PAGE_CLOCK 1 // the Clock and sound panel (clockpanel.h)
@@ -196,11 +234,32 @@ void settings_set_target(settings_t *s, const char *target);
 void settings_set_telnet_type(settings_t *s, const char *type);
 void settings_set_telnet_host(settings_t *s, const char *host);
 
+#if WIFI_MODEM
+// The WiFi network (spaces allowed, printable ASCII only).
+void settings_set_wifi_ssid(settings_t *s, const char *ssid);
+void settings_set_wifi_password(settings_t *s, const char *password);
+#endif
+
 // The width in use: the Columns setting, but 80 for the ADM-3A.
 unsigned settings_columns(const settings_t *s);
 
+// Whether the terminal UART is the WiFi modem (Port, in a WIFI_MODEM build).
+bool settings_wifi(const settings_t *s);
+
+// The flow control in use (SETTINGS_FLOW_*): RTS/CTS for the WiFi modem,
+// else the Flow control setting.
+unsigned settings_flow(const settings_t *s);
+
+// s with the values in use for the fields other settings decide (Columns
+// under the ADM-3A, the WiFi modem's Baud rate, Data/parity/stop and Flow
+// control): what
+// SET-UP shows on a fixed row.
+settings_t settings_in_use(const settings_t *s);
+
 // Why field i is decided by the other settings and has no effect as it is
-// (Columns under the ADM-3A: "ADM-3A"), or NULL when it can be changed.
+// (Columns under the ADM-3A: "ADM-3A"; Baud rate, Data/parity/stop and Flow
+// control for the WiFi modem: "WiFi modem"), or NULL when it can be
+// changed.
 // SET-UP skips such a field and shows the value in use; the stored value is
 // kept for when it counts again.
 const char *settings_field_fixed(const settings_t *s, unsigned i);

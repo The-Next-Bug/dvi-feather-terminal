@@ -43,6 +43,7 @@ setting's current choice is shown in reverse video.
 | Columns | the width at power-on, and after F11 in CP/M mode. With Terminal type ADM-3A it shows `80 (ADM-3A)` and is skipped: the ADM-3A has 80 columns only |
 | Backspace sends | what Backspace sends at power-on and after a reset (DECBKM); BS suits vttest and CP/M software |
 | Local echo | keys typed are shown on the terminal as well as sent |
+| Port | boards with a WiFi modem only (the Frankless): the serial port as a plain serial line, or the WiFi modem wired to it. Saving a new Port restarts the board. With the WiFi modem, Baud rate, Data/parity/stop and Flow control show its fixed line (`921600`, `8N1`, `RTS/CTS`, each marked `(WiFi modem)`) and are skipped, and Return on the Port row opens the modem's settings |
 | Baud rate, Data/parity/stop | the serial line; applied as soon as SET-UP saves |
 | Flow control | see [Connecting a host](../start/host.md#flow-control); RTS/CTS only on boards with the pins |
 | New line (LNM) | at power-on and after a reset: Return sends CR LF, and LF also returns the cursor. Not used in CP/M mode |
@@ -80,6 +81,32 @@ so SET-UP comes back over a cleared screen, as after a width change.
   level or Stereo layout plays a chime.
 - Return takes the choices back to SET-UP, whose Return saves them with the
   other settings; Esc goes back without them.
+
+## The Modem panel
+
+With Port on the WiFi modem (boards wired for one: the Frankless),
+**Return** on the Port row opens the Modem panel:
+
+- **Network** and **Password**: the WiFi network the modem joins, kept in
+  the terminal's flash (the password in plain text) and given to the
+  modem at every start, so a reflashed or replaced module joins by itself.
+  Type them (Backspace takes the last character off; the password shows as
+  stars); **Return** on either saves them and has the modem join. Left
+  empty, the modem keeps the network it was given some other way.
+  Zimodem cannot take a comma or a quote in the name, or a quote in the
+  password.
+- **Address**: DHCP.
+- **Reset modem**: resets the module and sets it up again, as at power-on.
+- **Defaults** (Return twice): the module's factory settings, then the
+  terminal's own (rate, flow control, the DCD and DTR lines, the network).
+- **Status**, **Firmware**, **Problem**: where the modem's start-up is,
+  the network it is on and its address, Zimodem's version, the ESP8266's
+  last reset cause, and the last thing that went wrong.
+
+Every start in WiFi modem mode (power-on, R, a crash) resets the module
+and sets it up; the status line says `WiFi modem: ...` meanwhile, and the
+serial port is the modem's until it is done. The wiring, the start-up's
+steps and what goes wrong: [WiFi modem](wifi-modem.md).
 
 ## Settings in flash
 
