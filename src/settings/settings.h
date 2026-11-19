@@ -5,8 +5,8 @@
 // pico-sdk), host-tested; nvflash.c does the flash access.
 //
 // Two flash sectors are used in turn: each save erases the sector that does
-// not hold the newest valid record and programs one record (one flash page)
-// at its start. Power lost during a save leaves the other sector's record,
+// not hold the newest valid record and programs one record (two flash
+// pages, bd xir.17.1) at its start. Power lost during a save leaves the other sector's record,
 // so the previous settings stand.
 //
 // Record (little-endian): magic "DVTS", version, payload length, 2 reserved,
@@ -22,19 +22,34 @@
 // The telnet texts (bd xir.10) are a second block just before it
 // (SETTINGS_TEXT2_OFFSET): 'U', the length, CRC-32, the terminal type, a
 // NUL, the host.
+//
+// The record was one 256-byte page until bd xir.17.1; it is two now, and
+// the first (SETTINGS_PAGE0_SIZE) keeps that layout byte for byte, so older
+// firmware still reads the record it finds (only its page 0). The second
+// page holds the WiFi network (SETTINGS_NET_OFFSET): 'N', the length,
+// CRC-32, then NUL-separated texts: the SSID, the password; parts added
+// later go after them, and a block without them leaves them empty. A save
+// by older firmware programs page 0 only, so page 1 reads erased: no
+// network, nothing else lost.
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#define SETTINGS_RECORD_SIZE 256 // one flash page
+#define SETTINGS_RECORD_SIZE 512 // two flash pages
+#define SETTINGS_PAGE0_SIZE 256  // the old record's layout: header, payload, text blocks
 #define SETTINGS_TARGET_MAX 63   // the printer's target (= PRINTJOB_TARGET_MAX)
 // The text block: 'T', length, CRC-32 (4), the text.
-#define SETTINGS_TEXT_OFFSET (SETTINGS_RECORD_SIZE - 6 - SETTINGS_TARGET_MAX)
+#define SETTINGS_TEXT_OFFSET (SETTINGS_PAGE0_SIZE - 6 - SETTINGS_TARGET_MAX)
 #define SETTINGS_TYPE_MAX 40 // telnet's terminal type override (= TELNET_TYPE_MAX)
 #define SETTINGS_HOST_MAX 63 // telnet's host[:port]
 // The second text block: 'U', length, CRC-32 (4), the type, NUL, the host.
 #define SETTINGS_TEXT2_OFFSET (SETTINGS_TEXT_OFFSET - 6 - SETTINGS_TYPE_MAX - 1 - SETTINGS_HOST_MAX)
+#define SETTINGS_SSID_MAX 32     // a WiFi network's name
+#define SETTINGS_PASSWORD_MAX 63 // a WPA2 passphrase
+// The network block in page 1: 'N', length, CRC-32 (4), "ssid\0password".
+#define SETTINGS_NET_OFFSET SETTINGS_PAGE0_SIZE
+#define SETTINGS_NET_TEXT_MAX (SETTINGS_RECORD_SIZE - SETTINGS_NET_OFFSET - 6)
 #define SETTINGS_SLOTS 2         // flash sectors used in turn
 
 // One byte per setting; the payload stores them in this order (append only).
@@ -78,6 +93,8 @@ typedef struct {
 	char printer_target[SETTINGS_TARGET_MAX + 1]; // host:port/path, NUL-padded
 	char telnet_type[SETTINGS_TYPE_MAX + 1];      // TTYPE's name; empty: the Terminal type's
 	char telnet_host[SETTINGS_HOST_MAX + 1];      // the last host dialed (F11), host[:port]
+	char wifi_ssid[SETTINGS_SSID_MAX + 1];        // the WiFi modem's network (page 1)
+	char wifi_password[SETTINGS_PASSWORD_MAX + 1]; // its passphrase, plain text
 } settings_t;
 
 // Telnet (telnet.h's telnet_mode_t, same values): off, once the host sends
@@ -196,6 +213,10 @@ void settings_set_target(settings_t *s, const char *target);
 // Likewise telnet's terminal type and host (no spaces in either).
 void settings_set_telnet_type(settings_t *s, const char *type);
 void settings_set_telnet_host(settings_t *s, const char *host);
+
+// The WiFi network (spaces allowed, printable ASCII only).
+void settings_set_wifi_ssid(settings_t *s, const char *ssid);
+void settings_set_wifi_password(settings_t *s, const char *password);
 
 // The width in use: the Columns setting, but 80 for the ADM-3A.
 unsigned settings_columns(const settings_t *s);

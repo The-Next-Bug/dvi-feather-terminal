@@ -13,7 +13,7 @@
 #define VERSION 1
 #define HEADER_SIZE 16
 #define CRC_OFFSET 12
-#define PAYLOAD_MAX (SETTINGS_RECORD_SIZE - HEADER_SIZE)
+#define PAYLOAD_MAX (SETTINGS_PAGE0_SIZE - HEADER_SIZE)
 
 #define FIELD_COUNT SETTINGS_FIELDS
 _Static_assert(offsetof(settings_t, printer_target) == SETTINGS_FIELDS, "one byte per setting, then the texts");
@@ -21,6 +21,10 @@ _Static_assert(HEADER_SIZE + SETTINGS_FIELDS <= SETTINGS_TEXT2_OFFSET, "the payl
 
 #define TEXT_MAGIC 'T'
 #define TEXT2_MAGIC 'U'
+#define NET_MAGIC 'N'
+// What the network block holds now (it may grow: SETTINGS_NET_TEXT_MAX).
+#define NET_LEN_MAX (SETTINGS_SSID_MAX + 1 + SETTINGS_PASSWORD_MAX)
+_Static_assert(NET_LEN_MAX <= SETTINGS_NET_TEXT_MAX && SETTINGS_NET_TEXT_MAX <= 255, "the network block fits page 1");
 
 // Appended only: the record keeps the index. 230400 and up are for a host
 // with RTS/CTS (the Frankless's Zimodem, ATB): without flow control the
@@ -185,6 +189,14 @@ void settings_set_telnet_host(settings_t *s, const char *host) {
 	set_text(s->telnet_host, SETTINGS_HOST_MAX, host, false);
 }
 
+void settings_set_wifi_ssid(settings_t *s, const char *ssid) {
+	set_text(s->wifi_ssid, SETTINGS_SSID_MAX, ssid, true);
+}
+
+void settings_set_wifi_password(settings_t *s, const char *password) {
+	set_text(s->wifi_password, SETTINGS_PASSWORD_MAX, password, true);
+}
+
 void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_RECORD_SIZE]) {
 	memset(out, 0xff, SETTINGS_RECORD_SIZE);
 	memcpy(out, MAGIC, 4);
@@ -212,6 +224,15 @@ void settings_encode(const settings_t *s, uint32_t seq, uint8_t out[SETTINGS_REC
 	u[6 + type_len] = '\0';
 	memcpy(u + 7 + type_len, s->telnet_host, host_len);
 	put32(u + 2, crc32_update(0, u + 6, u[1]));
+	uint8_t *n = out + SETTINGS_NET_OFFSET;
+	size_t ssid_len = strnlen(s->wifi_ssid, SETTINGS_SSID_MAX);
+	size_t pass_len = strnlen(s->wifi_password, SETTINGS_PASSWORD_MAX);
+	n[0] = NET_MAGIC;
+	n[1] = (uint8_t)(ssid_len + 1 + pass_len);
+	memcpy(n + 6, s->wifi_ssid, ssid_len);
+	n[6 + ssid_len] = '\0';
+	memcpy(n + 7 + ssid_len, s->wifi_password, pass_len);
+	put32(n + 2, crc32_update(0, n + 6, n[1]));
 }
 
 // The text block, if the record has a valid one.
@@ -246,6 +267,22 @@ static void decode_texts2(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s
 	settings_set_telnet_host(s, type_len < len ? text + type_len + 1 : "");
 }
 
+// The network block, if page 1 has a valid one: NUL-separated texts, the
+// SSID and the password, then (later) more; missing ones stay empty.
+static void decode_net(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s) {
+	const uint8_t *n = rec + SETTINGS_NET_OFFSET;
+	unsigned len = n[1];
+	if (n[0] != NET_MAGIC || len > SETTINGS_NET_TEXT_MAX || get32(n + 2) != crc32_update(0, n + 6, len)) {
+		return;
+	}
+	char text[SETTINGS_NET_TEXT_MAX + 1];
+	memcpy(text, n + 6, len);
+	text[len] = '\0';
+	size_t ssid_len = strnlen(text, len);
+	settings_set_wifi_ssid(s, text);
+	settings_set_wifi_password(s, ssid_len < len ? text + ssid_len + 1 : "");
+}
+
 bool settings_decode(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s, uint32_t *seq) {
 	unsigned len = rec[5];
 	if (memcmp(rec, MAGIC, 4) != 0 || rec[4] != VERSION || len > PAYLOAD_MAX ||
@@ -264,6 +301,7 @@ bool settings_decode(const uint8_t rec[SETTINGS_RECORD_SIZE], settings_t *s, uin
 	}
 	decode_texts(rec, s);
 	decode_texts2(rec, s);
+	decode_net(rec, s);
 	*seq = get32(rec + 8);
 	return true;
 }

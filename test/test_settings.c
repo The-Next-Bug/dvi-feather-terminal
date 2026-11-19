@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <string.h>
 
+#include "crc32.h"
 #include "palette.h"
 #include "screen.h"
 #include "settings.h"
@@ -457,7 +458,7 @@ static void test_printer_settings(void) {
 	settings_encode(&in, 10, rec);
 	CHECK(settings_decode(rec, &out, &seq));
 	CHECK(strcmp(in.printer_target, out.printer_target) == 0);
-	CHECK_EQ(rec[SETTINGS_RECORD_SIZE - 1], 'x');
+	CHECK_EQ(rec[SETTINGS_PAGE0_SIZE - 1], 'x'); // the text block ends page 0
 	// A bad text CRC: the target's default, the rest as saved.
 	rec[SETTINGS_TEXT_OFFSET + 10] ^= 1;
 	CHECK(settings_decode(rec, &out, &seq));
@@ -616,6 +617,85 @@ static void test_line_and_colors(void) {
 	}
 }
 
+// The WiFi network (bd xir.17.1): in page 1 of the two-page record, which
+// leaves page 0 as the one-page record was; records from before it (page 1
+// erased) or with a bad block there decode with no network, the rest kept.
+static void test_wifi_settings(void) {
+	settings_t in, out, plain;
+	uint8_t rec[SETTINGS_RECORD_SIZE], rec_plain[SETTINGS_RECORD_SIZE];
+	uint32_t seq;
+	settings_defaults(&in);
+	CHECK_EQ(in.wifi_ssid[0], '\0');
+	CHECK_EQ(in.wifi_password[0], '\0');
+	settings_set_telnet_host(&in, "bbs.example.org");
+	settings_set_target(&in, "printer:631/ipp");
+	plain = in;
+	settings_set_wifi_ssid(&in, "My Home Net");
+	settings_set_wifi_password(&in, "p@ss word 123");
+	settings_encode(&in, 7, rec);
+	CHECK_EQ(rec[SETTINGS_NET_OFFSET], 'N');
+	CHECK_EQ(rec[SETTINGS_NET_OFFSET + 1], 11 + 1 + 13);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK(memcmp(&in, &out, sizeof in) == 0);
+	// Page 0 does not depend on the network.
+	settings_encode(&plain, 7, rec_plain);
+	CHECK(memcmp(rec, rec_plain, SETTINGS_PAGE0_SIZE) == 0);
+	CHECK_EQ(SETTINGS_NET_OFFSET, SETTINGS_PAGE0_SIZE);
+	// Older firmware's record: page 1 erased.
+	memset(rec + SETTINGS_PAGE0_SIZE, 0xff, SETTINGS_RECORD_SIZE - SETTINGS_PAGE0_SIZE);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(out.wifi_ssid[0], '\0');
+	CHECK_EQ(out.wifi_password[0], '\0');
+	CHECK(strcmp(out.telnet_host, "bbs.example.org") == 0);
+	CHECK(strcmp(out.printer_target, "printer:631/ipp") == 0);
+	// A torn page 1 (bad CRC): no network, the rest kept.
+	settings_encode(&in, 8, rec);
+	rec[SETTINGS_NET_OFFSET + 7] ^= 1;
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK_EQ(seq, 8);
+	CHECK_EQ(out.wifi_ssid[0], '\0');
+	CHECK(strcmp(out.telnet_host, "bbs.example.org") == 0);
+	// Cut at their limits; control bytes dropped.
+	char long_text[100];
+	memset(long_text, 'w', sizeof long_text - 1);
+	long_text[sizeof long_text - 1] = '\0';
+	long_text[3] = ' ';
+	long_text[4] = '\t';
+	settings_set_wifi_ssid(&in, long_text);
+	settings_set_wifi_password(&in, long_text);
+	CHECK_EQ(strlen(in.wifi_ssid), SETTINGS_SSID_MAX);
+	CHECK_EQ(strlen(in.wifi_password), SETTINGS_PASSWORD_MAX);
+	CHECK(strchr(in.wifi_ssid, '\t') == NULL);
+	CHECK_EQ(in.wifi_ssid[3], ' ');
+	settings_encode(&in, 9, rec);
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK(memcmp(&in, &out, sizeof in) == 0);
+	CHECK_EQ(rec[SETTINGS_RECORD_SIZE - 1], 0xff);
+	// A later firmware's block with more parts: the first two are read.
+	static const char later[] = "lab\0secret12\0" "static\0" "10.0.0.5";
+	uint8_t *n = rec + SETTINGS_NET_OFFSET;
+	memset(n, 0xff, SETTINGS_RECORD_SIZE - SETTINGS_NET_OFFSET);
+	n[0] = 'N';
+	n[1] = sizeof later - 1;
+	memcpy(n + 6, later, sizeof later - 1);
+	uint32_t crc = crc32_update(0, n + 6, sizeof later - 1);
+	for (unsigned i = 0; i < 4; ++i) {
+		n[2 + i] = (uint8_t)(crc >> 8 * i);
+	}
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK(strcmp(out.wifi_ssid, "lab") == 0);
+	CHECK(strcmp(out.wifi_password, "secret12") == 0);
+	// No NUL at all: the SSID only.
+	n[1] = 3;
+	crc = crc32_update(0, n + 6, 3);
+	for (unsigned i = 0; i < 4; ++i) {
+		n[2 + i] = (uint8_t)(crc >> 8 * i);
+	}
+	CHECK(settings_decode(rec, &out, &seq));
+	CHECK(strcmp(out.wifi_ssid, "lab") == 0);
+	CHECK_EQ(out.wifi_password[0], '\0');
+}
+
 int main(void) {
 	RUN(test_round_trip);
 	RUN(test_erased_flash_gives_defaults);
@@ -634,6 +714,7 @@ int main(void) {
 	RUN(test_older_record);
 	RUN(test_retired_wide80);
 	RUN(test_telnet_settings);
+	RUN(test_wifi_settings);
 	RUN(test_term_type);
 	RUN(test_columns_in_use);
 	RUN(test_line_and_colors);

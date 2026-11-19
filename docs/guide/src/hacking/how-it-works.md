@@ -66,7 +66,9 @@ addresses for each flash size, and the SRAM's and PSRAM's layout.
 A record of one byte a setting, with a sequence number and a CRC-32, in
 two flash sectors used in turn; settings are only ever appended, so an
 older record lacks the newer ones, which keep their defaults
-(`src/settings/settings.c`).
+(`src/settings/settings.c`). A record is two flash pages: the first is
+laid out as the one-page record of older firmware (which still reads it),
+the second holds the WiFi network's name and passphrase, in plain text.
 
 ## The USB host
 

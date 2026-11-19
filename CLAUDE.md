@@ -481,7 +481,13 @@ UF2 in the latter).
   clears the NMI mask before the commit. Long blocking operations (card
   format, the update's file check) show STUCK harmlessly.
 - `src/settings/settings.[ch]` (portable): settings record (magic, seq, CRC-32,
-  one byte per setting, append-only) in two flash sectors used in turn.
+  one byte per setting, append-only) in two flash sectors used in turn;
+  512 bytes since bd xir.17.1: page 0 (SETTINGS_PAGE0_SIZE) keeps the old
+  one-page layout byte for byte (older firmware reads it; its saves leave
+  page 1 erased), page 1 the network block at SETTINGS_NET_OFFSET ('N',
+  length, CRC-32, NUL-separated texts: wifi_ssid, wifi_password; later
+  parts appended, missing ones empty); nvflash_write programs
+  NVFLASH_RECORD_SIZE.
   Settings (settings_fields[] drives the record, validation and SET-UP
   labels; append only): columns, backspace (DECBKM RIS value; default BS
   0x08, as CP/M wants), local_echo,

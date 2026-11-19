@@ -66,8 +66,8 @@
 #define LOGO_MS 10000
 #endif
 
-static_assert(NVFLASH_SECTORS == SETTINGS_SLOTS && NVFLASH_PAGE_SIZE == SETTINGS_RECORD_SIZE,
-	"a settings slot is a flash sector holding one page");
+static_assert(NVFLASH_SECTORS == SETTINGS_SLOTS && NVFLASH_RECORD_SIZE == SETTINGS_RECORD_SIZE,
+	"a settings slot is a flash sector holding one record");
 
 screen_t screen;
 term_t term;
@@ -175,9 +175,9 @@ void apply_settings(const settings_t *s) {
 }
 
 bool settings_store(const settings_t *s) {
-	static uint8_t page[SETTINGS_RECORD_SIZE]; // RAM, for the flash ROM routines
-	settings_encode(s, save_target.seq, page);
-	if (!nvflash_write(save_target.slot, page)) {
+	static uint8_t record[SETTINGS_RECORD_SIZE]; // RAM, for the flash ROM routines
+	settings_encode(s, save_target.seq, record);
+	if (!nvflash_write(save_target.slot, record)) {
 		return false;
 	}
 	settings = *s;
