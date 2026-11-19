@@ -179,6 +179,18 @@ void telnet_glue_hangup(void) {
 	}
 }
 
+bool telnet_glue_connected(void) {
+	if (cpm.on) {
+		return false;
+	}
+#if WIFI_MODEM
+	if (carrier_on && carrier.up) {
+		return true; // the modem's DCD: any call, dialed here or by hand
+	}
+#endif
+	return call.active || tn.seen;
+}
+
 const char *telnet_glue_call(void) {
 	return call.active ? call.host : NULL;
 }

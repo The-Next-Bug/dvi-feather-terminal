@@ -277,7 +277,9 @@ static void draw_logo_status(void) {
 	}
 	char text[SCREEN_MAX_COLS + 1];
 	const char *modem = modem_glue_notice();
-	snprintf(text, sizeof text, "%s%s%s", logo_status, modem ? " | " : "", modem ? modem : "");
+	// The modem first: the build's text may not all fit.
+	snprintf(text, sizeof text, "%s%s%s", modem ? " " : "", modem ? modem : "", modem ? " |" : "");
+	snprintf(text + strlen(text), sizeof text - strlen(text), "%s", logo_status);
 	if (strcmp(text, shown) != 0) {
 		snprintf(shown, sizeof shown, "%s", text);
 		screen_clear_line(&screen, STATUS_ROW, colors.status_fg, colors.status_bg);
@@ -311,7 +313,7 @@ static bool wait_for_input(absolute_time_t until, uint8_t *buf, size_t max, size
 // whether input ended it; *n is what arrived.
 static bool show_logo(uint8_t *buf, size_t max, size_t *n) {
 	char status[SCREEN_MAX_COLS + 1];
-	snprintf(status, sizeof status, " DVI Terminal | build %s (%s, %s)",
+	snprintf(status, sizeof status, " build %s (%s, %s)",
 		TERM_BUILD_ID, TERM_BUILD_COMMIT, TERM_BUILD_DATE);
 	logo_status = status;
 	draw_logo_status();

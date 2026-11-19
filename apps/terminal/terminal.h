@@ -170,6 +170,7 @@ typedef struct {
 	const char *type;   // term_type_name: the host can switch VT52 mode
 	uint8_t telnet;     // telnet_glue_status (telnet_status_t)
 	char modem[WIFI_MODEM ? 40 : 1]; // modem_glue_notice: the WiFi modem starting, or ""
+	bool echo;          // local echo in effect (the setting, off while connected)
 } status_t;
 
 bool status_shown(void);
@@ -221,6 +222,10 @@ void telnet_glue_poll(void);  // each main-loop pass: RIS, size, type, the hang-
 bool telnet_glue_dial(const char *host); // ATD"host", telnet on for the call
 void telnet_glue_hangup(void);
 const char *telnet_glue_call(void);   // the call's host, NULL: none
+// A connection is open (a call dialed here, a server negotiating telnet,
+// or the WiFi modem's DCD): local echo is off meanwhile, as the far end
+// echoes.
+bool telnet_glue_connected(void);
 const char *telnet_type_default(void); // TTYPE from the Terminal type now
 telnet_status_t telnet_glue_status(void);
 

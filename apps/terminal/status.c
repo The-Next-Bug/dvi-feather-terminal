@@ -449,6 +449,7 @@ status_t status_now(void) {
 	usb_label(st.usb, sizeof st.usb);
 	const char *modem = modem_glue_notice();
 	snprintf(st.modem, sizeof st.modem, "%s", modem ? modem : "");
+	st.echo = settings.local_echo && !telnet_glue_connected();
 	return st;
 }
 
@@ -457,7 +458,7 @@ bool status_equal(const status_t *a, const status_t *b) {
 		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0 && a->baud == b->baud &&
 		strcmp(a->usb, b->usb) == 0 &&
 		a->type == b->type && a->telnet == b->telnet &&
-		strcmp(a->modem, b->modem) == 0;
+		strcmp(a->modem, b->modem) == 0 && a->echo == b->echo;
 }
 
 void draw_status(const status_t *st) {
@@ -493,7 +494,7 @@ void draw_status(const status_t *st) {
 		n = strlen(text);
 	}
 	snprintf(text + n, sizeof text - n, "%s%s%s%s", st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "",
-		st->usb, st->settings.local_echo ? " | echo" : "");
+		st->usb, st->echo ? " | echo" : "");
 	put_status_text(text);
 	if (telnet_col && st->telnet == TELNET_STATUS_ACTIVE && telnet_col + 6 <= strlen(text)) {
 		for (unsigned i = 0; i < 6; ++i) {

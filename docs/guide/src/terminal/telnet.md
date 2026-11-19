@@ -92,6 +92,12 @@ then sends would reach the modem's AT prompt (which answers `ERROR`).
 With the WiFi modem's DCD line the end of the connection counts as a
 hang-up.
 
+Local echo (SET-UP) is off while a connection is open, as the far end
+echoes what it gets: during a call dialed with F11, once a server has
+negotiated telnet, and with the WiFi modem whenever its DCD line says a
+connection is up (a call dialed by hand too). The status line's `echo`
+shows only while it is in effect.
+
 ## The status line
 
 `telnet` on the [status line](status-line.md) while telnet is on or auto,
