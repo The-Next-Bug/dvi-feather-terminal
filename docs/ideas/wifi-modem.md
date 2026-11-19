@@ -205,11 +205,14 @@ hang-up, DCD carrier loss, print jobs start on DCD; local echo off while
 connected), 17.4 (Modem panel), 17.6 (status line wifi / no wifi /
 modem?, lit on DCD; HWINFO item 36; the guide's terminal/wifi-modem.md).
 The user tried 17.2/17.3/17.5 and the echo
-and notice fixes on the Frankless: work. The Modem panel (17.4) and
-17.6 are not tried on hardware yet.
+and notice fixes on the Frankless: work. The Modem panel's Reset modem
+and Defaults are not tried on hardware yet.
 
-Next: 17.7 (scan list: Zimodem's ATW
-lists "SSID (RSSI)*" lines), 17.8 (static address: the address mode field
+17.6 tried on the Frankless (2026-11-19): the status field in both modes,
+lit during a call, HWINFO's record, the panel's Network/Password. 17.7
+(scan list) dropped by the user: typing the network is enough.
+
+Next: 17.8 (static address: the address mode field
 was left out of 17.1; static parts go after the password in the page-1
 block, ATW"ssid,pw,ip,dns,gw,subnet"), 17.9-17.11 (module image and
 flashing), 17.12 (ESP32).
