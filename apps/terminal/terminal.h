@@ -223,6 +223,19 @@ const char *telnet_glue_call(void);   // the call's host, NULL: none
 const char *telnet_type_default(void); // TTYPE from the Terminal type now
 telnet_status_t telnet_glue_status(void);
 
+// ---- modem_glue.c ----
+
+// The WiFi modem's start-up (bd xir.17.2; WIFI_MODEM builds with the Port
+// on the modem, else no-ops). While busy the line is its own: nothing else
+// reads or writes the terminal UART.
+void modem_glue_start(void);  // at boot: reset the module and set it up
+extern bool modem_owns_line;  // in SRAM (main.c): read on every SIO2 byte
+static inline bool modem_glue_busy(void) {
+	return modem_owns_line;
+}
+void modem_glue_poll(void);   // while busy: each main-loop pass, the logo's wait and the CPU's
+void modem_glue_describe(char *text, size_t size); // one line, for SET-UP
+
 // ---- printer_glue.c ----
 
 typedef enum {

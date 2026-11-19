@@ -171,7 +171,18 @@ rate, Data/parity/stop and Flow control ("WiFi modem"),
 settings_in_use gives the shown values; line_rate refuses CP/M's rate
 changes; a new Port saves and restarts (setup_t.saved_port); Return on
 the Port row with the modem saved -> SETUP_MODEM (the Modem panel,
-xir.17.4; a placeholder message until then). Slide switch S1 puts the USB
+xir.17.4; a placeholder message until then). The start-up (bd xir.17.2):
+src/modem/modem.[ch] (portable dvt_modem, cold, linked only in WIFI_MODEM
+builds; test_modem's fake Zimodem: rates, ROM text, silent joins, echo,
+the profile, ATW, AT&W) and apps/terminal/modem_glue.c (cold): reset, ROM
+text at 74880, AT at 921600 (silence = joining, up to 35 s; noise = another
+rate), the scan (115200 first, 74880, ... 1200), ATB921600, ATI5's
+profile diffed (E per mode, Q0 V1 F0 R1 S46=0 S47=4 S54=0 S55=12 S63=2),
+ATI3/ATI2, ATW"ssid,password" from our settings when not on it, AT&W
+only after a change, ATI4. Started before the logo; while it runs
+modem_owns_line (main.c, SRAM; modem_glue_busy inline) keeps the terminal,
+SIO2, keys, dials and print jobs off the line. check_sram_only.py's
+OPTIONAL_COLD lets its cold patterns place nothing in builds without it. Slide switch S1 puts the USB
 on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
 CI builds it.
 `boards/feather-rp2350-hstx.h` (bd 1ls.14.1): Adafruit Feather RP2350 with

@@ -27,6 +27,9 @@ ROOTS = ('fwupdate_commit_image', 'core1_main', 'dma_irq', 'video_init', 'nvflas
          'nvflash_program', 'nvflash_read', 'nvflash_write')
 # Roots only some boards have: audio.c's refill interrupt (boards with a DAC).
 OPTIONAL_ROOTS = ('audio_irq',)
+# Cold code patterns only some builds link: the WiFi modem's start-up
+# (WIFI_MODEM builds; the glue's stubs are tiny but may still be dropped).
+OPTIONAL_COLD = ('*libdvt_modem.a:*', '*dvi_terminal.dir/modem_glue.c.o')
 FLASH_LO, FLASH_HI = 0x10000000, 0x11000000
 # Calls a function makes between two others are roots too: main() between
 # video_init (the clock change) and nvflash_retime.
@@ -128,7 +131,7 @@ def main():
     if not cold:
         errors.append('no cold code patterns between __cold_text_start__ and __cold_text_end__ in the link map')
     for p, n in (cold or {}).items():
-        if not n:
+        if not n and p not in OPTIONAL_COLD:
             errors.append(f'cold code pattern {p} placed nothing (its code left in SRAM?)')
     if end is None:
         errors.append('__flash_binary_end not in the link map')

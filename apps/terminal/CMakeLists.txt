@@ -17,6 +17,7 @@ set(TERMINAL_SOURCES
   crash_glue.c
   hwinfo_glue.c
   input_glue.c
+  modem_glue.c
   main.c
   printer_glue.c
   setup_glue.c
@@ -92,6 +93,10 @@ target_link_libraries(dvi_terminal
 
 # The SDK's PSRAM support: found and set up at boot (runtime init), the
 # timing set again after the clock change (extram_retime).
+# The WiFi modem's start-up (bd xir.17.2), in WIFI_MODEM builds only.
+if(WIFI_MODEM)
+  target_link_libraries(dvi_terminal dvt_modem)
+endif()
 if(PSRAM_BANKS)
   target_link_libraries(dvi_terminal hardware_psram)
 endif()

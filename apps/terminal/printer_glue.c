@@ -60,7 +60,7 @@ bool printer_has_tty2(void) {
 }
 
 void printer_poll(void) {
-	if (printer_active) {
+	if (printer_active && !modem_glue_busy()) { // the job waits for the modem's start-up
 		printjob_poll(&job, time_us_64());
 	}
 }

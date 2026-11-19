@@ -15,6 +15,7 @@ add_subdirectory(machine)
 add_subdirectory(disks)
 add_subdirectory(ui)
 add_subdirectory(printer)
+add_subdirectory(modem)
 
 if(DVT_FIRMWARE)
   add_subdirectory(board)

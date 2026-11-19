@@ -82,6 +82,7 @@ screen_stash_t stash;
 bool term_started;
 bool key_pressed;
 bool keys_held;
+bool modem_owns_line; // modem_glue.c's start-up has the terminal UART
 
 settings_t settings;
 settings_target_t save_target;
@@ -262,7 +263,10 @@ static bool display_confirm(void) {
 // press. Returns whether either happened; *n is what arrived.
 static bool wait_for_input(absolute_time_t until, uint8_t *buf, size_t max, size_t *n) {
 	while (!time_reached(until)) {
-		*n = serial_read(buf, max);
+		if (modem_glue_busy()) {
+			modem_glue_poll(); // the WiFi modem starting: the line is its own
+		}
+		*n = modem_glue_busy() ? 0 : serial_read(buf, max);
 		if (*n || key_pressed) {
 			return true;
 		}
@@ -388,6 +392,9 @@ int main(void) {
 	// Before the keyboard: send_key goes through telnet_glue_send from the
 	// first key (one during the logo jumped to tn.send == NULL).
 	telnet_glue_init();
+	// The WiFi modem (Port, bd xir.17.2): reset and set up while the logo
+	// shows; the line is the start-up's until it is done.
+	modem_glue_start();
 	usbkbd_init(send_key, setup_key, NULL);
 	diag_mark("usbkbd_init done");
 
@@ -515,7 +522,7 @@ int main(void) {
 			// receive buffer; opened by the host, what it sends are keys.
 			// Telnet commands come out first (telnet_glue.c).
 			static uint8_t data[sizeof buf + 1];
-			size_t got = setup.active && !setup.from_host ? 0 : serial_read(buf, sizeof buf);
+			size_t got = (setup.active && !setup.from_host) || modem_glue_busy() ? 0 : serial_read(buf, sizeof buf);
 			size_t n = got ? telnet_glue_filter(buf, got, data) : 0;
 			if (setup.active) {
 				setup_feed(data, n);
@@ -531,6 +538,9 @@ int main(void) {
 		keyboard_poll();
 		usbmsc_poll(); // a USB stick plugged in or pulled: mount or unmount it
 		usblog_poll();
+		if (modem_glue_busy()) {
+			modem_glue_poll();
+		}
 		printer_poll();
 		if (setup.open_requested) {
 			setup.open_requested = false;

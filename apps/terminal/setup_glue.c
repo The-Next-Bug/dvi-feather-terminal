@@ -656,9 +656,14 @@ void setup_service(void) {
 		monitor_enter(NULL, true);
 	} else if (a == SETUP_TELNET) {
 		setup_open_telnet(false);
+#if WIFI_MODEM
 	} else if (a == SETUP_MODEM) {
-		setup.ui.message = "The Modem panel is not built yet (bd xir.17.4)";
+		// The Modem panel is bd xir.17.4; until then, where the start-up is.
+		static char text[SCREEN_MAX_COLS + 1];
+		modem_glue_describe(text, 74); // the message row fits 73 columns
+		setup.ui.message = text;
 		setup_draw_panel();
+#endif
 	} else if (a == SETUP_SAVE) {
 		save_and_leave();
 	}

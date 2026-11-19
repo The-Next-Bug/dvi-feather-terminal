@@ -72,33 +72,41 @@ pulls off; in Serial mode they stay so.
 
 ## 3. Modem start-up (src/modem/, portable, host-tested)
 
-Runs from the main loop in WiFi modem mode, without holding up the logo or
-the CP/M monitor. The test's fake Zimodem (from test_printjob's) boots at
-any rate, stays silent, answers late, or loops in the ROM.
+Built (bd xir.17.2): src/modem/modem.[ch] (test_modem against a fake
+Zimodem), apps/terminal/modem_glue.c. From power-on in WiFi modem mode
+(started before the logo; the logo's wait, the main loop and the CPU's
+waits poll it), and while it runs the line is its own: the terminal reads
+nothing, CP/M's SIO2 gets nothing and its output is dropped, keys and
+telnet dials are dropped, print jobs wait.
 
-1. Reset: BOOT high, RST low >= 1 ms, release.
-2. ROM output: listen at 74880 for ~300 ms. The ESP8266 ROM prints its
-   reset cause and boot mode there ("rst cause:2, boot mode:(3,6)"); keep
-   it for the panel and HWINFO. Boot mode (1,x) means GPIO0 was low: the
-   module sits in its loader and the scan would fail.
-3. Probe at 921600: bare CR, then AT CR, OK on a line of its own within
-   ~2 s.
-4. No OK: scan 115200, 74880, 460800, 230400, 57600, 38400, 19200, 9600,
-   2400, 1200. Each: UART rate, input flushed, CR, AT, ~300 ms for OK.
-   (74880 from clk_peri 128 MHz: divider error well under 0.1%.)
-5. Found elsewhere: Zimodem's rate command for 921600 with RTS/CTS, our
-   UART switched, AT again, AT&W, so it starts at 921600 from then on.
-6. Nothing: one more reset and scan, then "modem?" (SET-UP's Reset modem
-   tries again).
-7. Profile: query each item, write only what differs, AT&W only after a
-   change (no flash wear on a normal boot). Items: result codes for our
-   parsers (Q0 V1), DCD on GPIO4 (S47=4), DTR hang-up (S63=2, safe now we
-   drive DTR), RTS/CTS. Terminal mode: echo off; CP/M mode: Hayes
-   defaults (echo on, verbose). Command names to be checked against
-   Zimodem's README.
-8. Network: not joined to our stored SSID -> join with our credentials.
-   Then read SSID, IP, RSSI, firmware version (ATI), ATI12's reset info.
-9. Later, a modem that stops answering AT: back to 1, with a back-off.
+1. Reset: RST low 20 ms, released.
+2. ROM: 300 ms at 74880; the line with "rst cause" kept (the panel will
+   show it; boot mode (1,x) = GPIO0 low).
+3. At 921600, AT probes (bare CR, AT, CR) every 500 ms from 1 s, every 2 s
+   after 2 s. Zimodem in the Frankless build joins its saved network before
+   it says anything, for up to 30 s (WIFI_CONNECT_TRIES 60 x 500 ms), so
+   silence is not a wrong rate: an OK (or READY.) means found; noise (4
+   bytes that are not text: the module talking at another rate) or 35 s
+   of silence starts the scan.
+4. Scan 115200, 74880, 460800, 230400, 57600, 38400, 19200, 9600, 2400,
+   1200, 300 ms each. Found: ATB921600 (Zimodem answers at the new rate),
+   our UART switched, an OK, AT&W at the end. Nothing: a second reset, then
+   "no answer at any rate".
+5. Profile: ATI5 (one line: ATB..E1Q0V1X1F0R1...S46=..S47=..S54=..S55=..
+   S63=..) parsed, and one command for what differs: E (0 terminal mode, 1
+   CP/M), Q0, V1, F0, R1, S46=0 (DCD active low, Zimodem's default despite
+   its README), S47=4, S54=0 (DTR active low), S55=12, S63=2 (DTR hang-up).
+6. Network: ATI3 (the SSID it is set to), ATI2 (its address, 0.0.0.0 when
+   not joined). Ours set and the module not on it (or not joined):
+   ATW"ssid,password" (up to 40 s). Zimodem splits at the first comma and a
+   quote ends the text: an SSID with a comma or quote, or a password with a
+   quote, is not sent (said so). Ours empty: the module's own kept.
+7. AT&W only if something changed (no flash wear on a normal boot), ATI4
+   (the version), ready.
+
+Until the Modem panel (xir.17.4), Return on SET-UP's Port row shows a line
+from modem_glue_describe: the step, or the version, SSID and address, and
+the last problem.
 
 ## 4. Calls
 

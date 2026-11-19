@@ -60,8 +60,8 @@ size_t telnet_glue_filter(const uint8_t *in, size_t n, uint8_t *out) {
 }
 
 void telnet_glue_send(const uint8_t *data, size_t len) {
-	if (call.hangup != HANG_NONE) {
-		return; // a byte now would spoil the guard time
+	if (call.hangup != HANG_NONE || modem_glue_busy()) {
+		return; // a byte now would spoil the guard time, or the modem's start-up
 	}
 	telnet_send_data(&tn, data, len);
 }
@@ -95,7 +95,7 @@ void telnet_glue_poll(void) {
 }
 
 bool telnet_glue_dial(const char *host) {
-	if (cpm.on || call.hangup != HANG_NONE || !host[0]) {
+	if (cpm.on || call.hangup != HANG_NONE || !host[0] || modem_glue_busy()) {
 		return false;
 	}
 	snprintf(call.host, sizeof call.host, "%s", host);
