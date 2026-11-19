@@ -39,7 +39,15 @@ static void set_mode(term_t *t, bool dec, unsigned mode, bool on) {
 	}
 	switch (mode) {
 	case 1: t->vt100.cursor_keys_app = on; break;
-	case 3: term_set_columns(t, on ? 132 : 80); break;
+	case 3: // DECCOLM
+		term_set_columns(t, on ? 132 : 80);
+		// A VT100 cannot hide its cursor, so terminfo's vt100 has no way to
+		// show it again: a program that hid it with xterm's ?25l (bd 0c4)
+		// left it hidden through Linux's reset, whose vt100 strings
+		// (ESC < ESC > CSI ? 3;4;5 l CSI ? 7;8 h CSI r) always include
+		// DECCOLM. So the host's DECCOLM shows it, as RIS does.
+		t->screen->cursor_visible = true;
+		break;
 	case 5: term_set_reverse_screen(t, on); break;
 	case 6: t->cur.origin_mode = on; term_move_to(t, 0, 0); break;
 	case 7:

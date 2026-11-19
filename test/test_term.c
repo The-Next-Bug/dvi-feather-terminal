@@ -1232,7 +1232,26 @@ static void test_utf8(void) {
 	CHECK(row_is(0, "\xc3\xa9"));
 }
 
+// Linux's reset with TERM=vt100 sends no RIS and nothing for the cursor
+// (bd 0c4): a cursor a program hid (?25l) comes back with its DECCOLM.
+static void test_vt100_reset_shows_cursor(void) {
+	setup();
+	put("hello\x1b[?25l");
+	CHECK(!s.cursor_visible);
+	put("\x1b<\x1b>\x1b[?3;4;5l\x1b[?7;8h\x1b[r\r");
+	CHECK(s.cursor_visible);
+	CHECK_EQ(s.cols, 80);
+	CHECK_CURSOR(0, 0);
+	put("\x1b[?25l\x1b[?3h"); // to 132 columns too
+	CHECK(s.cursor_visible);
+	// SET-UP's own width changes keep a hidden cursor hidden.
+	put("\x1b[?25l");
+	term_set_columns(&t, 80);
+	CHECK(!s.cursor_visible);
+}
+
 int main(void) {
+	RUN(test_vt100_reset_shows_cursor);
 	RUN(test_utf8);
 	for (cols = 80; cols <= 132; cols += 52) {
 		printf("-- basics, %u columns\n", cols);
