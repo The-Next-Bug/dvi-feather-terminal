@@ -54,7 +54,7 @@ static void select_next(setup_t *u, int step) {
 }
 
 void setup_open(setup_t *u, const settings_t *values) {
-	*u = (setup_t){.values = *values};
+	*u = (setup_t){.values = *values, .saved_port = values->port};
 	if (settings_field_fixed(&u->values, settings_main_field(u->item))) {
 		select_next(u, 1);
 	}
@@ -114,6 +114,12 @@ setup_action_t setup_input(setup_t *u, uint8_t c, uint32_t now_ms) {
 		break;
 	case '\r':
 	case '\n':
+		// On the Port row with the WiFi modem in use (not just chosen: a
+		// new Port is saved, then the board restarts): its settings.
+		if (settings_main_field(u->item) == offsetof(settings_t, port) && settings_wifi(&u->values) &&
+			u->saved_port == u->values.port) {
+			return SETUP_MODEM;
+		}
 		return SETUP_SAVE;
 	case 'm':
 	case 'M':
@@ -204,6 +210,7 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 	screen_frame(s, top, SETUP_ROWS, text, fg, bg, border);
 
 	settings_t values = u->values;
+	settings_t used = settings_in_use(&values);
 	// The preview goes under the last color setting.
 	unsigned preview_after = 0;
 	while (settings_main_field(preview_after) != offsetof(settings_t, palette)) {
@@ -226,10 +233,8 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 		unsigned col = LEFT + 3 + NAME_WIDTH;
 		const char *fixed = settings_field_fixed(&values, f);
 		if (fixed) {
-			// Only the value in use (Columns under the ADM-3A), then
-			// what decides it.
-			settings_t used = values;
-			used.columns = (uint8_t)settings_columns(&values);
+			// Only the value in use (Columns under the ADM-3A, the
+			// WiFi modem's line), then what decides it.
 			const char *label = it->labels[choice_index(&used, f)];
 			snprintf(text, sizeof text, " %s ", label);
 			screen_puts(s, col, row, text, bg, fg);
@@ -252,6 +257,11 @@ void setup_draw(const setup_t *u, screen_t *s, unsigned top, const char *title, 
 			bool on = c == current;
 			screen_puts(s, col, row, text, on ? bg : fg, on ? fg : bg);
 			col += (unsigned)strlen(it->labels[c]) + 3;
+		}
+		if (f == offsetof(settings_t, port) && values.port != u->saved_port) {
+			screen_puts(s, col + 1, row, "Return saves and restarts", fg, bg);
+		} else if (f == offsetof(settings_t, port) && settings_wifi(&values)) {
+			screen_puts(s, col + 1, row, "Return: modem settings", fg, bg);
 		}
 	}
 	draw_colors_preview(s, top + 2 + preview_after, &values);

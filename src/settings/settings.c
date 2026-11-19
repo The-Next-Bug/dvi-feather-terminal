@@ -93,11 +93,17 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 		SETTINGS_PAGE_PRINTER},
 	{"Telnet", 3, {SETTINGS_TELNET_OFF, SETTINGS_TELNET_AUTO, SETTINGS_TELNET_ON}, {"off", "auto", "on"},
 		SETTINGS_PAGE_TELNET},
+	{"Port", 2, {SETTINGS_PORT_SERIAL, SETTINGS_PORT_WIFI}, {"serial", "WiFi modem"},
+		WIFI_MODEM ? SETTINGS_PAGE_MAIN : SETTINGS_PAGE_NONE},
 };
 
-// SET-UP's rows: the line's settings together, then the rest.
+// SET-UP's rows: the line's settings together (the Port first, in
+// WIFI_MODEM builds), then the rest.
 static const uint8_t main_rows[SETTINGS_MAIN_FIELDS] = {
 	offsetof(settings_t, columns), offsetof(settings_t, backspace), offsetof(settings_t, local_echo),
+#if WIFI_MODEM
+	offsetof(settings_t, port),
+#endif
 	offsetof(settings_t, baud), offsetof(settings_t, framing), offsetof(settings_t, flow),
 	offsetof(settings_t, newline), offsetof(settings_t, colors), offsetof(settings_t, palette),
 	offsetof(settings_t, display), offsetof(settings_t, mode), offsetof(settings_t, status_line), offsetof(settings_t, blank_after),
@@ -108,7 +114,18 @@ unsigned settings_main_field(unsigned row) {
 	return row < SETTINGS_MAIN_FIELDS ? main_rows[row] : SETTINGS_FIELDS;
 }
 
+bool settings_wifi(const settings_t *s) {
+	return WIFI_MODEM && s->port == SETTINGS_PORT_WIFI;
+}
+
+unsigned settings_flow(const settings_t *s) {
+	return settings_wifi(s) ? SETTINGS_FLOW_RTSCTS : s->flow;
+}
+
 unsigned settings_baud_rate(const settings_t *s) {
+	if (settings_wifi(s)) {
+		return SETTINGS_MODEM_BAUD;
+	}
 	return baud_rates[s->baud < COUNT(baud_rates) ? s->baud : BAUD_DEFAULT];
 }
 
@@ -120,7 +137,24 @@ const char *settings_field_fixed(const settings_t *s, unsigned i) {
 	if (i == offsetof(settings_t, columns) && s->term_type == SETTINGS_TERM_ADM3A) {
 		return "ADM-3A";
 	}
+	if ((i == offsetof(settings_t, baud) || i == offsetof(settings_t, flow)) && settings_wifi(s)) {
+		return "WiFi modem";
+	}
 	return NULL;
+}
+
+settings_t settings_in_use(const settings_t *s) {
+	settings_t used = *s;
+	used.columns = (uint8_t)settings_columns(s);
+	used.flow = (uint8_t)settings_flow(s);
+	if (settings_wifi(s)) {
+		for (unsigned i = 0; i < COUNT(baud_rates); ++i) {
+			if (baud_rates[i] == SETTINGS_MODEM_BAUD) {
+				used.baud = (uint8_t)i;
+			}
+		}
+	}
+	return used;
 }
 
 void settings_framing(const settings_t *s, unsigned *data_bits, char *parity, unsigned *stop_bits) {
@@ -164,7 +198,7 @@ void settings_defaults(settings_t *s) {
 		.sound_stereo = SETTINGS_STEREO_MONO, .flow = SETTINGS_FLOW_NONE,
 		.display = SETTINGS_DISPLAY_DEFAULT, .display_was = SETTINGS_DISPLAY_NONE,
 		.printer = SETTINGS_PRINTER_OFF, .printer_text = 1, .printer_idle = SETTINGS_PRINTER_IDLE_DEFAULT,
-		.telnet = SETTINGS_TELNET_OFF};
+		.telnet = SETTINGS_TELNET_OFF, .port = SETTINGS_PORT_SERIAL};
 }
 
 // Copy src into dst (size max + 1): printable ASCII only (and no spaces

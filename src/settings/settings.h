@@ -96,6 +96,7 @@ typedef struct {
 	uint8_t printer_text;  // IPP: 1 text (AT+PRINTA), 0 raw (AT+PRINTR)
 	uint8_t printer_idle;  // seconds without a byte that end a job
 	uint8_t telnet;        // SETTINGS_TELNET_*: telnet for the host's bytes (SET-UP's Telnet panel, bd xir.10)
+	uint8_t port;          // SETTINGS_PORT_*: the terminal UART as a serial port or the WiFi modem (bd xir.17.3)
 	// New one-byte settings go above this line. Text settings, in the
 	// record's text blocks, not the payload:
 	char printer_target[SETTINGS_TARGET_MAX + 1]; // host:port/path, NUL-padded
@@ -112,6 +113,14 @@ typedef struct {
 #define SETTINGS_TELNET_OFF 0
 #define SETTINGS_TELNET_AUTO 1
 #define SETTINGS_TELNET_ON 2
+
+// The terminal UART (bd xir.17.3): a plain serial port, or the board's WiFi
+// modem (WIFI_MODEM builds only; elsewhere the field is kept but has no
+// effect): the line then runs at SETTINGS_MODEM_BAUD with RTS/CTS, whatever
+// Baud rate and Flow control say. A change reboots.
+#define SETTINGS_PORT_SERIAL 0
+#define SETTINGS_PORT_WIFI 1
+#define SETTINGS_MODEM_BAUD 921600 // = BOARD_MODEM_BAUD (main.c checks it)
 
 // The printer (settings_t.printer; printjob.h's PRINTJOB_* values).
 #define SETTINGS_PRINTER_OFF 0
@@ -184,8 +193,8 @@ typedef struct {
 // first choice need not be the default), their names and the SET-UP page
 // they are on: SET-UP's own rows (SETTINGS_MAIN_FIELDS of them, in
 // settings_main_field's order) or its Clock panel (clockpanel.h).
-#define SETTINGS_FIELDS 27
-#define SETTINGS_MAIN_FIELDS 15
+#define SETTINGS_FIELDS 28
+#define SETTINGS_MAIN_FIELDS (15 + WIFI_MODEM) // the Port row in WIFI_MODEM builds
 #define SETTINGS_MAX_CHOICES 12
 
 #define SETTINGS_PAGE_MAIN 0
@@ -233,8 +242,21 @@ void settings_set_wifi_password(settings_t *s, const char *password);
 // The width in use: the Columns setting, but 80 for the ADM-3A.
 unsigned settings_columns(const settings_t *s);
 
+// Whether the terminal UART is the WiFi modem (Port, in a WIFI_MODEM build).
+bool settings_wifi(const settings_t *s);
+
+// The flow control in use (SETTINGS_FLOW_*): RTS/CTS for the WiFi modem,
+// else the Flow control setting.
+unsigned settings_flow(const settings_t *s);
+
+// s with the values in use for the fields other settings decide (Columns
+// under the ADM-3A, Baud rate and Flow control for the WiFi modem): what
+// SET-UP shows on a fixed row.
+settings_t settings_in_use(const settings_t *s);
+
 // Why field i is decided by the other settings and has no effect as it is
-// (Columns under the ADM-3A: "ADM-3A"), or NULL when it can be changed.
+// (Columns under the ADM-3A: "ADM-3A"; Baud rate and Flow control for the
+// WiFi modem: "WiFi modem"), or NULL when it can be changed.
 // SET-UP skips such a field and shows the value in use; the stored value is
 // kept for when it counts again.
 const char *settings_field_fixed(const settings_t *s, unsigned i);

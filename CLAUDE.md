@@ -160,7 +160,17 @@ FATAL_ERROR without PSRAM_BANKS, user 2026-11-19: no SRAM to spare on the
 others; add_compile_definitions for all firmware, the host tests build
 with WIFI_MODEM=1; board.h #errors on WIFI_MODEM without a modem;
 build-info.txt wifi_modem=). Without it: settings record 256 bytes,
-modem_lines no-ops, no wifi_* fields. Slide switch S1 puts the USB
+modem_lines no-ops, no wifi_* fields. Port (field 27, bd xir.17.3:
+SETTINGS_PORT_SERIAL / _WIFI; in every build's record, a SET-UP row only
+in WIFI_MODEM builds, before Baud rate: SETTINGS_MAIN_FIELDS 15 +
+WIFI_MODEM, so the host tests' and the guide's SET-UP have it):
+settings_wifi(), settings_baud_rate() SETTINGS_MODEM_BAUD (= BOARD_MODEM_BAUD,
+main.c static_assert) and settings_flow() RTS/CTS for the modem;
+settings_field_fixed fixes Baud rate and Flow control ("WiFi modem"),
+settings_in_use gives the shown values; line_rate refuses CP/M's rate
+changes; a new Port saves and restarts (setup_t.saved_port); Return on
+the Port row with the modem saved -> SETUP_MODEM (the Modem panel,
+xir.17.4; a placeholder message until then). Slide switch S1 puts the USB
 on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
 CI builds it.
 `boards/feather-rp2350-hstx.h` (bd 1ls.14.1): Adafruit Feather RP2350 with

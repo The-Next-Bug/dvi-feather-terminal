@@ -9,7 +9,9 @@
 // from the host): Up/Down (ESC [ A/B or ESC O A/B) select a setting,
 // Left/Right and Space change it, Return saves, Escape cancels, T shows the
 // demo screen, R reboots the board, U opens the firmware update (fwpanel.h),
-// C the Clock panel (clockpanel.h), P the Printer panel (printpanel.h), and
+// C the Clock panel (clockpanel.h), P the Printer panel (printpanel.h),
+// Return on the Port row, with the WiFi modem saved and chosen, the Modem
+// panel (WIFI_MODEM builds), and
 // with machine_menu D opens the Drives
 // panel and M leaves for the Z80 machine's menu. A lone ESC
 // is only known to be the Escape key once SETUP_ESC_TIMEOUT_MS pass without
@@ -41,6 +43,7 @@ typedef enum {
 	SETUP_CLOCK,    // C: the Clock and sound panel (clockpanel.h)
 	SETUP_PRINTER,  // P: the Printer panel (printpanel.h)
 	SETUP_TELNET,   // N, terminal mode only: the Telnet panel (telnetpanel.h)
+	SETUP_MODEM,    // Return on the Port row while the WiFi modem is in use: the Modem panel
 } setup_action_t;
 
 typedef struct {
@@ -51,6 +54,7 @@ typedef struct {
 	const char *message; // shown in the panel until the next key; NULL: none
 	bool machine_menu;   // offer M for the Z80 machine's menu (set after setup_open)
 	bool no_rtscts;      // the board has no CTS/RTS pins: Flow control offers no RTS/CTS
+	uint8_t saved_port;  // the Port as saved (and in use) when SET-UP opened
 } setup_t;
 
 void setup_open(setup_t *u, const settings_t *values);

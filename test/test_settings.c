@@ -226,16 +226,20 @@ static void test_clock_settings(void) {
 		CHECK_EQ(rows, panel || hidden ? 0u : 1u);
 	}
 	CHECK_EQ(main, SETTINGS_MAIN_FIELDS);
-	for (unsigned row = 0; row <= offsetof(settings_t, framing); ++row) {
-		CHECK_EQ(settings_main_field(row), row);
-	}
-	CHECK_EQ(settings_main_field(offsetof(settings_t, framing) + 1), offsetof(settings_t, flow));
-	for (unsigned row = offsetof(settings_t, newline) + 1; row <= offsetof(settings_t, palette) + 1; ++row) {
-		CHECK_EQ(settings_main_field(row), row - 1);
-	}
-	CHECK_EQ(settings_main_field(offsetof(settings_t, palette) + 2), offsetof(settings_t, display));
-	for (unsigned row = offsetof(settings_t, mode) + 2; row <= offsetof(settings_t, term_type) + 2; ++row) {
-		CHECK_EQ(settings_main_field(row), row - 2);
+	// The rows' order: the line's settings together (the Port first in
+	// WIFI_MODEM builds, which the tests are), Display under Palette.
+	static const uint8_t order[] = {offsetof(settings_t, columns), offsetof(settings_t, backspace),
+		offsetof(settings_t, local_echo),
+#if WIFI_MODEM
+		offsetof(settings_t, port),
+#endif
+		offsetof(settings_t, baud), offsetof(settings_t, framing), offsetof(settings_t, flow),
+		offsetof(settings_t, newline), offsetof(settings_t, colors), offsetof(settings_t, palette),
+		offsetof(settings_t, display), offsetof(settings_t, mode), offsetof(settings_t, status_line),
+		offsetof(settings_t, blank_after), offsetof(settings_t, term_type), offsetof(settings_t, usb_log)};
+	CHECK_EQ(sizeof order, SETTINGS_MAIN_FIELDS);
+	for (unsigned row = 0; row < sizeof order; ++row) {
+		CHECK_EQ(settings_main_field(row), order[row]);
 	}
 	CHECK_EQ(settings_main_field(SETTINGS_MAIN_FIELDS - 1), offsetof(settings_t, usb_log));
 	CHECK_EQ(settings_main_field(SETTINGS_MAIN_FIELDS), SETTINGS_FIELDS); // past the rows

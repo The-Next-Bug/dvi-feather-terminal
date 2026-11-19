@@ -132,12 +132,14 @@ static void test_draw_marks_current_choice(void) {
 	CHECK(row_contains(&s, top + 1, "> Columns"));
 	CHECK(row_contains(&s, top + 2, "  Backspace sends"));
 	CHECK(row_contains(&s, top + 3, "  Local echo"));
-	CHECK(row_contains(&s, top + 4, "< 115200 >")); // long lists: current only
-	CHECK(row_contains(&s, top + 5, "< 8N1 >"));
-	CHECK(row_contains(&s, top + 6, "  Flow control")); // the line's settings together
-	CHECK(row_contains(&s, top + 6, " none   RTS/CTS   XON/XOFF "));
-	CHECK(row_contains(&s, top + 8, "  Colors"));
-	CHECK(row_contains(&s, top + 8, "white   green   amber   blue")); // short lists: all
+	const unsigned baud = top + 1 + row_of(offsetof(settings_t, baud));
+	const unsigned colors = top + 1 + row_of(offsetof(settings_t, colors));
+	CHECK(row_contains(&s, baud, "< 115200 >")); // long lists: current only
+	CHECK(row_contains(&s, baud + 1, "< 8N1 >"));
+	CHECK(row_contains(&s, baud + 2, "  Flow control")); // the line's settings together
+	CHECK(row_contains(&s, baud + 2, " none   RTS/CTS   XON/XOFF "));
+	CHECK(row_contains(&s, colors, "  Colors"));
+	CHECK(row_contains(&s, colors, "white   green   amber   blue")); // short lists: all
 	CHECK(row_contains(&s, top + SETUP_ROWS - 3, "Return save"));
 	// " 132 " is drawn reversed, " 80 " normal.
 	char line[81];
@@ -163,10 +165,11 @@ static void test_colors_preview(void) {
 	screen_init(&s, 80, RGB222(2, 2, 2), 0);
 	open_with(80);
 	const unsigned top = SCREEN_ROWS - 1 - SETUP_ROWS;
-	const unsigned preview = top + 10; // under Palette (item 8, row top + 9)
+	const unsigned palette = top + 1 + row_of(offsetof(settings_t, palette));
+	const unsigned preview = palette + 1; // under Palette
 	setup_draw(&u, &s, top, "", FG, BG, BORDER);
-	CHECK(row_contains(&s, top + 8, "Colors"));
-	CHECK(row_contains(&s, top + 9, "Palette"));
+	CHECK(row_contains(&s, palette - 1, "Colors"));
+	CHECK(row_contains(&s, palette, "Palette"));
 	CHECK(row_contains(&s, preview, " Text Bold  Status "));
 	CHECK(row_contains(&s, preview, "0 1 2 3 4 5 6 7 8 9 A B C D E F"));
 	CHECK(row_contains(&s, preview + 1, "0 1 2 3 4 5 6 7 8 9 A B C D E F"));
@@ -719,6 +722,65 @@ static void test_flow_control_row(void) {
 	CHECK(!row_contains(&s, 1 + row, "RTS/CTS"));
 }
 
+// The Port row (bd xir.17.3, WIFI_MODEM builds): before Baud rate. With the
+// WiFi modem, Baud rate and Flow control show its fixed line and are
+// skipped; Return on the Port row opens the Modem panel once the modem is
+// the saved Port, and saves (then restarts) while the Port is changed.
+static void test_port_row(void) {
+	static screen_t s;
+	screen_init(&s, 80, FG, BG);
+	const unsigned port = row_of(offsetof(settings_t, port));
+	const unsigned baud = row_of(offsetof(settings_t, baud));
+	const unsigned flow = row_of(offsetof(settings_t, flow));
+	CHECK_EQ(port, row_of(offsetof(settings_t, local_echo)) + 1);
+	CHECK_EQ(baud, port + 1);
+	open_with(80);
+	CHECK_EQ(u.values.port, SETTINGS_PORT_SERIAL);
+	u.item = port;
+	send(" ", 0);
+	CHECK_EQ(u.values.port, SETTINGS_PORT_WIFI);
+	setup_draw(&u, &s, 0, "", FG, BG, BORDER);
+	CHECK(row_contains(&s, 1 + port, "> Port"));
+	CHECK(row_contains(&s, 1 + port, " serial   WiFi modem "));
+	CHECK(row_contains(&s, 1 + port, "Return saves and restarts"));
+	CHECK(row_contains(&s, 1 + baud, "(WiFi modem)"));
+	CHECK_EQ(send("\r", 0), SETUP_SAVE); // a new Port: saved, not the panel
+
+	settings_t v;
+	settings_defaults(&v);
+	v.port = SETTINGS_PORT_WIFI;
+	v.baud = 4; // 9600 and XON/XOFF kept for the serial port
+	v.flow = SETTINGS_FLOW_XONXOFF;
+	CHECK(settings_wifi(&v));
+	CHECK_EQ(settings_baud_rate(&v), SETTINGS_MODEM_BAUD);
+	CHECK_EQ(settings_flow(&v), SETTINGS_FLOW_RTSCTS);
+	setup_open(&u, &v);
+	setup_draw(&u, &s, 0, "", FG, BG, BORDER);
+	CHECK(row_contains(&s, 1 + port, "Return: modem settings"));
+	CHECK(row_contains(&s, 1 + baud, " 921600  (WiFi modem)"));
+	CHECK(row_contains(&s, 1 + flow, " RTS/CTS  (WiFi modem)"));
+	CHECK(!row_contains(&s, 1 + flow, "XON/XOFF"));
+	u.item = port;
+	send("\x1b[B", 0); // past Baud rate, Data/parity/stop, past Flow control
+	CHECK_EQ(u.item, baud + 1);
+	send("\x1b[B", 0);
+	CHECK_EQ(u.item, flow + 1);
+	send("\x1b[A\x1b[A", 0);
+	CHECK_EQ(u.item, port);
+	CHECK_EQ(send("\r", 0), SETUP_MODEM);
+	u.item = baud + 1;
+	CHECK_EQ(send("\r", 0), SETUP_SAVE); // elsewhere: save
+	CHECK_EQ(u.values.baud, 4);
+	CHECK_EQ(u.values.flow, SETTINGS_FLOW_XONXOFF);
+	// Back to serial: the line's rows count again; Return saves.
+	u.item = port;
+	send(" ", 0);
+	CHECK_EQ(u.values.port, SETTINGS_PORT_SERIAL);
+	CHECK(!settings_field_fixed(&u.values, offsetof(settings_t, baud)));
+	CHECK_EQ(settings_baud_rate(&u.values), 9600);
+	CHECK_EQ(send("\r", 0), SETUP_SAVE);
+}
+
 // The ADM-3A is 80 columns only: Columns shows 80 and what fixes it, is
 // skipped by Up/Down and cannot change, and its own value is kept (dmt.39).
 static void test_columns_fixed_by_adm3a(void) {
@@ -827,6 +889,7 @@ int main(void) {
 	RUN(test_box_and_selection);
 	RUN(test_columns_fixed_by_adm3a);
 	RUN(test_flow_control_row);
+	RUN(test_port_row);
 	RUN(test_colors_preview);
 	RUN(test_machine_menu_key);
 	RUN(test_demo_key);

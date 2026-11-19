@@ -429,6 +429,9 @@ bool save_and_leave(void) {
 	if (settings.mode != (cpm.on ? SETTINGS_MODE_CPM : SETTINGS_MODE_TERMINAL)) {
 		restart(); // the other mode starts from a clean power-on
 	}
+	if (settings.port != setup.ui.saved_port) {
+		restart(); // the WiFi modem, or not, from power-on (bd xir.17.3)
+	}
 	setup_leave(true);
 	return true;
 }
@@ -653,6 +656,9 @@ void setup_service(void) {
 		monitor_enter(NULL, true);
 	} else if (a == SETUP_TELNET) {
 		setup_open_telnet(false);
+	} else if (a == SETUP_MODEM) {
+		setup.ui.message = "The Modem panel is not built yet (bd xir.17.4)";
+		setup_draw_panel();
 	} else if (a == SETUP_SAVE) {
 		save_and_leave();
 	}

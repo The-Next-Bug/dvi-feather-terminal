@@ -127,14 +127,20 @@ void show_palette(const settings_t *s) {
 	palette.mono = s->palette;
 }
 
-// The serial line settings of s.
+#if WIFI_MODEM
+static_assert(BOARD_MODEM_BAUD == SETTINGS_MODEM_BAUD, "the WiFi modem's rate is the settings' SETTINGS_MODEM_BAUD");
+#endif
+
+// The serial line settings of s (the WiFi modem's fixed rate and RTS/CTS
+// when the Port is the modem: settings_baud_rate, settings_flow).
 static void apply_line(const settings_t *s) {
 	unsigned data_bits, stop_bits;
 	char parity;
 	settings_framing(s, &data_bits, &parity, &stop_bits);
 	serial_configure(settings_baud_rate(s), data_bits, parity, stop_bits);
-	serial_set_flow(s->flow == SETTINGS_FLOW_RTSCTS ? SERIAL_FLOW_RTSCTS
-		: s->flow == SETTINGS_FLOW_XONXOFF ? SERIAL_FLOW_XONXOFF : SERIAL_FLOW_NONE);
+	unsigned flow = settings_flow(s);
+	serial_set_flow(flow == SETTINGS_FLOW_RTSCTS ? SERIAL_FLOW_RTSCTS
+		: flow == SETTINGS_FLOW_XONXOFF ? SERIAL_FLOW_XONXOFF : SERIAL_FLOW_NONE);
 }
 
 bool line_rate(unsigned rate) {
@@ -142,7 +148,7 @@ bool line_rate(unsigned rate) {
 		apply_line(&settings);
 		return true;
 	}
-	if (!serial_baud_possible(rate)) {
+	if (settings_wifi(&settings) || !serial_baud_possible(rate)) { // the modem's rate is fixed
 		return false;
 	}
 	unsigned data_bits, stop_bits;

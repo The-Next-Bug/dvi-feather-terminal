@@ -43,6 +43,7 @@ setting's current choice is shown in reverse video.
 | Columns | the width at power-on, and after F11 in CP/M mode. With Terminal type ADM-3A it shows `80 (ADM-3A)` and is skipped: the ADM-3A has 80 columns only |
 | Backspace sends | what Backspace sends at power-on and after a reset (DECBKM); BS suits vttest and CP/M software |
 | Local echo | keys typed are shown on the terminal as well as sent |
+| Port | boards with a WiFi modem only (the Frankless): the serial port as a plain serial line, or the WiFi modem wired to it. Saving a new Port restarts the board. With the WiFi modem, Baud rate and Flow control show its fixed line (`921600 (WiFi modem)`, `RTS/CTS (WiFi modem)`) and are skipped, and Return on the Port row opens the modem's settings |
 | Baud rate, Data/parity/stop | the serial line; applied as soon as SET-UP saves |
 | Flow control | see [Connecting a host](../start/host.md#flow-control); RTS/CTS only on boards with the pins |
 | New line (LNM) | at power-on and after a reset: Return sends CR LF, and LF also returns the cursor. Not used in CP/M mode |
