@@ -6,12 +6,15 @@
 
 #include "terminal.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "board.h"
 #include "modem_lines.h"
+#include "palette.h"
 #include "serial.h"
+#include "video.h"
 
 #if WIFI_MODEM
 
@@ -102,16 +105,115 @@ const char *modem_glue_notice(void) {
 	return text;
 }
 
-void modem_glue_describe(char *text, size_t size) {
-	if (!started) {
-		snprintf(text, size, "Modem: not started");
-	} else if (modem.state == MODEM_READY) {
-		snprintf(text, size, "Modem %s: %s%s%s", modem.version[0] ? modem.version : "ready",
-			modem_joined(&modem) ? modem.ssid : "no network",
-			modem_joined(&modem) ? " " : "", modem_joined(&modem) ? modem.ip : "");
-	} else {
-		snprintf(text, size, "Modem: %s%s%s", modem_step_name(&modem), modem.problem ? ": " : "",
-			modem.problem ? modem.problem : "");
+// ---- the Modem panel in SET-UP (Return on the Port row, bd xir.17.4) ----
+
+static_assert(MODEMPANEL_ROWS <= SETUP_ROWS, "the Modem panel fits SET-UP's rows");
+
+static void panel_status(modempanel_status_t *st) {
+	*st = (modempanel_status_t){
+		.state = started ? modem_step_name(&modem) : "not started",
+		.busy = modem_glue_busy(),
+		.joined = started && modem_joined(&modem),
+		.ssid = modem.ssid,
+		.ip = modem.ip,
+		.version = modem.version,
+		.rom = modem.rom,
+		.problem = modem.problem,
+	};
+}
+
+// What the panel shows of the modem, to redraw it when that changes.
+static char panel_shown[160];
+
+static void panel_fingerprint(char *out, size_t size) {
+	snprintf(out, size, "%s|%d|%s|%s|%s|%s", modem_step_name(&modem), modem_glue_busy(), modem.ip, modem.ssid,
+		modem.version, modem.problem ? modem.problem : "");
+}
+
+static void modem_draw_panel(void) {
+	settings_colors_t c = settings_colors(&setup.ui.values);
+	for (unsigned r = 0; r < SETUP_ROWS - MODEMPANEL_ROWS; ++r) {
+		screen_clear_line(&screen, SETUP_TOP + r, PALETTE_TEXT, PALETTE_BACKGROUND);
+	}
+	panel_status(&setup.modem.status);
+	panel_fingerprint(panel_shown, sizeof panel_shown);
+	modempanel_draw(&setup.modem, &screen, SETUP_TOP + SETUP_ROWS - MODEMPANEL_ROWS, PALETTE_TEXT,
+		PALETTE_BACKGROUND, c.status_bg);
+}
+
+void modem_panel_open(void) {
+	modempanel_open(&setup.modem, &setup.ui.values);
+	setup.modem_open = true;
+	setup.modem_work = MODEMPANEL_NONE;
+	modem_draw_panel();
+}
+
+void modem_panel_feed(uint8_t c, uint32_t now) {
+	modempanel_action_t a = modempanel_input(&setup.modem, c, now);
+	if (a == MODEMPANEL_REDRAW) {
+		modem_draw_panel();
+	} else if (a != MODEMPANEL_NONE) {
+		setup.modem_work = a;
+	}
+}
+
+// Return on Network or Password: the network saved (into SET-UP's edited
+// settings too, so its own Return keeps it), then pushed to the module.
+static void panel_join(uint32_t now) {
+	const settings_t *v = &setup.modem.values;
+	if (v->wifi_ssid[0] && !modem_network_sendable(v->wifi_ssid, v->wifi_password)) {
+		setup.modem.message = "Zimodem cannot take a comma or quote in the name, a quote in the password";
+		return;
+	}
+	settings_t s = settings;
+	settings_set_wifi_ssid(&s, v->wifi_ssid);
+	settings_set_wifi_password(&s, v->wifi_password);
+	setup.modem.message = "Saving...";
+	modem_draw_panel();
+	video_update(&screen);
+	if (!settings_store(&s)) {
+		setup.modem.message = "Saving to flash failed";
+		return;
+	}
+	settings_set_wifi_ssid(&setup.ui.values, v->wifi_ssid);
+	settings_set_wifi_password(&setup.ui.values, v->wifi_password);
+	modem_join(&modem, now); // cfg points at settings' texts, saved just now
+	modem_owns_line = modem_busy(&modem);
+	setup.modem.message = v->wifi_ssid[0] ? "Saved; joining the network" : "Saved: the module keeps its own network";
+}
+
+void modem_panel_service(void) {
+	uint32_t now = to_ms_since_boot(get_absolute_time());
+	modempanel_action_t work = setup.modem_work;
+	setup.modem_work = MODEMPANEL_NONE;
+	if (work == MODEMPANEL_NONE) {
+		work = modempanel_tick(&setup.modem, now);
+	}
+	switch (work) {
+	case MODEMPANEL_CANCEL:
+		setup.modem_open = false;
+		setup_draw_panel();
+		return;
+	case MODEMPANEL_JOIN:
+		panel_join(now);
+		break;
+	case MODEMPANEL_RESET:
+		modem_start(&modem, now);
+		modem_owns_line = true;
+		setup.modem.message = "Resetting it; the line is the modem's until it is set up";
+		break;
+	case MODEMPANEL_DEFAULTS:
+		modem_factory(&modem, now);
+		modem_owns_line = modem_busy(&modem);
+		setup.modem.message = "Its factory settings, then ours: this takes a while";
+		break;
+	default:
+		break;
+	}
+	char now_shown[sizeof panel_shown];
+	panel_fingerprint(now_shown, sizeof now_shown);
+	if (work != MODEMPANEL_NONE || strcmp(now_shown, panel_shown) != 0) {
+		modem_draw_panel();
 	}
 }
 
@@ -127,8 +229,5 @@ const char *modem_glue_notice(void) {
 void modem_glue_poll(void) {
 }
 
-void modem_glue_describe(char *text, size_t size) {
-	snprintf(text, size, "No WiFi modem in this build");
-}
 
 #endif

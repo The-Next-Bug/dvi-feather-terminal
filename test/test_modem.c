@@ -120,6 +120,18 @@ static void command(const char *cmd) {
 		CHECK(sscanf(a + 1, "%u", &rate) == 1);
 		z.rate = rate;
 		reply(true); // at the new rate
+	} else if (strcmp(a, "&F") == 0) {
+		// Zimodem's factory settings: its config file gone, reloaded at once.
+		z.saved_rate = 115200;
+		z.saved_echo = true;
+		z.saved_s47 = 2;
+		z.saved_s63 = 0;
+		z.saved_ssid[0] = z.saved_password[0] = '\0';
+		z.ssid[0] = z.password[0] = '\0';
+		z.joined = false;
+		z.rate = 115200;
+		z.echo = true;
+		reply(true);
 	} else if (strcmp(a, "&W") == 0) {
 		++z.saves;
 		z.saved_rate = z.rate;
@@ -410,6 +422,57 @@ static void test_no_network(void) {
 	check_profile(false);
 }
 
+// A new password for the network it is on: ATW anyway (forced), no reset.
+static void test_join_again(void) {
+	fresh_module();
+	start(false, "Home Net", "secret 1");
+	run(60000);
+	CHECK(modem_joined(&m));
+	unsigned resets = z.resets, joins = z.joins, saves = z.saves;
+	z.ap_password = "secret 2";
+	static const char password[] = "secret 2";
+	m.cfg.password = password;
+	modem_join(&m, now);
+	CHECK(modem_busy(&m));
+	CHECK(strcmp(modem_step_name(&m), "joining the network") == 0);
+	run(60000);
+	CHECK_EQ(m.state, MODEM_READY);
+	CHECK_EQ(z.resets, resets);
+	CHECK_EQ(z.joins, joins + 1);
+	CHECK_EQ(z.saves, saves + 1);
+	CHECK(strcmp(z.saved_password, "secret 2") == 0);
+	CHECK(modem_joined(&m));
+}
+
+// Defaults: AT&F (the module back at 115200 with nothing set), then the
+// whole start-up gives it our profile and network again.
+static void test_factory(void) {
+	fresh_module();
+	start(true, "Home Net", "secret 1");
+	run(60000);
+	unsigned resets = z.resets;
+	modem_factory(&m, now);
+	CHECK(strcmp(modem_step_name(&m), "restoring its factory settings") == 0);
+	run(80000);
+	CHECK_EQ(m.state, MODEM_READY);
+	CHECK_EQ(z.resets, resets + 1);
+	CHECK_EQ(m.found, 115200);
+	check_profile(true);
+	CHECK(strcmp(z.saved_ssid, "Home Net") == 0);
+	CHECK(modem_joined(&m));
+	// One that is not ready is only started over.
+	fresh_module();
+	z.dead = true;
+	z.powered = false;
+	start(false, "Home Net", "secret 1");
+	run(200000);
+	CHECK_EQ(m.state, MODEM_FAILED);
+	z.dead = false;
+	modem_factory(&m, now);
+	run(60000);
+	CHECK_EQ(m.state, MODEM_READY);
+}
+
 // What ATW cannot carry: a comma or quote in the name, a quote in the
 // password.
 static void test_network_sendable(void) {
@@ -486,6 +549,8 @@ int main(void) {
 	RUN(test_wrong_password);
 	RUN(test_no_network);
 	RUN(test_network_sendable);
+	RUN(test_join_again);
+	RUN(test_factory);
 	RUN(test_carrier);
 	return tests_done();
 }

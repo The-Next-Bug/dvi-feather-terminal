@@ -4,6 +4,7 @@
 #include "setup.h"
 #include "clockpanel.h"
 #include "printpanel.h"
+#include "modempanel.h"
 #include "telnetpanel.h"
 #include "datetime.h"
 #include "font.h"
@@ -882,6 +883,83 @@ static void test_box_and_selection(void) {
 	CHECK_EQ(screen_glyph(&s, 78, top), ' ');
 }
 
+// The Modem panel (bd xir.17.4): the network typed (spaces too), the
+// password as stars; Return on them joins, on Reset modem resets, on
+// Defaults asks first; the modem's state as the owner gives it.
+static void test_modem_panel(void) {
+	static screen_t s;
+	screen_init(&s, 80, FG, BG);
+	static modempanel_t p;
+	settings_t v;
+	settings_defaults(&v);
+	modempanel_open(&p, &v);
+	CHECK_EQ(p.line, MODEMPANEL_NETWORK);
+	for (const char *k = "My Netx"; *k; ++k) {
+		CHECK_EQ(modempanel_input(&p, (uint8_t)*k, 0), MODEMPANEL_REDRAW);
+	}
+	CHECK_EQ(modempanel_input(&p, 0x7f, 0), MODEMPANEL_REDRAW); // Backspace
+	CHECK(strcmp(p.values.wifi_ssid, "My Net") == 0);
+	modempanel_input(&p, 0x1b, 0);
+	modempanel_input(&p, '[', 0);
+	CHECK_EQ(modempanel_input(&p, 'B', 0), MODEMPANEL_REDRAW);
+	CHECK_EQ(p.line, MODEMPANEL_PASSWORD);
+	for (const char *k = "pa ss"; *k; ++k) {
+		modempanel_input(&p, (uint8_t)*k, 0);
+	}
+	p.status = (modempanel_status_t){.state = "ready", .joined = true, .ssid = "My Net", .ip = "192.168.1.50",
+		.version = "4.0.3-frankless", .rom = "rst cause:2, boot mode:(3,6)"};
+	modempanel_draw(&p, &s, 0, FG, BG, BORDER);
+	CHECK(row_contains(&s, 0, "WiFi modem"));
+	CHECK(row_contains(&s, 1, "  Network"));
+	CHECK(row_contains(&s, 1, "My Net"));
+	CHECK(row_contains(&s, 2, "> Password"));
+	CHECK(row_contains(&s, 2, "*****"));
+	CHECK(!row_contains(&s, 2, "pa ss"));
+	CHECK(row_contains(&s, 3, "DHCP"));
+	CHECK(row_contains(&s, 7, "ready, on My Net, 192.168.1.50"));
+	CHECK(row_contains(&s, 8, "4.0.3-frankless"));
+	CHECK(row_contains(&s, 8, "rst cause:2"));
+	CHECK(row_contains(&s, 9, "none"));
+	CHECK_EQ(modempanel_input(&p, '\r', 0), MODEMPANEL_JOIN);
+	CHECK(strcmp(p.values.wifi_password, "pa ss") == 0);
+	// Starting: the step; not joined: what it is set to.
+	p.status = (modempanel_status_t){.state = "finding its rate", .busy = true};
+	modempanel_draw(&p, &s, 0, FG, BG, BORDER);
+	CHECK(row_contains(&s, 7, "finding its rate..."));
+	p.status = (modempanel_status_t){.state = "ready", .ssid = "Other", .problem = "it did not join the network"};
+	modempanel_draw(&p, &s, 0, FG, BG, BORDER);
+	CHECK(row_contains(&s, 7, "no network: set to Other"));
+	CHECK(row_contains(&s, 9, "it did not join the network"));
+	// Reset modem; Defaults twice; moving away forgets the first.
+	modempanel_input(&p, 0x1b, 0);
+	modempanel_input(&p, '[', 0);
+	modempanel_input(&p, 'B', 0);
+	CHECK_EQ(p.line, MODEMPANEL_RESET_LINE);
+	CHECK_EQ(modempanel_input(&p, '\r', 0), MODEMPANEL_RESET);
+	modempanel_input(&p, 0x1b, 0);
+	modempanel_input(&p, '[', 0);
+	modempanel_input(&p, 'B', 0);
+	CHECK_EQ(modempanel_input(&p, '\r', 0), MODEMPANEL_REDRAW);
+	CHECK(p.confirm);
+	CHECK(p.message && strstr(p.message, "Return again"));
+	modempanel_input(&p, 0x1b, 0);
+	modempanel_input(&p, '[', 0);
+	modempanel_input(&p, 'A', 0); // away and back: asks again
+	modempanel_input(&p, 0x1b, 0);
+	modempanel_input(&p, '[', 0);
+	modempanel_input(&p, 'B', 0);
+	CHECK(!p.confirm);
+	CHECK_EQ(modempanel_input(&p, '\r', 0), MODEMPANEL_REDRAW);
+	CHECK_EQ(modempanel_input(&p, '\r', 0), MODEMPANEL_DEFAULTS);
+	// Down from Defaults wraps to Network; a lone ESC cancels.
+	modempanel_input(&p, 0x1b, 0);
+	modempanel_input(&p, '[', 0);
+	modempanel_input(&p, 'B', 0);
+	CHECK_EQ(p.line, MODEMPANEL_NETWORK);
+	CHECK_EQ(modempanel_input(&p, 0x1b, 1000), MODEMPANEL_NONE);
+	CHECK_EQ(modempanel_tick(&p, 1000 + MODEMPANEL_ESC_TIMEOUT_MS), MODEMPANEL_CANCEL);
+}
+
 int main(void) {
 	RUN(test_space_and_arrows_change_columns);
 	RUN(test_down_selects_next_setting);
@@ -895,6 +973,7 @@ int main(void) {
 	RUN(test_columns_fixed_by_adm3a);
 	RUN(test_flow_control_row);
 	RUN(test_port_row);
+	RUN(test_modem_panel);
 	RUN(test_colors_preview);
 	RUN(test_machine_menu_key);
 	RUN(test_demo_key);

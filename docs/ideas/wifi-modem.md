@@ -1,6 +1,7 @@
 # Plan: WiFi modem mode (the ESP-12F on J8 and J1)
 
-Status: planned with the user, 2026-11-19; nothing built. Beads: the
+Status: planned with the user, 2026-11-19; sections 1-6 built on branch
+wifi-modem (bd xir.15, xir.17.1-17.5, 17.4), see "Progress" at the end. Beads: the
 "WiFi modem mode" epic under xir, plus xir.15 (pins and start-up state).
 The hardware is the user's hand-wired ESP-12F running our Zimodem build
 (lib/zimodem): UART with RTS/CTS on J8, DCD, DTR, RST and GPIO0 on J1.
@@ -194,3 +195,20 @@ rest unchanged (still Zimodem).
 7. Scan list; static addresses.
 8. Module image container; the flasher from card/USB; the built-in image.
 9. ESP32 module.
+
+## Progress (2026-11-19, branch wifi-modem, not merged)
+
+Built and committed: xir.15 (pins), 17.1 (512-byte record, network in
+page 1), WIFI_MODEM build option (PSRAM boards only), 17.3 (Port row, 8N1
+/921600/RTS/CTS fixed), 17.2 (start-up + status line notice), 17.5 (DTR
+hang-up, DCD carrier loss, print jobs start on DCD; local echo off while
+connected), 17.4 (Modem panel). The user tried 17.2/17.3/17.5 and the echo
+and notice fixes on the Frankless: work. The Modem panel (17.4) is
+host-tested only.
+
+Next: 17.6 (status line wifi state, HWINFO modem record, guide page with
+the wiring from modem-carrier.md), then 17.7 (scan list: Zimodem's ATW
+lists "SSID (RSSI)*" lines), 17.8 (static address: the address mode field
+was left out of 17.1; static parts go after the password in the page-1
+block, ATW"ssid,pw,ip,dns,gw,subnet"), 17.9-17.11 (module image and
+flashing), 17.12 (ESP32).

@@ -31,6 +31,7 @@
 #include "monitor.h"
 #include "printpanel.h"
 #include "telnetpanel.h"
+#include "modempanel.h"
 #include "screen.h"
 #include "settings.h"
 #include "setup.h"
@@ -109,6 +110,13 @@ typedef struct {
 	telnetpanel_action_t telnet_work;
 	telnetpanel_t telnet;
 	char print_last[64]; // what the last job did, as the panel shows it
+#if WIFI_MODEM
+	// The Modem panel (Return on the Port row, bd xir.17.4); its Return
+	// waits for the main loop (modem_glue.c).
+	bool modem_open;
+	modempanel_action_t modem_work;
+	modempanel_t modem;
+#endif
 	// The firmware update panel (U), over the same rows; its work and its
 	// cancel wait for the main loop.
 	bool fw_open, fw_work, fw_cancel;
@@ -240,7 +248,11 @@ static inline bool modem_glue_busy(void) {
 	return modem_owns_line;
 }
 void modem_glue_poll(void);   // while busy: each main-loop pass, the logo's wait and the CPU's
-void modem_glue_describe(char *text, size_t size); // one line, for SET-UP
+#if WIFI_MODEM
+void modem_panel_open(void);                  // SET-UP's Modem panel
+void modem_panel_feed(uint8_t c, uint32_t now); // a key for it
+void modem_panel_service(void);               // its work and its redraws, from the main loop
+#endif
 // While busy, "WiFi modem: <step>" for the status line (so a long start-up
 // does not look like a hang); else NULL.
 const char *modem_glue_notice(void);

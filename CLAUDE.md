@@ -190,7 +190,18 @@ the start-up is done: the panel's hang-up drops DTR (HANG_DTR; +++/ATH
 on STUCK), DCD going inactive ends the call and the telnet negotiation;
 printjob_io_t.carrier (printer_glue: DCD) starts a job's data as soon as
 the connection is up instead of after PRINTJOB_OPEN_US. CP/M mode keeps
-DTR active (Hayes programs on SIO2). Slide switch S1 puts the USB
+DTR active (Hayes programs on SIO2). Local echo is off while
+telnet_glue_connected() (F11 call, telnet negotiated, or DCD). The Modem
+panel (bd xir.17.4): src/ui/modempanel.[ch] (portable, WIFI_MODEM only,
+test_setup's test_modem_panel; 16 rows: Network, Password (stars),
+Address DHCP, Reset modem, Defaults (Return twice), then Status/Firmware/
+Problem from modempanel_status_t), opened by SETUP_MODEM; its glue in
+modem_glue.c (modem_panel_open/feed/service, setup.modem* fields under
+#if WIFI_MODEM in setup_state_t): Return on Network/Password stores the
+network (settings_store, setup.ui.values too) and modem_join (forced ATW,
+no reset), Reset = modem_start, Defaults = modem_factory (AT&F, 1.5 s,
+then the whole start-up: it is back at 115200); redrawn when the
+start-up's step/IP/problem changes. Slide switch S1 puts the USB
 on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
 CI builds it.
 `boards/feather-rp2350-hstx.h` (bd 1ls.14.1): Adafruit Feather RP2350 with

@@ -223,7 +223,11 @@ void setup_feed(const uint8_t *data, size_t len) {
 		return;
 	}
 	for (size_t i = 0; i < len && setup.action == SETUP_NONE && !setup.drives_work && !setup.fw_work &&
-		!setup.fw_cancel && !setup.clock_apply && !setup.print_apply && setup.telnet_work == TELNETPANEL_NONE;
+		!setup.fw_cancel && !setup.clock_apply && !setup.print_apply && setup.telnet_work == TELNETPANEL_NONE
+#if WIFI_MODEM
+		&& setup.modem_work == MODEMPANEL_NONE
+#endif
+		;
 		++i) {
 		if (setup.fw_open) {
 			fw_feed(data[i]);
@@ -241,6 +245,12 @@ void setup_feed(const uint8_t *data, size_t len) {
 			telnet_feed(data[i], now);
 			continue;
 		}
+#if WIFI_MODEM
+		if (setup.modem_open) {
+			modem_panel_feed(data[i], now);
+			continue;
+		}
+#endif
 		if (setup.drives_open) {
 			drives_feed(data[i], now);
 			continue;
@@ -292,6 +302,10 @@ void setup_enter(bool from_host) {
 	setup.print_open = setup.print_apply = false;
 	setup.telnet_open = setup.telnet_direct = false;
 	setup.telnet_work = TELNETPANEL_NONE;
+#if WIFI_MODEM
+	setup.modem_open = false;
+	setup.modem_work = MODEMPANEL_NONE;
+#endif
 	setup.from_host = from_host;
 	setup.action = SETUP_NONE;
 	setup.demo = false;
@@ -316,6 +330,10 @@ void setup_leave(bool apply) {
 	setup.print_open = setup.print_apply = false;
 	setup.telnet_open = setup.telnet_direct = false;
 	setup.telnet_work = TELNETPANEL_NONE;
+#if WIFI_MODEM
+	setup.modem_open = false;
+	setup.modem_work = MODEMPANEL_NONE;
+#endif
 	fw_close();
 	ay_give_back(); // a chime still sounding
 	if (!apply) {
@@ -610,6 +628,12 @@ void setup_service(void) {
 		telnet_service();
 		return;
 	}
+#if WIFI_MODEM
+	if (setup.modem_open && setup.action == SETUP_NONE) {
+		modem_panel_service();
+		return;
+	}
+#endif
 	if (setup.fw_open && setup.action == SETUP_NONE) {
 		if (setup.fw_cancel) {
 			fw_close();
@@ -658,11 +682,7 @@ void setup_service(void) {
 		setup_open_telnet(false);
 #if WIFI_MODEM
 	} else if (a == SETUP_MODEM) {
-		// The Modem panel is bd xir.17.4; until then, where the start-up is.
-		static char text[SCREEN_MAX_COLS + 1];
-		modem_glue_describe(text, 74); // the message row fits 73 columns
-		setup.ui.message = text;
-		setup_draw_panel();
+		modem_panel_open();
 #endif
 	} else if (a == SETUP_SAVE) {
 		save_and_leave();

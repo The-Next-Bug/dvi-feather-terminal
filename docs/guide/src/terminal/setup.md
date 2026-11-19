@@ -82,6 +82,31 @@ so SET-UP comes back over a cleared screen, as after a width change.
 - Return takes the choices back to SET-UP, whose Return saves them with the
   other settings; Esc goes back without them.
 
+## The Modem panel
+
+With Port on the WiFi modem (boards wired for one: the Frankless),
+**Return** on the Port row opens the Modem panel:
+
+- **Network** and **Password**: the WiFi network the modem joins, kept in
+  the terminal's flash (the password in plain text) and given to the
+  modem at every start, so a reflashed or replaced module joins by itself.
+  Type them (Backspace takes the last character off; the password shows as
+  stars); **Return** on either saves them and has the modem join. Left
+  empty, the modem keeps the network it was given some other way.
+  Zimodem cannot take a comma or a quote in the name, or a quote in the
+  password.
+- **Address**: DHCP.
+- **Reset modem**: resets the module and sets it up again, as at power-on.
+- **Defaults** (Return twice): the module's factory settings, then the
+  terminal's own (rate, flow control, the DCD and DTR lines, the network).
+- **Status**, **Firmware**, **Problem**: where the modem's start-up is,
+  the network it is on and its address, Zimodem's version, the ESP8266's
+  last reset cause, and the last thing that went wrong.
+
+Every start in WiFi modem mode (power-on, R, a crash) resets the module
+and sets it up; the status line says `WiFi modem: ...` meanwhile, and the
+serial port is the modem's until it is done.
+
 ## Settings in flash
 
 The settings live in two flash sectors used in turn, each save with a

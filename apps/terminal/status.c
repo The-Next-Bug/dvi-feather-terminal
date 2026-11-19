@@ -445,7 +445,7 @@ static const char *term_type_name(void) {
 
 status_t status_now(void) {
 	status_t st = {usbkbd_count(), settings, serial_baud(), "", term_type_name(),
-		(uint8_t)telnet_glue_status(), ""};
+		(uint8_t)telnet_glue_status(), "", false};
 	usb_label(st.usb, sizeof st.usb);
 	const char *modem = modem_glue_notice();
 	snprintf(st.modem, sizeof st.modem, "%s", modem ? modem : "");

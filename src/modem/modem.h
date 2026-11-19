@@ -33,6 +33,7 @@
 #define MODEM_REPLY_MS 2000      // a command's OK
 #define MODEM_WIFI_MS 40000      // ATW: Zimodem tries the network for up to 30 s
 #define MODEM_ATTEMPTS 2         // resets before giving up
+#define MODEM_FACTORY_MS 1500    // after AT&F (Zimodem drops its network, reloads at 115200) before the reset
 
 #define MODEM_LINE_MAX 255   // ATI5's line is the longest
 #define MODEM_ROM_MAX 79     // the ROM's lines kept: "rst cause:2, boot mode:(3,6)"
@@ -76,6 +77,7 @@ typedef struct {
 	bool failed;      // ... or ERROR
 	bool changed;     // the module's settings changed: AT&W at the end
 	bool join_tried;  // ATW sent in this attempt
+	bool force_join;  // ATW even if the module is on the network (its password changed)
 	uint32_t since;   // when the step began
 	uint32_t probed;  // when AT was last sent while waiting
 	unsigned baud;    // the rate we are at
@@ -103,6 +105,16 @@ void modem_feed(modem_t *m, uint8_t c, uint32_t now_ms);
 
 // Call regularly (the main loop): the timeouts and the next step.
 void modem_poll(modem_t *m, uint32_t now_ms);
+
+// The network changed (cfg's ssid and password, which point at the
+// owner's text, are as wanted now): ATW, even if the module is on that
+// network, then AT&W. A module that is not ready is started over.
+void modem_join(modem_t *m, uint32_t now_ms);
+
+// The module's factory settings (AT&F: no network, 115200, Zimodem's
+// defaults), then the start-up from the reset, which gives it ours. A
+// module that is not ready is only started over.
+void modem_factory(modem_t *m, uint32_t now_ms);
 
 // The line belongs to the start-up.
 static inline bool modem_busy(const modem_t *m) {

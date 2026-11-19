@@ -20,6 +20,7 @@ enum {
 	ST_JOIN,        // ATW"ssid,password"
 	ST_SAVE,        // AT&W, if anything changed
 	ST_VERSION,     // ATI4
+	ST_FACTORY,     // AT&F sent: wait, then the reset
 };
 
 #define SETTLE_MS 150
@@ -246,9 +247,10 @@ bool modem_joined(const modem_t *m) {
 // The network: ours, if set, unless the module is on it already.
 static void network_step(modem_t *m, uint32_t now) {
 	const char *want = m->cfg.ssid;
-	if (want[0] && !m->join_tried && (strcmp(m->ssid, want) != 0 || !modem_joined(m))) {
+	if (want[0] && !m->join_tried && (m->force_join || strcmp(m->ssid, want) != 0 || !modem_joined(m))) {
 		if (modem_network_sendable(want, m->cfg.password)) {
 			m->join_tried = true;
+			m->force_join = false;
 			snprintf(m->cmd, sizeof m->cmd, "ATW\"%s,%s\"", want, m->cfg.password);
 			issue(m, ST_JOIN, m->cmd, now);
 			return;
@@ -260,6 +262,29 @@ static void network_step(modem_t *m, uint32_t now) {
 	} else {
 		issue(m, ST_VERSION, "ATI4", now);
 	}
+}
+
+void modem_join(modem_t *m, uint32_t now_ms) {
+	m->force_join = true;
+	if (m->state != MODEM_READY) {
+		modem_start(m, now_ms);
+		return;
+	}
+	m->state = MODEM_STARTING;
+	m->problem = NULL;
+	m->join_tried = false;
+	m->changed = false;
+	network_step(m, now_ms);
+}
+
+void modem_factory(modem_t *m, uint32_t now_ms) {
+	m->force_join = true;
+	if (m->state != MODEM_READY) {
+		modem_start(m, now_ms);
+		return;
+	}
+	m->state = MODEM_STARTING;
+	issue(m, ST_FACTORY, "AT&F", now_ms);
 }
 
 static void ready(modem_t *m) {
@@ -410,6 +435,13 @@ void modem_poll(modem_t *m, uint32_t now_ms) {
 			ready(m);
 		}
 		break;
+	case ST_FACTORY:
+		if (elapsed >= MODEM_FACTORY_MS) {
+			bool force = m->force_join;
+			modem_start(m, now);
+			m->force_join = force;
+		}
+		break;
 	default:
 		break;
 	}
@@ -438,6 +470,8 @@ const char *modem_step_name(const modem_t *m) {
 		return "finding its rate";
 	case ST_JOIN:
 		return "joining the network";
+	case ST_FACTORY:
+		return "restoring its factory settings";
 	default:
 		return "setting it up";
 	}
