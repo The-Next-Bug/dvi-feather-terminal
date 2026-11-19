@@ -9,7 +9,8 @@
 # next to the ZIP for use as release notes.
 #
 # The WiFi modem's firmware (scripts/build-zimodem.sh, BUILD_DIR/zimodem)
-# goes into modem/ with its licenses, source and docs/MODEM.txt; without
+# goes into modem/ with its licenses, sources (Zimodem's and the ESP8266
+# core's, about 35 MB) and docs/MODEM.txt; without
 # it the ZIP has no modem/ (an error with REQUIRE_ZIMODEM=1, as in CI).
 #
 # Tagged builds (tags like v0.1.0) are named dvi-terminal-<tag>; anything
@@ -84,7 +85,7 @@ zim="$BUILD_DIR/zimodem"
 modem_bin=
 if [[ -f "$zim/zimodem.bin" ]]; then
   mkdir -p "$stage/modem"
-  cp -r "$zim/zimodem.bin" "$zim/build-info.txt" "$zim/zimodem-source.zip" "$zim/licenses" "$stage/modem/"
+  cp -r "$zim/zimodem.bin" "$zim/build-info.txt" "$zim/sources" "$zim/licenses" "$stage/modem/"
   cp docs/MODEM.txt "$stage/modem/README.txt"
   modem_bin=modem/zimodem.bin
 elif [[ "${REQUIRE_ZIMODEM:-0}" == 1 ]]; then

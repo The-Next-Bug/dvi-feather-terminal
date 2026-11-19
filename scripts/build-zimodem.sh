@@ -8,9 +8,11 @@
 # ESP-12F flashes at 0x0), build-info.txt (Zimodem's, plus our lines),
 # licenses/ (the texts of everything in the image, docs/THIRD-PARTY.md's
 # "WiFi modem firmware" table, copied from the sources and the toolchain
-# the build used) and zimodem-source.zip (the submodule's commit, the
-# image's own source). scripts/package.sh puts them in the release ZIP's
-# modem/ folder.
+# the build used) and sources/: zimodem-<commit>.zip (the submodule's
+# commit, the image's own source) and the ESP8266 core's release archive
+# (its source, LGPL-2.1, linked into the image; arduino-cli's download,
+# else fetched again, checked against the package index's SHA-256).
+# scripts/package.sh puts them in the release ZIP's modem/ folder.
 #
 # The version Zimodem reports (ATI4) is 4.0.3-<BUILD_ID>; BUILD_ID defaults
 # to the submodule commit's time (UTC, YYYYMMDDHHMMSS), so the same commit
@@ -66,13 +68,38 @@ opt="$core/tools/sdk/lwip2/include/lwip/opt.h"
 sed -n '/Copyright (c) 2001-2004 Swedish Institute/,/OF SUCH DAMAGE/p' "$opt" | sed 's/^ \* \{0,1\}//' > "$lic/lwIP-BSD-3-Clause.txt"
 [[ -s "$lic/lwIP-BSD-3-Clause.txt" ]] || { echo "error: lwIP's license not found in $opt" >&2; exit 1; }
 
-# The image's source: the submodule at the commit built (Apache-2.0).
-git -C "$ZROOT" archive --format=zip --prefix=zimodem/ -o "$BUILD_DIR/zimodem-source.zip" HEAD
+# The sources: the submodule at the commit built (Apache-2.0), and the
+# ESP8266 core's release, which arduino-cli installed from (LGPL-2.1).
+mkdir -p "$BUILD_DIR/sources"
+zsha="$(git -C "$ZROOT" rev-parse --short HEAD)"
+git -C "$ZROOT" archive --format=zip --prefix="zimodem-$zsha/" -o "$BUILD_DIR/sources/zimodem-$zsha.zip" HEAD
+core_version="${core##*/}"
+read -r core_url core_sha < <(python3 - "$TOOLCHAIN_DIR/arduino15/package_esp8266com_index.json" "$core_version" <<'PY'
+import json, sys
+index, version = sys.argv[1], sys.argv[2]
+for package in json.load(open(index))["packages"]:
+    for platform in package["platforms"]:
+        if platform["architecture"] == "esp8266" and platform["version"] == version:
+            print(platform["url"], platform["checksum"].removeprefix("SHA-256:"))
+            sys.exit(0)
+sys.exit("ESP8266 core " + version + " not in " + index)
+PY
+)
+core_zip="$BUILD_DIR/sources/${core_url##*/}"
+staged="$TOOLCHAIN_DIR/arduino15/staging/packages/${core_url##*/}"
+if [[ -f "$staged" ]]; then
+  cp "$staged" "$core_zip"
+else
+  curl -sSfL -o "$core_zip" "$core_url"
+fi
+echo "$core_sha  $core_zip" | sha256sum -c - >&2
 {
   echo "image=zimodem.bin"
   echo "image_size=$(stat -c %s "$BUILD_DIR/zimodem.bin")"
   echo "image_sha256=$(sha256sum "$BUILD_DIR/zimodem.bin" | cut -d' ' -f1)"
   echo "module=esp12f"
+  echo "zimodem_source=sources/zimodem-$zsha.zip"
+  echo "core_source=sources/${core_url##*/} ($core_url)"
   echo "terminal_git_describe=$(git describe --always --dirty 2>/dev/null || echo unknown)"
 } >> "$BUILD_DIR/build-info.txt"
 cat "$BUILD_DIR/build-info.txt"

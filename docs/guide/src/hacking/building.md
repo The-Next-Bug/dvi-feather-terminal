@@ -28,7 +28,9 @@ Builds the [WiFi modem](../terminal/wifi-modem.md)'s firmware from
 (`lib/zimodem/toolchain.env`), into `build/zimodem/`: `zimodem.bin` (an
 ESP-12F's image, written at 0x0), `build-info.txt`, the
 [license texts](licenses.md#the-wifi-modems-firmware) in `licenses/` and
-the source as `zimodem-source.zip`. The version Zimodem reports (`ATI4`) is
+the sources in `sources/` (Zimodem's at the commit, and the ESP8266 core's
+release archive, from arduino-cli's download or fetched again, checked
+against the package index's SHA-256). The version Zimodem reports (`ATI4`) is
 `4.0.3-` and the submodule commit's time, so one commit always builds the
 same version. `BUILD_DIR`, `BUILD_ID` and `FRANKLESS_HW_FLOW` override.
 `scripts/package.sh` puts it in the ZIP's `modem/` (CI requires it there:

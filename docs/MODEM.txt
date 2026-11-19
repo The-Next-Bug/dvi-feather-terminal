@@ -4,15 +4,20 @@ The WiFi modem's firmware (Zimodem)
 This folder holds the firmware for the WiFi modem a board can have on its
 serial port (the Frankless's hand-wired ESP-12F; see "WiFi modem" in the
 user guide, guide/terminal/wifi-modem.html). It is our build of Zimodem
-(github.com/arlaneenalra/Zimodem, branch frankless-build; upstream
-github.com/bozimmerman/Zimodem): hardware RTS/CTS on GPIO13/GPIO15, the
-lines the terminal's WiFi modem mode uses.
+with hardware RTS/CTS on GPIO13/GPIO15, the lines the terminal's WiFi
+modem mode uses:
+
+  our fork             https://github.com/arlaneenalra/Zimodem/tree/frankless-build
+  the original         https://github.com/bozimmerman/Zimodem
 
   zimodem.bin          the image, for a 4 MB ESP8266 module (ESP-12F),
                        written at address 0x0
   build-info.txt       its version (ATI4 reports firmware_version), the
                        Zimodem commit, the toolchain, the image's SHA-256
-  zimodem-source.zip   the source it was built from
+  sources/             the source it was built from: zimodem-<commit>.zip
+                       (Zimodem at the commit built) and esp8266-2.7.4.zip
+                       (the ESP8266 core for Arduino, LGPL-2.1, linked into
+                       the image; https://github.com/esp8266/Arduino)
   licenses/            the license texts of the code in the image (see
                        THIRD-PARTY.md, "WiFi modem firmware")
 

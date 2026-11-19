@@ -1222,7 +1222,7 @@ As of v0.5.0 with the default build (`MACHINE_BANKS=2`):
 | `tools/hostbridge.py` | Run a host program with the terminal as its display (see [Trying it from a PC](#trying-it-from-a-pc)) |
 | `lib/pico-sdk` | Pinned submodule (not its own submodules) |
 | `lib/tinyusb` | Pinned submodule: TinyUSB, newer than pico-sdk's 0.18 (its USB host fixes); upstream master (github.com/hathach/tinyusb), which has the RP2350 host fixes we proposed (`docs/upstream/`; merged as #4458) |
-| `lib/zimodem` | Submodule, not built: the Zimodem firmware for the Frankless's ESP-12F modem on J8 (github.com/arlaneenalra/Zimodem, branch `frankless-build`; its `BUILDING.md` has the arduino-cli build and the wiring) |
+| `lib/zimodem` | Submodule: the Zimodem firmware for the Frankless's ESP-12F modem on J8 (our fork, https://github.com/arlaneenalra/Zimodem/tree/frankless-build, of https://github.com/bozimmerman/Zimodem; its `BUILDING.md` has the arduino-cli build and the wiring), built by `scripts/build-zimodem.sh` and CI into the release ZIP's `modem/` |
 | `lib/z80pack` | Vendored part of z80pack (Z80 core, z80asm, picosim disk images); `UPSTREAM.md` gives the commit and local changes |
 | `lib/fatfs` | ChaN's FatFs R0.15a, vendored (see its README) |
 | `assets/logo/` | The startup logo (PNG used by the build, JPEG original) |

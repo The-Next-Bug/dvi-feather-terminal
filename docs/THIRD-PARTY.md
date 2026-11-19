@@ -59,16 +59,21 @@ Z80 machine's monitor can write to an SD card:
 
 `modem/zimodem.bin` in the release ZIP is a separate program: the firmware
 for the ESP8266 WiFi modem a board can have on its serial port, not part of
-the terminal's firmware. It is our build of Zimodem (`lib/zimodem`,
-github.com/arlaneenalra/Zimodem branch `frankless-build`; upstream
-github.com/bozimmerman/Zimodem), made by `scripts/build-zimodem.sh` with the
-ESP8266 Arduino core. Its license texts are in `modem/licenses/`
-(`scripts/build-zimodem.sh` copies them from the sources and the toolchain
-the build used), its source in `modem/zimodem-source.zip`.
+the terminal's firmware. It is our build of Zimodem (`lib/zimodem`), made
+by `scripts/build-zimodem.sh` with the ESP8266 Arduino core:
+
+- our fork: https://github.com/arlaneenalra/Zimodem/tree/frankless-build
+- the original: https://github.com/bozimmerman/Zimodem
+
+Its license texts are in `modem/licenses/` (`scripts/build-zimodem.sh`
+copies them from the sources and the toolchain the build used), its
+sources in `modem/sources/`: Zimodem's at the commit built
+(`zimodem-<commit>.zip`) and the ESP8266 core's release archive
+(`esp8266-2.7.4.zip`).
 
 | Component | Used for | License | Text |
 |---|---|---|---|
-| [Zimodem](https://github.com/bozimmerman/Zimodem) (Bo Zimmerman), our fork with the Frankless changes | The modem: Hayes commands, WiFi, telnet, printing | Apache-2.0, with its NOTICE | `modem/licenses/Zimodem-Apache-2.0.txt`, `Zimodem-NOTICE.txt` |
+| [Zimodem](https://github.com/bozimmerman/Zimodem) (Bo Zimmerman), [our fork](https://github.com/arlaneenalra/Zimodem/tree/frankless-build) with the Frankless changes | The modem: Hayes commands, WiFi, telnet, printing | Apache-2.0, with its NOTICE | `modem/licenses/Zimodem-Apache-2.0.txt`, `Zimodem-NOTICE.txt` |
 | [ESP8266 core for Arduino](https://github.com/esp8266/Arduino) 2.7.4, with its ESP8266WiFi library | Runtime, WiFi and network API | LGPL-2.1 | `modem/licenses/esp8266-arduino-LGPL-2.1.txt` |
 | Espressif ESP8266 NONOS SDK (in the core) | WiFi driver, system libraries | Espressif MIT License (ESP8266 only) | `modem/licenses/Espressif-MIT.txt` |
 | [lwIP](https://savannah.nongnu.org/projects/lwip/) 2 (in the core) | TCP/IP stack | BSD-3-Clause | `modem/licenses/lwIP-BSD-3-Clause.txt` |
@@ -82,10 +87,9 @@ Zimodem's ZMODEM (from Synchronet), HostCM (Robert Ferguson's) and SSH
 this image.
 
 The ESP8266 core is under the LGPL-2.1 and linked statically into the
-image. Its source, at the version used, is the core's 2.7.4 release
-(https://github.com/esp8266/Arduino/releases/tag/2.7.4, the package
-arduino-cli installs, pinned by `lib/zimodem/toolchain.env`); Zimodem's
-source (`modem/zimodem-source.zip`) and `scripts/build-zimodem.sh` with the
-pinned toolchain rebuild and relink the image, with a changed core if
-wanted.
-
+image. Its complete source at the version used is in
+`modem/sources/esp8266-2.7.4.zip`, the core's 2.7.4 release
+(https://github.com/esp8266/Arduino/releases/tag/2.7.4, the archive
+arduino-cli installs, pinned by `lib/zimodem/toolchain.env`); with
+Zimodem's source, also there, and `scripts/build-zimodem.sh` the image can
+be rebuilt and relinked, with a changed core if wanted.

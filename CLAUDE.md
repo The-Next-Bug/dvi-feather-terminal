@@ -73,7 +73,7 @@ scripts/build.sh                     # TARGET=pico2-dvi-sock (default; any board
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip (release notes: scripts/changelog.sh, the commits since the last tag without a hyphen)
 scripts/lint.sh                      # clang-tidy (.clang-tidy) over build/test and build/$TARGET's compile_commands.json (build them first)
 scripts/docs.sh                      # the user guide (mdBook, toolchain.env MDBOOK_*) -> build/docs/html; package.sh requires it
-scripts/build-zimodem.sh             # the WiFi modem's firmware (bd xir.17.9): lib/zimodem's own build.sh with setup-toolchain.sh's "zimodem" component (arduino-cli + ESP8266 core 2.7.4 per lib/zimodem/toolchain.env, in .toolchain/arduino15) -> build/zimodem/zimodem.bin, build-info.txt, licenses/ (from the core and lib/zimodem), zimodem-source.zip; BUILD_ID = the submodule commit's UTC time; package.sh -> modem/ (+ docs/MODEM.txt as README.txt; REQUIRE_ZIMODEM=1 in CI's package job); CI job zimodem; licenses in docs/THIRD-PARTY.md "WiFi modem firmware" 
+scripts/build-zimodem.sh             # the WiFi modem's firmware (bd xir.17.9): lib/zimodem's own build.sh with setup-toolchain.sh's "zimodem" component (arduino-cli + ESP8266 core 2.7.4 per lib/zimodem/toolchain.env, in .toolchain/arduino15) -> build/zimodem/zimodem.bin, build-info.txt, licenses/ (from the core and lib/zimodem), sources/ (zimodem-<sha>.zip, the core's esp8266-2.7.4.zip from arduino15/staging or fetched, SHA-256 from the package index; the LGPL part's source, ~35 MB in the ZIP); BUILD_ID = the submodule commit's UTC time; package.sh -> modem/ (+ docs/MODEM.txt as README.txt; REQUIRE_ZIMODEM=1 in CI's package job); CI job zimodem; licenses in docs/THIRD-PARTY.md "WiFi modem firmware" 
 ```
 
 User guide (bd 1ay): `docs/guide/` (book.toml, src/SUMMARY.md and one
@@ -752,8 +752,9 @@ UF2 in the latter).
   (PTSTL0). Status line PRN / lit / PRN!; HWINFO item 35. Zimodem notes
   and the two-modem idea: docs/ideas/second-modem.md. Zimodem itself is
   `lib/zimodem` (bd xir.1: submodule, github.com/arlaneenalra/Zimodem
-  branch frankless-build, upstream bozimmerman/Zimodem; not built by our
-  scripts or CI, its own scripts/build.sh and BUILDING.md; ~/fz80/Zimodem
+  branch frankless-build, upstream bozimmerman/Zimodem; built by
+  scripts/build-zimodem.sh and CI through its own scripts/build.sh, bd
+  xir.17.9; BUILDING.md; ~/fz80/Zimodem
   is the older working copy, remote fork). Its throughput (one byte per
   loop() into an empty FIFO on the ESP8266), telnet (WONT NAWS) and the
   J8 rewiring for hardware RTS/CTS (GPIO13 U0CTS / GPIO15 U0RTS, built in

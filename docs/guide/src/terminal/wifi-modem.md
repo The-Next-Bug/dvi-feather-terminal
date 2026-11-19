@@ -3,7 +3,8 @@
 A board wired for one (the [Frankless](../start/boards.md#frankless-frankless))
 can have an ESP8266 module running
 [Zimodem](https://github.com/bozimmerman/Zimodem) on its serial port and
-switch the port between a plain serial line and that modem. In WiFi modem
+switch the port between a plain serial line and that modem (we build
+[our fork](https://github.com/arlaneenalra/Zimodem/tree/frankless-build) of it, with hardware flow control for this wiring). In WiFi modem
 mode the terminal resets the module at every start, finds it, sets it up
 and gives it the WiFi network from its own settings, so the module never
 needs setting up by hand, and a reflashed or replaced one joins by itself.
@@ -79,7 +80,7 @@ lists them, and HWINFO shows them (below).
 The module runs our Zimodem build (`lib/zimodem`, its own `BUILDING.md`):
 hardware RTS/CTS on GPIO13/15 for J8, as wired above. Every release ZIP
 has it in `modem/`: `zimodem.bin`, its `build-info.txt` (the version
-`ATI4` reports), its source and its [licenses](../hacking/licenses.md#the-wifi-modems-firmware);
+`ATI4` reports), its sources and its [licenses](../hacking/licenses.md#the-wifi-modems-firmware);
 `modem/README.txt` tells how to flash it with esptool. Flash it once with a
 USB-serial adapter; the terminal does the rest. Zimodem's own setup (its
 rate, echo, the DCD and DTR pins, the network) is the terminal's to set: do

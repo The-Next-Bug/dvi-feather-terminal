@@ -26,8 +26,10 @@ the firmware with its license, and `licenses/` holds the texts.
 
 The release ZIP's `modem/` holds a second program, the
 [WiFi modem](../terminal/wifi-modem.md)'s firmware: our build of Zimodem
-(`lib/zimodem`, `scripts/build-zimodem.sh`). It has its own licenses, in
-`modem/licenses/`, and its source in `modem/zimodem-source.zip`:
+(`lib/zimodem`, `scripts/build-zimodem.sh`; [our fork](https://github.com/arlaneenalra/Zimodem/tree/frankless-build) of
+[the original](https://github.com/bozimmerman/Zimodem)). It has its own licenses, in `modem/licenses/`,
+and its sources in `modem/sources/`: Zimodem's at the commit built and
+the ESP8266 core's release archive, the LGPL part's complete source:
 
 | Component | License |
 |---|---|
