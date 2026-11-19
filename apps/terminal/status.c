@@ -482,8 +482,15 @@ static const char *term_type_name(void) {
 }
 
 status_t status_now(void) {
-	status_t st = {usbkbd_count(), settings, serial_baud(), "", term_type_name(),
-		(uint8_t)telnet_glue_status(), "", false, (uint8_t)modem_glue_status(), modem_glue_carrier()};
+	status_t st = {
+		.keyboards = usbkbd_count(),
+		.settings = settings,
+		.baud = serial_baud(),
+		.type = term_type_name(),
+		.telnet = (uint8_t)telnet_glue_status(),
+		.wifi = (uint8_t)modem_glue_status(),
+		.carrier = modem_glue_carrier(),
+	};
 	usb_label(st.usb, sizeof st.usb);
 	const char *modem = modem_glue_notice();
 	snprintf(st.modem, sizeof st.modem, "%s", modem ? modem : "");
