@@ -144,12 +144,15 @@ done
 modem() { echo "#define BOARD_MODEM_ESP8266 1"; echo "#define BOARD_MODEM_DCD_PIN $1"
   echo "#define BOARD_MODEM_DTR_PIN $2"; echo "#define BOARD_MODEM_RST_PIN $3"
   echo "#define BOARD_MODEM_BOOT_PIN $4"; echo '#define BOARD_MODEM_NAME "esp12f"'
-  echo "#define BOARD_MODEM_BAUD 921600"; }
+  echo "#define BOARD_MODEM_BAUD 921600"; echo "#define BOARD_MODEM_FLASH_KB 4096"; }
 check "modem" "" "$sock" "$(modem 26 27 28 8)"
 check "modem without RST" "needs BOARD_MODEM_DCD_PIN" "$sock" "$(modem 26 27 28 8)" "#undef BOARD_MODEM_RST_PIN"
 check "modem without a name" "needs BOARD_MODEM_NAME" "$sock" "$(modem 26 27 28 8)" "#undef BOARD_MODEM_NAME"
 check "modem without CTS/RTS" "needs the terminal UART's" "$sock" "$(modem 26 27 28 8)" \
   "#undef BOARD_UART_CTS_PIN" "#undef BOARD_UART_RTS_PIN"
+check "modem without its flash size" "needs BOARD_MODEM_NAME, BOARD_MODEM_FLASH_KB" "$sock" "$(modem 26 27 28 8)" \
+  "#undef BOARD_MODEM_FLASH_KB"
+check "modem flash too big" "from 512 to 16384" "$sock" "$(modem 26 27 28 8)" "$(set_pin BOARD_MODEM_FLASH_KB 32768)"
 check "modem rate too high" "from 1200 to 921600" "$sock" "$(modem 26 27 28 8)" "$(set_pin BOARD_MODEM_BAUD 1843200)"
 check "modem pins without a chip" "need a chip" "$sock" "#define BOARD_MODEM_DCD_PIN 26"
 check "WiFi modem mode" "" "$sock" "$(modem 26 27 28 8)" "#define WIFI_MODEM 1"

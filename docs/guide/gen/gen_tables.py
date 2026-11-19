@@ -91,7 +91,8 @@ def board_rows(m):
     if "BOARD_MODEM_ESP8266" in m:
         rows.append(("WiFi modem (ESP8266)", f"DCD {gp(m, 'BOARD_MODEM_DCD_PIN')}, DTR "
                      f"{gp(m, 'BOARD_MODEM_DTR_PIN')}, RST {gp(m, 'BOARD_MODEM_RST_PIN')}, BOOT "
-                     f"{gp(m, 'BOARD_MODEM_BOOT_PIN')}; the serial port at {m.get('BOARD_MODEM_BAUD')} baud"))
+                     f"{gp(m, 'BOARD_MODEM_BOOT_PIN')}; the serial port at {m.get('BOARD_MODEM_BAUD')} baud; "
+                     f"module {m.get('BOARD_MODEM_NAME', '?').strip(chr(34))}, {m.get('BOARD_MODEM_FLASH_KB')} KB of flash"))
     if "BOARD_USB_VBUS_EN_PIN" in m:
         rows.append(("USB 5 V switch", gp(m, "BOARD_USB_VBUS_EN_PIN")))
     sys_khz = int(m.get("BOARD_SYS_KHZ", "384000"))

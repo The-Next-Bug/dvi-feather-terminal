@@ -95,6 +95,8 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 		SETTINGS_PAGE_TELNET},
 	{"Port", 2, {SETTINGS_PORT_SERIAL, SETTINGS_PORT_WIFI}, {"serial", "WiFi modem"},
 		WIFI_MODEM ? SETTINGS_PAGE_MAIN : SETTINGS_PAGE_NONE},
+	{"Character set", 2, {SETTINGS_CHARSET_UTF8, SETTINGS_CHARSET_LATIN1}, {"UTF-8", "Latin-1"},
+		SETTINGS_PAGE_MAIN},
 };
 
 // SET-UP's rows: the line's settings together (the Port first, in
@@ -107,7 +109,7 @@ static const uint8_t main_rows[SETTINGS_MAIN_FIELDS] = {
 	offsetof(settings_t, baud), offsetof(settings_t, framing), offsetof(settings_t, flow),
 	offsetof(settings_t, newline), offsetof(settings_t, colors), offsetof(settings_t, palette),
 	offsetof(settings_t, display), offsetof(settings_t, mode), offsetof(settings_t, status_line), offsetof(settings_t, blank_after),
-	offsetof(settings_t, term_type), offsetof(settings_t, usb_log),
+	offsetof(settings_t, term_type), offsetof(settings_t, charset), offsetof(settings_t, usb_log),
 };
 
 unsigned settings_main_field(unsigned row) {
@@ -116,6 +118,11 @@ unsigned settings_main_field(unsigned row) {
 
 bool settings_wifi(const settings_t *s) {
 	return WIFI_MODEM && s->port == SETTINGS_PORT_WIFI;
+}
+
+bool settings_utf8(const settings_t *s) {
+	return s->charset == SETTINGS_CHARSET_UTF8 && s->term_type == SETTINGS_TERM_VT100 &&
+		s->mode == SETTINGS_MODE_TERMINAL;
 }
 
 unsigned settings_flow(const settings_t *s) {
@@ -141,6 +148,12 @@ const char *settings_field_fixed(const settings_t *s, unsigned i) {
 		settings_wifi(s)) {
 		return "WiFi modem";
 	}
+	if (i == offsetof(settings_t, charset) && s->term_type != SETTINGS_TERM_VT100) {
+		return s->term_type == SETTINGS_TERM_ADM3A ? "ADM-3A" : "VT52";
+	}
+	if (i == offsetof(settings_t, charset) && s->mode != SETTINGS_MODE_TERMINAL) {
+		return "CP/M";
+	}
 	return NULL;
 }
 
@@ -148,6 +161,7 @@ settings_t settings_in_use(const settings_t *s) {
 	settings_t used = *s;
 	used.columns = (uint8_t)settings_columns(s);
 	used.flow = (uint8_t)settings_flow(s);
+	used.charset = settings_utf8(s) ? SETTINGS_CHARSET_UTF8 : SETTINGS_CHARSET_LATIN1;
 	if (settings_wifi(s)) {
 		used.framing = 0; // 8N1
 		for (unsigned i = 0; i < COUNT(baud_rates); ++i) {
@@ -200,7 +214,7 @@ void settings_defaults(settings_t *s) {
 		.sound_stereo = SETTINGS_STEREO_MONO, .flow = SETTINGS_FLOW_NONE,
 		.display = SETTINGS_DISPLAY_DEFAULT, .display_was = SETTINGS_DISPLAY_NONE,
 		.printer = SETTINGS_PRINTER_OFF, .printer_text = 1, .printer_idle = SETTINGS_PRINTER_IDLE_DEFAULT,
-		.telnet = SETTINGS_TELNET_OFF, .port = SETTINGS_PORT_SERIAL};
+		.telnet = SETTINGS_TELNET_OFF, .port = SETTINGS_PORT_SERIAL, .charset = SETTINGS_CHARSET_UTF8};
 }
 
 // Copy src into dst (size max + 1): printable ASCII only (and no spaces

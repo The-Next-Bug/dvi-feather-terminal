@@ -885,7 +885,8 @@ static void test_box_and_selection(void) {
 
 // The Modem panel (bd xir.17.4): the network typed (spaces too), the
 // password as stars; Return on them joins, on Reset modem resets, on
-// Defaults asks first; the modem's state as the owner gives it.
+// Defaults asks first; Update firmware checks, then flashes; the modem's
+// state as the owner gives it.
 static void test_modem_panel(void) {
 	static screen_t s;
 	screen_init(&s, 80, FG, BG);
@@ -916,20 +917,21 @@ static void test_modem_panel(void) {
 	CHECK(row_contains(&s, 2, "*****"));
 	CHECK(!row_contains(&s, 2, "pa ss"));
 	CHECK(row_contains(&s, 3, "DHCP"));
-	CHECK(row_contains(&s, 7, "ready, on My Net, 192.168.1.50"));
-	CHECK(row_contains(&s, 8, "4.0.3-frankless"));
-	CHECK(row_contains(&s, 8, "rst cause:2"));
-	CHECK(row_contains(&s, 9, "none"));
+	CHECK(row_contains(&s, 6, "Update firmware"));
+	CHECK(row_contains(&s, 8, "ready, on My Net, 192.168.1.50"));
+	CHECK(row_contains(&s, 9, "4.0.3-frankless"));
+	CHECK(row_contains(&s, 9, "rst cause:2"));
+	CHECK(row_contains(&s, 10, "none"));
 	CHECK_EQ(modempanel_input(&p, '\r', 0), MODEMPANEL_JOIN);
 	CHECK(strcmp(p.values.wifi_password, "pa ss") == 0);
 	// Starting: the step; not joined: what it is set to.
 	p.status = (modempanel_status_t){.state = "finding its rate", .busy = true};
 	modempanel_draw(&p, &s, 0, FG, BG, BORDER);
-	CHECK(row_contains(&s, 7, "finding its rate..."));
+	CHECK(row_contains(&s, 8, "finding its rate..."));
 	p.status = (modempanel_status_t){.state = "ready", .ssid = "Other", .problem = "it did not join the network"};
 	modempanel_draw(&p, &s, 0, FG, BG, BORDER);
-	CHECK(row_contains(&s, 7, "no network: set to Other"));
-	CHECK(row_contains(&s, 9, "it did not join the network"));
+	CHECK(row_contains(&s, 8, "no network: set to Other"));
+	CHECK(row_contains(&s, 10, "it did not join the network"));
 	// Reset modem; Defaults twice; moving away forgets the first.
 	modempanel_input(&p, 0x1b, 0);
 	modempanel_input(&p, '[', 0);
@@ -951,7 +953,34 @@ static void test_modem_panel(void) {
 	CHECK(!p.confirm);
 	CHECK_EQ(modempanel_input(&p, '\r', 0), MODEMPANEL_REDRAW);
 	CHECK_EQ(modempanel_input(&p, '\r', 0), MODEMPANEL_DEFAULTS);
-	// Down from Defaults wraps to Network; a lone ESC cancels.
+	// Update firmware (bd xir.17.10): Return checks the file; once the
+	// owner found it good, Return again flashes it; moving off forgets it;
+	// while flashing keys do nothing, Escape too.
+	modempanel_input(&p, 0x1b, 0);
+	modempanel_input(&p, '[', 0);
+	modempanel_input(&p, 'B', 0);
+	CHECK_EQ(p.line, MODEMPANEL_UPDATE_LINE);
+	CHECK_EQ(modempanel_input(&p, '\r', 0), MODEMPANEL_UPDATE);
+	CHECK_EQ(modempanel_input(&p, '\r', 0), MODEMPANEL_UPDATE); // not checked yet: again
+	p.update_ready = true;
+	CHECK_EQ(modempanel_input(&p, '\r', 0), MODEMPANEL_FLASH);
+	CHECK(!p.update_ready);
+	p.update_ready = true;
+	modempanel_input(&p, 0x1b, 0);
+	modempanel_input(&p, '[', 0);
+	modempanel_input(&p, 'A', 0);
+	CHECK(!p.update_ready);
+	modempanel_input(&p, 0x1b, 0);
+	modempanel_input(&p, '[', 0);
+	modempanel_input(&p, 'B', 0);
+	p.flashing = true;
+	CHECK_EQ(modempanel_input(&p, 0x1b, 2000), MODEMPANEL_NONE);
+	CHECK_EQ(modempanel_tick(&p, 3000), MODEMPANEL_NONE);
+	CHECK_EQ(modempanel_input(&p, '\r', 3000), MODEMPANEL_NONE);
+	modempanel_draw(&p, &s, 0, FG, BG, BORDER);
+	CHECK(row_contains(&s, MODEMPANEL_ROWS - 2, "Writing the module"));
+	p.flashing = false;
+	// Down from Update firmware wraps to Network; a lone ESC cancels.
 	modempanel_input(&p, 0x1b, 0);
 	modempanel_input(&p, '[', 0);
 	modempanel_input(&p, 'B', 0);

@@ -21,7 +21,7 @@
 //   0x00        blank
 //   0x01-0x1F   DEC Special Graphics for 0x60-0x7E (◆▒␉␌␍␊°±␤␋┘┐┌└┼⎺⎻─⎼⎽├┤┴┬│≤≥π≠£·)
 //   0x20-0x7E   ASCII
-//   0x7F        blank
+//   0x7F        the replacement character (U+FFFD): UTF-8 the glyphs cannot show
 //   0x80-0x9F   shades, blocks and double-line box drawing (░▒▓█▀▄▌▐■═║╔╗╚╝╠╣╦╩╬╒╓╕╖╘╙╛╜╞╟╡╢)
 //   0xA0-0xFF   Latin-1
 //
@@ -40,6 +40,8 @@
 #else
 #define FONT_FLASH_DATA
 #endif
+
+#define GLYPH_REPLACEMENT 0x7F
 
 #define GLYPH_DEC_GRAPHICS(c) ((uint8_t)((c) - 0x5F)) // c in 0x60-0x7E
 

@@ -194,8 +194,10 @@
 // a call is open), DTR an output (low: active), RST and BOOT are open drain
 // (driven low or released; the module pulls them up): RST to the chip's
 // reset/enable, BOOT to its boot loader strap (the ESP8266's GPIO0).
-// BOARD_MODEM_NAME is the module a firmware image must name, and
-// BOARD_MODEM_BAUD the fixed link rate; RTS/CTS is always on.
+// BOARD_MODEM_NAME is the module a firmware image must name,
+// BOARD_MODEM_FLASH_KB its flash (an image built for more is refused,
+// bd xir.17.10), and BOARD_MODEM_BAUD the fixed link rate; RTS/CTS is
+// always on.
 #ifdef BOARD_MODEM_ESP8266
 #define BOARD_HAS_MODEM 1
 #define BOARD_MODEM_CHIP_NAME "ESP8266"
@@ -203,8 +205,11 @@
 	!defined(BOARD_MODEM_BOOT_PIN)
 #error "a modem needs BOARD_MODEM_DCD_PIN, BOARD_MODEM_DTR_PIN, BOARD_MODEM_RST_PIN and BOARD_MODEM_BOOT_PIN (see boards/example.h)"
 #endif
-#if !defined(BOARD_MODEM_NAME) || !defined(BOARD_MODEM_BAUD)
-#error "a modem needs BOARD_MODEM_NAME and BOARD_MODEM_BAUD (see boards/example.h)"
+#if !defined(BOARD_MODEM_NAME) || !defined(BOARD_MODEM_BAUD) || !defined(BOARD_MODEM_FLASH_KB)
+#error "a modem needs BOARD_MODEM_NAME, BOARD_MODEM_FLASH_KB and BOARD_MODEM_BAUD (see boards/example.h)"
+#endif
+#if BOARD_MODEM_FLASH_KB < 512 || BOARD_MODEM_FLASH_KB > 16384
+#error "BOARD_MODEM_FLASH_KB must be from 512 to 16384"
 #endif
 #if !defined(BOARD_UART_CTS_PIN) || !defined(BOARD_UART_RTS_PIN)
 #error "a modem needs the terminal UART's BOARD_UART_CTS_PIN and BOARD_UART_RTS_PIN (RTS/CTS)"
@@ -215,7 +220,8 @@
 #define BOARD_MODEM_BITS (BOARD_PIN_BIT(BOARD_MODEM_DCD_PIN) | BOARD_PIN_BIT(BOARD_MODEM_DTR_PIN) | \
 	BOARD_PIN_BIT(BOARD_MODEM_RST_PIN) | BOARD_PIN_BIT(BOARD_MODEM_BOOT_PIN))
 #elif defined(BOARD_MODEM_DCD_PIN) || defined(BOARD_MODEM_DTR_PIN) || defined(BOARD_MODEM_RST_PIN) || \
-	defined(BOARD_MODEM_BOOT_PIN) || defined(BOARD_MODEM_NAME) || defined(BOARD_MODEM_BAUD)
+	defined(BOARD_MODEM_BOOT_PIN) || defined(BOARD_MODEM_NAME) || defined(BOARD_MODEM_BAUD) || \
+	defined(BOARD_MODEM_FLASH_KB)
 #error "BOARD_MODEM_* need a chip: BOARD_MODEM_ESP8266"
 #else
 #define BOARD_HAS_MODEM 0

@@ -1,0 +1,43 @@
+The WiFi modem's firmware (Zimodem)
+===================================
+
+This folder holds the firmware for the WiFi modem a board can have on its
+serial port (the Frankless's hand-wired ESP-12F; see "WiFi modem" in the
+user guide, guide/terminal/wifi-modem.html). It is our build of Zimodem
+with hardware RTS/CTS on GPIO13/GPIO15, the lines the terminal's WiFi
+modem mode uses:
+
+  our fork             https://github.com/arlaneenalra/Zimodem/tree/frankless-build
+  the original         https://github.com/bozimmerman/Zimodem
+
+  zimodem.bin          the image, for a 4 MB ESP8266 module (ESP-12F),
+                       written at address 0x0
+  ZIMODEM.ZMI          the same image in the container the terminal flashes
+                       from (with the module and version it is for)
+  build-info.txt       its version (ATI4 reports firmware_version), the
+                       Zimodem commit, the toolchain, the image's SHA-256
+  sources/             the source it was built from: zimodem-<commit>.zip
+                       (Zimodem at the commit built) and esp8266-2.7.4.zip
+                       (the ESP8266 core for Arduino, LGPL-2.1, linked into
+                       the image; https://github.com/esp8266/Arduino)
+  licenses/            the license texts of the code in the image (see
+                       THIRD-PARTY.md, "WiFi modem firmware")
+
+The terminal flashes it itself: copy ZIMODEM.ZMI to the root of the SD
+card or a USB stick, then SET-UP, Return on the Port row (the Modem
+panel), Return on Update firmware, and Return again once it has checked
+the file (the guide's "Updating the module's firmware").
+
+By hand, with esptool (pip install esptool) and a USB-serial adapter on
+the module's TXD/RXD/GND:
+
+1. Put the module in its boot loader: GPIO0 low while it comes out of
+   reset (hold GPIO0 to GND, pulse RST low).
+
+2. esptool --port /dev/ttyUSB0 --baud 460800 write_flash 0x0 zimodem.bin
+
+3. Release GPIO0 and reset the module. The terminal's start-up in WiFi
+   modem mode then gives it its settings and the network from SET-UP.
+
+A module flashed this way loses its saved Zimodem settings (and network);
+the terminal sets them again at its next start-up.

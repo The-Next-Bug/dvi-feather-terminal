@@ -7,7 +7,7 @@
 
 // The text starts inside the box (screen_frame).
 #define LEFT 1
-#define NAME_WIDTH 14
+#define NAME_WIDTH 16
 #define VALUE_COL (LEFT + 3 + NAME_WIDTH)
 
 void modempanel_open(modempanel_t *p, const settings_t *values) {
@@ -18,7 +18,7 @@ void modempanel_open(modempanel_t *p, const settings_t *values) {
 static modempanel_action_t cursor_key(modempanel_t *p, uint8_t final) {
 	if (final == 'A' || final == 'B') {
 		p->line = (p->line + MODEMPANEL_LINES + (final == 'A' ? -1u : 1u)) % MODEMPANEL_LINES;
-		p->confirm = false;
+		p->confirm = p->update_ready = false;
 		return MODEMPANEL_REDRAW;
 	}
 	return MODEMPANEL_NONE;
@@ -61,12 +61,21 @@ static modempanel_action_t enter(modempanel_t *p) {
 		}
 		p->confirm = false;
 		return MODEMPANEL_DEFAULTS;
+	case MODEMPANEL_UPDATE_LINE:
+		if (p->update_ready) {
+			p->update_ready = false;
+			return MODEMPANEL_FLASH;
+		}
+		return MODEMPANEL_UPDATE;
 	default:
 		return MODEMPANEL_JOIN;
 	}
 }
 
 modempanel_action_t modempanel_input(modempanel_t *p, uint8_t c, uint32_t now_ms) {
+	if (p->flashing) {
+		return MODEMPANEL_NONE; // nothing stops it halfway
+	}
 	bool had_message = p->message != NULL;
 	p->message = NULL;
 	modempanel_action_t action = MODEMPANEL_NONE;
@@ -99,7 +108,7 @@ modempanel_action_t modempanel_input(modempanel_t *p, uint8_t c, uint32_t now_ms
 }
 
 modempanel_action_t modempanel_tick(modempanel_t *p, uint32_t now_ms) {
-	if (p->esc == 1 && now_ms - p->esc_ms >= MODEMPANEL_ESC_TIMEOUT_MS) {
+	if (p->esc == 1 && !p->flashing && now_ms - p->esc_ms >= MODEMPANEL_ESC_TIMEOUT_MS) {
 		p->esc = 0;
 		return MODEMPANEL_CANCEL;
 	}
@@ -147,6 +156,8 @@ void modempanel_draw(const modempanel_t *p, screen_t *s, unsigned top, uint8_t f
 	screen_puts(s, VALUE_COL + 1, top + 4, "Return: reset it and set it up again", fg, bg);
 	draw_name(s, top + 5, "Defaults", p->line == MODEMPANEL_DEFAULTS_LINE, fg, bg);
 	screen_puts(s, VALUE_COL + 1, top + 5, "Return twice: its factory settings, then ours", fg, bg);
+	draw_name(s, top + 6, "Update firmware", p->line == MODEMPANEL_UPDATE_LINE, fg, bg);
+	screen_puts(s, VALUE_COL + 1, top + 6, "Return: ZIMODEM.ZMI from the SD card or a stick", fg, bg);
 
 	// The modem as it is.
 	const modempanel_status_t *st = &p->status;
@@ -159,18 +170,19 @@ void modempanel_draw(const modempanel_t *p, screen_t *s, unsigned top, uint8_t f
 		snprintf(text, sizeof text, "   Status    %s, no network%s%.32s", or_none(st->state, "?"),
 			st->ssid && st->ssid[0] ? ": set to " : "", st->ssid ? st->ssid : "");
 	}
-	screen_puts(s, LEFT, top + 7, text, fg, bg);
-	snprintf(text, sizeof text, "   Firmware  %.24s   boot: %.32s", or_none(st->version, "?"), or_none(st->rom, "?"));
 	screen_puts(s, LEFT, top + 8, text, fg, bg);
-	snprintf(text, sizeof text, "   Problem   %.60s", or_none(st->problem, "none"));
+	snprintf(text, sizeof text, "   Firmware  %.24s   boot: %.32s", or_none(st->version, "?"), or_none(st->rom, "?"));
 	screen_puts(s, LEFT, top + 9, text, fg, bg);
+	snprintf(text, sizeof text, "   Problem   %.60s", or_none(st->problem, "none"));
+	screen_puts(s, LEFT, top + 10, text, fg, bg);
 
 	if (p->message) {
 		screen_puts(s, LEFT + 3, top + MODEMPANEL_ROWS - 4, p->message, fg, bg);
 	}
 	screen_puts(s, LEFT, top + MODEMPANEL_ROWS - 3, " Up/Down row   Network, Password: type, Backspace", fg, bg);
 	screen_puts(s, LEFT, top + MODEMPANEL_ROWS - 2,
-		" Return: Network, Password save and join; Reset, Defaults as shown   Esc back", fg, bg);
+		p->flashing ? " Writing the module: wait (about a minute)" :
+		" Return: Network, Password save and join; the rest as shown   Esc back", fg, bg);
 }
 
 #endif

@@ -54,3 +54,42 @@ Z80 machine's monitor can write to an SD card:
   no license comes with these files. WordStar for CP/M is effectively
   abandonware: MicroPro is long gone, and the CP/M versions have not
   been sold or supported for decades.
+
+## WiFi modem firmware
+
+`modem/zimodem.bin` in the release ZIP is a separate program: the firmware
+for the ESP8266 WiFi modem a board can have on its serial port, not part of
+the terminal's firmware. It is our build of Zimodem (`lib/zimodem`), made
+by `scripts/build-zimodem.sh` with the ESP8266 Arduino core:
+
+- our fork: https://github.com/arlaneenalra/Zimodem/tree/frankless-build
+- the original: https://github.com/bozimmerman/Zimodem
+
+Its license texts are in `modem/licenses/` (`scripts/build-zimodem.sh`
+copies them from the sources and the toolchain the build used), its
+sources in `modem/sources/`: Zimodem's at the commit built
+(`zimodem-<commit>.zip`) and the ESP8266 core's release archive
+(`esp8266-2.7.4.zip`).
+
+| Component | Used for | License | Text |
+|---|---|---|---|
+| [Zimodem](https://github.com/bozimmerman/Zimodem) (Bo Zimmerman), [our fork](https://github.com/arlaneenalra/Zimodem/tree/frankless-build) with the Frankless changes | The modem: Hayes commands, WiFi, telnet, printing | Apache-2.0, with its NOTICE | `modem/licenses/Zimodem-Apache-2.0.txt`, `Zimodem-NOTICE.txt` |
+| [ESP8266 core for Arduino](https://github.com/esp8266/Arduino) 2.7.4, with its ESP8266WiFi library | Runtime, WiFi and network API | LGPL-2.1 | `modem/licenses/esp8266-arduino-LGPL-2.1.txt` |
+| Espressif ESP8266 NONOS SDK (in the core) | WiFi driver, system libraries | Espressif MIT License (ESP8266 only) | `modem/licenses/Espressif-MIT.txt` |
+| [lwIP](https://savannah.nongnu.org/projects/lwip/) 2 (in the core) | TCP/IP stack | BSD-3-Clause | `modem/licenses/lwIP-BSD-3-Clause.txt` |
+| umm_malloc (Ralph Hempel, in the core) | Heap | MIT | `modem/licenses/umm_malloc-MIT.txt` |
+| SPIFFS (Peter Andersson, in the core) | File system for Zimodem's settings | MIT | `modem/licenses/SPIFFS-MIT.txt` |
+| eboot (Ivan Grokhotkov, in the core) | Boot loader at the start of the image | BSD-3-Clause | `modem/licenses/eboot-BSD-3-Clause.txt` |
+| newlib, libgcc, libstdc++ (the core's Xtensa GCC toolchain) | C and C++ libraries, compiler runtime | newlib: BSD-style licenses; libgcc, libstdc++: GPL-3.0 with the GCC Runtime Library Exception | in the toolchain's sources |
+
+Zimodem's ZMODEM (from Synchronet), HostCM (Robert Ferguson's) and SSH
+(libssh2, BSD-3-Clause) code is built only for the ESP32 and is not in
+this image.
+
+The ESP8266 core is under the LGPL-2.1 and linked statically into the
+image. Its complete source at the version used is in
+`modem/sources/esp8266-2.7.4.zip`, the core's 2.7.4 release
+(https://github.com/esp8266/Arduino/releases/tag/2.7.4, the archive
+arduino-cli installs, pinned by `lib/zimodem/toolchain.env`); with
+Zimodem's source, also there, and `scripts/build-zimodem.sh` the image can
+be rebuilt and relinked, with a changed core if wanted.

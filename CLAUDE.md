@@ -67,12 +67,13 @@ CMake or Arm GCC on the dev host. Use the scripts:
 ```bash
 git submodule update --init          # lib/pico-sdk (2.3.1) and lib/tinyusb, not pico-sdk's submodules (lib/z80pack is vendored)
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool, clang-tidy, mdBook (toolchain.env; one by name: setup-toolchain.sh mdbook)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): board (test_board.sh on every board header), screen, palette, vtparse, term, raster, keyboard, blank, keyname, settings, setup, splash, clock, ay (the AY-3-8910's tones, noise, envelopes, levels), rtc (the RTC chip drivers on a fake register bus), xonxoff (the XON/XOFF decisions), sdformat (card formats on a sparse disk), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), usbvol (which stick is USB:), machine (boots CP/M 2.2 from a FAT32 RAM volume)
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): board (test_board.sh on every board header), screen, palette, vtparse, term, raster, keyboard, blank, keyname, settings, setup, splash, clock, ay (the AY-3-8910's tones, noise, envelopes, levels), rtc (the RTC chip drivers on a fake register bus), xonxoff (the XON/XOFF decisions), sdformat (card formats on a sparse disk), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), usbvol (which stick is USB:), zmi (the modem's image container), espflash (writing it through the ESP8266 ROM loader, a fake ROM), machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimized, no sanitizers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default; any boards/<target>.h) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip (release notes: scripts/changelog.sh, the commits since the last tag without a hyphen)
 scripts/lint.sh                      # clang-tidy (.clang-tidy) over build/test and build/$TARGET's compile_commands.json (build them first)
 scripts/docs.sh                      # the user guide (mdBook, toolchain.env MDBOOK_*) -> build/docs/html; package.sh requires it
+scripts/build-zimodem.sh             # the WiFi modem's firmware (bd xir.17.9): lib/zimodem's own build.sh with setup-toolchain.sh's "zimodem" component (arduino-cli + ESP8266 core 2.7.4 per lib/zimodem/toolchain.env, in .toolchain/arduino15) -> build/zimodem/zimodem.bin, ZIMODEM.ZMI (bd xir.17.13: src/modem/zmi_gen.py writes it, src/modem/zmi.[ch] reads it a chunk at a time with a data callback, the ESP header held back until checked; format in zmi.h and the guide's file-formats page; test_zmi, which also reads the built one), build-info.txt, licenses/ (from the core and lib/zimodem), sources/ (zimodem-<sha>.zip, the core's esp8266-2.7.4.zip from arduino15/staging or fetched, SHA-256 from the package index; the LGPL part's source, ~35 MB in the ZIP); BUILD_ID = the submodule commit's UTC time; package.sh -> modem/ (+ docs/MODEM.txt as README.txt; REQUIRE_ZIMODEM=1 in CI's package job); CI job zimodem; licenses in docs/THIRD-PARTY.md "WiFi modem firmware" (the Frankless build has AT&U compiled out since lib/zimodem e3932d0: INCLUDE_OTH_UPDATES false, update_stem=none; the private update URL and the "frankless" file stem removed: Zimodem's defaults) 
 ```
 
 User guide (bd 1ay): `docs/guide/` (book.toml, src/SUMMARY.md and one
@@ -150,7 +151,8 @@ GP10/11 (BOARD_RTC_DS3231, bd 1ls.6.1) with its 1 Hz on GP8 (the clock's
 tick); TDA1387 DAC (U8, hand-fitted) on GP5 BCK / 6 WS / 7 DATA for the
 bell; the WiFi modem (bd xir.15, the user's hand-wired ESP-12F with our
 Zimodem build on J8): BOARD_MODEM_ESP8266, DCD 26 / DTR 27 / RST 24 /
-BOOT 25 on J1, BOARD_MODEM_NAME "esp12f", BOARD_MODEM_BAUD 921600
+BOOT 25 on J1, BOARD_MODEM_NAME "esp12f", BOARD_MODEM_FLASH_KB 4096 (bd
+xir.17.10; board.h requires it, 512-16384), BOARD_MODEM_BAUD 921600
 (board.h: BOARD_HAS_MODEM, all four lines plus CTS/RTS required;
 src/platform/modem_lines.[ch]: main() first sets DTR active, RST/BOOT
 released open drain, DCD in, pulls off; the WiFi modem mode built on it:
@@ -207,7 +209,22 @@ modem_glue_status() (terminal.h modem_status_t: NONE / STARTING / WIFI
 modem_glue_carrier() (raw DCD); status.c's wifi_label "wifi" / "no wifi"
 / "modem?" in place of the baud and framing (terminal), before the flow
 field as " | wifi RTS/CTS" (CP/M), lit while DCD; HWINFO_MODEM 36,
-modem_glue.c modem_record (0 bytes without WIFI_MODEM). Guide:
+modem_glue.c modem_record (0 bytes without WIFI_MODEM). Flashing the
+module (bd xir.17.10): src/modem/espflash.[ch] (portable, cold; the
+ESP8266 ROM loader without esptool's stub: SLIP, SYNC at 115200, READ_REG
+0x40001000 = 0xfff0c101, FLASH_BEGIN with esptool's ESP8266 erase-size
+workaround espflash_erase_size, 1 KB FLASH_DATA blocks with the 0xEF XOR
+checksum; no read-back in the ROM: the per-block checksums and ATI4 after
+are the check; espflash_room limits the owner's file pieces, 1 byte while
+READY so a part's data never comes before espflash_part; test_espflash's
+fake ROM models the erase bug and refuses unerased writes); the Modem
+panel's Update firmware row (MODEMPANEL_UPDATE: modem_glue.c update_check
+reads 0:/ then 1:/ZIMODEM.ZMI whole through zmi + zmi_check_target with
+BOARD_MODEM_NAME/_FLASH_KB, sets update_ready; MODEMPANEL_FLASH:
+update_start, serial flow off, flashing = modem_owns_line; flash_poll from
+modem_glue_poll feeds the file in espflash_room pieces; update_end: RTS/CTS
+back, modem_start, version_service compares ATI4 with the file's);
+setup_glue.c's fw_mount/fw_unmount/fw_stick exported for it. Guide:
 terminal/wifi-modem.md (wiring, start-up, troubleshooting). Slide switch S1 puts the USB
 on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
 CI builds it.
@@ -351,7 +368,9 @@ UF2 in the latter).
   SET-UP's rows at 80 columns; at 132, SET-UP over the alternate screen
   has no room and its rows come back blank.
 - `src/term/vtparse.[ch]` (portable): Paul Williams' DEC parser. C1 (0x80-0x9F)
-  ignored unless `c1_controls` (keeps UTF-8 safe); OSC/DCS/APC discarded,
+  ignored unless `c1_controls`; with `utf8` (bd cvc) bytes from 0x80 in
+  ground state are UTF-8, VTPARSE_PRINT_CODE with the code point in
+  p->code (malformed: U+FFFD, the cutting byte then parsed); OSC/DCS/APC discarded,
   and ended by any C0 but NUL (BEL in OSC is the terminator), which then
   executes, or after VTPARSE_MAX_STRING (1024) bytes (dmt.36, xterm
   brokenStringTerm: an Alt+] sends ESC ]).
@@ -379,6 +398,19 @@ UF2 in the latter).
   (term_set_defaults) resets the terminal. SET-UP and the CP/M monitor
   always get VT100 ANSI-mode keys (input_glue.c keyboard_poll), whatever the
   host's modes; the host cannot open SET-UP (CSI ? 999 ~) from the ADM-3A.
+  UTF-8 (bd cvc, option A: no new glyphs): term.c term_print_code, its
+  glyph and width from `src/term/unicode.[ch]` (cold, in flash, with
+  unicode_table.c, which `src/term/unicode_gen.py` writes from Python's
+  unicodedata and font_gen.py's glyph lists; checked in, rerun by hand):
+  Latin-1 itself, box drawing/blocks to our lines and blocks (heavy as
+  light, rounded as square), punctuation look-alikes, accented letters to
+  their base, Fullwidth ASCII; zero-width dropped; East Asian Wide in two
+  cells (glyph + blank; wraps first at the last column); else
+  GLYPH_REPLACEMENT 0x7F (U+FFFD, was a blank glyph). Settings field 28
+  charset (SETTINGS_CHARSET_UTF8 default / _LATIN1), SET-UP row after
+  Terminal type; settings_utf8: VT100 in terminal mode only (fixed
+  "VT52" / "ADM-3A" / "CP/M" otherwise); term_defaults_t.utf8, RIS back to
+  it; xterm's ESC % G / ESC % @. VT52 mode and the ADM-3A stay 8-bit.
   Writes palette indices
   only (nothing depends on the palette): default fg 7, bold default 15, bg
   0; bold brightens 0-7 to 8-15; 38;5;n as is; 24-bit -> palette_nearest.
@@ -736,8 +768,9 @@ UF2 in the latter).
   (PTSTL0). Status line PRN / lit / PRN!; HWINFO item 35. Zimodem notes
   and the two-modem idea: docs/ideas/second-modem.md. Zimodem itself is
   `lib/zimodem` (bd xir.1: submodule, github.com/arlaneenalra/Zimodem
-  branch frankless-build, upstream bozimmerman/Zimodem; not built by our
-  scripts or CI, its own scripts/build.sh and BUILDING.md; ~/fz80/Zimodem
+  branch frankless-build, upstream bozimmerman/Zimodem; built by
+  scripts/build-zimodem.sh and CI through its own scripts/build.sh, bd
+  xir.17.9; BUILDING.md; ~/fz80/Zimodem
   is the older working copy, remote fork). Its throughput (one byte per
   loop() into an empty FIFO on the ESP8266), telnet (WONT NAWS) and the
   J8 rewiring for hardware RTS/CTS (GPIO13 U0CTS / GPIO15 U0RTS, built in

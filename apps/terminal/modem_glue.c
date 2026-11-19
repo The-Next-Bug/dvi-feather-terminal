@@ -18,7 +18,10 @@
 
 #if WIFI_MODEM
 
+#include "espflash.h"
+#include "ff.h"
 #include "modem.h"
+#include "zmi.h"
 
 // Zimodem's GPIOs for the lines our pins see (S47, S55).
 #ifndef BOARD_MODEM_ZIMODEM_DCD
@@ -30,6 +33,11 @@
 
 static modem_t modem;
 static bool started;
+
+// Flashing the module (bd xir.17.10): the flasher has the line meanwhile.
+static espflash_t flash;
+static bool flashing;
+static void flash_poll(uint32_t now);
 
 static void io_reset(void *ctx, bool hold) {
 	(void)ctx;
@@ -84,6 +92,10 @@ void modem_glue_poll(void) {
 		return;
 	}
 	uint32_t now = to_ms_since_boot(get_absolute_time());
+	if (flashing) {
+		flash_poll(now);
+		return;
+	}
 	uint8_t buf[64];
 	size_t n;
 	while ((n = serial_read(buf, sizeof buf)) > 0) {
@@ -101,13 +113,21 @@ const char *modem_glue_notice(void) {
 	if (!modem_glue_busy()) {
 		return NULL;
 	}
-	snprintf(text, sizeof text, "WiFi modem: %s", modem_step_name(&modem));
+	if (flashing) {
+		snprintf(text, sizeof text, "WiFi modem: %s %u%%", espflash_step_name(&flash),
+			flash.total ? (unsigned)((uint64_t)flash.written * 100 / flash.total) : 0u);
+	} else {
+		snprintf(text, sizeof text, "WiFi modem: %s", modem_step_name(&modem));
+	}
 	return text;
 }
 
 modem_status_t modem_glue_status(void) {
 	if (!started) {
 		return MODEM_STATUS_NONE;
+	}
+	if (flashing) {
+		return MODEM_STATUS_STARTING;
 	}
 	switch (modem.state) {
 	case MODEM_STARTING:
@@ -160,6 +180,218 @@ size_t modem_record(uint8_t *buf) {
 	return hwinfo_record(buf, st, "WiFi modem", text);
 }
 
+// ---- the module's firmware from ZIMODEM.ZMI (bd xir.17.10) ----
+//
+// Update firmware on the Modem panel: the file is looked for on the card,
+// then the stick, read whole and checked (zmi.h: the container, the ESP
+// image, the chip, the module, its flash) before anything is erased; a
+// second Return writes it through the ROM loader (espflash.h), a piece of
+// the file at a time from modem_glue_poll, then the start-up runs and the
+// version the module reports is compared with the file's.
+
+#define ZMI_NAME "ZIMODEM.ZMI"
+
+static FIL zmi_file;
+static bool zmi_open;
+static zmi_reader_t zmi;
+static uint8_t zmi_buf[512];
+static UINT zmi_len, zmi_pos;
+static bool zmi_eof;
+static char zmi_path[16];
+static char zmi_version[ZMI_VERSION_MAX + 1];
+static uint32_t zmi_image_bytes;
+static char update_message[128]; // shown in the panel's 76 columns
+static bool check_version; // the start-up after a flash: compare its ATI4
+
+static void zmi_close(void) {
+	if (zmi_open) {
+		f_close(&zmi_file);
+		zmi_open = false;
+	}
+	fw_unmount(false);
+}
+
+// The file on the card ("0:"), else the stick ("1:"): open, true.
+static bool zmi_find(const char **where) {
+	char info[64];
+	bool card = fw_mount(info, sizeof info);
+	static const char *const paths[] = {"0:/" ZMI_NAME, "1:/" ZMI_NAME};
+	static const char *const names[] = {"SD card", "USB stick"};
+	for (unsigned v = card ? 0 : 1; v < 2; ++v) {
+		if (v == 1 && !fw_stick()) {
+			break;
+		}
+		if (f_open(&zmi_file, paths[v], FA_READ) == FR_OK) {
+			zmi_open = true;
+			snprintf(zmi_path, sizeof zmi_path, "%s", paths[v]);
+			*where = names[v];
+			return true;
+		}
+	}
+	return false;
+}
+
+static void on_part(void *ctx, uint32_t address, uint32_t length) {
+	(void)ctx;
+	espflash_part(&flash, address, length, to_ms_since_boot(get_absolute_time()));
+}
+
+static void on_data(void *ctx, uint32_t address, const uint8_t *data, size_t len) {
+	(void)ctx;
+	(void)address;
+	espflash_data(&flash, data, len, to_ms_since_boot(get_absolute_time()));
+}
+
+// Return on Update firmware: find the file and check all of it.
+static void update_check(void) {
+	const char *where;
+	setup.modem.update_ready = false;
+	if (!zmi_find(&where)) {
+		zmi_close();
+		setup.modem.message = "No " ZMI_NAME " on the SD card or a USB stick";
+		return;
+	}
+	zmi_reader_t r;
+	zmi_init(&r, NULL, NULL);
+	UINT n;
+	while (f_read(&zmi_file, zmi_buf, sizeof zmi_buf, &n) == FR_OK && n > 0 && zmi_feed(&r, zmi_buf, n) == ZMI_OK) {
+	}
+	zmi_result_t res = zmi_finish(&r);
+	if (res == ZMI_OK) {
+		res = zmi_check_target(&r.info, ZMI_CHIP_ESP8266, BOARD_MODEM_NAME, BOARD_MODEM_FLASH_KB * 1024u);
+	}
+	zmi_close();
+	if (res != ZMI_OK) {
+		snprintf(update_message, sizeof update_message, ZMI_NAME " on the %s: %s; not used", where,
+			zmi_result_text(res));
+		setup.modem.message = update_message;
+		return;
+	}
+	snprintf(zmi_version, sizeof zmi_version, "%s", r.info.version);
+	zmi_image_bytes = r.info.image_bytes;
+	snprintf(update_message, sizeof update_message, "%s: Zimodem %s. Return again: write it", where,
+		r.info.version); // the module's own is on the Firmware row
+	setup.modem.message = update_message;
+	setup.modem.update_ready = true;
+}
+
+static void flash_reset(void *ctx, bool hold) {
+	(void)ctx;
+	modem_hold_reset(hold);
+}
+
+static void flash_boot(void *ctx, bool hold) {
+	(void)ctx;
+	modem_hold_boot(hold);
+}
+
+static void flash_send(void *ctx, const uint8_t *data, size_t len) {
+	(void)ctx;
+	while (len) {
+		size_t sent = serial_write(data, len);
+		data += sent;
+		len -= sent;
+		if (len) {
+			serial_poll();
+		}
+	}
+}
+
+static const espflash_io_t flash_io = {NULL, flash_reset, flash_boot, io_baud, flash_send};
+
+// The second Return: open the file again and start writing.
+static void update_start(uint32_t now) {
+	const char *where;
+	if (!zmi_find(&where)) {
+		zmi_close();
+		setup.modem.message = ZMI_NAME " is gone";
+		return;
+	}
+	zmi_init(&zmi, on_data, NULL);
+	zmi_set_part_callback(&zmi, on_part);
+	zmi_len = zmi_pos = 0;
+	zmi_eof = false;
+	serial_set_flow(SERIAL_FLOW_NONE); // the ROM loader has none
+	espflash_init(&flash, &flash_io);
+	espflash_start(&flash, zmi_image_bytes, now);
+	flashing = true;
+	modem_owns_line = true;
+	setup.modem.flashing = true;
+	setup.modem.message = update_message;
+	update_message[0] = '\0'; // the progress, from modem_panel_service
+}
+
+// Done (or failed): the line back to the modem, which starts again.
+static void update_end(uint32_t now) {
+	zmi_close();
+	flashing = false;
+	setup.modem.flashing = false;
+	serial_set_flow(SERIAL_FLOW_RTSCTS);
+	if (flash.state == ESPFLASH_DONE) {
+		check_version = true;
+		snprintf(update_message, sizeof update_message, "Written; the modem starts (it checks the version)");
+	} else {
+		snprintf(update_message, sizeof update_message, "Not written: %.60s", flash.problem ? flash.problem : "?");
+	}
+	setup.modem.message = update_message;
+	modem_start(&modem, now); // a reset with BOOT high: whatever the flash holds runs
+	modem_owns_line = true;
+}
+
+static void flash_poll(uint32_t now) {
+	uint8_t buf[64];
+	size_t n;
+	while ((n = serial_read(buf, sizeof buf)) > 0) {
+		for (size_t i = 0; i < n; ++i) {
+			espflash_feed(&flash, buf[i], now);
+		}
+	}
+	espflash_poll(&flash, now);
+	// The file, a piece at a time: never more than the flasher has room for.
+	size_t room;
+	while (!zmi_eof && (room = espflash_room(&flash)) > 0) {
+		if (zmi_pos == zmi_len) {
+			if (f_read(&zmi_file, zmi_buf, sizeof zmi_buf, &zmi_len) != FR_OK || zmi_len == 0) {
+				zmi_eof = true;
+				break;
+			}
+			zmi_pos = 0;
+		}
+		UINT piece = zmi_len - zmi_pos < room ? zmi_len - zmi_pos : (UINT)room;
+		if (zmi_feed(&zmi, zmi_buf + zmi_pos, piece) != ZMI_OK) {
+			espflash_abort(&flash, "the file changed since its check");
+			break;
+		}
+		zmi_pos += piece;
+	}
+	if (zmi_eof && flash.state == ESPFLASH_READY) {
+		if (zmi_finish(&zmi) == ZMI_OK) {
+			espflash_finish(&flash, now);
+		} else {
+			espflash_abort(&flash, "the file changed since its check");
+		}
+	}
+	serial_poll();
+	if (flash.state == ESPFLASH_DONE || flash.state == ESPFLASH_FAILED) {
+		update_end(now);
+	}
+}
+
+// After a flash, the start-up's ATI4 against the file's version.
+static void version_service(void) {
+	if (!check_version || modem_busy(&modem)) {
+		return;
+	}
+	check_version = false;
+	if (modem.state == MODEM_READY && strcmp(modem.version, zmi_version) == 0) {
+		snprintf(update_message, sizeof update_message, "Updated: Zimodem %s", zmi_version);
+	} else {
+		snprintf(update_message, sizeof update_message, "Written; the module reports %.23s, not %.23s",
+			modem.version[0] ? modem.version : "nothing", zmi_version);
+	}
+	setup.modem.message = update_message;
+}
+
 // ---- the Modem panel in SET-UP (Return on the Port row, bd xir.17.4) ----
 
 static_assert(MODEMPANEL_ROWS <= SETUP_ROWS, "the Modem panel fits SET-UP's rows");
@@ -178,11 +410,11 @@ static void panel_status(modempanel_status_t *st) {
 }
 
 // What the panel shows of the modem, to redraw it when that changes.
-static char panel_shown[160];
+static char panel_shown[256];
 
 static void panel_fingerprint(char *out, size_t size) {
-	snprintf(out, size, "%s|%d|%s|%s|%s|%s", modem_step_name(&modem), modem_glue_busy(), modem.ip, modem.ssid,
-		modem.version, modem.problem ? modem.problem : "");
+	snprintf(out, size, "%s|%d|%s|%s|%s|%s|%d|%s", modem_step_name(&modem), modem_glue_busy(), modem.ip, modem.ssid,
+		modem.version, modem.problem ? modem.problem : "", flashing, setup.modem.message ? setup.modem.message : "");
 }
 
 static void modem_draw_panel(void) {
@@ -241,6 +473,11 @@ void modem_panel_service(void) {
 	uint32_t now = to_ms_since_boot(get_absolute_time());
 	modempanel_action_t work = setup.modem_work;
 	setup.modem_work = MODEMPANEL_NONE;
+	version_service();
+	if (flashing) {
+		snprintf(update_message, sizeof update_message, "%s: %u of %u KB; do not switch off",
+			espflash_step_name(&flash), (unsigned)(flash.written / 1024), (unsigned)(flash.total / 1024));
+	}
 	if (work == MODEMPANEL_NONE) {
 		work = modempanel_tick(&setup.modem, now);
 	}
@@ -261,6 +498,16 @@ void modem_panel_service(void) {
 		modem_factory(&modem, now);
 		modem_owns_line = modem_busy(&modem);
 		setup.modem.message = "Its factory settings, then ours: this takes a while";
+		break;
+	case MODEMPANEL_UPDATE:
+		if (modem_glue_busy()) {
+			setup.modem.message = "Wait for the modem's start-up first";
+		} else {
+			update_check();
+		}
+		break;
+	case MODEMPANEL_FLASH:
+		update_start(now);
 		break;
 	default:
 		break;

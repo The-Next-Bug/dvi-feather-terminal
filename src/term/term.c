@@ -7,6 +7,7 @@
 #include "font.h"
 #include "palette.h"
 #include "term_internal.h"
+#include "unicode.h"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -136,11 +137,43 @@ static uint8_t map_charset(const term_t *t, uint8_t ch) {
 	return ch;
 }
 
+static void put_glyph(term_t *t, uint8_t glyph);
+
 void term_print(term_t *t, uint8_t ch) {
 	if (ch == 0x7f) {
 		return;
 	}
-	uint8_t glyph = map_charset(t, ch);
+	put_glyph(t, map_charset(t, ch));
+}
+
+// A character from U+0080 in UTF-8 mode (bd cvc): Latin-1 as term_print,
+// others as unicode.c's glyph; zero-width ones dropped, wide ones in two
+// cells (the glyph, then a blank), moved to the next line first when only
+// the last column is left, as xterm does.
+void term_print_code(term_t *t, uint32_t code) {
+	if (code < 0x100) {
+		if (code >= 0xa0) {
+			term_print(t, (uint8_t)code);
+		}
+		return; // C1 controls as characters: nothing
+	}
+	unsigned width = unicode_width(code);
+	if (!width) {
+		return;
+	}
+	if (width == 2 && !t->cur.wrap_pending && t->autowrap && t->cur.col + 1 >= term_cols(t)) {
+		t->cur.wrap_pending = true;
+	}
+	// Room for the second cell: a pending wrap starts a new line; without
+	// autowrap the last column takes only the glyph.
+	bool room = t->cur.wrap_pending || t->cur.col + 1 < term_cols(t);
+	put_glyph(t, unicode_glyph(code));
+	if (width == 2 && room) {
+		put_glyph(t, ' ');
+	}
+}
+
+static void put_glyph(term_t *t, uint8_t glyph) {
 	if (t->cur.wrap_pending) {
 		t->cur.col = 0;
 		term_index_down(t);
@@ -399,7 +432,13 @@ void term_set_defaults(term_t *t, const term_defaults_t *d) {
 		reset(t);
 	}
 	switch (t->personality) {
-	case TERM_VT100: vt100_set_vt52(t, d->vt52); break;
+	case TERM_VT100:
+		vt100_set_vt52(t, d->vt52);
+		if (t->vt100.parser.utf8 != d->utf8) {
+			vtparse_reset(&t->vt100.parser); // SET-UP's Character set, at once
+			t->vt100.parser.utf8 = d->utf8;
+		}
+		break;
 	case TERM_ADM3A: break;
 	}
 	sync_cursor(t);

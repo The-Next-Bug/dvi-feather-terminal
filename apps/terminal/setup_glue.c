@@ -102,11 +102,11 @@ static void print_draw_panel(void) {
 // monitor never runs in terminal mode). The stick (volume 1) is usbmsc.c's,
 // mounted in both modes.
 
-static bool fw_stick(void) {
+bool fw_stick(void) {
 	return usbmsc_status().mounted;
 }
 
-static bool fw_mount(char *info, size_t n) {
+bool fw_mount(char *info, size_t n) {
 	if (cpm.on) {
 		return true;
 	}
@@ -122,7 +122,7 @@ static bool fw_mount(char *info, size_t n) {
 	return false;
 }
 
-static void fw_unmount(bool commit) {
+void fw_unmount(bool commit) {
 	if (cpm.on && !commit) {
 		return; // the monitor's
 	}

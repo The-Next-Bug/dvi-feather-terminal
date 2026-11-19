@@ -39,7 +39,15 @@ static void set_mode(term_t *t, bool dec, unsigned mode, bool on) {
 	}
 	switch (mode) {
 	case 1: t->vt100.cursor_keys_app = on; break;
-	case 3: term_set_columns(t, on ? 132 : 80); break;
+	case 3: // DECCOLM
+		term_set_columns(t, on ? 132 : 80);
+		// A VT100 cannot hide its cursor, so terminfo's vt100 has no way to
+		// show it again: a program that hid it with xterm's ?25l (bd 0c4)
+		// left it hidden through Linux's reset, whose vt100 strings
+		// (ESC < ESC > CSI ? 3;4;5 l CSI ? 7;8 h CSI r) always include
+		// DECCOLM. So the host's DECCOLM shows it, as RIS does.
+		t->screen->cursor_visible = true;
+		break;
 	case 5: term_set_reverse_screen(t, on); break;
 	case 6: t->cur.origin_mode = on; term_move_to(t, 0, 0); break;
 	case 7:
@@ -225,10 +233,14 @@ static void csi_dispatch(term_t *t, const vtparse_t *p, uint8_t final) {
 		term_scroll_down(t, t->margin_top, t->margin_bottom, n);
 		break;
 	case 'b': { // REP: the preceding printed character, n more times
-		uint8_t ch = t->vt100.last_char;
+		uint32_t ch = t->vt100.last_char;
 		unsigned max = term_cols(t) * t->rows;
 		for (unsigned i = 0; ch && i < n && i < max; ++i) {
-			term_print(t, ch);
+			if (ch < 0x100) {
+				term_print(t, (uint8_t)ch);
+			} else {
+				term_print_code(t, ch);
+			}
 		}
 		break;
 	}
@@ -299,6 +311,11 @@ static void esc_dispatch(term_t *t, const vtparse_t *p, uint8_t final) {
 				}
 			}
 			term_move_to(t, 0, 0);
+		} else if (i == '%') { // xterm: ESC % G UTF-8, ESC % @ back to Latin-1
+			if (final == 'G' || final == '@') {
+				vtparse_reset(&t->vt100.parser);
+				t->vt100.parser.utf8 = final == 'G';
+			}
 		}
 		return; // ESC # 3-6 (double height/width): ignored
 	}
@@ -368,6 +385,10 @@ static void on_parse(vtparse_t *p, vtparse_action_t action, uint8_t ch) {
 		term_print(t, ch);
 		t->vt100.last_char = ch == 0x7f ? 0 : ch;
 		return;
+	case VTPARSE_PRINT_CODE:
+		term_print_code(t, p->code);
+		t->vt100.last_char = p->code;
+		return;
 	case VTPARSE_EXECUTE: vt100_execute(t, ch); break;
 	case VTPARSE_ESC_DISPATCH: esc_dispatch(t, p, ch); break;
 	case VTPARSE_CSI_DISPATCH: csi_dispatch(t, p, ch); break;
@@ -386,6 +407,7 @@ void vt100_reset(term_t *t) {
 	term_reset_cursor(&t->vt100.saved);
 	t->vt100.cursor_keys_app = t->vt100.keypad_app = false;
 	t->vt100.last_char = 0; // REP must not repeat a character from before the reset
+	t->vt100.parser.utf8 = t->defaults.utf8;
 	t->vt100.vt52 = false;
 	vt100_set_vt52(t, t->defaults.vt52);
 }

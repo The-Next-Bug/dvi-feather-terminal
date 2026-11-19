@@ -8,11 +8,17 @@
 # guide/, also on its own as <release>-guide.zip. CHANGES.md is also written
 # next to the ZIP for use as release notes.
 #
+# The WiFi modem's firmware (scripts/build-zimodem.sh, BUILD_DIR/zimodem)
+# goes into modem/ with its licenses, sources (Zimodem's and the ESP8266
+# core's, about 35 MB) and docs/MODEM.txt; without
+# it the ZIP has no modem/ (an error with REQUIRE_ZIMODEM=1, as in CI).
+#
 # Tagged builds (tags like v0.1.0) are named dvi-terminal-<tag>; anything
 # else dvi-terminal-<git describe>.
 #
 # Environment overrides:
 #   BUILD_DIR   build output root from build.sh (default: build)
+#   REQUIRE_ZIMODEM  1: fail without the modem's firmware
 #   DIST_DIR    where the ZIP is written        (default: dist)
 #   DOCS_DIR    the built user guide            (default: build/docs/html)
 set -euo pipefail
@@ -29,6 +35,7 @@ info() { sed -n "s/^$2=//p" "$1"; }
 infos=()
 for f in "$BUILD_DIR"/*/build-info.txt; do
   [[ -f "$f" ]] || continue
+  [[ "$f" != "$BUILD_DIR/zimodem/build-info.txt" ]] || continue # the modem's (below)
   if [[ "$(info "$f" experimental)" == yes ]]; then
     echo "skipping experimental build $(dirname "$f")" >&2
     continue
@@ -72,8 +79,26 @@ license lib/z80pack/LICENSE z80pack-MIT.txt
 license lib/fatfs/LICENSE.txt FatFs-BSD-1-Clause.txt
 license assets/fonts/Terminus-OFL.txt Terminus-OFL-1.1.txt
 license docs/licenses/GPL-2.0.txt GPL-2.0.txt
+
+# The WiFi modem's firmware (bd xir.17.9), built from lib/zimodem.
+zim="$BUILD_DIR/zimodem"
+modem_bin=
+modem_zmi=
+if [[ -f "$zim/zimodem.bin" ]]; then
+  mkdir -p "$stage/modem"
+  cp -r "$zim/ZIMODEM.ZMI" "$zim/zimodem.bin" "$zim/build-info.txt" "$zim/sources" "$zim/licenses" "$stage/modem/"
+  cp docs/MODEM.txt "$stage/modem/README.txt"
+  modem_bin=modem/zimodem.bin
+  modem_zmi=modem/ZIMODEM.ZMI
+elif [[ "${REQUIRE_ZIMODEM:-0}" == 1 ]]; then
+  echo "error: no WiFi modem firmware in $zim; run scripts/build-zimodem.sh" >&2
+  exit 1
+else
+  echo "warning: no WiFi modem firmware in $zim (scripts/build-zimodem.sh): no modem/ in the ZIP" >&2
+fi
+
 scripts/changelog.sh "$sha" | tee "$stage/CHANGES.md" > "$DIST_DIR/CHANGES.md"
-(cd "$stage" && sha256sum -- */FIRMWARE.UF2 */dvi_terminal.bin > SHA256SUMS)
+(cd "$stage" && sha256sum -- */FIRMWARE.UF2 */dvi_terminal.bin ${modem_bin:+"$modem_bin"} ${modem_zmi:+"$modem_zmi"} > SHA256SUMS)
 
 # Source of exactly the commit that was built. The submodules (pico-sdk,
 # TinyUSB) are not included; their commits are recorded in <target>/build-info.txt

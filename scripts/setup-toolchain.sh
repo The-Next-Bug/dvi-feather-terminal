@@ -3,9 +3,14 @@
 # builds; nothing is installed system-wide.
 #
 # Usage: scripts/setup-toolchain.sh [component...]
-#   components: cmake arm picotool clang-tidy mdbook (default: all). The
-#   host-test job only needs cmake; scripts/lint.sh needs clang-tidy,
-#   scripts/docs.sh mdbook (and cmake).
+#   components: cmake arm picotool clang-tidy mdbook zimodem (default: all).
+#   The host-test job only needs cmake; scripts/lint.sh needs clang-tidy,
+#   scripts/docs.sh mdbook (and cmake), scripts/build-zimodem.sh zimodem.
+#
+# zimodem (bd xir.17.9): arduino-cli and the ESP8266 Arduino core for the
+# WiFi modem's firmware (lib/zimodem), at the versions lib/zimodem's own
+# toolchain.env pins, installed by its scripts/setup-toolchain.sh into
+# TOOLCHAIN_DIR/arduino15 (about 400 MB with the Xtensa compiler).
 #
 # Versions come from toolchain.env; any of its variables can be overridden
 # from the environment (e.g. ARM_GNU_VERSION=... ARM_GNU_SHA256=...).
@@ -32,7 +37,7 @@ done < "$ROOT/toolchain.env"
 TOOLCHAIN_DIR="${TOOLCHAIN_DIR:-$ROOT/.toolchain}"
 
 components=("$@")
-[[ ${#components[@]} -gt 0 ]] || components=(cmake arm picotool clang-tidy mdbook)
+[[ ${#components[@]} -gt 0 ]] || components=(cmake arm picotool clang-tidy mdbook zimodem)
 
 mkdir -p "$TOOLCHAIN_DIR"
 
@@ -153,6 +158,22 @@ install_mdbook() {
   "$dir/mdbook" --version
 }
 
+# Zimodem's toolchain (lib/zimodem/scripts/setup-toolchain.sh), pinned by
+# lib/zimodem/toolchain.env; .version records both versions, so a cached
+# install skips the index download.
+install_zimodem() {
+  local dir="$TOOLCHAIN_DIR/arduino15" zroot="$ROOT/lib/zimodem"
+  [[ -f "$zroot/toolchain.env" ]] || { echo "error: lib/zimodem missing (git submodule update --init)" >&2; exit 1; }
+  local want
+  want="$(grep -E '^(ARDUINO_CLI_VERSION|ESP8266_CORE_VERSION)=' "$zroot/toolchain.env" | tr '\n' ' ')"
+  if ! installed "$dir" "$want"; then
+    ARDUINO_DIRECTORIES_DATA="$dir" ARDUINO_DIRECTORIES_USER="$TOOLCHAIN_DIR/arduino-user" \
+      INSTALL_DIR="$dir/bin" "$zroot/scripts/setup-toolchain.sh" >&2
+    echo "$want" > "$dir/.version"
+  fi
+  "$dir/bin/arduino-cli" version
+}
+
 for c in "${components[@]}"; do
   case "$c" in
     cmake) install_cmake ;;
@@ -160,6 +181,7 @@ for c in "${components[@]}"; do
     picotool) install_picotool ;;
     clang-tidy) install_clang_tidy ;;
     mdbook) install_mdbook ;;
+    zimodem) install_zimodem ;;
     *) echo "error: unknown component '$c'" >&2; exit 1 ;;
   esac
 done

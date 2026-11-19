@@ -3,7 +3,8 @@
 A board wired for one (the [Frankless](../start/boards.md#frankless-frankless))
 can have an ESP8266 module running
 [Zimodem](https://github.com/bozimmerman/Zimodem) on its serial port and
-switch the port between a plain serial line and that modem. In WiFi modem
+switch the port between a plain serial line and that modem (we build
+[our fork](https://github.com/arlaneenalra/Zimodem/tree/frankless-build) of it, with hardware flow control for this wiring). In WiFi modem
 mode the terminal resets the module at every start, finds it, sets it up
 and gives it the WiFi network from its own settings, so the module never
 needs setting up by hand, and a reflashed or replaced one joins by itself.
@@ -77,10 +78,48 @@ lists them, and HWINFO shows them (below).
 ## The Zimodem build
 
 The module runs our Zimodem build (`lib/zimodem`, its own `BUILDING.md`):
-hardware RTS/CTS on GPIO13/15 for J8, as wired above. Flash it once with a
-USB-serial adapter; the terminal does the rest. Zimodem's own setup (its
-rate, echo, the DCD and DTR pins, the network) is the terminal's to set: do
-not set those by hand, the next start sets them back.
+hardware RTS/CTS on GPIO13/15 for J8, as wired above. Every release ZIP
+has it in `modem/`: `zimodem.bin`, its `build-info.txt` (the version
+`ATI4` reports), its sources and its [licenses](../hacking/licenses.md#the-wifi-modems-firmware);
+`modem/README.txt` tells how to flash it with esptool. Zimodem's own setup
+(its rate, echo, the DCD and DTR pins, the network) is the terminal's to
+set: do not set those by hand, the next start sets them back.
+
+## Updating the module's firmware
+
+The terminal writes the module's firmware itself, through the ESP8266's
+own boot loader over the serial port, so a module wired as above never
+needs a USB-serial adapter (a fresh one, still on Espressif's AT firmware,
+included). Copy the release ZIP's `modem/ZIMODEM.ZMI` to the root of the
+SD card or a USB stick, open the [Modem panel](setup.md#the-modem-panel)
+(Return on SET-UP's Port row) and press **Return** on **Update firmware**:
+
+1. The terminal looks for `ZIMODEM.ZMI` on the card, then the stick, and
+   checks all of it before anything is erased: the
+   [container](../reference/file-formats.md#zimodemzmi) and its CRC, the
+   ESP image in it, and that it is for this chip (ESP8266), this module
+   (the board header's `BOARD_MODEM_NAME`, `esp12f`) and fits its flash
+   (`BOARD_MODEM_FLASH_KB`). It shows the file's Zimodem version (the
+   module's own is on the Firmware row) or why the file cannot be used.
+2. **Return** again writes it: BOOT (GPIO0) held low across a reset starts
+   the boot loader, which must answer at 115200 baud and say it is an
+   ESP8266; then the image's sectors are erased and it is written 1 KB at
+   a time, each block checked by the loader. The panel and the status line
+   show the progress; about a minute for Zimodem's 400 KB. Keys do nothing
+   meanwhile: do not switch off.
+3. The module is reset into the new firmware and the usual
+   [start-up](#the-start-up) runs: writing it erased Zimodem's saved
+   settings, and the start-up gives them back (the rate, the profile, the
+   network from SET-UP). Then the panel compares the version the module
+   reports with the file's: `Updated: Zimodem ...`, or what it reports
+   instead.
+
+The ESP8266's boot loader cannot read the flash back, so the check of the
+write is the loader's per-block checksums and the version the new firmware
+reports. If anything goes wrong (`Not written: ...` and the reason), the
+module is reset and runs whatever its flash holds; a write cut short
+leaves no working firmware, and the start-up says `no answer`, but the
+boot loader is in the chip's ROM: Update firmware again always works.
 
 ## The Port setting
 
@@ -164,10 +203,18 @@ With Port on the serial line it shows `no`, and the pins.
   mode `(1,x)` is the boot loader, `(3,x)` the flash.
 - Reset modem on the panel tries again; Defaults restores the module's
   factory settings first, then the terminal's (it takes a while).
+- A module with no working firmware (a write cut short, the wrong image
+  flashed by hand) still has its boot loader:
+  [Update firmware](#updating-the-modules-firmware) writes ours.
 
 `no wifi` with Problem `it refused the settings`: the module is not
 running our Zimodem build (a fresh ESP-12F has Espressif's AT firmware,
-which answers `AT` but not Zimodem's commands). Flash it.
+which answers `AT` but not Zimodem's commands):
+[Update firmware](#updating-the-modules-firmware) writes it.
+
+Update firmware's `Not written: no answer from the loader`: check the
+BOOT (J1.7 to GPIO0) and RST (J1.8) wires and their pull-ups; the loader
+also needs GPIO15 low and GPIO2 high at reset, as for a normal start.
 
 `no wifi` otherwise: the network's name or password is wrong, or the network is out
 of range. The panel's Problem row says what went wrong last. Zimodem

@@ -4,6 +4,7 @@
 #include "palette.h"
 #include "term.h"
 #include "test.h"
+#include "unicode.h"
 
 // Cells hold palette indices.
 #define FG PALETTE_TEXT
@@ -1158,7 +1159,100 @@ static void test_adm3a_reset(void) {
 	CHECK(row_is(0, "xy"));
 }
 
+// UTF-8 (bd cvc): onto the glyph set, wide characters in two cells,
+// combining marks dropped, ESC % G / ESC % @, RIS back to the default.
+static void test_utf8(void) {
+	setup();
+	term_set_defaults(&t, &(term_defaults_t){.utf8 = true});
+	put("\xc3\xa9\xe2\x94\x8c\xe2\x94\x80\xe2\x94\x93\xe2\x94\x81\xe2\x95\xad\xe2\x95\x94\xe2\x96\x91");
+	CHECK_EQ(screen_glyph(&s, 0, 0), 0xe9);                    // é
+	CHECK_EQ(screen_glyph(&s, 1, 0), GLYPH_DEC_GRAPHICS('l')); // ┌
+	CHECK_EQ(screen_glyph(&s, 2, 0), GLYPH_DEC_GRAPHICS('q')); // ─
+	CHECK_EQ(screen_glyph(&s, 3, 0), GLYPH_DEC_GRAPHICS('k')); // ┓ as ┐
+	CHECK_EQ(screen_glyph(&s, 4, 0), GLYPH_DEC_GRAPHICS('q')); // ━ as ─
+	CHECK_EQ(screen_glyph(&s, 5, 0), GLYPH_DEC_GRAPHICS('l')); // ╭ as ┌
+	CHECK_EQ(screen_glyph(&s, 6, 0), GLYPH_DOUBLE_DR);         // ╔
+	CHECK_EQ(screen_glyph(&s, 7, 0), GLYPH_SHADE_LIGHT);       // ░
+	CHECK_CURSOR(8, 0);
+
+	// Look-alikes, accented letters, unknown characters.
+	put("\r\n\xe2\x80\x9cq\xe2\x80\x9d\xe2\x80\x94\xc5\x91\xc5\x82\xd0\x96\xef\xbf\xbd");
+	CHECK(row_is(1, "\"q\"-ol\x7f\x7f"));
+
+	// Wide: the glyph and a blank; combining marks and zero-width spaces dropped.
+	put("\r\n\xe4\xb8\xad" "a" "e\xcc\x81\xe2\x80\x8b" "\xef\xbc\xa1" "b");
+	CHECK(row_is(2, "\x7f ae" "A b"));
+	CHECK_CURSOR(7, 2);
+
+	// A wide character with only the last column left goes on the next line.
+	put("\x1b[4;80H\xf0\x9f\x98\x80");
+	CHECK_EQ(screen_glyph(&s, 79, 3), ' ');
+	CHECK_EQ(screen_glyph(&s, 0, 4), GLYPH_REPLACEMENT);
+	CHECK_EQ(screen_glyph(&s, 1, 4), ' ');
+	CHECK_CURSOR(2, 4);
+	// Without autowrap it takes the last column alone.
+	put("\x1b[?7l\x1b[6;79Hxy\x1b[6;80H\xe4\xb8\xad");
+	CHECK_EQ(screen_glyph(&s, 78, 5), 'x');
+	CHECK_EQ(screen_glyph(&s, 79, 5), GLYPH_REPLACEMENT);
+	put("\x1b[?7h");
+
+	// REP repeats a code point.
+	put("\x1b[7H\xe2\x94\x80\x1b[2b");
+	CHECK_EQ(screen_glyph(&s, 2, 6), GLYPH_DEC_GRAPHICS('q'));
+	CHECK_CURSOR(3, 6);
+
+	// The host switches: ESC % @ Latin-1, ESC % G UTF-8; RIS: the default.
+	put("\x1b[8H\x1b%@\xc3\xa9\x1b%G\xc3\xa9");
+	CHECK(row_is(7, "\xc3\xa9\xe9"));
+	put("\x1b%@\x1b" "c\xc3\xa9");
+	CHECK(row_is(0, "\xe9"));
+
+	// The tables' edges.
+	CHECK_EQ(unicode_width(0x85), 0);
+	CHECK_EQ(unicode_width(0xad), 1);
+	CHECK_EQ(unicode_width(0x301), 0);
+	CHECK_EQ(unicode_width(0x200b), 0);
+	CHECK_EQ(unicode_width(0x2500), 1);
+	CHECK_EQ(unicode_width(0x4e2d), 2);
+	CHECK_EQ(unicode_width(0x1f600), 2);
+	CHECK_EQ(unicode_width(0x10ffff), 1);
+	CHECK_EQ(unicode_glyph(0x2264), GLYPH_DEC_GRAPHICS('y')); // ≤
+	CHECK_EQ(unicode_glyph(0x2592), GLYPH_DEC_GRAPHICS('a')); // ▒, the DEC one
+	CHECK_EQ(unicode_glyph(0x25c6), GLYPH_DEC_GRAPHICS('`')); // ◆
+	CHECK_EQ(unicode_glyph(0x2588), GLYPH_FULL_BLOCK);
+	CHECK_EQ(unicode_glyph(0x2554), GLYPH_DOUBLE_DR);
+	CHECK_EQ(unicode_glyph(0x01d8), 0xfc);                    // ǘ as ü
+	CHECK_EQ(unicode_glyph(0xff5e), '~');
+	CHECK_EQ(unicode_glyph(0xfffd), GLYPH_REPLACEMENT);
+	CHECK_EQ(unicode_glyph(0x0416), GLYPH_REPLACEMENT);
+
+	// SET-UP's Latin-1.
+	term_set_defaults(&t, &(term_defaults_t){.utf8 = false});
+	put("\x1b[H\xc3\xa9");
+	CHECK(row_is(0, "\xc3\xa9"));
+}
+
+// Linux's reset with TERM=vt100 sends no RIS and nothing for the cursor
+// (bd 0c4): a cursor a program hid (?25l) comes back with its DECCOLM.
+static void test_vt100_reset_shows_cursor(void) {
+	setup();
+	put("hello\x1b[?25l");
+	CHECK(!s.cursor_visible);
+	put("\x1b<\x1b>\x1b[?3;4;5l\x1b[?7;8h\x1b[r\r");
+	CHECK(s.cursor_visible);
+	CHECK_EQ(s.cols, 80);
+	CHECK_CURSOR(0, 0);
+	put("\x1b[?25l\x1b[?3h"); // to 132 columns too
+	CHECK(s.cursor_visible);
+	// SET-UP's own width changes keep a hidden cursor hidden.
+	put("\x1b[?25l");
+	term_set_columns(&t, 80);
+	CHECK(!s.cursor_visible);
+}
+
 int main(void) {
+	RUN(test_vt100_reset_shows_cursor);
+	RUN(test_utf8);
 	for (cols = 80; cols <= 132; cols += 52) {
 		printf("-- basics, %u columns\n", cols);
 		run_basics();

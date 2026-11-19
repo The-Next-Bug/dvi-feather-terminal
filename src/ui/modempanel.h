@@ -13,8 +13,11 @@
 // password shows as stars. Return on either saves the network and joins
 // it (MODEMPANEL_JOIN); on Reset modem resets and sets it up again
 // (MODEMPANEL_RESET); on Defaults, pressed twice, gives the module its
-// factory settings and then ours (MODEMPANEL_DEFAULTS). Escape goes back
-// to SET-UP without changes.
+// factory settings and then ours (MODEMPANEL_DEFAULTS); on Update firmware
+// looks for ZIMODEM.ZMI and checks it (MODEMPANEL_UPDATE), then, once the
+// owner has set update_ready, again flashes it (MODEMPANEL_FLASH, bd
+// xir.17.10). While the owner has flashing set, keys do nothing. Escape
+// goes back to SET-UP without changes.
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -25,8 +28,8 @@
 #if WIFI_MODEM
 
 // In a box: the title line, Network, Password, Address, Reset modem,
-// Defaults, a gap, Status, Firmware, Problem, a gap, message, 2 help
-// lines, the bottom line.
+// Defaults, Update firmware, a gap, Status, Firmware, Problem, message, 2
+// help lines, the bottom line.
 #define MODEMPANEL_ROWS 16
 #define MODEMPANEL_ESC_TIMEOUT_MS 100
 
@@ -36,6 +39,8 @@ typedef enum {
 	MODEMPANEL_JOIN,     // Return on Network or Password: save the network, join it
 	MODEMPANEL_RESET,    // Return on Reset modem
 	MODEMPANEL_DEFAULTS, // Return twice on Defaults
+	MODEMPANEL_UPDATE,   // Return on Update firmware: find and check the file
+	MODEMPANEL_FLASH,    // ... again, once the owner set update_ready: flash it
 	MODEMPANEL_CANCEL,   // Escape
 } modempanel_action_t;
 
@@ -43,7 +48,8 @@ typedef enum {
 #define MODEMPANEL_PASSWORD 1
 #define MODEMPANEL_RESET_LINE 2
 #define MODEMPANEL_DEFAULTS_LINE 3
-#define MODEMPANEL_LINES 4
+#define MODEMPANEL_UPDATE_LINE 4
+#define MODEMPANEL_LINES 5
 
 // The modem as the owner sees it (all its strings the owner's; NULL or ""
 // for unknown).
@@ -64,6 +70,8 @@ typedef struct {
 	uint8_t esc;       // 0, 1 after ESC, 2 inside ESC [ / ESC O
 	uint32_t esc_ms;
 	bool confirm;      // Defaults pressed once
+	bool update_ready; // the owner's: a file was found and checked; moving off forgets it
+	bool flashing;     // the owner's: writing the module, keys ignored
 	const char *message;
 	modempanel_status_t status; // the owner's, before each draw
 } modempanel_t;

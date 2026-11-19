@@ -70,6 +70,11 @@ unit_test(rtc dvt_rtc_chips)
 unit_test(xonxoff dvt_common)
 unit_test(printjob dvt_printer)
 unit_test(modem dvt_modem)
+unit_test(zmi dvt_modem)
+unit_test(espflash dvt_modem)
+# Also checks the container scripts/build-zimodem.sh made, if there is one.
+target_compile_definitions(test_zmi PRIVATE
+  ZMI_FILE="${CMAKE_CURRENT_LIST_DIR}/../build/zimodem/ZIMODEM.ZMI")
 unit_test(uf2 dvt_settings)
 # Also checks the firmware build/pico2-dvi-sock made, if there is one.
 target_compile_definitions(test_uf2 PRIVATE
