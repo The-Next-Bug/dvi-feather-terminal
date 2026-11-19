@@ -202,7 +202,7 @@ typedef struct {
 // settings_main_field's order) or its Clock panel (clockpanel.h).
 #define SETTINGS_FIELDS 29
 #define SETTINGS_MAIN_FIELDS (16 + WIFI_MODEM) // the Port row in WIFI_MODEM builds
-#define SETTINGS_MAX_CHOICES 12
+#define SETTINGS_MAX_CHOICES 13
 
 #define SETTINGS_PAGE_MAIN 0
 #define SETTINGS_PAGE_CLOCK 1 // the Clock and sound panel (clockpanel.h)

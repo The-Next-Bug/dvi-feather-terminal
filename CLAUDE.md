@@ -577,7 +577,7 @@ UF2 in the latter).
   Settings (settings_fields[] drives the record, validation and SET-UP
   labels; append only): columns, backspace (DECBKM RIS value; default BS
   0x08, as CP/M wants), local_echo,
-  baud, framing, newline (LNM RIS value), colors (hue), palette (mono),
+  baud (an index into settings.c's baud_rates, append only: 74880 is index 12, listed between 57600 and 115200, bd ubc), framing, newline (LNM RIS value), colors (hue), palette (mono),
   mode (terminal / CP/M machine), status_line (hidden: status.c
   status_shown() leaves row 24 blank; debug: status.c debug_status_* shows
   video_stats() (late lines, compose cycles as % of the line, fps) and

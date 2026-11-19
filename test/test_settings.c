@@ -611,8 +611,16 @@ static void test_line_and_colors(void) {
 	CHECK(bits == 8 && parity == 'N' && stop == 1);
 	s.baud = 11;
 	CHECK_EQ(settings_baud_rate(&s), 921600);
-	s.baud = 12; // past the list: the default
+	s.baud = 12; // 74880 (bd ubc): appended, so stored values keep their rates
+	CHECK_EQ(settings_baud_rate(&s), 74880);
+	s.baud = 13; // past the list: the default
 	CHECK_EQ(settings_baud_rate(&s), 115200);
+	// SET-UP lists it by rate, between 57600 and 115200.
+	const settings_field_t *f = &settings_fields[offsetof(settings_t, baud)];
+	CHECK_EQ(f->n_choices, 13);
+	CHECK(strcmp(f->labels[7], "57600") == 0 && strcmp(f->labels[8], "74880") == 0 &&
+		strcmp(f->labels[9], "115200") == 0);
+	CHECK_EQ(f->values[8], 12);
 	s.baud = 4;
 	s.framing = 4;
 	CHECK_EQ(settings_baud_rate(&s), 9600);
