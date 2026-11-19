@@ -201,7 +201,14 @@ modem_glue.c (modem_panel_open/feed/service, setup.modem* fields under
 network (settings_store, setup.ui.values too) and modem_join (forced ATW,
 no reset), Reset = modem_start, Defaults = modem_factory (AT&F, 1.5 s,
 then the whole start-up: it is back at 115200); redrawn when the
-start-up's step/IP/problem changes. Slide switch S1 puts the USB
+start-up's step/IP/problem changes. Status and HWINFO (bd xir.17.6):
+modem_glue_status() (terminal.h modem_status_t: NONE / STARTING / WIFI
+= joined at start-up, never re-asked / NO_WIFI / FAILED) and
+modem_glue_carrier() (raw DCD); status.c's wifi_label "wifi" / "no wifi"
+/ "modem?" in place of the baud and framing (terminal), before the flow
+field as " | wifi RTS/CTS" (CP/M), lit while DCD; HWINFO_MODEM 36,
+modem_glue.c modem_record (0 bytes without WIFI_MODEM). Guide:
+terminal/wifi-modem.md (wiring, start-up, troubleshooting). Slide switch S1 puts the USB
 on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
 CI builds it.
 `boards/feather-rp2350-hstx.h` (bd 1ls.14.1): Adafruit Feather RP2350 with

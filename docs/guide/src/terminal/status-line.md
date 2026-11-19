@@ -16,6 +16,10 @@ Row 24, below the 24 text rows, shows the terminal's state.
   or its XOFF sent: it cannot keep up), its right name while the host
   holds the terminal off (CTS down, or the host's XOFF). Each stays lit
   at least a quarter of a second, so a short hold still shows.
+  With Port on the [WiFi modem](wifi-modem.md#on-the-status-line) its
+  state takes the baud rate's and framing's place: `wifi` (lit while a
+  connection is open), `no wifi` or `modem?`; while it starts the line
+  begins with `WiFi modem: ` and the step.
 - `telnet` while [Telnet](telnet.md) is on or auto, lit once the server
   has negotiated; `hangup` while a hang-up's `+++` and `ATH` go out,
 - `kbd` while a keyboard is attached,
@@ -40,7 +44,8 @@ Row 24, below the 24 text rows, shows the terminal's state.
   runs, `PRN!` after one failed.
 - the emulated clock rate in MHz, or `monitor` while the monitor runs,
 - `RTS/CTS` or `XON/XOFF` with flow control, lit as in terminal mode (the
-  Z80's second serial port and the printer use the line),
+  Z80's second serial port and the printer use the line), after the
+  [WiFi modem](wifi-modem.md#on-the-status-line)'s state with Port on it,
 - `kbd` and the build, and the clock.
 
 ## Debug lines

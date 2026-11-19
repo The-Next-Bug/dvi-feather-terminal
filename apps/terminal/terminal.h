@@ -178,6 +178,8 @@ typedef struct {
 	const char *type;   // term_type_name: the host can switch VT52 mode
 	uint8_t telnet;     // telnet_glue_status (telnet_status_t)
 	char modem[WIFI_MODEM ? 40 : 1]; // modem_glue_notice: the WiFi modem starting, or ""
+	uint8_t wifi;       // modem_glue_status (modem_status_t)
+	bool carrier;       // modem_glue_carrier: a connection open
 	bool echo;          // local echo in effect (the setting, off while connected)
 } status_t;
 
@@ -256,6 +258,21 @@ void modem_panel_service(void);               // its work and its redraws, from 
 // While busy, "WiFi modem: <step>" for the status line (so a long start-up
 // does not look like a hang); else NULL.
 const char *modem_glue_notice(void);
+
+// The modem as the status line and HWINFO see it (bd xir.17.6). What the
+// start-up found: the module is not asked again later, so a network lost
+// after it still reads WIFI until the next start-up (Reset modem, a reboot).
+typedef enum {
+	MODEM_STATUS_NONE,     // Port is the serial line (or no WIFI_MODEM)
+	MODEM_STATUS_STARTING, // the start-up has the line
+	MODEM_STATUS_WIFI,     // set up, on a network (it has an address)
+	MODEM_STATUS_NO_WIFI,  // set up, no network
+	MODEM_STATUS_FAILED,   // no answer at any rate
+} modem_status_t;
+
+modem_status_t modem_glue_status(void);
+bool modem_glue_carrier(void); // DCD active: the modem has a connection open
+size_t modem_record(uint8_t *buf); // HWINFO_MODEM: none (0) without WIFI_MODEM
 
 // ---- printer_glue.c ----
 

@@ -142,11 +142,11 @@ void status_flow_poll(void) {
 
 // Append " | " and the flow control field to a status line's text (at n,
 // its length) and note where it starts; nothing for no flow control.
-static size_t put_flow_field(char *text, size_t size, size_t n) {
+static size_t put_flow_field(char *text, size_t size, size_t n, const char *sep) {
 	const char *label = flow_label();
-	if (label[0] && n + 3 + strlen(label) < size) {
-		flow_light.col = (unsigned)n + 3;
-		snprintf(text + n, size - n, " | %s", label);
+	if (label[0] && n + strlen(sep) + strlen(label) < size) {
+		flow_light.col = (unsigned)(n + strlen(sep));
+		snprintf(text + n, size - n, "%s%s", sep, label);
 		n = strlen(text);
 	}
 	return n;
@@ -166,6 +166,33 @@ static void put_status_text(char *text) {
 	screen_puts(&screen, 0, STATUS_ROW, text, colors.status_fg, colors.status_bg);
 	draw_clock(true);
 	draw_flow(true);
+}
+
+// The WiFi modem once started (bd xir.17.6): "wifi" on a network, lit
+// while the modem has a connection open (DCD); "no wifi" without one;
+// "modem?" when it did not answer. NULL for the serial line, and while it
+// starts (the notice at the line's start says more).
+static const char *wifi_label(uint8_t status) {
+	switch (status) {
+	case MODEM_STATUS_WIFI:
+		return "wifi";
+	case MODEM_STATUS_NO_WIFI:
+		return "no wifi";
+	case MODEM_STATUS_FAILED:
+		return "modem?";
+	default:
+		return NULL;
+	}
+}
+
+// The label at col drawn lit (reverse), if the line's text reached it.
+static void light_label(unsigned col, const char *label, const char *text) {
+	if (!col || col + strlen(label) > strlen(text)) {
+		return;
+	}
+	for (unsigned i = 0; label[i]; ++i) {
+		screen_put(&screen, col + i, STATUS_ROW, (uint8_t)label[i], colors.status_bg, colors.status_fg);
+	}
 }
 
 // The USB stick on the status line: "USB" while one is volume 1 (USB: to
@@ -416,8 +443,16 @@ void draw_cpm_status(void) {
 		snprintf(text + n, sizeof text - n, " | monitor");
 	}
 	n = strlen(text);
+	// The WiFi modem, then the flow control on its line: "wifi RTS/CTS".
+	const char *wifi = wifi_label((uint8_t)modem_glue_status());
+	unsigned wifi_col = 0;
+	if (wifi && n + 3 + strlen(wifi) < sizeof text) {
+		wifi_col = (unsigned)n + 3;
+		snprintf(text + n, sizeof text - n, " | %s", wifi);
+		n = strlen(text);
+	}
 	flow_light.col = 0;
-	n = put_flow_field(text, sizeof text, n); // the Z80's SIO2 and the printer use the line
+	n = put_flow_field(text, sizeof text, n, wifi_col ? " " : " | "); // the Z80's SIO2 and the printer use the line
 	snprintf(text + n, sizeof text - n, "%s | %s", usbkbd_count() ? " | kbd" : "", TERM_BUILD_ID);
 	put_status_text(text);
 	for (unsigned d = 0; d < DRIVES; ++d) {
@@ -436,6 +471,9 @@ void draw_cpm_status(void) {
 			screen_put(&screen, prn_col + i, STATUS_ROW, (uint8_t)"PRN"[i], colors.status_bg, colors.status_fg);
 		}
 	}
+	if (wifi && modem_glue_carrier()) {
+		light_label(wifi_col, wifi, text);
+	}
 }
 
 // The terminal type now, for the status line.
@@ -445,7 +483,7 @@ static const char *term_type_name(void) {
 
 status_t status_now(void) {
 	status_t st = {usbkbd_count(), settings, serial_baud(), "", term_type_name(),
-		(uint8_t)telnet_glue_status(), "", false};
+		(uint8_t)telnet_glue_status(), "", false, (uint8_t)modem_glue_status(), modem_glue_carrier()};
 	usb_label(st.usb, sizeof st.usb);
 	const char *modem = modem_glue_notice();
 	snprintf(st.modem, sizeof st.modem, "%s", modem ? modem : "");
@@ -458,7 +496,7 @@ bool status_equal(const status_t *a, const status_t *b) {
 		memcmp(&a->settings, &b->settings, sizeof a->settings) == 0 && a->baud == b->baud &&
 		strcmp(a->usb, b->usb) == 0 &&
 		a->type == b->type && a->telnet == b->telnet &&
-		strcmp(a->modem, b->modem) == 0 && a->echo == b->echo;
+		strcmp(a->modem, b->modem) == 0 && a->echo == b->echo && a->wifi == b->wifi && a->carrier == b->carrier;
 }
 
 void draw_status(const status_t *st) {
@@ -475,8 +513,19 @@ void draw_status(const status_t *st) {
 	char text[SCREEN_MAX_COLS + 1];
 	// The WiFi modem starting (bd xir.17.2) first: the terminal is not hung.
 	bool modem = st->modem[0] != '\0';
-	snprintf(text, sizeof text, "%s%s%s %s %ux24 | %s | %u %u%c%u", modem ? " " : "", st->modem, modem ? " |" : "",
-		st->type, screen.cols, TERM_BUILD_ID, st->baud, data_bits, parity, stop_bits);
+	int n0 = snprintf(text, sizeof text, "%s%s%s %s %ux24 | %s | ", modem ? " " : "", st->modem, modem ? " |" : "",
+		st->type, screen.cols, TERM_BUILD_ID);
+	// The WiFi modem's line is fixed (921600 8N1): its state in their place.
+	const char *wifi = wifi_label(st->wifi);
+	unsigned wifi_col = 0;
+	if (n0 > 0 && (size_t)n0 < sizeof text) {
+		if (wifi) {
+			wifi_col = (unsigned)n0;
+			snprintf(text + n0, sizeof text - (size_t)n0, "%s", wifi);
+		} else {
+			snprintf(text + n0, sizeof text - (size_t)n0, "%u %u%c%u", st->baud, data_bits, parity, stop_bits);
+		}
+	}
 	flow_light.col = 0;
 	size_t n = strlen(text);
 	const char *label = flow_label();
@@ -496,10 +545,10 @@ void draw_status(const status_t *st) {
 	snprintf(text + n, sizeof text - n, "%s%s%s%s", st->keyboards ? " | kbd" : "", st->usb[0] ? " | " : "",
 		st->usb, st->echo ? " | echo" : "");
 	put_status_text(text);
-	if (telnet_col && st->telnet == TELNET_STATUS_ACTIVE && telnet_col + 6 <= strlen(text)) {
-		for (unsigned i = 0; i < 6; ++i) {
-			screen_put(&screen, telnet_col + i, STATUS_ROW, (uint8_t)"telnet"[i], colors.status_bg,
-				colors.status_fg);
-		}
+	if (st->telnet == TELNET_STATUS_ACTIVE) {
+		light_label(telnet_col, "telnet", text);
+	}
+	if (wifi && st->carrier) {
+		light_label(wifi_col, wifi, text);
 	}
 }

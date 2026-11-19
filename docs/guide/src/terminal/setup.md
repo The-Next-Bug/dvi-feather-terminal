@@ -105,7 +105,8 @@ With Port on the WiFi modem (boards wired for one: the Frankless),
 
 Every start in WiFi modem mode (power-on, R, a crash) resets the module
 and sets it up; the status line says `WiFi modem: ...` meanwhile, and the
-serial port is the modem's until it is done.
+serial port is the modem's until it is done. The wiring, the start-up's
+steps and what goes wrong: [WiFi modem](wifi-modem.md).
 
 ## Settings in flash
 

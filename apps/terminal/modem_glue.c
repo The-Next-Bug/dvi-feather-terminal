@@ -105,6 +105,61 @@ const char *modem_glue_notice(void) {
 	return text;
 }
 
+modem_status_t modem_glue_status(void) {
+	if (!started) {
+		return MODEM_STATUS_NONE;
+	}
+	switch (modem.state) {
+	case MODEM_STARTING:
+		return MODEM_STATUS_STARTING;
+	case MODEM_READY:
+		return modem_joined(&modem) ? MODEM_STATUS_WIFI : MODEM_STATUS_NO_WIFI;
+	case MODEM_FAILED:
+		return MODEM_STATUS_FAILED;
+	default:
+		return MODEM_STATUS_NONE;
+	}
+}
+
+bool modem_glue_carrier(void) {
+	return started && modem_dcd();
+}
+
+// HWINFO's record (port 12): the module, what the start-up found, its
+// lines. HWINFO wraps the detail; a long network name cuts the lines off.
+#define PIN(n) "GP" BOARD_STR(n)
+#define MODEM_LINES BOARD_UART_NAME " " BOARD_STR(BOARD_MODEM_BAUD) " RTS/CTS, DCD/DTR/RST/BOOT " \
+	PIN(BOARD_MODEM_DCD_PIN) "/" BOARD_STR(BOARD_MODEM_DTR_PIN) "/" BOARD_STR(BOARD_MODEM_RST_PIN) "/" \
+	BOARD_STR(BOARD_MODEM_BOOT_PIN)
+#define MODEM_CHIP BOARD_MODEM_CHIP_NAME " (" BOARD_MODEM_NAME ")"
+
+size_t modem_record(uint8_t *buf) {
+	char text[192]; // the longest names fit; hwinfo_record cuts to HWINFO_MAX
+	uint8_t st = HWINFO_ST_PRESENT;
+	const char *version = modem.version[0] ? modem.version : "?";
+	switch (modem_glue_status()) {
+	case MODEM_STATUS_NONE:
+		return hwinfo_record(buf, HWINFO_ST_ABSENT, "WiFi modem",
+			MODEM_CHIP ": off, Port is the serial line (SET-UP); " MODEM_LINES);
+	case MODEM_STATUS_STARTING:
+		snprintf(text, sizeof text, MODEM_CHIP ": %s; " MODEM_LINES, modem_step_name(&modem));
+		break;
+	case MODEM_STATUS_WIFI:
+		snprintf(text, sizeof text, MODEM_CHIP ", Zimodem %s, on %s as %s%s; " MODEM_LINES, version, modem.ssid,
+			modem.ip, modem_glue_carrier() ? ", connected" : "");
+		break;
+	case MODEM_STATUS_NO_WIFI:
+		snprintf(text, sizeof text, MODEM_CHIP ", Zimodem %s, no network (SET-UP's Modem panel); " MODEM_LINES,
+			version);
+		break;
+	default:
+		st = HWINFO_ST_NOT_FOUND;
+		snprintf(text, sizeof text, MODEM_CHIP " did not answer (SET-UP's Modem panel: Reset modem); " MODEM_LINES);
+		break;
+	}
+	return hwinfo_record(buf, st, "WiFi modem", text);
+}
+
 // ---- the Modem panel in SET-UP (Return on the Port row, bd xir.17.4) ----
 
 static_assert(MODEMPANEL_ROWS <= SETUP_ROWS, "the Modem panel fits SET-UP's rows");
@@ -229,5 +284,17 @@ const char *modem_glue_notice(void) {
 void modem_glue_poll(void) {
 }
 
+modem_status_t modem_glue_status(void) {
+	return MODEM_STATUS_NONE;
+}
+
+bool modem_glue_carrier(void) {
+	return false;
+}
+
+size_t modem_record(uint8_t *buf) {
+	(void)buf;
+	return 0;
+}
 
 #endif
