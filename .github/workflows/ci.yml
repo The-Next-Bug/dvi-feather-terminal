@@ -1,5 +1,5 @@
-# Build the DVI terminal firmware on GitHub Actions (bd c8q) from the same
-# scripts as a local build. The toolchain comes from
+# Build the DVI terminal firmware, and the WiFi modem's (Zimodem), on GitHub
+# Actions (bd c8q) from the same scripts as a local build. The toolchain comes from
 # scripts/setup-toolchain.sh at toolchain.env's pinned versions and is
 # cached in .toolchain/ (keyed on toolchain.env and pico-sdk's commit,
 # which picotool is built against).
@@ -107,6 +107,41 @@ jobs:
             build/${{ matrix.target }}/compile.log
           retention-days: 30
 
+  # The WiFi modem's firmware (bd xir.17.9): our Zimodem fork (lib/zimodem)
+  # with its pinned arduino-cli and ESP8266 core, cached apart from the
+  # rest (keyed on lib/zimodem's toolchain.env), for the release's modem/.
+  zimodem:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: "Check out (full history for git describe, top-level submodules)"
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: true
+      - name: Fetch the annotated tags
+        run: git fetch --force --tags origin
+      - name: Toolchain cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            .toolchain/arduino15
+            !.toolchain/arduino15/staging
+          key: toolchain-zimodem-${{ hashFiles('lib/zimodem/toolchain.env', 'lib/zimodem/arduino-cli.yaml') }}
+      - run: scripts/setup-toolchain.sh zimodem
+      - run: scripts/build-zimodem.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: build-zimodem
+          path: |
+            build/zimodem/zimodem.bin
+            build/zimodem/zimodem.ino.elf
+            build/zimodem/zimodem.ino.map
+            build/zimodem/build-info.txt
+            build/zimodem/compile.log
+            build/zimodem/zimodem-source.zip
+            build/zimodem/licenses
+          retention-days: 30
+
   # The user guide (scripts/docs.sh, bd 1ay).
   docs:
     runs-on: ubuntu-24.04
@@ -136,10 +171,11 @@ jobs:
           path: build/docs/html
           retention-days: 30
 
-  # The release ZIP from every board's build and the guide.
+  # The release ZIP from every board's build, the modem's firmware and the
+  # guide.
   package:
     runs-on: ubuntu-24.04
-    needs: [test, build, docs]
+    needs: [test, build, zimodem, docs]
     steps:
       - name: "Check out (full history for git describe, top-level submodules)"
         uses: actions/checkout@v7
@@ -163,6 +199,8 @@ jobs:
           name: guide
           path: build/docs/html
       - run: scripts/package.sh
+        env:
+          REQUIRE_ZIMODEM: 1
       - uses: actions/upload-artifact@v7
         with:
           name: package

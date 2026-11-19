@@ -5,14 +5,34 @@ the host needs only `curl`, `git`, `python3`, `xz` and a C/C++ compiler
 with `make`.
 
 ```sh
-git submodule update --init      # pico-sdk and TinyUSB (not pico-sdk's own submodules)
-scripts/setup-toolchain.sh       # CMake, Arm GNU Toolchain, picotool, clang-tidy, mdBook
+git submodule update --init      # pico-sdk, TinyUSB and Zimodem (not pico-sdk's own submodules)
+scripts/setup-toolchain.sh       # CMake, Arm GNU Toolchain, picotool, clang-tidy, mdBook, arduino-cli + ESP8266 core
 scripts/test.sh                  # host unit tests
 scripts/build.sh                 # -> build/pico2-dvi-sock/dvi_terminal.uf2
 scripts/lint.sh                  # clang-tidy over the tests' and the firmware's builds
 scripts/docs.sh                  # this guide -> build/docs/html/index.html
-scripts/package.sh               # every built target -> dist/dvi-terminal-<rev>.zip
+scripts/build-zimodem.sh         # the WiFi modem's firmware -> build/zimodem/zimodem.bin
+scripts/package.sh               # every built target and the modem's -> dist/dvi-terminal-<rev>.zip
 ```
+
+`scripts/setup-toolchain.sh` takes components by name to install only
+some: `cmake arm picotool clang-tidy mdbook zimodem`. `zimodem` (about
+400 MB, the Xtensa compiler with it) is needed only for
+`scripts/build-zimodem.sh`.
+
+## scripts/build-zimodem.sh
+
+Builds the [WiFi modem](../terminal/wifi-modem.md)'s firmware from
+`lib/zimodem` (our Zimodem fork, branch `frankless-build`) with its own
+`scripts/build.sh` and the pinned arduino-cli and ESP8266 core
+(`lib/zimodem/toolchain.env`), into `build/zimodem/`: `zimodem.bin` (an
+ESP-12F's image, written at 0x0), `build-info.txt`, the
+[license texts](licenses.md#the-wifi-modems-firmware) in `licenses/` and
+the source as `zimodem-source.zip`. The version Zimodem reports (`ATI4`) is
+`4.0.3-` and the submodule commit's time, so one commit always builds the
+same version. `BUILD_DIR`, `BUILD_ID` and `FRANKLESS_HW_FLOW` override.
+`scripts/package.sh` puts it in the ZIP's `modem/` (CI requires it there:
+`REQUIRE_ZIMODEM=1`).
 
 ## scripts/build.sh
 

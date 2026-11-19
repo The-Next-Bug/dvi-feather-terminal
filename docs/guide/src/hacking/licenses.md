@@ -21,3 +21,22 @@ z80pack's picosim (MIT).
 
 `THIRD-PARTY.md` in the release ZIP lists every third-party component in
 the firmware with its license, and `licenses/` holds the texts.
+
+## The WiFi modem's firmware
+
+The release ZIP's `modem/` holds a second program, the
+[WiFi modem](../terminal/wifi-modem.md)'s firmware: our build of Zimodem
+(`lib/zimodem`, `scripts/build-zimodem.sh`). It has its own licenses, in
+`modem/licenses/`, and its source in `modem/zimodem-source.zip`:
+
+| Component | License |
+|---|---|
+| Zimodem (Bo Zimmerman; our fork) | Apache-2.0, with its NOTICE |
+| ESP8266 core for Arduino 2.7.4 | LGPL-2.1, linked statically; rebuild and relink with `scripts/build-zimodem.sh` |
+| Espressif's ESP8266 NONOS SDK | Espressif MIT License, for the ESP8266 only |
+| lwIP | BSD-3-Clause |
+| umm_malloc, SPIFFS | MIT |
+| eboot (the boot loader) | BSD-3-Clause |
+| newlib, libgcc, libstdc++ | BSD-style; GPL-3.0 with the GCC Runtime Library Exception |
+
+`THIRD-PARTY.md`'s "WiFi modem firmware" section has the details.

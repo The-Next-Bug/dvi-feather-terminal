@@ -77,7 +77,10 @@ lists them, and HWINFO shows them (below).
 ## The Zimodem build
 
 The module runs our Zimodem build (`lib/zimodem`, its own `BUILDING.md`):
-hardware RTS/CTS on GPIO13/15 for J8, as wired above. Flash it once with a
+hardware RTS/CTS on GPIO13/15 for J8, as wired above. Every release ZIP
+has it in `modem/`: `zimodem.bin`, its `build-info.txt` (the version
+`ATI4` reports), its source and its [licenses](../hacking/licenses.md#the-wifi-modems-firmware);
+`modem/README.txt` tells how to flash it with esptool. Flash it once with a
 USB-serial adapter; the terminal does the rest. Zimodem's own setup (its
 rate, echo, the DCD and DTR pins, the network) is the terminal's to set: do
 not set those by hand, the next start sets them back.
