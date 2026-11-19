@@ -85,7 +85,9 @@ A job goes like this:
    once more.
 3. `ATS61=` the idle time, then `AT+PRINTA:` or `AT+PRINTR:` and the
    target. Zimodem answers nothing when it has connected and `ERROR` when
-   it could not; the data starts 2 s after the command if no `ERROR` came.
+   it could not; the data starts 2 s after the command if no `ERROR` came,
+   or at once once the WiFi modem's DCD line says it has connected (the
+   Port setting on the modem).
 4. The data goes straight to the modem.
 5. The end, after the idle time without a byte, or after `OUT 05h,01h`
    (see [the ports](../reference/ports.md#printer-05h-06h)): the firmware

@@ -237,7 +237,7 @@ static void opening(printjob_t *pj, uint64_t now_us) {
 	case OPEN_PRINT:
 		if (replied(pj, "ERROR")) {
 			fail(pj, PRINTJOB_ERR_REFUSED, now_us);
-		} else if (waited >= PRINTJOB_OPEN_US) {
+		} else if ((pj->io->carrier && pj->io->carrier()) || waited >= PRINTJOB_OPEN_US) {
 			start_printing(pj);
 		}
 		break;

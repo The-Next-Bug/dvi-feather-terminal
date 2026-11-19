@@ -3,8 +3,11 @@
 // host, the window size and terminal type kept up to date, and the call
 // dialed from the Telnet panel (F11): ATD"host" to a Zimodem at its AT
 // prompt (raw TCP: no T modifier), telnet on for the call, hung up with
-// +++ between guard times and ATH. Cold: kept in flash (ld/), only the
-// filter (telnet.c, dvt_term) is in SRAM.
+// +++ between guard times and ATH. With the WiFi modem's lines (bd
+// xir.17.5: the Port on the modem, its start-up done) DTR hangs up instead
+// (carrier.c; +++ and ATH if the call stays up) and DCD going inactive ends
+// the call, whoever ended it. Cold: kept in flash (ld/), only the filter
+// (telnet.c, dvt_term) is in SRAM.
 
 #include <stdio.h>
 #include <string.h>
@@ -16,6 +19,10 @@
 #include "settings.h"
 #include "telnet.h"
 #include "terminal.h"
+#if WIFI_MODEM
+#include "carrier.h"
+#include "modem_lines.h"
+#endif
 
 _Static_assert(SETTINGS_TELNET_OFF == TELNET_OFF && SETTINGS_TELNET_AUTO == TELNET_AUTO &&
 	SETTINGS_TELNET_ON == TELNET_ON, "the setting is telnet.h's mode");
@@ -25,7 +32,7 @@ _Static_assert(SETTINGS_TYPE_MAX == TELNET_TYPE_MAX, "the override fits TTYPE");
 // either side of +++; printjob.c waits as long.
 #define GUARD_MS 1500
 
-enum { HANG_NONE, HANG_GUARD_BEFORE, HANG_GUARD_AFTER };
+enum { HANG_NONE, HANG_GUARD_BEFORE, HANG_GUARD_AFTER, HANG_DTR };
 
 static telnet_t tn;
 static struct {
@@ -35,6 +42,55 @@ static struct {
 	uint32_t at_ms;                      // the guard time's start
 } call;
 static unsigned host_resets_seen;
+#if WIFI_MODEM
+static carrier_t carrier;
+static bool carrier_on; // carrier initialized for the modem's lines
+#endif
+
+// The WiFi modem's DCD and DTR are there to use: the Port on the modem,
+// its start-up over (it pulls DCD about while it resets).
+static bool modem_lines(void) {
+#if WIFI_MODEM
+	return settings_wifi(&settings) && !modem_glue_busy();
+#else
+	return false;
+#endif
+}
+
+// The call is over (hung up, or the far end went): telnet as the setting
+// says, negotiated from the start next time.
+static void end_call(void) {
+	call.hangup = HANG_NONE;
+	call.active = false;
+	telnet_glue_apply();
+	telnet_reset(&tn);
+}
+
+#if WIFI_MODEM
+static void carrier_service(uint32_t now) {
+	if (!modem_lines()) {
+		carrier_on = false;
+		return;
+	}
+	if (!carrier_on) {
+		carrier_on = true;
+		carrier_init(&carrier, modem_dcd(), now);
+	}
+	carrier_event_t e = carrier_poll(&carrier, modem_dcd(), now);
+	modem_set_dtr(carrier.dtr);
+	if (e == CARRIER_LOST) {
+		if (call.hangup != HANG_DTR) {
+			end_call(); // the far end (or a manual ATH) closed it
+		}
+		telnet_reset(&tn);
+	} else if (e == CARRIER_HUNG_UP && call.hangup == HANG_DTR) {
+		end_call();
+	} else if (e == CARRIER_STUCK && call.hangup == HANG_DTR) {
+		call.hangup = HANG_GUARD_BEFORE; // DTR did nothing: the escape and ATH
+		call.at_ms = now;
+	}
+}
+#endif
 
 static void tn_send(void *ctx, const uint8_t *data, size_t len) {
 	(void)ctx;
@@ -81,16 +137,16 @@ void telnet_glue_poll(void) {
 	telnet_set_type(&tn, settings.telnet_type[0] ? settings.telnet_type : telnet_type_default());
 	telnet_set_size(&tn, screen.cols, TERM_ROWS);
 	uint32_t now = to_ms_since_boot(get_absolute_time());
+#if WIFI_MODEM
+	carrier_service(now);
+#endif
 	if (call.hangup == HANG_GUARD_BEFORE && serial_tx_drained() && now - call.at_ms >= GUARD_MS) {
 		serial_write((const uint8_t *)"+++", 3);
 		call.hangup = HANG_GUARD_AFTER;
 		call.at_ms = now;
 	} else if (call.hangup == HANG_GUARD_AFTER && serial_tx_drained() && now - call.at_ms >= GUARD_MS) {
 		serial_write((const uint8_t *)"ATH\r", 4);
-		call.hangup = HANG_NONE;
-		call.active = false;
-		telnet_glue_apply();
-		telnet_reset(&tn); // the next call negotiates from the start
+		end_call();
 	}
 }
 
@@ -110,8 +166,16 @@ bool telnet_glue_dial(const char *host) {
 
 void telnet_glue_hangup(void) {
 	if (call.active && call.hangup == HANG_NONE) {
-		call.hangup = HANG_GUARD_BEFORE;
 		call.at_ms = to_ms_since_boot(get_absolute_time());
+#if WIFI_MODEM
+		if (modem_lines() && carrier_on) {
+			call.hangup = HANG_DTR;
+			carrier_hangup(&carrier, call.at_ms);
+			modem_set_dtr(carrier.dtr);
+			return;
+		}
+#endif
+		call.hangup = HANG_GUARD_BEFORE;
 	}
 }
 
@@ -193,7 +257,7 @@ void telnet_service(void) {
 			setup_leave(false);
 		} else {
 			setup.telnet_open = false;
-			setup.ui.message = "Hanging up: +++ and ATH";
+			setup.ui.message = modem_lines() ? "Hanging up (DTR)" : "Hanging up: +++ and ATH";
 			setup_draw_panel();
 		}
 		return;

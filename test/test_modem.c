@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "carrier.h"
 #include "modem.h"
 #include "test.h"
 
@@ -425,6 +426,57 @@ static void test_network_sendable(void) {
 	CHECK(m.problem && strstr(m.problem, "comma"));
 }
 
+// The carrier (bd xir.17.5): DCD debounced; a hang-up holds DTR inactive
+// until DCD drops (then at least CARRIER_DTR_MS), or gives up after
+// CARRIER_HANGUP_MS.
+static void test_carrier(void) {
+	carrier_t c;
+	carrier_init(&c, false, 0);
+	CHECK(c.dtr);
+	CHECK(!c.up);
+	CHECK_EQ(carrier_poll(&c, true, 10), CARRIER_NONE);
+	CHECK_EQ(carrier_poll(&c, false, 30), CARRIER_NONE); // a glitch
+	CHECK_EQ(carrier_poll(&c, false, 200), CARRIER_NONE);
+	CHECK(!c.up);
+	CHECK_EQ(carrier_poll(&c, true, 1000), CARRIER_NONE);
+	CHECK_EQ(carrier_poll(&c, true, 1000 + CARRIER_DEBOUNCE_MS), CARRIER_UP);
+	CHECK(c.up);
+	// The far end closes.
+	CHECK_EQ(carrier_poll(&c, false, 5000), CARRIER_NONE);
+	CHECK_EQ(carrier_poll(&c, false, 5000 + CARRIER_DEBOUNCE_MS), CARRIER_LOST);
+	CHECK(c.dtr);
+
+	// A hang-up the modem takes: DCD drops 30 ms after DTR.
+	carrier_init(&c, true, 0);
+	carrier_hangup(&c, 100);
+	CHECK(!c.dtr);
+	carrier_hangup(&c, 110); // again: no change
+	CHECK_EQ(c.hangup_since, 100);
+	CHECK_EQ(carrier_poll(&c, true, 120), CARRIER_NONE);
+	CHECK_EQ(carrier_poll(&c, false, 130), CARRIER_NONE);
+	CHECK_EQ(carrier_poll(&c, false, 130 + CARRIER_DEBOUNCE_MS), CARRIER_LOST);
+	CHECK(!c.dtr); // DTR held CARRIER_DTR_MS at least
+	CHECK_EQ(carrier_poll(&c, false, 100 + CARRIER_DTR_MS - 1), CARRIER_NONE);
+	CHECK_EQ(carrier_poll(&c, false, 100 + CARRIER_DTR_MS), CARRIER_HUNG_UP);
+	CHECK(c.dtr);
+	CHECK_EQ(carrier_poll(&c, false, 1000), CARRIER_NONE);
+
+	// One it does not: DCD stays; DTR back, the caller's +++ next.
+	carrier_init(&c, true, 0);
+	carrier_hangup(&c, 0);
+	CHECK_EQ(carrier_poll(&c, true, CARRIER_HANGUP_MS - 1), CARRIER_NONE);
+	CHECK(!c.dtr);
+	CHECK_EQ(carrier_poll(&c, true, CARRIER_HANGUP_MS), CARRIER_STUCK);
+	CHECK(c.dtr);
+	CHECK(c.up);
+
+	// Nothing to drop: done after the DTR pulse.
+	carrier_init(&c, false, 0);
+	carrier_hangup(&c, 0);
+	CHECK_EQ(carrier_poll(&c, false, CARRIER_DTR_MS), CARRIER_HUNG_UP);
+	CHECK(c.dtr);
+}
+
 int main(void) {
 	RUN(test_fresh_module);
 	RUN(test_configured_module);
@@ -434,5 +486,6 @@ int main(void) {
 	RUN(test_wrong_password);
 	RUN(test_no_network);
 	RUN(test_network_sendable);
+	RUN(test_carrier);
 	return tests_done();
 }

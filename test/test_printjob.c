@@ -215,6 +215,14 @@ static bool io_get(uint8_t *c) {
 
 static const printjob_io_t io = {.room = io_room, .put = io_put, .get = io_get};
 
+// The modem's DCD (bd xir.17.5): active while it has the printer's
+// connection open.
+static bool io_carrier(void) {
+	return m.mode == M_PRINT;
+}
+
+static const printjob_io_t io_dcd = {.room = io_room, .put = io_put, .get = io_get, .carrier = io_carrier};
+
 // ---- The spool hook ----
 
 static unsigned spool_bytes, spool_ends;
@@ -237,11 +245,13 @@ static const printjob_spool_t spool = {.offer = spool_offer, .job_end = spool_en
 
 static printjob_t pj;
 
+static const printjob_io_t *line = &io;
+
 static void setup(uint8_t kind, bool text, const char *target) {
 	modem_reset();
 	m.now = 10000000; // well after power-on
 	spool_bytes = spool_ends = 0;
-	printjob_init(&pj, &io, &spool);
+	printjob_init(&pj, line, &spool);
 	printjob_config_t cfg = {.kind = kind, .text = text, .idle_s = 5};
 	snprintf(cfg.target, sizeof cfg.target, "%s", target);
 	printjob_configure(&pj, &cfg);
@@ -431,6 +441,26 @@ static void test_lost(void) {
 	CHECK(spool_bytes > 0);
 }
 
+// With the modem's DCD the data starts once it is active, not after
+// PRINTJOB_OPEN_US; the job ends as before.
+static void test_carrier_opens(void) {
+	line = &io_dcd;
+	setup(PRINTJOB_IPP, true, "192.168.1.10:631/ipp/print");
+	CHECK(print(TEXT));
+	unsigned ms = 0;
+	while (pj.state == PRINTJOB_OPENING && ms < 5000) {
+		run(1);
+		++ms;
+	}
+	CHECK(pj.state == PRINTJOB_PRINTING);
+	CHECK(ms < PRINTJOB_OPEN_US / 1000 / 2);
+	CHECK(run_until_idle(10000));
+	CHECK_EQ(m.jobs_done, 1);
+	CHECK(m.done_len == strlen(TEXT) && memcmp(m.done, TEXT, strlen(TEXT)) == 0);
+	CHECK_EQ(pj.error, PRINTJOB_ERR_NONE);
+	line = &io;
+}
+
 static void test_off(void) {
 	setup(PRINTJOB_OFF, true, "h:631/p");
 	CHECK(print(TEXT));
@@ -448,6 +478,7 @@ int main(void) {
 	RUN(test_no_modem);
 	RUN(test_refused);
 	RUN(test_lost);
+	RUN(test_carrier_opens);
 	RUN(test_off);
 	return tests_done();
 }

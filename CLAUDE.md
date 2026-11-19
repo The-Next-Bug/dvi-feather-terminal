@@ -182,7 +182,15 @@ ATI3/ATI2, ATW"ssid,password" from our settings when not on it, AT&W
 only after a change, ATI4. Started before the logo; while it runs
 modem_owns_line (main.c, SRAM; modem_glue_busy inline) keeps the terminal,
 SIO2, keys, dials and print jobs off the line. check_sram_only.py's
-OPTIONAL_COLD lets its cold patterns place nothing in builds without it. Slide switch S1 puts the USB
+OPTIONAL_COLD lets its cold patterns place nothing in builds without it.
+Calls on the lines (bd xir.17.5): src/modem/carrier.[ch] (DCD debounced
+50 ms; hang-up = DTR inactive >= 100 ms until DCD drops, CARRIER_STUCK
+after 2 s), run by telnet_glue.c's carrier_service in terminal mode once
+the start-up is done: the panel's hang-up drops DTR (HANG_DTR; +++/ATH
+on STUCK), DCD going inactive ends the call and the telnet negotiation;
+printjob_io_t.carrier (printer_glue: DCD) starts a job's data as soon as
+the connection is up instead of after PRINTJOB_OPEN_US. CP/M mode keeps
+DTR active (Hayes programs on SIO2). Slide switch S1 puts the USB
 on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
 CI builds it.
 `boards/feather-rp2350-hstx.h` (bd 1ls.14.1): Adafruit Feather RP2350 with

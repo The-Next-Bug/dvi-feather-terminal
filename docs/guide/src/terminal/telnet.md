@@ -38,6 +38,13 @@ up. The terminal waits until the line has been quiet for 1.5 s, sends
 guard time on both sides: keys typed meanwhile are dropped). The status
 line shows `hangup` until it is done.
 
+With the WiFi modem (the Port setting, on boards wired for it) the
+terminal hangs up with the modem's DTR line instead: DTR goes inactive
+until the modem drops the call (its DCD line goes inactive), which takes
+a fraction of a second. If the call is still up after 2 s, the `+++` and
+`ATH` above follow. The modem's DCD also shows when the far end closes the
+connection: the call is over at once, and the telnet negotiation with it.
+
 ## The Telnet panel
 
 **N** in SET-UP (terminal mode) opens the panel at its first row.
@@ -82,6 +89,8 @@ forgotten on RIS (`ESC c`), when the Telnet setting changes, or when a call
 dialed with F11 is hung up. A server that ends the call by itself leaves
 the terminal in telnet until one of those: the window size updates it
 then sends would reach the modem's AT prompt (which answers `ERROR`).
+With the WiFi modem's DCD line the end of the connection counts as a
+hang-up.
 
 ## The status line
 
