@@ -239,6 +239,15 @@ bool telnet_glue_connected(void);
 const char *telnet_type_default(void); // TTYPE from the Terminal type now
 telnet_status_t telnet_glue_status(void);
 
+// ---- setup_glue.c: the card and the stick for SET-UP's panels ----
+
+// The card's file system for a panel's file (terminal mode: mounted until
+// fw_unmount; CP/M mode: the monitor's, always there); false: why in info.
+bool fw_mount(char *info, size_t n);
+// Done with it (commit: before the firmware update's commit, closing all).
+void fw_unmount(bool commit);
+bool fw_stick(void); // a USB stick is mounted as volume 1
+
 // ---- modem_glue.c ----
 
 // The WiFi modem's start-up (bd xir.17.2; WIFI_MODEM builds with the Port

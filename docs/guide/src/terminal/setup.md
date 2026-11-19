@@ -100,6 +100,9 @@ With Port on the WiFi modem (boards wired for one: the Frankless),
 - **Reset modem**: resets the module and sets it up again, as at power-on.
 - **Defaults** (Return twice): the module's factory settings, then the
   terminal's own (rate, flow control, the DCD and DTR lines, the network).
+- **Update firmware**: Return finds `ZIMODEM.ZMI` on the SD card or a USB
+  stick and checks it; Return again writes it into the module; see
+  [Updating the module's firmware](wifi-modem.md#updating-the-modules-firmware).
 - **Status**, **Firmware**, **Problem**: where the modem's start-up is,
   the network it is on and its address, Zimodem's version, the ESP8266's
   last reset cause, and the last thing that went wrong.

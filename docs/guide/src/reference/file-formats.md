@@ -82,7 +82,7 @@ as `picotool` and the build write them; see
 
 The [WiFi modem](../terminal/wifi-modem.md)'s firmware with what it is
 for, so that the terminal can refuse a wrong file before it erases
-anything (flashing the module from the terminal is still to come).
+anything ([Updating the module's firmware](../terminal/wifi-modem.md#updating-the-modules-firmware)).
 `scripts/build-zimodem.sh` writes it with `src/modem/zmi_gen.py`, and the
 release ZIP has it in `modem/`; `src/modem/zmi.c` reads it. Little-endian:
 

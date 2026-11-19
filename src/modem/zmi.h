@@ -71,10 +71,13 @@ typedef struct {
 // Called before the CRC is known: check the whole file first (no callback),
 // then read it again to use it.
 typedef void (*zmi_data_t)(void *ctx, uint32_t address, const uint8_t *data, size_t len);
+// A part begins: its address and length, before its data.
+typedef void (*zmi_part_t)(void *ctx, uint32_t address, uint32_t length);
 
 typedef struct {
 	zmi_info_t info; // valid once the header is in (zmi_header_done)
 	zmi_data_t data;
+	zmi_part_t part;
 	void *ctx;
 	zmi_result_t result; // the first error, kept
 	uint8_t state;
@@ -94,6 +97,9 @@ typedef struct {
 } zmi_reader_t;
 
 void zmi_init(zmi_reader_t *r, zmi_data_t data, void *ctx);
+
+// Also tell part (NULL: nothing) where each part begins (after zmi_init).
+void zmi_set_part_callback(zmi_reader_t *r, zmi_part_t part);
 
 // The next bytes of the file. ZMI_OK while it is fine so far; the first
 // error otherwise (later calls return it too).

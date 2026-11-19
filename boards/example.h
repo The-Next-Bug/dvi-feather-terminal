@@ -177,13 +177,15 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 // pull-ups at the module (4.7k-5.1k: they must hold against the RP2350's
 // reset pull-downs): RST to the chip's reset or enable, BOOT to its boot
 // loader strap (the ESP8266's GPIO0). BOARD_MODEM_NAME is the module a
-// firmware image for it must name; BOARD_MODEM_BAUD the link's fixed rate.
+// firmware image for it must name; BOARD_MODEM_FLASH_KB its flash (4096
+// on an ESP-12F); BOARD_MODEM_BAUD the link's fixed rate.
 // #define BOARD_MODEM_ESP8266 1
 // #define BOARD_MODEM_DCD_PIN 26
 // #define BOARD_MODEM_DTR_PIN 27
 // #define BOARD_MODEM_RST_PIN 24
 // #define BOARD_MODEM_BOOT_PIN 25
 // #define BOARD_MODEM_NAME "esp12f"
+// #define BOARD_MODEM_FLASH_KB 4096
 // #define BOARD_MODEM_BAUD 921600
 
 // --- Other optional hardware ---

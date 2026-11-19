@@ -31,6 +31,10 @@ void zmi_init(zmi_reader_t *r, zmi_data_t data, void *ctx) {
 	r->state = ST_HEADER;
 }
 
+void zmi_set_part_callback(zmi_reader_t *r, zmi_part_t part) {
+	r->part = part;
+}
+
 bool zmi_header_done(const zmi_reader_t *r) {
 	return r->state > ST_HEADER_EXTRA;
 }
@@ -92,6 +96,9 @@ static zmi_result_t parse_part_header(zmi_reader_t *r) {
 	r->left = length;
 	r->next_free = address + length;
 	r->has_image = r->has_image || address == 0;
+	if (r->part) {
+		r->part(r->ctx, address, length);
+	}
 	return ZMI_OK;
 }
 

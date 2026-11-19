@@ -23,9 +23,13 @@ modem mode uses:
   licenses/            the license texts of the code in the image (see
                        THIRD-PARTY.md, "WiFi modem firmware")
 
-Flashing it, with esptool (pip install esptool) and a USB-serial adapter
-on the module's TXD/RXD/GND, or through the board once the terminal can
-do it itself:
+The terminal flashes it itself: copy ZIMODEM.ZMI to the root of the SD
+card or a USB stick, then SET-UP, Return on the Port row (the Modem
+panel), Return on Update firmware, and Return again once it has checked
+the file (the guide's "Updating the module's firmware").
+
+By hand, with esptool (pip install esptool) and a USB-serial adapter on
+the module's TXD/RXD/GND:
 
 1. Put the module in its boot loader: GPIO0 low while it comes out of
    reset (hold GPIO0 to GND, pulse RST low).

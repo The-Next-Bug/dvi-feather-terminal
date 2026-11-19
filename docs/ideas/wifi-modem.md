@@ -212,7 +212,13 @@ and Defaults are not tried on hardware yet.
 lit during a call, HWINFO's record, the panel's Network/Password. 17.7
 (scan list) dropped by the user: typing the network is enough.
 
-Next: 17.8 (static address: the address mode field
-was left out of 17.1; static parts go after the password in the page-1
-block, ATW"ssid,pw,ip,dns,gw,subnet"), 17.9-17.11 (module image and
-flashing), 17.12 (ESP32).
+17.9 (Zimodem built with ours, CI, release modem/ with licenses and
+sources; AT&U off in the Frankless build), 17.13 (ZIMODEM.ZMI container)
+and 17.10 (Update firmware on the Modem panel, through the ESP8266 ROM
+loader; host-tested against a fake ROM, not yet on hardware) done
+2026-11-19 on branch zimodem-build. 17.8 deferred; 17.7 dropped.
+
+Next: 17.11 (the image built into our firmware), 17.8 (deferred: static
+address; the address mode field was left out of 17.1; static parts go
+after the password in the page-1 block, ATW"ssid,pw,ip,dns,gw,subnet"),
+17.12 (ESP32).

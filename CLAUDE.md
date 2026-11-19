@@ -67,7 +67,7 @@ CMake or Arm GCC on the dev host. Use the scripts:
 ```bash
 git submodule update --init          # lib/pico-sdk (2.3.1) and lib/tinyusb, not pico-sdk's submodules (lib/z80pack is vendored)
 scripts/setup-toolchain.sh           # pinned CMake, Arm GNU Toolchain, picotool, clang-tidy, mdBook (toolchain.env; one by name: setup-toolchain.sh mdbook)
-scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): board (test_board.sh on every board header), screen, palette, vtparse, term, raster, keyboard, blank, keyname, settings, setup, splash, clock, ay (the AY-3-8910's tones, noise, envelopes, levels), rtc (the RTC chip drivers on a fake register bus), xonxoff (the XON/XOFF decisions), sdformat (card formats on a sparse disk), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), usbvol (which stick is USB:), zmi (the modem's image container), machine (boots CP/M 2.2 from a FAT32 RAM volume)
+scripts/test.sh                      # host unit tests (gcc + ASan/UBSan): board (test_board.sh on every board header), screen, palette, vtparse, term, raster, keyboard, blank, keyname, settings, setup, splash, clock, ay (the AY-3-8910's tones, noise, envelopes, levels), rtc (the RTC chip drivers on a fake register bus), xonxoff (the XON/XOFF decisions), sdformat (card formats on a sparse disk), uf2, lz, xfer (port 10's files on a FAT12 RAM volume), usbvol (which stick is USB:), zmi (the modem's image container), espflash (writing it through the ESP8266 ROM loader, a fake ROM), machine (boots CP/M 2.2 from a FAT32 RAM volume)
 CPU_TESTS=1 scripts/test.sh          # also the Z80 exercisers (test_cpu, ~3 min, optimized, no sanitizers): EXZ80DOC, EXZ80ALL and CPUTEST under CP/M; build/test/test_cpu <PROGRAM> runs any program on B:
 scripts/build.sh                     # TARGET=pico2-dvi-sock (default; any boards/<target>.h) -> build/<target>/dvi_terminal.uf2
 scripts/package.sh                   # every built target -> dist/dvi-terminal-<describe>.zip (release notes: scripts/changelog.sh, the commits since the last tag without a hyphen)
@@ -151,7 +151,8 @@ GP10/11 (BOARD_RTC_DS3231, bd 1ls.6.1) with its 1 Hz on GP8 (the clock's
 tick); TDA1387 DAC (U8, hand-fitted) on GP5 BCK / 6 WS / 7 DATA for the
 bell; the WiFi modem (bd xir.15, the user's hand-wired ESP-12F with our
 Zimodem build on J8): BOARD_MODEM_ESP8266, DCD 26 / DTR 27 / RST 24 /
-BOOT 25 on J1, BOARD_MODEM_NAME "esp12f", BOARD_MODEM_BAUD 921600
+BOOT 25 on J1, BOARD_MODEM_NAME "esp12f", BOARD_MODEM_FLASH_KB 4096 (bd
+xir.17.10; board.h requires it, 512-16384), BOARD_MODEM_BAUD 921600
 (board.h: BOARD_HAS_MODEM, all four lines plus CTS/RTS required;
 src/platform/modem_lines.[ch]: main() first sets DTR active, RST/BOOT
 released open drain, DCD in, pulls off; the WiFi modem mode built on it:
@@ -208,7 +209,22 @@ modem_glue_status() (terminal.h modem_status_t: NONE / STARTING / WIFI
 modem_glue_carrier() (raw DCD); status.c's wifi_label "wifi" / "no wifi"
 / "modem?" in place of the baud and framing (terminal), before the flow
 field as " | wifi RTS/CTS" (CP/M), lit while DCD; HWINFO_MODEM 36,
-modem_glue.c modem_record (0 bytes without WIFI_MODEM). Guide:
+modem_glue.c modem_record (0 bytes without WIFI_MODEM). Flashing the
+module (bd xir.17.10): src/modem/espflash.[ch] (portable, cold; the
+ESP8266 ROM loader without esptool's stub: SLIP, SYNC at 115200, READ_REG
+0x40001000 = 0xfff0c101, FLASH_BEGIN with esptool's ESP8266 erase-size
+workaround espflash_erase_size, 1 KB FLASH_DATA blocks with the 0xEF XOR
+checksum; no read-back in the ROM: the per-block checksums and ATI4 after
+are the check; espflash_room limits the owner's file pieces, 1 byte while
+READY so a part's data never comes before espflash_part; test_espflash's
+fake ROM models the erase bug and refuses unerased writes); the Modem
+panel's Update firmware row (MODEMPANEL_UPDATE: modem_glue.c update_check
+reads 0:/ then 1:/ZIMODEM.ZMI whole through zmi + zmi_check_target with
+BOARD_MODEM_NAME/_FLASH_KB, sets update_ready; MODEMPANEL_FLASH:
+update_start, serial flow off, flashing = modem_owns_line; flash_poll from
+modem_glue_poll feeds the file in espflash_room pieces; update_end: RTS/CTS
+back, modem_start, version_service compares ATI4 with the file's);
+setup_glue.c's fw_mount/fw_unmount/fw_stick exported for it. Guide:
 terminal/wifi-modem.md (wiring, start-up, troubleshooting). Slide switch S1 puts the USB
 on the hub (host) or the USB-C socket (BOOTSEL); hub VBUS is always on.
 CI builds it.

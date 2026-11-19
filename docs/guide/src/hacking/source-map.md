@@ -17,7 +17,7 @@ it) or RP2350-only.
 | `src/settings` | portable | `settings` (the records, the fields), `uf2` (firmware file checks) | [SET-UP](../terminal/setup.md), [Firmware updates](../terminal/firmware-update.md) |
 | `src/machine` | portable | `machine` (the Z80 machine on z80pack's core); `cpm/` (the BIOSes and the CP/M tools, in assembler), `cpm/cpm3/`, `cpm/mpm/`, `cpm/f83/`, `cpm/tunes/`, `cpm/ws4/` (WordStar's patches) | [The Z80 CP/M machine](../cpm/overview.md), [MP/M II](../cpm/mpm.md), [Z80 I/O ports](../reference/ports.md) |
 | `src/printer` | portable | `printjob` (print jobs through a Zimodem's AT+PRINT) | [Printing](../cpm/printing.md) |
-| `src/modem` | portable | `modem` (the WiFi modem's start-up), `carrier` (DCD and DTR for calls) | [WiFi modem](../terminal/wifi-modem.md) |
+| `src/modem` | portable | `modem` (the WiFi modem's start-up), `carrier` (DCD and DTR for calls), `zmi` (its firmware image container), `espflash` (writing it through the ESP8266's boot loader) | [WiFi modem](../terminal/wifi-modem.md) |
 | `src/sound` | portable | `ay8910`, `mixer`, `tune` | [Bell and sound](../terminal/sound.md) |
 | `src/disks` | portable | `drives`, `drivecfg` (images, DRIVES.CFG, sets), `diskimg` (the built-in disks), `xfer` (port 0Ah), `usbvol`, `sdformat` | [Drives](../cpm/drives.md), [Moving files](../cpm/moving-files.md), [File transfer](../reference/xfer.md) |
 | `src/ui` | portable | `setup`, `clockpanel`, `printpanel`, `telnetpanel`, `modempanel`, `drivepanel`, `fwpanel`, `monitor`, `demo` | [SET-UP](../terminal/setup.md), [The monitor](../cpm/monitor.md) |
