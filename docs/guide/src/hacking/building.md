@@ -26,7 +26,9 @@ Builds the [WiFi modem](../terminal/wifi-modem.md)'s firmware from
 `lib/zimodem` (our Zimodem fork, branch `frankless-build`) with its own
 `scripts/build.sh` and the pinned arduino-cli and ESP8266 core
 (`lib/zimodem/toolchain.env`), into `build/zimodem/`: `zimodem.bin` (an
-ESP-12F's image, written at 0x0), `build-info.txt`, the
+ESP-12F's image, written at 0x0), `ZIMODEM.ZMI` (the same in the
+[container](../reference/file-formats.md#zimodemzmi) the terminal will flash
+from), `build-info.txt`, the
 [license texts](licenses.md#the-wifi-modems-firmware) in `licenses/` and
 the sources in `sources/` (Zimodem's at the commit, and the ESP8266 core's
 release archive, from arduino-cli's download or fetched again, checked

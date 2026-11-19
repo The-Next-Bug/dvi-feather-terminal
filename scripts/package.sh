@@ -83,11 +83,13 @@ license docs/licenses/GPL-2.0.txt GPL-2.0.txt
 # The WiFi modem's firmware (bd xir.17.9), built from lib/zimodem.
 zim="$BUILD_DIR/zimodem"
 modem_bin=
+modem_zmi=
 if [[ -f "$zim/zimodem.bin" ]]; then
   mkdir -p "$stage/modem"
-  cp -r "$zim/zimodem.bin" "$zim/build-info.txt" "$zim/sources" "$zim/licenses" "$stage/modem/"
+  cp -r "$zim/ZIMODEM.ZMI" "$zim/zimodem.bin" "$zim/build-info.txt" "$zim/sources" "$zim/licenses" "$stage/modem/"
   cp docs/MODEM.txt "$stage/modem/README.txt"
   modem_bin=modem/zimodem.bin
+  modem_zmi=modem/ZIMODEM.ZMI
 elif [[ "${REQUIRE_ZIMODEM:-0}" == 1 ]]; then
   echo "error: no WiFi modem firmware in $zim; run scripts/build-zimodem.sh" >&2
   exit 1
@@ -96,7 +98,7 @@ else
 fi
 
 scripts/changelog.sh "$sha" | tee "$stage/CHANGES.md" > "$DIST_DIR/CHANGES.md"
-(cd "$stage" && sha256sum -- */FIRMWARE.UF2 */dvi_terminal.bin ${modem_bin:+"$modem_bin"} > SHA256SUMS)
+(cd "$stage" && sha256sum -- */FIRMWARE.UF2 */dvi_terminal.bin ${modem_bin:+"$modem_bin"} ${modem_zmi:+"$modem_zmi"} > SHA256SUMS)
 
 # Source of exactly the commit that was built. The submodules (pico-sdk,
 # TinyUSB) are not included; their commits are recorded in <target>/build-info.txt

@@ -5,7 +5,10 @@
 # (arduino-cli and the ESP8266 Arduino core, into TOOLCHAIN_DIR/arduino15).
 #
 # Output in BUILD_DIR (default build/zimodem): zimodem.bin (the image an
-# ESP-12F flashes at 0x0), build-info.txt (Zimodem's, plus our lines),
+# ESP-12F flashes at 0x0), ZIMODEM.ZMI (the same in the container the
+# terminal flashes from, src/modem/zmi.h, bd xir.17.13: module esp12f,
+# Zimodem's version, the flash size from the FQBN's eesz), build-info.txt
+# (Zimodem's, plus our lines),
 # licenses/ (the texts of everything in the image, docs/THIRD-PARTY.md's
 # "WiFi modem firmware" table, copied from the sources and the toolchain
 # the build used) and sources/: zimodem-<commit>.zip (the submodule's
@@ -93,7 +96,16 @@ else
   curl -sSfL -o "$core_zip" "$core_url"
 fi
 echo "$core_sha  $core_zip" | sha256sum -c - >&2
+# The container: the version ATI4 reports, the flash size the image is
+# built for (the FQBN's eesz=4M1M: 4M).
+version="$(sed -n 's/^firmware_version=//p' "$BUILD_DIR/build-info.txt")"
+flash="$(sed -n 's/^fqbn=.*eesz=\([0-9]*[KM]\).*/\1/p' "$BUILD_DIR/build-info.txt")"
+[[ -n "$version" && -n "$flash" ]] || { echo "error: no version or flash size in build-info.txt" >&2; exit 1; }
+python3 "$ROOT/src/modem/zmi_gen.py" --module esp12f --version "$version" --flash-size "$flash" \
+  "$BUILD_DIR/ZIMODEM.ZMI" "0x0:$BUILD_DIR/zimodem.bin"
 {
+  echo "container=ZIMODEM.ZMI"
+  echo "container_sha256=$(sha256sum "$BUILD_DIR/ZIMODEM.ZMI" | cut -d' ' -f1)"
   echo "image=zimodem.bin"
   echo "image_size=$(stat -c %s "$BUILD_DIR/zimodem.bin")"
   echo "image_sha256=$(sha256sum "$BUILD_DIR/zimodem.bin" | cut -d' ' -f1)"

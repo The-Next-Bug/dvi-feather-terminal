@@ -134,6 +134,7 @@ jobs:
           name: build-zimodem
           path: |
             build/zimodem/zimodem.bin
+            build/zimodem/ZIMODEM.ZMI
             build/zimodem/zimodem.ino.elf
             build/zimodem/zimodem.ino.map
             build/zimodem/build-info.txt

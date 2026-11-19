@@ -77,3 +77,34 @@ Each power-on starts with a line giving the firmware and the date.
 A UF2 file for the RP2350 (family `rp2350-arm-s`) with the blocks in order,
 as `picotool` and the build write them; see
 [Firmware updates](../terminal/firmware-update.md).
+
+## ZIMODEM.ZMI
+
+The [WiFi modem](../terminal/wifi-modem.md)'s firmware with what it is
+for, so that the terminal can refuse a wrong file before it erases
+anything (flashing the module from the terminal is still to come).
+`scripts/build-zimodem.sh` writes it with `src/modem/zmi_gen.py`, and the
+release ZIP has it in `modem/`; `src/modem/zmi.c` reads it. Little-endian:
+
+| Offset | Size | Field |
+|---|---|---|
+| 0 | 4 | `ZMI1` |
+| 4 | 2 | header size: 64, or more (a later version's fields, skipped) |
+| 6 | 1 | chip: 1 ESP8266 |
+| 7 | 1 | 0 |
+| 8 | 16 | module, NUL-padded (`esp12f`) |
+| 24 | 24 | Zimodem's version as `ATI4` reports it, NUL-padded |
+| 48 | 4 | the flash size the image is built for, in bytes |
+| 52 | 4 | parts (1-16) |
+| 56 | 4 | bytes of parts, from the header's end to the CRC |
+| 60 | 4 | 0 |
+
+Then each part: its flash address (4 bytes; a multiple of 4 KB, ascending,
+not overlapping, inside the flash), its length (4 bytes, not 0) and its
+data; then a CRC-32 (as zlib's) of every byte before it. An ESP8266
+container has an ESP image at address 0: `E9h` first, and the flash size
+in its header (byte 3, high nibble) is the container's.
+
+The checks before flashing: the header's fields, the parts, the ESP
+image, the CRC, and that the chip, the module's name and its flash size
+are the board's.

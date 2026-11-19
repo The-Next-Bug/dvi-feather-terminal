@@ -12,6 +12,8 @@ modem mode uses:
 
   zimodem.bin          the image, for a 4 MB ESP8266 module (ESP-12F),
                        written at address 0x0
+  ZIMODEM.ZMI          the same image in the container the terminal flashes
+                       from (with the module and version it is for)
   build-info.txt       its version (ATI4 reports firmware_version), the
                        Zimodem commit, the toolchain, the image's SHA-256
   sources/             the source it was built from: zimodem-<commit>.zip
