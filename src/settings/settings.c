@@ -31,8 +31,11 @@ _Static_assert(NET_LEN_MAX <= SETTINGS_NET_TEXT_MAX && SETTINGS_NET_TEXT_MAX <= 
 // Appended only: the record keeps the index. 230400 and up are for a host
 // with RTS/CTS (the Frankless's Zimodem, ATB): without flow control the
 // terminal falls behind a full-screen burst at these rates.
+// Indexed by the stored value (append only); SET-UP lists them by rate
+// (settings_fields' order). 74880: the ESP8266's boot ROM's rate (bd
+// ubc), its boot text readable on the terminal.
 static const unsigned baud_rates[] = {300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800,
-	921600};
+	921600, 74880};
 #define BAUD_DEFAULT 8 // 115200
 
 static const struct {
@@ -53,8 +56,9 @@ const settings_field_t settings_fields[SETTINGS_FIELDS] = {
 	{"Columns", 2, {80, 132}, {"80", "132"}, SETTINGS_PAGE_MAIN},
 	{"Backspace sends", 2, {0x7f, 0x08}, {"DEL", "BS"}, SETTINGS_PAGE_MAIN},
 	{"Local echo", 2, {0, 1}, {"off", "on"}, SETTINGS_PAGE_MAIN},
-	{"Baud rate", 12, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
-		{"300", "1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"},
+	{"Baud rate", 13, {0, 1, 2, 3, 4, 5, 6, 7, 12, 8, 9, 10, 11},
+		{"300", "1200", "2400", "4800", "9600", "19200", "38400", "57600", "74880", "115200", "230400", "460800",
+			"921600"},
 		SETTINGS_PAGE_MAIN},
 	{"Data/parity/stop", 8, {0, 1, 2, 3, 4, 5, 6, 7},
 		{"8N1", "8E1", "8O1", "8N2", "7E1", "7O1", "7N1", "7N2"}, SETTINGS_PAGE_MAIN},

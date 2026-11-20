@@ -18,7 +18,8 @@ Which pins those are depends on the board: see [Boards](boards.md).
 ## Line settings
 
 115200 baud, 8 data bits, no parity, 1 stop bit (8N1) until changed in
-[SET-UP](../terminal/setup.md): baud rates 300 to 921600, framings 8N1,
+[SET-UP](../terminal/setup.md): baud rates 300 to 921600 (74880 too, the
+ESP8266's boot ROM's rate, to read its boot text), framings 8N1,
 8E1, 8O1, 8N2, 7E1, 7O1, 7N1 and 7N2. A new rate applies as soon as SET-UP
 saves it, so switch the host to match. Use 230400, 460800 and 921600 only
 with RTS/CTS flow control (below): at those rates the host can send faster
