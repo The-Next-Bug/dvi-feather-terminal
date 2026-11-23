@@ -159,14 +159,17 @@ void modem_feed(modem_t *m, uint8_t c, uint32_t now_ms) {
 // The profile: what ATI5 shows of it.
 typedef struct {
 	int e, q, v, f, r;
-	int s46, s47, s54, s55, s63;
+	int s46, s54, s63;
 } profile_t;
 
-// ATI5's line: "ATB921600E1Q0V1X1F0R1&D...S46=0S47=4...S63=0&P0&O0", fields
+// Nothing known: every field set.
+static const profile_t profile_unknown = {-1, -1, -1, -1, -1, -1, -1, -1};
+
+// ATI5's line: "ATB921600E1Q0V1X1F0R1&D...S46=0S47=14...S63=0&P0&O0", fields
 // as letter and digits, &letter and digits, S<reg>=<value>. False if it is
 // not such a line.
 static bool parse_profile(const char *p, profile_t *out) {
-	*out = (profile_t){-1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+	*out = profile_unknown;
 	const char *at = strstr(p, "ATB");
 	if (!at) {
 		return false;
@@ -192,8 +195,7 @@ static bool parse_profile(const char *p, profile_t *out) {
 		if (k == 'S' && *p == '=') {
 			long v = strtol(p + 1, &end, 10);
 			p = end;
-			int *reg = n == 46 ? &out->s46 : n == 47 ? &out->s47 : n == 54 ? &out->s54 : n == 55 ? &out->s55
-				: n == 63 ? &out->s63 : NULL;
+			int *reg = n == 46 ? &out->s46 : n == 54 ? &out->s54 : n == 63 ? &out->s63 : NULL;
 			if (reg) {
 				*reg = (int)v;
 			}
@@ -217,8 +219,11 @@ static void add(char *cmd, int have, int want, const char *fmt) {
 
 // The command setting what differs from the profile (have), or "" when
 // nothing does: result codes as our parsers read them (Q0 V1, CR LF),
-// RTS/CTS, DCD and DTR on our pins, active low (S46/S54 0), DTR hang-up
-// (S63=2: safe, as the firmware drives DTR), the mode's echo.
+// RTS/CTS, DCD and DTR active low (S46/S54 0), DTR hang-up (S63=2: safe, as
+// the firmware drives DTR), the mode's echo. Not the pins (S47, S55): our
+// Zimodem builds fix them for the module they are built for (the ESP-12F's
+// DCD GPIO14 / DTR GPIO12, the XH-C3F's IO3 / IO4: the same carrier pads;
+// FIXED_MODEM_PINS, bd xir.17.12), and refuse others.
 static void profile_command(const modem_t *m, const profile_t *have, char *cmd) {
 	strcpy(cmd, "AT");
 	add(cmd, have->e, m->cfg.echo ? 1 : 0, "E%d");
@@ -227,9 +232,7 @@ static void profile_command(const modem_t *m, const profile_t *have, char *cmd) 
 	add(cmd, have->f, 0, "F%d");
 	add(cmd, have->r, 1, "R%d");
 	add(cmd, have->s46, 0, "S46=%d");
-	add(cmd, have->s47, (int)m->cfg.dcd_pin, "S47=%d");
 	add(cmd, have->s54, 0, "S54=%d");
-	add(cmd, have->s55, (int)m->cfg.dtr_pin, "S55=%d");
 	add(cmd, have->s63, 2, "S63=%d");
 	if (strcmp(cmd, "AT") == 0) {
 		cmd[0] = '\0';
@@ -376,7 +379,7 @@ void modem_poll(modem_t *m, uint32_t now_ms) {
 		if (done(m, now, MODEM_REPLY_MS)) {
 			profile_t have;
 			if (!m->replied || !parse_profile(m->info, &have)) {
-				have = (profile_t){-1, -1, -1, -1, -1, -1, -1, -1, -1, -1}; // set all of it
+				have = profile_unknown; // set all of it
 			}
 			char cmd[MODEM_LINE_MAX + 1];
 			profile_command(m, &have, cmd);

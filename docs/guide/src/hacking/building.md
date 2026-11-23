@@ -12,13 +12,15 @@ scripts/build.sh                 # -> build/pico2-dvi-sock/dvi_terminal.uf2
 scripts/lint.sh                  # clang-tidy over the tests' and the firmware's builds
 scripts/docs.sh                  # this guide -> build/docs/html/index.html
 scripts/build-zimodem.sh         # the WiFi modem's firmware -> build/zimodem/zimodem.bin
+MODULE=xhc3f scripts/build-zimodem.sh  # the XH-C3F's -> build/zimodem-xhc3f/zimodem-xhc3f.bin
 scripts/package.sh               # every built target and the modem's -> dist/dvi-terminal-<rev>.zip
 ```
 
 `scripts/setup-toolchain.sh` takes components by name to install only
 some: `cmake arm picotool clang-tidy mdbook zimodem`. `zimodem` (about
 400 MB, the Xtensa compiler with it) is needed only for
-`scripts/build-zimodem.sh`.
+`scripts/build-zimodem.sh`. `zimodem-esp32` (the ESP32 core, about 2 GB
+more) is only installed when named, for `MODULE=xhc3f`.
 
 ## scripts/build-zimodem.sh
 
@@ -37,6 +39,16 @@ against the package index's SHA-256). The version Zimodem reports (`ATI4`) is
 same version. `BUILD_DIR`, `BUILD_ID` and `FRANKLESS_HW_FLOW` override.
 `scripts/package.sh` puts it in the ZIP's `modem/` (CI requires it there:
 `REQUIRE_ZIMODEM=1`).
+
+`MODULE=xhc3f` builds for the XH-C3F (ESP32-C3) instead, with the ESP32
+core 2.0.17, into `build/zimodem-xhc3f/`: `zimodem-xhc3f.bin` (boot loader,
+partition table and Zimodem merged, written at 0x0), the parts beside it,
+`build-info.txt`, `licenses/` (from the core's headers, and texts the core
+lacks fetched from ESP-IDF 4.4.7 and the others at fixed SHA-256s) and
+`sources/` (Zimodem's, and the core's release archive without the
+precompiled ESP-IDF libraries: its LGPL part). No `ZIMODEM.ZMI`: the
+terminal cannot flash a C3 yet. `scripts/package.sh` puts it in
+`modem/xhc3f/`.
 
 ## scripts/build.sh
 

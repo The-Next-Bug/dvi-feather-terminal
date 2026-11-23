@@ -10,8 +10,10 @@
 #
 # The WiFi modem's firmware (scripts/build-zimodem.sh, BUILD_DIR/zimodem)
 # goes into modem/ with its licenses, sources (Zimodem's and the ESP8266
-# core's, about 35 MB) and docs/MODEM.txt; without
-# it the ZIP has no modem/ (an error with REQUIRE_ZIMODEM=1, as in CI).
+# core's, about 35 MB) and docs/MODEM.txt; the XH-C3F's (MODULE=xhc3f,
+# BUILD_DIR/zimodem-xhc3f) into modem/xhc3f/ with its own (Zimodem's and the
+# ESP32 core's LGPL part, about 7 MB). Without them the ZIP has no modem/
+# or modem/xhc3f/ (an error with REQUIRE_ZIMODEM=1, as in CI).
 #
 # Tagged builds (tags like v0.1.0) are named dvi-terminal-<tag>; anything
 # else dvi-terminal-<git describe>.
@@ -35,7 +37,9 @@ info() { sed -n "s/^$2=//p" "$1"; }
 infos=()
 for f in "$BUILD_DIR"/*/build-info.txt; do
   [[ -f "$f" ]] || continue
-  [[ "$f" != "$BUILD_DIR/zimodem/build-info.txt" ]] || continue # the modem's (below)
+  # the modem's (below), and builds for other modules (zimodem-xhc3f: not
+  # packaged yet, bd xir.17.12)
+  [[ "$(basename "$(dirname "$f")")" != zimodem* ]] || continue
   if [[ "$(info "$f" experimental)" == yes ]]; then
     echo "skipping experimental build $(dirname "$f")" >&2
     continue
@@ -96,9 +100,24 @@ elif [[ "${REQUIRE_ZIMODEM:-0}" == 1 ]]; then
 else
   echo "warning: no WiFi modem firmware in $zim (scripts/build-zimodem.sh): no modem/ in the ZIP" >&2
 fi
+# The XH-C3F's (bd xir.17.12.4): flashed by hand for now (no ZIMODEM.ZMI).
+zc3="$BUILD_DIR/zimodem-xhc3f"
+modem_c3=
+if [[ -f "$zc3/zimodem-xhc3f.bin" ]]; then
+  mkdir -p "$stage/modem/xhc3f"
+  cp -r "$zc3/zimodem-xhc3f.bin" "$zc3/build-info.txt" "$zc3/sources" "$zc3/licenses" "$stage/modem/xhc3f/"
+  [[ -f "$stage/modem/README.txt" ]] || cp docs/MODEM.txt "$stage/modem/README.txt"
+  modem_c3=modem/xhc3f/zimodem-xhc3f.bin
+elif [[ "${REQUIRE_ZIMODEM:-0}" == 1 ]]; then
+  echo "error: no XH-C3F modem firmware in $zc3; run MODULE=xhc3f scripts/build-zimodem.sh" >&2
+  exit 1
+else
+  echo "warning: no XH-C3F modem firmware in $zc3 (MODULE=xhc3f scripts/build-zimodem.sh): no modem/xhc3f/ in the ZIP" >&2
+fi
 
 scripts/changelog.sh "$sha" | tee "$stage/CHANGES.md" > "$DIST_DIR/CHANGES.md"
-(cd "$stage" && sha256sum -- */FIRMWARE.UF2 */dvi_terminal.bin ${modem_bin:+"$modem_bin"} ${modem_zmi:+"$modem_zmi"} > SHA256SUMS)
+(cd "$stage" && sha256sum -- */FIRMWARE.UF2 */dvi_terminal.bin ${modem_bin:+"$modem_bin"} ${modem_zmi:+"$modem_zmi"} \
+  ${modem_c3:+"$modem_c3"} > SHA256SUMS)
 
 # Source of exactly the commit that was built. The submodules (pico-sdk,
 # TinyUSB) are not included; their commits are recorded in <target>/build-info.txt

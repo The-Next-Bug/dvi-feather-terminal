@@ -41,4 +41,19 @@ the ESP8266 core's release archive, the LGPL part's complete source:
 | eboot (the boot loader) | BSD-3-Clause |
 | newlib, libgcc, libstdc++ | BSD-style; GPL-3.0 with the GCC Runtime Library Exception |
 
+The XH-C3F's build in `modem/xhc3f/` (an ESP32-C3) is Zimodem on the
+ESP32 Arduino core and Espressif's ESP-IDF, with its own `licenses/` and
+`sources/`: Zimodem's, and the core's LGPL part (its release archive
+without the precompiled ESP-IDF libraries):
+
+| Component | License |
+|---|---|
+| Zimodem (Bo Zimmerman; our fork), with its libssh2 (SSH) | Apache-2.0, with its NOTICE; libssh2 BSD-3-Clause |
+| ESP32 core for Arduino 2.0.17 | LGPL-2.1, linked statically; rebuild and relink with `scripts/build-zimodem.sh` |
+| ESP-IDF 4.4.7 (Espressif), with Mbed TLS | Apache-2.0; its `COPYRIGHT.rst` lists the parts under other licenses |
+| FreeRTOS, SPIFFS, cJSON, nghttp2 | MIT |
+| lwIP | BSD-3-Clause |
+| wpa_supplicant, protobuf-c, FatFs | BSD-style (FatFs: ChaN's) |
+| newlib, libgcc, libstdc++ | BSD-style; GPL-3.0 with the GCC Runtime Library Exception |
+
 `THIRD-PARTY.md`'s "WiFi modem firmware" section has the details.

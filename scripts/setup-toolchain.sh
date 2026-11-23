@@ -3,7 +3,8 @@
 # builds; nothing is installed system-wide.
 #
 # Usage: scripts/setup-toolchain.sh [component...]
-#   components: cmake arm picotool clang-tidy mdbook zimodem (default: all).
+#   components: cmake arm picotool clang-tidy mdbook zimodem (default: all),
+#   and zimodem-esp32 (only by name).
 #   The host-test job only needs cmake; scripts/lint.sh needs clang-tidy,
 #   scripts/docs.sh mdbook (and cmake), scripts/build-zimodem.sh zimodem.
 #
@@ -11,6 +12,9 @@
 # WiFi modem's firmware (lib/zimodem), at the versions lib/zimodem's own
 # toolchain.env pins, installed by its scripts/setup-toolchain.sh into
 # TOOLCHAIN_DIR/arduino15 (about 400 MB with the Xtensa compiler).
+# zimodem-esp32 (bd xir.17.12.4): the ESP32 Arduino core as well, for
+# MODULE=xhc3f builds (scripts/build-zimodem.sh); about 1.5 GB more, so not
+# in the default set.
 #
 # Versions come from toolchain.env; any of its variables can be overridden
 # from the environment (e.g. ARM_GNU_VERSION=... ARM_GNU_SHA256=...).
@@ -174,6 +178,21 @@ install_zimodem() {
   "$dir/bin/arduino-cli" version
 }
 
+# The ESP32 core beside it (installs zimodem first); its own record,
+# .version-esp32, since the ESP8266 builds never need it.
+install_zimodem_esp32() {
+  install_zimodem
+  local dir="$TOOLCHAIN_DIR/arduino15" zroot="$ROOT/lib/zimodem"
+  local want
+  want="$(grep -E '^ESP32_CORE_VERSION=' "$zroot/toolchain.env")"
+  if [[ "$(cat "$dir/.version-esp32" 2>/dev/null)" != "$want" ]]; then
+    ARDUINO_DIRECTORIES_DATA="$dir" ARDUINO_DIRECTORIES_USER="$TOOLCHAIN_DIR/arduino-user" \
+      INSTALL_DIR="$dir/bin" "$zroot/scripts/setup-toolchain.sh" esp32 >&2
+    echo "$want" > "$dir/.version-esp32"
+  fi
+  echo "$want"
+}
+
 for c in "${components[@]}"; do
   case "$c" in
     cmake) install_cmake ;;
@@ -182,6 +201,7 @@ for c in "${components[@]}"; do
     clang-tidy) install_clang_tidy ;;
     mdbook) install_mdbook ;;
     zimodem) install_zimodem ;;
+    zimodem-esp32) install_zimodem_esp32 ;;
     *) echo "error: unknown component '$c'" >&2; exit 1 ;;
   esac
 done

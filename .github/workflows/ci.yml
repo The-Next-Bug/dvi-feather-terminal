@@ -143,6 +143,45 @@ jobs:
             build/zimodem/licenses
           retention-days: 30
 
+  # The same for the XH-C3F (ESP32-C3, bd xir.17.12.4): the ESP32 core is
+  # about 2 GB installed, so it has its own job and cache. Its license
+  # texts not in the core are fetched (scripts/build-zimodem.sh).
+  zimodem-xhc3f:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: "Check out (full history for git describe, top-level submodules)"
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: true
+      - name: Fetch the annotated tags
+        run: git fetch --force --tags origin
+      - name: Toolchain cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            .toolchain/arduino15
+            !.toolchain/arduino15/staging
+          key: toolchain-zimodem-esp32-${{ hashFiles('lib/zimodem/toolchain.env', 'lib/zimodem/arduino-cli.yaml') }}
+      - run: scripts/setup-toolchain.sh zimodem-esp32
+      - run: MODULE=xhc3f scripts/build-zimodem.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: build-zimodem-xhc3f
+          path: |
+            build/zimodem-xhc3f/zimodem-xhc3f.bin
+            build/zimodem-xhc3f/zimodem.ino.bin
+            build/zimodem-xhc3f/zimodem.ino.bootloader.bin
+            build/zimodem-xhc3f/zimodem.ino.partitions.bin
+            build/zimodem-xhc3f/boot_app0.bin
+            build/zimodem-xhc3f/zimodem.ino.elf
+            build/zimodem-xhc3f/zimodem.ino.map
+            build/zimodem-xhc3f/build-info.txt
+            build/zimodem-xhc3f/compile.log
+            build/zimodem-xhc3f/sources
+            build/zimodem-xhc3f/licenses
+          retention-days: 30
+
   # The user guide (scripts/docs.sh, bd 1ay).
   docs:
     runs-on: ubuntu-24.04
@@ -176,7 +215,7 @@ jobs:
   # guide.
   package:
     runs-on: ubuntu-24.04
-    needs: [test, build, zimodem, docs]
+    needs: [test, build, zimodem, zimodem-xhc3f, docs]
     steps:
       - name: "Check out (full history for git describe, top-level submodules)"
         uses: actions/checkout@v7

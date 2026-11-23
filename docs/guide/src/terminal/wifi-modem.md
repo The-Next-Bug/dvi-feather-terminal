@@ -52,7 +52,7 @@ GPIO0, GPIO2, GPIO15, GND (top to bottom).
 | J8.4 CTS (GP22 in) | GPIO15 (U0RTS) | flow control | pull-down to GND (a boot strap) |
 | J8.5 RX (GP21 in) | TXD | data | |
 | J8.6 TX (GP20 out) | RXD | data | |
-| J1.6 GP26 (in) | GPIO4 | DCD | low while the modem has a connection open |
+| J1.6 GP26 (in) | GPIO14 | DCD | low while the modem has a connection open |
 | J1.5 GP27 (out) | GPIO12 | DTR | the terminal drops it to hang up |
 | J1.8 GP24 (open drain) | RST | reset | pull-up to 3V3 at the module |
 | J1.7 GP25 (open drain) | GPIO0 | boot loader | pull-up to 3V3 at the module |
@@ -72,18 +72,48 @@ Leave J1.1 (VBUS) unused unless the module has its own regulator, and never
 feed J8's 3V3 and a regulator together. J1.3 and J1.4 (GP29, GP28) stay
 free.
 
+DCD is on GPIO14, the pin the frankless-wifi carrier board uses
+(`reworked/frankless-wifi` in the Frankless's board repository: the module,
+its own regulator from J1.1 and these lines on one board that plugs onto J1
+and J8). Earlier builds used GPIO4: a module wired that way needs the wire
+moved to GPIO14 along with the firmware update (the pin is the firmware's
+now, below). The carrier uses 10k pull-ups on RST and GPIO0,
+which works because the start-up resets the module once the terminal's
+firmware has let go of GP24 and GP25.
+
 The pins are in the board header; the [board's table](../start/boards.md)
 lists them, and HWINFO shows them (below).
 
 ## The Zimodem build
 
 The module runs our Zimodem build (`lib/zimodem`, its own `BUILDING.md`):
-hardware RTS/CTS on GPIO13/15 for J8, as wired above. Every release ZIP
-has it in `modem/`: `zimodem.bin`, its `build-info.txt` (the version
-`ATI4` reports), its sources and its [licenses](../hacking/licenses.md#the-wifi-modems-firmware);
-`modem/README.txt` tells how to flash it with esptool. Zimodem's own setup
-(its rate, echo, the DCD and DTR pins, the network) is the terminal's to
-set: do not set those by hand, the next start sets them back.
+hardware RTS/CTS on GPIO13/15 for J8, DCD on GPIO14 and DTR on GPIO12 for
+J1, as wired above. The build fixes those pins: whatever the module saved
+before is ignored, and `ATS47`, `ATS49`, `ATS51`, `ATS55` refuse other pins,
+so a module flashed with it is wired right without any setting. Every
+release ZIP has it in `modem/`: `zimodem.bin`, its `build-info.txt` (the
+version `ATI4` reports), its sources and its
+[licenses](../hacking/licenses.md#the-wifi-modems-firmware);
+`modem/README.txt` tells how to flash it with esptool. Zimodem's other
+settings (its rate, echo, the DCD and DTR levels, the network) are the
+terminal's to set: do not set those by hand, the next start sets them back.
+
+### The XH-C3F (ESP32-C3)
+
+**Not yet tested on hardware**: the build compiles and is packaged, but no
+XH-C3F has run it yet.
+
+The frankless-wifi carrier also takes a Sparkleiot XH-C3F, an ESP32-C3 in
+the ESP-12F's footprint, and the release ZIP has a Zimodem build for it in
+`modem/xhc3f/` (`zimodem-xhc3f.bin`, its `build-info.txt`, sources and
+licenses). Its pins are on the same pads under the C3's names: CTS IO5,
+RTS IO10, DCD IO3, DTR IO4, boot loader IO9 (IO8 must be pulled up), RST
+on EN; fixed by the build in the same way. The terminal cannot write a
+C3's firmware yet: flash `zimodem-xhc3f.bin` at address 0 with esptool,
+through the C3's own USB (pads 19/20) or a USB-serial adapter on RXD0/TXD0
+(`modem/README.txt`). Its boot loader talks at 115200, so the start-up's
+first step (the ESP8266's boot text at 74880) reads nothing useful from
+it; the rest of the start-up is the same.
 
 ## Updating the module's firmware
 

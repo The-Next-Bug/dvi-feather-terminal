@@ -93,3 +93,41 @@ image. Its complete source at the version used is in
 arduino-cli installs, pinned by `lib/zimodem/toolchain.env`); with
 Zimodem's source, also there, and `scripts/build-zimodem.sh` the image can
 be rebuilt and relinked, with a changed core if wanted.
+
+### WiFi modem firmware: XH-C3F
+
+`modem/xhc3f/zimodem-xhc3f.bin` is the same Zimodem fork built for the
+Sparkleiot XH-C3F, an ESP32-C3 module (`MODULE=xhc3f
+scripts/build-zimodem.sh`), with the ESP32 Arduino core 2.0.17 and the
+ESP-IDF 4.4.7 it is built on. Its license texts are in
+`modem/xhc3f/licenses/`: copied from Zimodem and the core's headers, and
+fetched by the build, at fixed SHA-256s, where the core does not carry
+them (ESP-IDF's LICENSE and COPYRIGHT.rst, wpa_supplicant's, newlib's,
+SPIFFS's, the core's own LGPL-2.1 text). Its sources are in
+`modem/xhc3f/sources/`.
+
+| Component | Used for | License | Text |
+|---|---|---|---|
+| [Zimodem](https://github.com/bozimmerman/Zimodem), [our fork](https://github.com/arlaneenalra/Zimodem/tree/frankless-build) | The modem | Apache-2.0, with its NOTICE | `Zimodem-Apache-2.0.txt`, `Zimodem-NOTICE.txt` |
+| libssh2 (in Zimodem) | SSH client | BSD-3-Clause | `libssh2-BSD-3-Clause.txt` |
+| [ESP32 core for Arduino](https://github.com/espressif/arduino-esp32) 2.0.17 | Runtime, WiFi and network API | LGPL-2.1 | `arduino-esp32-LGPL-2.1.txt` |
+| [ESP-IDF](https://github.com/espressif/esp-idf) 4.4.7 (Espressif; precompiled in the core), with its WiFi and PHY libraries and Mbed TLS | System, drivers, WiFi, TLS | Apache-2.0; `COPYRIGHT.rst` lists the third-party parts and their licenses | `ESP-IDF-Apache-2.0.txt`, `ESP-IDF-COPYRIGHT.rst` |
+| FreeRTOS (in ESP-IDF) | Kernel | MIT | `FreeRTOS-MIT.txt` |
+| lwIP (in ESP-IDF) | TCP/IP stack | BSD-3-Clause | `lwIP-BSD-3-Clause.txt` |
+| wpa_supplicant (in ESP-IDF) | WiFi security | BSD | `wpa_supplicant-BSD.txt` |
+| SPIFFS (in ESP-IDF) | File system for Zimodem's settings | MIT | `SPIFFS-MIT.txt` |
+| FatFs (ChaN, in ESP-IDF) | FAT file system | BSD-style (ChaN's) | `FatFs-ChaN.txt` |
+| cJSON, nghttp2 (in ESP-IDF) | JSON, HTTP/2 (linked by ESP-IDF's components) | MIT | `cJSON-MIT.txt`, `nghttp2-MIT.txt` |
+| protobuf-c (in ESP-IDF) | Provisioning messages (linked by ESP-IDF's components) | BSD-2-Clause | `protobuf-c-BSD-2-Clause.txt` |
+| newlib, libgcc, libstdc++ (ESP-IDF's RISC-V GCC toolchain) | C and C++ libraries, compiler runtime | newlib: BSD-style licenses; libgcc, libstdc++: GPL-3.0 with the GCC Runtime Library Exception | `newlib-COPYING.NEWLIB.txt`; the rest in the toolchain's sources |
+
+The ESP32 core is under the LGPL-2.1 and linked statically into the image.
+Its source at the version used is in
+`modem/xhc3f/sources/arduino-esp32-2.0.17-lgpl.zip`: the core's 2.0.17
+release archive (https://github.com/espressif/arduino-esp32/releases/tag/2.0.17,
+the one arduino-cli installs, pinned by `lib/zimodem/toolchain.env`; its
+SHA-256 is in `build-info.txt`) without `tools/sdk/`, the four chips'
+precompiled ESP-IDF libraries (Apache-2.0, not LGPL; in the full archive),
+and the Windows tools. With Zimodem's source, also there, the full
+archive and `scripts/build-zimodem.sh` the image can be rebuilt and
+relinked, with a changed core if wanted.

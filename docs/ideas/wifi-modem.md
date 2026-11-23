@@ -96,7 +96,9 @@ telnet dials are dropped, print jobs wait.
 5. Profile: ATI5 (one line: ATB..E1Q0V1X1F0R1...S46=..S47=..S54=..S55=..
    S63=..) parsed, and one command for what differs: E (0 terminal mode, 1
    CP/M), Q0, V1, F0, R1, S46=0 (DCD active low, Zimodem's default despite
-   its README), S47=4, S54=0 (DTR active low), S55=12, S63=2 (DTR hang-up).
+   its README), S54=0 (DTR active low), S63=2 (DTR hang-up). Not S47/S55
+   since bd xir.17.12: our Zimodem builds fix the pins for their module
+   (FIXED_MODEM_PINS; the start-up set S47=4, S55=12 before).
 6. Network: ATI3 (the SSID it is set to), ATI2 (its address, 0.0.0.0 when
    not joined). Ours set and the module not on it (or not joined):
    ATW"ssid,password" (up to 40 s). Zimodem splits at the first comma and a
