@@ -20,7 +20,8 @@ static struct {
 	unsigned saved_rate; // AT&W's (what it boots at)
 	bool echo, saved_echo;
 	int q, v, f, r, s46, s47, s54, s55, s63;
-	int saved_s47, saved_s63;
+	int saved_s63;
+	unsigned pin_writes; // S47/S55 written: the build fixes them (FIXED_MODEM_PINS)
 	char ssid[40], saved_ssid[40], password[70], saved_password[70];
 	const char *ap_ssid, *ap_password; // the network that exists
 	bool joined;
@@ -70,7 +71,6 @@ static void boot(void) {
 	emit_at(" ets Jan  8 2013,rst cause:2, boot mode:(3,6)\r\n", now + 30);
 	z.rate = z.saved_rate;
 	z.echo = z.saved_echo;
-	z.s47 = z.saved_s47;
 	z.s63 = z.saved_s63;
 	strcpy(z.ssid, z.saved_ssid);
 	strcpy(z.password, z.saved_password);
@@ -124,7 +124,6 @@ static void command(const char *cmd) {
 		// Zimodem's factory settings: its config file gone, reloaded at once.
 		z.saved_rate = 115200;
 		z.saved_echo = true;
-		z.saved_s47 = 2;
 		z.saved_s63 = 0;
 		z.saved_ssid[0] = z.saved_password[0] = '\0';
 		z.ssid[0] = z.password[0] = '\0';
@@ -136,7 +135,6 @@ static void command(const char *cmd) {
 		++z.saves;
 		z.saved_rate = z.rate;
 		z.saved_echo = z.echo;
-		z.saved_s47 = z.s47;
 		z.saved_s63 = z.s63;
 		strcpy(z.saved_ssid, z.ssid);
 		strcpy(z.saved_password, z.password);
@@ -172,8 +170,17 @@ static void command(const char *cmd) {
 				while (*a >= '0' && *a <= '9') {
 					++a;
 				}
-				int *reg = n == 46 ? &z.s46 : n == 47 ? &z.s47 : n == 54 ? &z.s54 : n == 55 ? &z.s55
-					: n == 63 ? &z.s63 : NULL;
+				if (n == 47 || n == 55) {
+					// our builds' pins are fixed: another one is refused,
+					// and the rest of the line with it
+					++z.pin_writes;
+					if (v != (n == 47 ? z.s47 : z.s55)) {
+						reply(false);
+						return;
+					}
+					continue;
+				}
+				int *reg = n == 46 ? &z.s46 : n == 54 ? &z.s54 : n == 63 ? &z.s63 : NULL;
 				if (reg) {
 					*reg = v;
 				}
@@ -254,7 +261,7 @@ static void fresh_module(void) {
 	z.f = 0;
 	z.r = 1;
 	z.s46 = 0;
-	z.saved_s47 = 2;
+	z.s47 = 14; // the ESP-12F build's DCD and DTR, fixed by it
 	z.s54 = 0;
 	z.s55 = 12;
 	z.saved_s63 = 0;
@@ -266,8 +273,7 @@ static void fresh_module(void) {
 }
 
 static void start(bool echo, const char *ssid, const char *password) {
-	modem_config_t cfg = {.baud = 921600, .echo = echo, .dcd_pin = 4, .dtr_pin = 12, .ssid = ssid,
-		.password = password};
+	modem_config_t cfg = {.baud = 921600, .echo = echo, .ssid = ssid, .password = password};
 	now = 1000;
 	modem_init(&m, &io, &cfg);
 	modem_start(&m, now);
@@ -293,16 +299,14 @@ static void check_profile(bool echo) {
 	CHECK_EQ(z.rate, 921600);
 	CHECK_EQ(z.saved_rate, 921600);
 	CHECK_EQ(z.echo, echo);
-	CHECK_EQ(z.s47, 4);
 	CHECK_EQ(z.s63, 2);
-	CHECK_EQ(z.saved_s47, 4);
 	CHECK_EQ(z.saved_s63, 2);
 	CHECK_EQ(z.s46, 0);
 	CHECK_EQ(z.s54, 0);
-	CHECK_EQ(z.s55, 12);
+	CHECK_EQ(z.pin_writes, 0u); // the pins are the build's, never ours to set
 }
 
-// A module from the factory (115200, echo on, DCD on GPIO2, no network):
+// A module from the factory (115200, echo on, no network):
 // found by the scan, moved to 921600, set up, joined, saved.
 static void test_fresh_module(void) {
 	fresh_module();

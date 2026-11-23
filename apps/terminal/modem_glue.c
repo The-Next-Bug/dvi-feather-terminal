@@ -23,14 +23,6 @@
 #include "modem.h"
 #include "zmi.h"
 
-// Zimodem's GPIOs for the lines our pins see (S47, S55).
-#ifndef BOARD_MODEM_ZIMODEM_DCD
-#define BOARD_MODEM_ZIMODEM_DCD 4
-#endif
-#ifndef BOARD_MODEM_ZIMODEM_DTR
-#define BOARD_MODEM_ZIMODEM_DTR 12
-#endif
-
 static modem_t modem;
 static bool started;
 
@@ -76,8 +68,6 @@ void modem_glue_start(void) {
 	modem_config_t cfg = {
 		.baud = SETTINGS_MODEM_BAUD,
 		.echo = settings.mode == SETTINGS_MODE_CPM, // Hayes for CP/M programs; quiet for the terminal
-		.dcd_pin = BOARD_MODEM_ZIMODEM_DCD,
-		.dtr_pin = BOARD_MODEM_ZIMODEM_DTR,
 		.ssid = settings.wifi_ssid,
 		.password = settings.wifi_password,
 	};

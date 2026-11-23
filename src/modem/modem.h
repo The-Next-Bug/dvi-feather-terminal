@@ -52,8 +52,6 @@ typedef struct {
 typedef struct {
 	unsigned baud;         // the link rate (BOARD_MODEM_BAUD)
 	bool echo;             // command echo: off for terminal mode, on (Hayes) for CP/M
-	unsigned dcd_pin;      // Zimodem's GPIO for DCD (S47) and DTR (S55)
-	unsigned dtr_pin;
 	const char *ssid;      // the network to join; "" leaves the module's own
 	const char *password;
 } modem_config_t;

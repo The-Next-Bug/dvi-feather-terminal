@@ -2,10 +2,13 @@ The WiFi modem's firmware (Zimodem)
 ===================================
 
 This folder holds the firmware for the WiFi modem a board can have on its
-serial port (the Frankless's hand-wired ESP-12F; see "WiFi modem" in the
-user guide, guide/terminal/wifi-modem.html). It is our build of Zimodem
-with hardware RTS/CTS on GPIO13/GPIO15, the lines the terminal's WiFi
-modem mode uses:
+serial port (the Frankless's ESP-12F, by hand or on the frankless-wifi
+carrier; see "WiFi modem" in the user guide,
+guide/terminal/wifi-modem.html). It is our build of Zimodem with the pins
+the terminal's WiFi modem mode uses fixed in it: hardware RTS/CTS on
+GPIO13/GPIO15, DCD on GPIO14, DTR on GPIO12 (an older module with DCD
+wired to GPIO4 needs that wire moved). xhc3f/ has the same for the
+Sparkleiot XH-C3F (ESP32-C3), below.
 
   our fork             https://github.com/arlaneenalra/Zimodem/tree/frankless-build
   the original         https://github.com/bozimmerman/Zimodem
@@ -41,3 +44,33 @@ the module's TXD/RXD/GND:
 
 A module flashed this way loses its saved Zimodem settings (and network);
 the terminal sets them again at its next start-up.
+
+The XH-C3F (xhc3f/)
+-------------------
+
+NOT YET TESTED ON HARDWARE: this build compiles, but no XH-C3F has run
+it yet.
+
+  zimodem-xhc3f.bin    the image for the XH-C3F (ESP32-C3, 4 MB): boot
+                       loader, partition table and Zimodem in one, written
+                       at address 0x0; CTS IO5, RTS IO10, DCD IO3, DTR IO4
+  build-info.txt       its version, commit, toolchain and SHA-256
+  sources/             zimodem-<commit>.zip and arduino-esp32-2.0.17-lgpl.zip
+                       (the ESP32 core for Arduino's LGPL part)
+  licenses/            the license texts of the code in the image (see
+                       THIRD-PARTY.md, "WiFi modem firmware: XH-C3F")
+
+The terminal cannot write a C3's firmware yet: flash it by hand. Through
+the C3's own USB (pads 19/20, IO18/IO19) or a USB-serial adapter on its
+RXD0/TXD0/GND:
+
+1. Put the module in its boot loader: IO9 low while it comes out of reset
+   (hold IO9 to GND, pulse EN low). IO8 must be high (the carrier pulls it
+   up). Over its own USB esptool does this itself.
+
+2. esptool --chip esp32c3 --port /dev/ttyACM0 erase_flash
+   esptool --chip esp32c3 --port /dev/ttyACM0 write_flash 0x0 zimodem-xhc3f.bin
+
+3. Release IO9 and reset the module. Its boot loader talks at 115200, not
+   74880 as the ESP8266's does; the rest of the terminal's start-up is the
+   same.

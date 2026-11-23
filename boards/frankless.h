@@ -77,12 +77,13 @@ pico_board_cmake_set_default(PICO_RP2350_A2_SUPPORTED, 1)
 
 // --- WiFi modem (bd xir.15) ---
 //
-// The user's hand-wired ESP-12F running our Zimodem build (lib/zimodem):
-// UART and RTS/CTS on J8 as above, its modem lines on header J1 (pins
-// 5-8; wiring in docs/ideas/modem-carrier.md). J1.6 GP26 <- GPIO4 (DCD,
-// ATS47=4), J1.5 GP27 -> GPIO12 (DTR), J1.8 GP24 -> RST and J1.7 GP25 ->
-// GPIO0, both with pull-ups at the module (4.7k-5.1k: they hold against
-// the RP2350's reset pull-downs).
+// An ESP-12F running our Zimodem build (lib/zimodem), on the
+// frankless-wifi carrier (pi-pico-boards reworked/frankless-wifi) or wired
+// the same by hand: UART and RTS/CTS on J8 as above, its modem lines on
+// header J1 (pins 5-8; wiring in docs/ideas/modem-carrier.md). J1.6 GP26
+// <- GPIO14 (DCD, ATS47=14; GPIO4 until the carrier), J1.5 GP27 -> GPIO12
+// (DTR), J1.8 GP24 -> RST and J1.7 GP25 -> GPIO0, both with pull-ups at the
+// module (they hold against the RP2350's reset pull-downs).
 #define BOARD_MODEM_ESP8266 1
 #define BOARD_MODEM_DCD_PIN 26
 #define BOARD_MODEM_DTR_PIN 27

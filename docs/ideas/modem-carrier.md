@@ -1,9 +1,12 @@
 # Idea: modem carrier detect and hang-up, and an ESP-12F carrier board
 
-Status: future work (user, 2026-11-18), nothing built; bd xir.14. Written
+Status: Option A built (bd xir.15, xir.17.5): DCD/DTR/RST/BOOT on J1, by
+hand and on the frankless-wifi carrier board (2026-11-22, below). Written
 from a read of lib/zimodem (frankless-build d0f904a), the Frankless KiCad
 files (~/fz80/pi-pico-boards reworked/frankless, commit 3292573) and its
-experimental case (exp-case/frankless.scad, frankless_board.stl).
+experimental case (exp-case/frankless.scad, frankless_board.stl). DCD moved
+from GPIO4 to GPIO14 with the carrier (bd xir.17.12): the sections below
+written before it say GPIO4.
 
 ## The problem
 
@@ -43,7 +46,7 @@ none of them.
 | 2, 9 | GND | |
 | 3 / 4 | GP29 / GP28 | keep for a second UART (UART0, bd qtq) |
 | 5 | GP27 | DTR out -> ESP GPIO12 |
-| 6 | GP26 | DCD in <- ESP GPIO4 |
+| 6 | GP26 | DCD in <- ESP GPIO14 (GPIO4 before the carrier) |
 | 7 | GP25 | ESP GPIO0 (open drain): boot loader |
 | 8 | GP24 | ESP RST (open drain): reset a hung modem |
 | 10 | +3V3 | |
@@ -119,7 +122,7 @@ GPIO0, GPIO2, GPIO15, GND (top to bottom).
 | J8.4 CTS (GP22 in) | GPIO15 (U0RTS) | flow | as now; 10k to GND (boot strap) |
 | J8.5 RX (GP21 in) | TXD | data | as now |
 | J8.6 TX (GP20 out) | RXD | data | as now |
-| J1.6 GP26 (in) | GPIO4 | DCD | `ATS47=4`, `AT&W`; active low = connected |
+| J1.6 GP26 (in) | GPIO14 | DCD | fixed by our Zimodem build (was GPIO4, `ATS47=4`); active low = connected |
 | J1.5 GP27 (out) | GPIO12 | DTR | keep `S63=0` until the firmware drives it |
 | J1.8 GP24 (open drain) | RST | reset | 4.7k pull-up to 3V3 at the module |
 | J1.7 GP25 (open drain) | GPIO0 | boot loader | 4.7k pull-up to 3V3 at the module |
@@ -169,6 +172,44 @@ lines to its own boot pins: docs/ideas/esp-at-modem.md, "Newer modules".
    UART, too heavy here.
 
 ## A carrier board for the ESP-12F
+
+### As built: frankless-wifi (2026-11-22)
+
+The user's board, pi-pico-boards `reworked/frankless-wifi` (main d098ea0,
+PR #3; production Frankless_Frank_Wifi_1.00.zip), for an ESP-12F or a
+Sparkleiot XH-C3F (ESP32-C3 in the same 22-pad footprint; bd xir.17.12).
+Module pads (ESP-12F / XH-C3F name):
+
+| Pad | Module | Carrier |
+|---|---|---|
+| 1 | RST / EN | J1.8 GP24 through R5 100R; C2 1 uF to GND, R1 10k up |
+| 3 | EN / IO2 | R2 10k up |
+| 5 | GPIO14 / IO3 | J1.6 GP26: DCD |
+| 6 | GPIO12 / IO4 | J1.5 GP27: DTR |
+| 7 | GPIO13 / IO5 | J8.3 RTS (GP23 out): the module's CTS |
+| 8 | VCC | 3V3 from U3 (AMS1117-3.3 on J1.1 VBUS); 22 uF x3 + 100 nF |
+| 15 | GND | GND |
+| 16 | GPIO15 / IO10 | J8.4 CTS (GP22 in): the module's RTS; R4 10k down |
+| 17 | GPIO2 / IO8 | R6 10k up (the C3's download mode needs IO8 high) |
+| 18 | GPIO0 / IO9 | J1.7 GP25: BOOT; R3 10k up |
+| 21 / 22 | RXD / TXD | J8.6 TX / J8.5 RX |
+| 2, 4, 9-14, 19, 20 | | unconnected (19/20: the C3's USB, unused) |
+
+J8.1 and J1.10 (the Frankless's 3V3) are unconnected. The RC on pad 1
+rises past the ESP's threshold in ~14 ms, inside ESPFLASH_BOOT_MS (100 ms)
+and MODEM_ROM_MS (300 ms). 10k on RST and BOOT works because the start-up
+resets the module after the firmware releases GP24/25.
+
+Fit in exp-case (by J1 pin 1; case coordinates as below): board x
+-0.1..31.9, y 16.6..43.4, notch for the button-plunger guide x 19.1..25.7
+(KiCad 224.36..230.95, 0.5 mm radius at its mouth, so module pad 22 keeps
+0.5 mm to the edge), y >= 35.4; module body x 1.8..17.8, y 26.5..50.5, the
+antenna 7.1 mm past the board edge. Clearances: guide 0.32 / 0.44 mm, LD2's
+light-pipe tube 0.17 mm, walls 0.20 / 0.37 mm, posts 9.8 mm; only the
+header pins (z 8.54) under the board. All copper >= 0.5 mm from the edge;
+DRC passes (user).
+
+The plan it was drawn from:
 
 Plugs onto J1 and J8, carrying the module, its own regulator and Option A's
 lines.
